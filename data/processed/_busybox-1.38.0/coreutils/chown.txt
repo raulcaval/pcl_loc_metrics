@@ -1,0 +1,241 @@
+FILE: data/raw/busybox-1.38.0/coreutils/chown.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                             | 
+-----+------------------------------------------+---------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                              | 
+   2 | /*                                       | True                                              | 
+   3 |  * Mini chown implementation for busybox | True                                              | 
+   4 |  *                                       | True                                              | 
+   5 |  * Copyright (C) 1999-2004 by Erik Ander | True                                              | 
+   6 |  *                                       | True                                              | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                                              | 
+   8 |  */                                      | True                                              | 
+   9 | //config:config CHOWN                    | True                                              | 
+  10 | //config: bool "chown (7.6 kb)"          | True                                              | 
+  11 | //config: default y                      | True                                              | 
+  12 | //config: help                           | True                                              | 
+  13 | //config: chown is used to change the us | True                                              | 
+  14 | //config: of files.                      | True                                              | 
+  15 | //config:                                | True                                              | 
+  16 | //config:config FEATURE_CHOWN_LONG_OPTIO | True                                              | 
+  17 | //config: bool "Enable long options"     | True                                              | 
+  18 | //config: default y                      | True                                              | 
+  19 | //config: depends on CHOWN && LONG_OPTS  | True                                              | 
+  20 |                                          | True                                              | 
+  21 | //applet:IF_CHOWN(APPLET_NOEXEC(chown, c | True                                              | 
+  22 |                                          | True                                              | 
+  23 | //kbuild:lib-$(CONFIG_CHOWN) += chown.o  | True                                              | 
+  24 |                                          | True                                              | 
+  25 | /* BB_AUDIT SUSv3 defects - none? */     | True                                              | 
+  26 | /* http://www.opengroup.org/onlinepubs/0 | True                                              | 
+  27 |                                          | True                                              | 
+  28 | //usage:#define chown_trivial_usage      | True                                              | 
+  29 | //usage:       "[-Rh"IF_DESKTOP("LHPcvf" | True                                              | 
+  30 | //usage:#define chown_full_usage "\n\n"  | True                                              | 
+  31 | //usage:       "Change the owner and/or  | True                                              | 
+  32 | //usage:     "\n"                        | True                                              | 
+  33 | //usage:     "\n -h Affect symlinks inst | True                                              | 
+  34 | //usage: IF_DESKTOP(                     | True                                              | 
+  35 | //usage:     "\n -L Traverse all symlink | True                                              | 
+  36 | //usage:     "\n -H Traverse symlinks on | True                                              | 
+  37 | //usage:     "\n -P Don't traverse symli | True                                              | 
+  38 | //usage: )                               | True                                              | 
+  39 | //next 4 options are the same for chmod/ | True                                              | 
+  40 | //usage:     "\n -R Recurse"             | True                                              | 
+  41 | //usage: IF_DESKTOP(                     | True                                              | 
+  42 | //usage:     "\n -c List changed files"  | True                                              | 
+  43 | //usage:     "\n -v Verbose"             | True                                              | 
+  44 | //usage:     "\n -f Hide errors"         | True                                              | 
+  45 | //usage: )                               | True                                              | 
+  46 | //usage:                                 | True                                              | 
+  47 | //usage:#define chown_example_usage      | True                                              | 
+  48 | //usage:       "$ ls -l /tmp/foo\n"      | True                                              | 
+  49 | //usage:       "-r--r--r--    1 andersen | True                                              | 
+  50 | //usage:       "$ chown root /tmp/foo\n" | True                                              | 
+  51 | //usage:       "$ ls -l /tmp/foo\n"      | True                                              | 
+  52 | //usage:       "-r--r--r--    1 root     | True                                              | 
+  53 | //usage:       "$ chown root.root /tmp/f | True                                              | 
+  54 | //usage:       "ls -l /tmp/foo\n"        | True                                              | 
+  55 | //usage:       "-r--r--r--    1 root     | True                                              | 
+  56 |                                          | True                                              | 
+  57 | #include "libbb.h"                       | True                                              | 
+  58 |                                          | True                                              | 
+  59 | /* This is a NOEXEC applet. Be very care | True                                              | 
+  60 |                                          | True                                              | 
+  61 |                                          | True                                              | 
+  62 | #define OPT_STR     "Rh" IF_DESKTOP("vcf | True                                              | 
+  63 | #define BIT_RECURSE 1                    | True                                              | 
+  64 | #define OPT_RECURSE (opt & 1)            | True                                              | 
+  65 | #define OPT_NODEREF (opt & 2)            | True                                              | 
+  66 | #define OPT_VERBOSE (IF_DESKTOP(opt & 0x | True                                              | 
+  67 | #define OPT_CHANGED (IF_DESKTOP(opt & 0x | True                                              | 
+  68 | #define OPT_QUIET   (IF_DESKTOP(opt & 0x | True                                              | 
+  69 | /* POSIX options                         | True                                              | 
+  70 |  * -L traverse every symbolic link to a  | True                                              | 
+  71 |  * -H if a command line argument is a sy | True                                              | 
+  72 |  * -P do not traverse any symbolic links | True                                              | 
+  73 |  * We do not conform to the following:   | True                                              | 
+  74 |  * "Specifying more than one of -H, -L,  | True                                              | 
+  75 |  * The last option specified shall deter | True                                              | 
+  76 | /* -L */                                 | True                                              | 
+  77 | #define BIT_TRAVERSE 0x20                | True                                              | 
+  78 | #define OPT_TRAVERSE (IF_DESKTOP(opt & B | True                                              | 
+  79 | /* -H or -L */                           | True                                              | 
+  80 | #define BIT_TRAVERSE_TOP (0x20|0x40)     | True                                              | 
+  81 | #define OPT_TRAVERSE_TOP (IF_DESKTOP(opt | True                                              | 
+  82 |                                          | True                                              | 
+  83 | #if ENABLE_FEATURE_CHOWN_LONG_OPTIONS    | True                                              | 
+  84 | static const char chown_longopts[] ALIGN | ENABLE_FEATURE_CHOWN_LONG_OPTIONS                 | 
+  85 |  "recursive\0"        No_argument   "R"  | ENABLE_FEATURE_CHOWN_LONG_OPTIONS                 | 
+  86 |  "dereference\0"      No_argument   "\xf | ENABLE_FEATURE_CHOWN_LONG_OPTIONS                 | 
+  87 |  "no-dereference\0"   No_argument   "h"  | ENABLE_FEATURE_CHOWN_LONG_OPTIONS                 | 
+  88 | # if ENABLE_DESKTOP                      | ENABLE_FEATURE_CHOWN_LONG_OPTIONS                 | 
+  89 |  "changes\0"          No_argument   "c"  | ENABLE_FEATURE_CHOWN_LONG_OPTIONS&&ENABLE_DESKTOP | 
+  90 |  "silent\0"           No_argument   "f"  | ENABLE_FEATURE_CHOWN_LONG_OPTIONS&&ENABLE_DESKTOP | 
+  91 |  "quiet\0"            No_argument   "f"  | ENABLE_FEATURE_CHOWN_LONG_OPTIONS&&ENABLE_DESKTOP | 
+  92 |  "verbose\0"          No_argument   "v"  | ENABLE_FEATURE_CHOWN_LONG_OPTIONS&&ENABLE_DESKTOP | 
+  93 | # endif                                  | ENABLE_FEATURE_CHOWN_LONG_OPTIONS                 | 
+  94 |  ;                                       | ENABLE_FEATURE_CHOWN_LONG_OPTIONS                 | 
+  95 | #endif                                   | True                                              | 
+  96 |                                          | True                                              | 
+  97 | typedef int (*chown_fptr)(const char *,  | True                                              | 
+  98 |                                          | True                                              | 
+  99 | struct param_t {                         | True                                              | 
+ 100 |  struct bb_uidgid_t ugid;                | True                                              | 
+ 101 |  chown_fptr chown_func;                  | True                                              | 
+ 102 | };                                       | True                                              | 
+ 103 |                                          | True                                              | 
+ 104 | static int FAST_FUNC fileAction(struct r | True                                              | 
+ 105 |   const char *fileName, struct stat *sta | True                                              | 
+ 106 | {                                        | True                                              | 
+ 107 | #define param  (*(struct param_t*)state- | True                                              | 
+ 108 | #define opt option_mask32                | True                                              | 
+ 109 |  uid_t u = (param.ugid.uid == (uid_t)-1L | True                                              | 
+ 110 |  gid_t g = (param.ugid.gid == (gid_t)-1L | True                                              | 
+ 111 |                                          | True                                              | 
+ 112 |  if (param.chown_func(fileName, u, g) == | True                                              | 
+ 113 |   if (OPT_VERBOSE                        | True                                              | 
+ 114 |    || (OPT_CHANGED && (statbuf->st_uid ! | True                                              | 
+ 115 |   ) {                                    | True                                              | 
+ 116 |    printf("changed ownership of '%s' to  | True                                              | 
+ 117 |      fileName, (unsigned)u, (unsigned)g) | True                                              | 
+ 118 |   }                                      | True                                              | 
+ 119 |   return TRUE;                           | True                                              | 
+ 120 |  }                                       | True                                              | 
+ 121 |  if (!OPT_QUIET)                         | True                                              | 
+ 122 |   bb_simple_perror_msg(fileName);        | True                                              | 
+ 123 |  return FALSE;                           | True                                              | 
+ 124 | #undef opt                               | True                                              | 
+ 125 | #undef param                             | True                                              | 
+ 126 | }                                        | True                                              | 
+ 127 |                                          | True                                              | 
+ 128 | int chown_main(int argc UNUSED_PARAM, ch | True                                              | 
+ 129 | {                                        | True                                              | 
+ 130 |  int retval = EXIT_SUCCESS;              | True                                              | 
+ 131 |  int opt, flags;                         | True                                              | 
+ 132 |  struct param_t param;                   | True                                              | 
+ 133 |                                          | True                                              | 
+ 134 | #if ENABLE_FEATURE_CHOWN_LONG_OPTIONS    | True                                              | 
+ 135 |  opt = getopt32long(argv, "^" OPT_STR "\ | ENABLE_FEATURE_CHOWN_LONG_OPTIONS                 | 
+ 136 | #else                                    | True                                              | 
+ 137 |  opt = getopt32(argv, "^" OPT_STR "\0" " | !ENABLE_FEATURE_CHOWN_LONG_OPTIONS                | 
+ 138 | #endif                                   | True                                              | 
+ 139 |  argv += optind;                         | True                                              | 
+ 140 |                                          | True                                              | 
+ 141 |  /* This matches coreutils behavior (alm | True                                              | 
+ 142 |  param.chown_func = chown;               | True                                              | 
+ 143 |  if (OPT_NODEREF                         | True                                              | 
+ 144 |  /* || (OPT_RECURSE && !OPT_TRAVERSE_TOP | True                                              | 
+ 145 |  IF_DESKTOP( || (opt & (BIT_RECURSE|BIT_ | True                                              | 
+ 146 |  ) {                                     | True                                              | 
+ 147 |   param.chown_func = lchown;             | True                                              | 
+ 148 |  }                                       | True                                              | 
+ 149 |                                          | True                                              | 
+ 150 |  flags = ACTION_DEPTHFIRST; /* match cor | True                                              | 
+ 151 |  if (OPT_RECURSE)                        | True                                              | 
+ 152 |   flags |= ACTION_RECURSE;               | True                                              | 
+ 153 |  if (OPT_TRAVERSE_TOP)                   | True                                              | 
+ 154 |   flags |= ACTION_FOLLOWLINKS_L0; /* -H/ | True                                              | 
+ 155 |  if (OPT_TRAVERSE)                       | True                                              | 
+ 156 |   flags |= ACTION_FOLLOWLINKS; /* follow | True                                              | 
+ 157 |                                          | True                                              | 
+ 158 |  parse_chown_usergroup_or_die(&param.ugi | True                                              | 
+ 159 |                                          | True                                              | 
+ 160 |  /* Ok, ready to do the deed now */      | True                                              | 
+ 161 |  while (*++argv) {                       | True                                              | 
+ 162 |   if (!recursive_action(*argv,           | True                                              | 
+ 163 |     flags,          /* flags */          | True                                              | 
+ 164 |     fileAction,     /* file action */    | True                                              | 
+ 165 |     fileAction,     /* dir action */     | True                                              | 
+ 166 |     &param)         /* user data */      | True                                              | 
+ 167 |   ) {                                    | True                                              | 
+ 168 |    retval = EXIT_FAILURE;                | True                                              | 
+ 169 |   }                                      | True                                              | 
+ 170 |  }                                       | True                                              | 
+ 171 |                                          | True                                              | 
+ 172 |  return retval;                          | True                                              | 
+ 173 | }                                        | True                                              | 
+ 174 |                                          | True                                              | 
+ 175 | /*                                       | True                                              | 
+ 176 | Testcase. Run in empty directory.        | True                                              | 
+ 177 |                                          | True                                              | 
+ 178 | #!/bin/sh                                | True                                              | 
+ 179 | t1="/tmp/busybox chown"                  | True                                              | 
+ 180 | t2="/usr/bin/chown"                      | True                                              | 
+ 181 | create() {                               | True                                              | 
+ 182 |     rm -rf $1; mkdir $1                  | True                                              | 
+ 183 |     (                                    | True                                              | 
+ 184 |     cd $1 || exit 1                      | True                                              | 
+ 185 |     mkdir dir dir2                       | True                                              | 
+ 186 |     >up                                  | True                                              | 
+ 187 |     >file                                | True                                              | 
+ 188 |     >dir/file                            | True                                              | 
+ 189 |     >dir2/file                           | True                                              | 
+ 190 |     ln -s dir linkdir                    | True                                              | 
+ 191 |     ln -s file linkfile                  | True                                              | 
+ 192 |     ln -s ../up dir/linkup               | True                                              | 
+ 193 |     ln -s ../dir2 dir/linkupdir2         | True                                              | 
+ 194 |     )                                    | True                                              | 
+ 195 |     chown -R 0:0 $1                      | True                                              | 
+ 196 | }                                        | True                                              | 
+ 197 | tst() {                                  | True                                              | 
+ 198 |     create test1                         | True                                              | 
+ 199 |     create test2                         | True                                              | 
+ 200 |     echo "[$1]" >>test1.out              | True                                              | 
+ 201 |     echo "[$1]" >>test2.out              | True                                              | 
+ 202 |     (cd test1; $t1 $1) >>test1.out 2>&1  | True                                              | 
+ 203 |     (cd test2; $t2 $1) >>test2.out 2>&1  | True                                              | 
+ 204 |     (cd test1; ls -lnR) >out1            | True                                              | 
+ 205 |     (cd test2; ls -lnR) >out2            | True                                              | 
+ 206 |     echo "chown $1" >out.diff            | True                                              | 
+ 207 |     if ! diff -u out1 out2 >>out.diff; t | True                                              | 
+ 208 |     rm out.diff                          | True                                              | 
+ 209 | }                                        | True                                              | 
+ 210 | tst_for_each() {                         | True                                              | 
+ 211 |     tst "$1 1:1 file"                    | True                                              | 
+ 212 |     tst "$1 1:1 dir"                     | True                                              | 
+ 213 |     tst "$1 1:1 linkdir"                 | True                                              | 
+ 214 |     tst "$1 1:1 linkfile"                | True                                              | 
+ 215 | }                                        | True                                              | 
+ 216 | echo "If script produced 'out.diff' file | True                                              | 
+ 217 | >test1.out                               | True                                              | 
+ 218 | >test2.out                               | True                                              | 
+ 219 | # These match coreutils 6.8:             | True                                              | 
+ 220 | tst_for_each "-v"                        | True                                              | 
+ 221 | tst_for_each "-vR"                       | True                                              | 
+ 222 | tst_for_each "-vRP"                      | True                                              | 
+ 223 | tst_for_each "-vRL"                      | True                                              | 
+ 224 | tst_for_each "-vRH"                      | True                                              | 
+ 225 | tst_for_each "-vh"                       | True                                              | 
+ 226 | tst_for_each "-vhR"                      | True                                              | 
+ 227 | tst_for_each "-vhRP"                     | True                                              | 
+ 228 | tst_for_each "-vhRL"                     | True                                              | 
+ 229 | tst_for_each "-vhRH"                     | True                                              | 
+ 230 | # Fix `name' in coreutils output         | True                                              | 
+ 231 | sed 's/`/'"'"'/g' -i test2.out           | True                                              | 
+ 232 | # Compare us with coreutils output       | True                                              | 
+ 233 | diff -u test1.out test2.out              | True                                              | 
+ 234 |                                          | True                                              | 
+ 235 | */                                       | True                                              | 
+-----+------------------------------------------+---------------------------------------------------+
+     |                                          | +108MB, 235ms                                     | 

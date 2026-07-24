@@ -1,0 +1,721 @@
+FILE: data/raw/busybox-1.38.0/runit/runsv.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 | Copyright (c) 2001-2006, Gerrit Pape     | True                      | 
+   3 | All rights reserved.                     | True                      | 
+   4 |                                          | True                      | 
+   5 | Redistribution and use in source and bin | True                      | 
+   6 | modification, are permitted provided tha | True                      | 
+   7 |                                          | True                      | 
+   8 |    1. Redistributions of source code mus | True                      | 
+   9 |       this list of conditions and the fo | True                      | 
+  10 |    2. Redistributions in binary form mus | True                      | 
+  11 |       notice, this list of conditions an | True                      | 
+  12 |       documentation and/or other materia | True                      | 
+  13 |    3. The name of the author may not be  | True                      | 
+  14 |       derived from this software without | True                      | 
+  15 |                                          | True                      | 
+  16 | THIS SOFTWARE IS PROVIDED BY THE AUTHOR  | True                      | 
+  17 | WARRANTIES, INCLUDING, BUT NOT LIMITED T | True                      | 
+  18 | MERCHANTABILITY AND FITNESS FOR A PARTIC | True                      | 
+  19 | EVENT SHALL THE AUTHOR BE LIABLE FOR ANY | True                      | 
+  20 | SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAM | True                      | 
+  21 | PROCUREMENT OF SUBSTITUTE GOODS OR SERVI | True                      | 
+  22 | OR BUSINESS INTERRUPTION) HOWEVER CAUSED | True                      | 
+  23 | WHETHER IN CONTRACT, STRICT LIABILITY, O | True                      | 
+  24 | OTHERWISE) ARISING IN ANY WAY OUT OF THE | True                      | 
+  25 | ADVISED OF THE POSSIBILITY OF SUCH DAMAG | True                      | 
+  26 | */                                       | True                      | 
+  27 |                                          | True                      | 
+  28 | /* Busyboxed by Denys Vlasenko <vda.linu | True                      | 
+  29 |                                          | True                      | 
+  30 | //config:config RUNSV                    | True                      | 
+  31 | //config: bool "runsv (8.2 kb)"          | True                      | 
+  32 | //config: default y                      | True                      | 
+  33 | //config: help                           | True                      | 
+  34 | //config: runsv starts and monitors a se | True                      | 
+  35 | //config: service.                       | True                      | 
+  36 |                                          | True                      | 
+  37 | //applet:IF_RUNSV(APPLET(runsv, BB_DIR_U | True                      | 
+  38 |                                          | True                      | 
+  39 | //kbuild:lib-$(CONFIG_RUNSV) += runsv.o  | True                      | 
+  40 |                                          | True                      | 
+  41 | //usage:#define runsv_trivial_usage      | True                      | 
+  42 | //usage:       "DIR"                     | True                      | 
+  43 | //usage:#define runsv_full_usage "\n\n"  | True                      | 
+  44 | //usage:       "Start and monitor a serv | True                      | 
+  45 |                                          | True                      | 
+  46 | #include <sys/file.h>                    | True                      | 
+  47 | #include "libbb.h"                       | True                      | 
+  48 | #include "common_bufsiz.h"               | True                      | 
+  49 | #include "runit_lib.h"                   | True                      | 
+  50 |                                          | True                      | 
+  51 | #if ENABLE_MONOTONIC_SYSCALL             | True                      | 
+  52 | #include <sys/syscall.h>                 | ENABLE_MONOTONIC_SYSCALL  | 
+  53 |                                          | ENABLE_MONOTONIC_SYSCALL  | 
+  54 | static void gettimeofday_ns(struct times | ENABLE_MONOTONIC_SYSCALL  | 
+  55 | {                                        | ENABLE_MONOTONIC_SYSCALL  | 
+  56 |  clock_gettime(CLOCK_REALTIME, ts);      | ENABLE_MONOTONIC_SYSCALL  | 
+  57 | }                                        | ENABLE_MONOTONIC_SYSCALL  | 
+  58 | #else                                    | True                      | 
+  59 | static void gettimeofday_ns(struct times | !ENABLE_MONOTONIC_SYSCALL | 
+  60 | {                                        | !ENABLE_MONOTONIC_SYSCALL | 
+  61 |  if (sizeof(struct timeval) == sizeof(st | !ENABLE_MONOTONIC_SYSCALL | 
+  62 |   && sizeof(((struct timeval*)ts)->tv_us | !ENABLE_MONOTONIC_SYSCALL | 
+  63 |  ) {                                     | !ENABLE_MONOTONIC_SYSCALL | 
+  64 |   /* Cheat */                            | !ENABLE_MONOTONIC_SYSCALL | 
+  65 |   xgettimeofday((void*)ts);              | !ENABLE_MONOTONIC_SYSCALL | 
+  66 |   ts->tv_nsec *= 1000;                   | !ENABLE_MONOTONIC_SYSCALL | 
+  67 |  } else {                                | !ENABLE_MONOTONIC_SYSCALL | 
+  68 |   /* For example, musl has "incompatible | !ENABLE_MONOTONIC_SYSCALL | 
+  69 |   struct timeval tv;                     | !ENABLE_MONOTONIC_SYSCALL | 
+  70 |   xgettimeofday(&tv);                    | !ENABLE_MONOTONIC_SYSCALL | 
+  71 |   ts->tv_sec = tv.tv_sec;                | !ENABLE_MONOTONIC_SYSCALL | 
+  72 |   ts->tv_nsec = tv.tv_usec * 1000;       | !ENABLE_MONOTONIC_SYSCALL | 
+  73 |  }                                       | !ENABLE_MONOTONIC_SYSCALL | 
+  74 | }                                        | !ENABLE_MONOTONIC_SYSCALL | 
+  75 | #endif                                   | True                      | 
+  76 |                                          | True                      | 
+  77 | /* Compare possibly overflowing unsigned | True                      | 
+  78 | #define LESS(a,b) ((int)((unsigned)(b) - | True                      | 
+  79 |                                          | True                      | 
+  80 | /* state */                              | True                      | 
+  81 | #define S_DOWN 0                         | True                      | 
+  82 | #define S_RUN 1                          | True                      | 
+  83 | #define S_FINISH 2                       | True                      | 
+  84 | /* ctrl */                               | True                      | 
+  85 | #define C_NOOP 0                         | True                      | 
+  86 | #define C_TERM 1                         | True                      | 
+  87 | #define C_PAUSE 2                        | True                      | 
+  88 | /* want */                               | True                      | 
+  89 | #define W_UP 0                           | True                      | 
+  90 | #define W_DOWN 1                         | True                      | 
+  91 | #define W_EXIT 2                         | True                      | 
+  92 |                                          | True                      | 
+  93 | struct svdir {                           | True                      | 
+  94 |  int pid;                                | True                      | 
+  95 |  smallint state;                         | True                      | 
+  96 |  smallint ctrl;                          | True                      | 
+  97 |  smallint sd_want;                       | True                      | 
+  98 |  smallint islog;                         | True                      | 
+  99 |  struct timespec start;                  | True                      | 
+ 100 |  int fdlock;                             | True                      | 
+ 101 |  int fdcontrol;                          | True                      | 
+ 102 |  int fdcontrolwrite;                     | True                      | 
+ 103 |  int wstat;                              | True                      | 
+ 104 | };                                       | True                      | 
+ 105 |                                          | True                      | 
+ 106 | struct globals {                         | True                      | 
+ 107 |  smallint haslog;                        | True                      | 
+ 108 |  smallint sigterm;                       | True                      | 
+ 109 |  smallint pidchanged;                    | True                      | 
+ 110 |  struct fd_pair selfpipe;                | True                      | 
+ 111 |  struct fd_pair logpipe;                 | True                      | 
+ 112 |  char *dir;                              | True                      | 
+ 113 |  struct svdir svd[2];                    | True                      | 
+ 114 | } FIX_ALIASING;                          | True                      | 
+ 115 | #define G (*(struct globals*)bb_common_b | True                      | 
+ 116 | #define haslog       (G.haslog      )    | True                      | 
+ 117 | #define sigterm      (G.sigterm     )    | True                      | 
+ 118 | #define pidchanged   (G.pidchanged  )    | True                      | 
+ 119 | #define selfpipe     (G.selfpipe    )    | True                      | 
+ 120 | #define logpipe      (G.logpipe     )    | True                      | 
+ 121 | #define dir          (G.dir         )    | True                      | 
+ 122 | #define svd          (G.svd         )    | True                      | 
+ 123 | #define INIT_G() do { \                  | True                      | 
+ 124 |  setup_common_bufsiz(); \                | True                      | 
+ 125 |  pidchanged = 1; \                       | True                      | 
+ 126 | } while (0)                              | True                      | 
+ 127 |                                          | True                      | 
+ 128 | static void fatal2_cannot(const char *m1 | True                      | 
+ 129 | {                                        | True                      | 
+ 130 |  bb_perror_msg_and_die("%s: fatal: can't | True                      | 
+ 131 |  /* was exiting 111 */                   | True                      | 
+ 132 | }                                        | True                      | 
+ 133 | static void fatal_cannot(const char *m)  | True                      | 
+ 134 | {                                        | True                      | 
+ 135 |  fatal2_cannot(m, "");                   | True                      | 
+ 136 |  /* was exiting 111 */                   | True                      | 
+ 137 | }                                        | True                      | 
+ 138 | static void fatal2x_cannot(const char *m | True                      | 
+ 139 | {                                        | True                      | 
+ 140 |  bb_error_msg_and_die("%s: fatal: can't  | True                      | 
+ 141 |  /* was exiting 111 */                   | True                      | 
+ 142 | }                                        | True                      | 
+ 143 | static void warn2_cannot(const char *m1, | True                      | 
+ 144 | {                                        | True                      | 
+ 145 |  bb_perror_msg("%s: warning: can't %s%s" | True                      | 
+ 146 | }                                        | True                      | 
+ 147 | static void warn_cannot(const char *m)   | True                      | 
+ 148 | {                                        | True                      | 
+ 149 |  warn2_cannot(m, "");                    | True                      | 
+ 150 | }                                        | True                      | 
+ 151 |                                          | True                      | 
+ 152 | /* SIGCHLD/TERM handler is reentrancy-sa | True                      | 
+ 153 |  * only over poll() call, not over memor | True                      | 
+ 154 |  * or printouts. Do not need to save/res | True                      | 
+ 155 |  * as poll() error is not checked there. | True                      | 
+ 156 |  */                                      | True                      | 
+ 157 | static void s_chld_term(int sig_no)      | True                      | 
+ 158 | {                                        | True                      | 
+ 159 |  if (sig_no == SIGTERM)                  | True                      | 
+ 160 |   sigterm = 1;                           | True                      | 
+ 161 |  write(selfpipe.wr, "", 1);              | True                      | 
+ 162 | }                                        | True                      | 
+ 163 |                                          | True                      | 
+ 164 | static int open_trunc_or_warn(const char | True                      | 
+ 165 | {                                        | True                      | 
+ 166 |  /* Why O_NDELAY? */                     | True                      | 
+ 167 |  int fd = open(name, O_WRONLY | O_NDELAY | True                      | 
+ 168 |  if (fd < 0)                             | True                      | 
+ 169 |   bb_perror_msg("%s: warning: cannot ope | True                      | 
+ 170 |     dir, name);                          | True                      | 
+ 171 |  return fd;                              | True                      | 
+ 172 | }                                        | True                      | 
+ 173 |                                          | True                      | 
+ 174 | static void update_status(struct svdir * | True                      | 
+ 175 | {                                        | True                      | 
+ 176 |  ssize_t sz;                             | True                      | 
+ 177 |  int fd;                                 | True                      | 
+ 178 |  svstatus_t status;                      | True                      | 
+ 179 |  const char *fstatus ="log/supervise/sta | True                      | 
+ 180 |  const char *fstatusnew ="log/supervise/ | True                      | 
+ 181 |  const char *f_stat ="log/supervise/stat | True                      | 
+ 182 |  const char *fstatnew ="log/supervise/st | True                      | 
+ 183 |  const char *fpid ="log/supervise/pid";  | True                      | 
+ 184 |  const char *fpidnew ="log/supervise/pid | True                      | 
+ 185 |                                          | True                      | 
+ 186 |  if (!s->islog) {                        | True                      | 
+ 187 |   fstatus += 4;                          | True                      | 
+ 188 |   fstatusnew += 4;                       | True                      | 
+ 189 |   f_stat += 4;                           | True                      | 
+ 190 |   fstatnew += 4;                         | True                      | 
+ 191 |   fpid += 4;                             | True                      | 
+ 192 |   fpidnew += 4;                          | True                      | 
+ 193 |  }                                       | True                      | 
+ 194 |                                          | True                      | 
+ 195 |  /* pid */                               | True                      | 
+ 196 |  if (pidchanged) {                       | True                      | 
+ 197 |   fd = open_trunc_or_warn(fpidnew);      | True                      | 
+ 198 |   if (fd < 0)                            | True                      | 
+ 199 |    return;                               | True                      | 
+ 200 |   if (s->pid) {                          | True                      | 
+ 201 |    char spid[sizeof(int)*3 + 2];         | True                      | 
+ 202 |    int size = sprintf(spid, "%u\n", (uns | True                      | 
+ 203 |    write(fd, spid, size);                | True                      | 
+ 204 |   }                                      | True                      | 
+ 205 |   close(fd);                             | True                      | 
+ 206 |   if (rename_or_warn(fpidnew, fpid))     | True                      | 
+ 207 |    return;                               | True                      | 
+ 208 |   pidchanged = 0;                        | True                      | 
+ 209 |  }                                       | True                      | 
+ 210 |                                          | True                      | 
+ 211 |  /* stat */                              | True                      | 
+ 212 |  fd = open_trunc_or_warn(fstatnew);      | True                      | 
+ 213 |  if (fd < 0)                             | True                      | 
+ 214 |   return;                                | True                      | 
+ 215 |                                          | True                      | 
+ 216 |  {                                       | True                      | 
+ 217 |   char stat_buf[sizeof("finish, paused,  | True                      | 
+ 218 |   char *p = stat_buf;                    | True                      | 
+ 219 |   switch (s->state) {                    | True                      | 
+ 220 |   case S_DOWN:                           | True                      | 
+ 221 |    p = stpcpy(p, "down");                | True                      | 
+ 222 |    break;                                | True                      | 
+ 223 |   case S_RUN:                            | True                      | 
+ 224 |    p = stpcpy(p, "run");                 | True                      | 
+ 225 |    break;                                | True                      | 
+ 226 |   case S_FINISH:                         | True                      | 
+ 227 |    p = stpcpy(p, "finish");              | True                      | 
+ 228 |    break;                                | True                      | 
+ 229 |   }                                      | True                      | 
+ 230 |   if (s->ctrl & C_PAUSE)                 | True                      | 
+ 231 |    p = stpcpy(p, ", paused");            | True                      | 
+ 232 |   if (s->ctrl & C_TERM)                  | True                      | 
+ 233 |    p = stpcpy(p, ", got TERM");          | True                      | 
+ 234 |   if (s->state != S_DOWN)                | True                      | 
+ 235 |    switch (s->sd_want) {                 | True                      | 
+ 236 |    case W_DOWN:                          | True                      | 
+ 237 |     p = stpcpy(p, ", want down");        | True                      | 
+ 238 |     break;                               | True                      | 
+ 239 |    case W_EXIT:                          | True                      | 
+ 240 |     p = stpcpy(p, ", want exit");        | True                      | 
+ 241 |     break;                               | True                      | 
+ 242 |    }                                     | True                      | 
+ 243 |   *p++ = '\n';                           | True                      | 
+ 244 |   write(fd, stat_buf, p - stat_buf);     | True                      | 
+ 245 |   close(fd);                             | True                      | 
+ 246 |  }                                       | True                      | 
+ 247 |                                          | True                      | 
+ 248 |  rename_or_warn(fstatnew, f_stat);       | True                      | 
+ 249 |                                          | True                      | 
+ 250 |  /* supervise compatibility */           | True                      | 
+ 251 |  memset(&status, 0, sizeof(status));     | True                      | 
+ 252 |  status.time_be64 = SWAP_BE64(s->start.t | True                      | 
+ 253 |  status.time_nsec_be32 = SWAP_BE32(s->st | True                      | 
+ 254 |  status.pid_le32 = SWAP_LE32(s->pid);    | True                      | 
+ 255 |  if (s->ctrl & C_PAUSE)                  | True                      | 
+ 256 |   status.paused = 1;                     | True                      | 
+ 257 |  if (s->sd_want == W_UP)                 | True                      | 
+ 258 |   status.want = 'u';                     | True                      | 
+ 259 |  else                                    | True                      | 
+ 260 |   status.want = 'd';                     | True                      | 
+ 261 |  if (s->ctrl & C_TERM)                   | True                      | 
+ 262 |   status.got_term = 1;                   | True                      | 
+ 263 |  status.run_or_finish = s->state;        | True                      | 
+ 264 |  fd = open_trunc_or_warn(fstatusnew);    | True                      | 
+ 265 |  if (fd < 0)                             | True                      | 
+ 266 |   return;                                | True                      | 
+ 267 |  sz = write(fd, &status, sizeof(status)) | True                      | 
+ 268 |  close(fd);                              | True                      | 
+ 269 |  if (sz != sizeof(status)) {             | True                      | 
+ 270 |   warn2_cannot("write ", fstatusnew);    | True                      | 
+ 271 |   unlink(fstatusnew);                    | True                      | 
+ 272 |   return;                                | True                      | 
+ 273 |  }                                       | True                      | 
+ 274 |  rename_or_warn(fstatusnew, fstatus);    | True                      | 
+ 275 | }                                        | True                      | 
+ 276 |                                          | True                      | 
+ 277 | static unsigned custom(struct svdir *s,  | True                      | 
+ 278 | {                                        | True                      | 
+ 279 |  pid_t pid;                              | True                      | 
+ 280 |  int w;                                  | True                      | 
+ 281 |  char a[10];                             | True                      | 
+ 282 |  struct stat st;                         | True                      | 
+ 283 |                                          | True                      | 
+ 284 |  if (s->islog)                           | True                      | 
+ 285 |   return 0;                              | True                      | 
+ 286 |  strcpy(a, "control/?");                 | True                      | 
+ 287 |  a[8] = c; /* replace '?' */             | True                      | 
+ 288 |  if (stat(a, &st) == 0) {                | True                      | 
+ 289 |   if (st.st_mode & S_IXUSR) {            | True                      | 
+ 290 |    pid = vfork();                        | True                      | 
+ 291 |    if (pid == -1) {                      | True                      | 
+ 292 |     warn2_cannot("vfork for ", a);       | True                      | 
+ 293 |     return 0;                            | True                      | 
+ 294 |    }                                     | True                      | 
+ 295 |    if (pid == 0) {                       | True                      | 
+ 296 |     /* child */                          | True                      | 
+ 297 |     if (haslog && dup2(logpipe.wr, 1) == | True                      | 
+ 298 |      warn2_cannot("setup stdout for ", a | True                      | 
+ 299 |     execl(a, a, (char *) NULL);          | True                      | 
+ 300 |     fatal2_cannot("run ", a);            | True                      | 
+ 301 |    }                                     | True                      | 
+ 302 |    /* parent */                          | True                      | 
+ 303 |    if (safe_waitpid(pid, &w, 0) == -1) { | True                      | 
+ 304 |     warn2_cannot("wait for child ", a);  | True                      | 
+ 305 |     return 0;                            | True                      | 
+ 306 |    }                                     | True                      | 
+ 307 |    return WEXITSTATUS(w) == 0;           | True                      | 
+ 308 |   }                                      | True                      | 
+ 309 |  } else {                                | True                      | 
+ 310 |   if (errno != ENOENT)                   | True                      | 
+ 311 |    warn2_cannot("stat ", a);             | True                      | 
+ 312 |  }                                       | True                      | 
+ 313 |  return 0;                               | True                      | 
+ 314 | }                                        | True                      | 
+ 315 |                                          | True                      | 
+ 316 | static void stopservice(struct svdir *s) | True                      | 
+ 317 | {                                        | True                      | 
+ 318 |  if (s->pid && !custom(s, 't')) {        | True                      | 
+ 319 |   kill(s->pid, SIGTERM);                 | True                      | 
+ 320 |   s->ctrl |= C_TERM;                     | True                      | 
+ 321 |   update_status(s);                      | True                      | 
+ 322 |  }                                       | True                      | 
+ 323 |  if (s->sd_want == W_DOWN) {             | True                      | 
+ 324 |   kill(s->pid, SIGCONT);                 | True                      | 
+ 325 |   custom(s, 'd');                        | True                      | 
+ 326 |   return;                                | True                      | 
+ 327 |  }                                       | True                      | 
+ 328 |  if (s->sd_want == W_EXIT) {             | True                      | 
+ 329 |   kill(s->pid, SIGCONT);                 | True                      | 
+ 330 |   custom(s, 'x');                        | True                      | 
+ 331 |  }                                       | True                      | 
+ 332 | }                                        | True                      | 
+ 333 |                                          | True                      | 
+ 334 | static void startservice(struct svdir *s | True                      | 
+ 335 | {                                        | True                      | 
+ 336 |  int p;                                  | True                      | 
+ 337 |  const char *arg[4];                     | True                      | 
+ 338 |  char exitcode[sizeof(int)*3 + 2];       | True                      | 
+ 339 |                                          | True                      | 
+ 340 |  if (s->state == S_FINISH) {             | True                      | 
+ 341 | /* Two arguments are given to ./finish.  | True                      | 
+ 342 |  * or -1 if ./run didnt exit normally. T | True                      | 
+ 343 |  * the least significant byte of the exi | True                      | 
+ 344 |  * for instance it is 0 if ./run exited  | True                      | 
+ 345 |  * if ./run was terminated by a signal.  | True                      | 
+ 346 |  * for some reason, the exit code is 111 | True                      | 
+ 347 |  */                                      | True                      | 
+ 348 |   arg[0] = "./finish";                   | True                      | 
+ 349 |   arg[1] = "-1";                         | True                      | 
+ 350 |   if (WIFEXITED(s->wstat)) {             | True                      | 
+ 351 |    *utoa_to_buf(WEXITSTATUS(s->wstat), e | True                      | 
+ 352 |    arg[1] = exitcode;                    | True                      | 
+ 353 |   }                                      | True                      | 
+ 354 |   //arg[2] = "0";                        | True                      | 
+ 355 |   //if (WIFSIGNALED(s->wstat)) {         | True                      | 
+ 356 |    arg[2] = utoa(WTERMSIG(s->wstat));    | True                      | 
+ 357 |   //}                                    | True                      | 
+ 358 |   arg[3] = NULL;                         | True                      | 
+ 359 |  } else {                                | True                      | 
+ 360 |   arg[0] = "./run";                      | True                      | 
+ 361 |   arg[1] = NULL;                         | True                      | 
+ 362 |   custom(s, 'u');                        | True                      | 
+ 363 |  }                                       | True                      | 
+ 364 |                                          | True                      | 
+ 365 |  if (s->pid != 0)                        | True                      | 
+ 366 |   stopservice(s); /* should never happen | True                      | 
+ 367 |  while ((p = vfork()) == -1) {           | True                      | 
+ 368 |   warn_cannot("vfork, sleeping");        | True                      | 
+ 369 |   sleep(5);                              | True                      | 
+ 370 |  }                                       | True                      | 
+ 371 |  if (p == 0) {                           | True                      | 
+ 372 |   /* child */                            | True                      | 
+ 373 |   if (haslog) {                          | True                      | 
+ 374 |    /* NB: bug alert! right order is clos | True                      | 
+ 375 |    if (s->islog) {                       | True                      | 
+ 376 |     xchdir("./log");                     | True                      | 
+ 377 |     close(logpipe.wr);                   | True                      | 
+ 378 |     xdup2(logpipe.rd, 0);                | True                      | 
+ 379 |    } else {                              | True                      | 
+ 380 |     close(logpipe.rd);                   | True                      | 
+ 381 |     xdup2(logpipe.wr, 1);                | True                      | 
+ 382 |    }                                     | True                      | 
+ 383 |   }                                      | True                      | 
+ 384 |   /* Non-ignored signals revert to SIG_D | True                      | 
+ 385 |    * But we can get signals BEFORE execl | True                      | 
+ 386 |    * SIGCHLD is safe (would merely write | True                      | 
+ 387 |    * but SIGTERM would set sigterm = 1 ( | True                      | 
+ 388 |    * Avoid that.                         | True                      | 
+ 389 |    */                                    | True                      | 
+ 390 |   /*signal(SIGCHLD, SIG_DFL);*/          | True                      | 
+ 391 |   signal(SIGTERM, SIG_DFL);              | True                      | 
+ 392 |   sig_unblock(SIGCHLD);                  | True                      | 
+ 393 |   sig_unblock(SIGTERM);                  | True                      | 
+ 394 |   execv(arg[0], (char**) arg);           | True                      | 
+ 395 |   fatal2_cannot(s->islog ? "start log/"  | True                      | 
+ 396 |  }                                       | True                      | 
+ 397 |  /* parent */                            | True                      | 
+ 398 |  if (s->state != S_FINISH) {             | True                      | 
+ 399 |   gettimeofday_ns(&s->start);            | True                      | 
+ 400 |   s->state = S_RUN;                      | True                      | 
+ 401 |  }                                       | True                      | 
+ 402 |  s->pid = p;                             | True                      | 
+ 403 |  pidchanged = 1;                         | True                      | 
+ 404 |  s->ctrl = C_NOOP;                       | True                      | 
+ 405 |  update_status(s);                       | True                      | 
+ 406 | }                                        | True                      | 
+ 407 |                                          | True                      | 
+ 408 | static int ctrl(struct svdir *s, char c) | True                      | 
+ 409 | {                                        | True                      | 
+ 410 |  int sig;                                | True                      | 
+ 411 |                                          | True                      | 
+ 412 |  switch (c) {                            | True                      | 
+ 413 |  case 'd': /* down */                    | True                      | 
+ 414 |   s->sd_want = W_DOWN;                   | True                      | 
+ 415 |   update_status(s);                      | True                      | 
+ 416 |   if (s->state == S_RUN)                 | True                      | 
+ 417 |    stopservice(s);                       | True                      | 
+ 418 |   break;                                 | True                      | 
+ 419 |  case 'u': /* up */                      | True                      | 
+ 420 |   s->sd_want = W_UP;                     | True                      | 
+ 421 |   update_status(s);                      | True                      | 
+ 422 |   if (s->state == S_DOWN)                | True                      | 
+ 423 |    startservice(s);                      | True                      | 
+ 424 |   break;                                 | True                      | 
+ 425 |  case 'x': /* exit */                    | True                      | 
+ 426 |   if (s->islog)                          | True                      | 
+ 427 |    break;                                | True                      | 
+ 428 |   s->sd_want = W_EXIT;                   | True                      | 
+ 429 |   update_status(s);                      | True                      | 
+ 430 |   /* FALLTHROUGH */                      | True                      | 
+ 431 |  case 't': /* sig term */                | True                      | 
+ 432 |   if (s->state == S_RUN)                 | True                      | 
+ 433 |    stopservice(s);                       | True                      | 
+ 434 |   break;                                 | True                      | 
+ 435 |  case 'k': /* sig kill */                | True                      | 
+ 436 |   if ((s->state == S_RUN) && !custom(s,  | True                      | 
+ 437 |    kill(s->pid, SIGKILL);                | True                      | 
+ 438 |   s->state = S_DOWN;                     | True                      | 
+ 439 |   break;                                 | True                      | 
+ 440 |  case 'p': /* sig pause */               | True                      | 
+ 441 |   if ((s->state == S_RUN) && !custom(s,  | True                      | 
+ 442 |    kill(s->pid, SIGSTOP);                | True                      | 
+ 443 |   s->ctrl |= C_PAUSE;                    | True                      | 
+ 444 |   update_status(s);                      | True                      | 
+ 445 |   break;                                 | True                      | 
+ 446 |  case 'c': /* sig cont */                | True                      | 
+ 447 |   if ((s->state == S_RUN) && !custom(s,  | True                      | 
+ 448 |    kill(s->pid, SIGCONT);                | True                      | 
+ 449 |   s->ctrl &= ~C_PAUSE;                   | True                      | 
+ 450 |   update_status(s);                      | True                      | 
+ 451 |   break;                                 | True                      | 
+ 452 |  case 'o': /* once */                    | True                      | 
+ 453 |   s->sd_want = W_DOWN;                   | True                      | 
+ 454 |   update_status(s);                      | True                      | 
+ 455 |   if (s->state == S_DOWN)                | True                      | 
+ 456 |    startservice(s);                      | True                      | 
+ 457 |   break;                                 | True                      | 
+ 458 |  case 'a': /* sig alarm */               | True                      | 
+ 459 |   sig = SIGALRM;                         | True                      | 
+ 460 |   goto sendsig;                          | True                      | 
+ 461 |  case 'h': /* sig hup */                 | True                      | 
+ 462 |   sig = SIGHUP;                          | True                      | 
+ 463 |   goto sendsig;                          | True                      | 
+ 464 |  case 'i': /* sig int */                 | True                      | 
+ 465 |   sig = SIGINT;                          | True                      | 
+ 466 |   goto sendsig;                          | True                      | 
+ 467 |  case 'q': /* sig quit */                | True                      | 
+ 468 |   sig = SIGQUIT;                         | True                      | 
+ 469 |   goto sendsig;                          | True                      | 
+ 470 |  case '1': /* sig usr1 */                | True                      | 
+ 471 |   sig = SIGUSR1;                         | True                      | 
+ 472 |   goto sendsig;                          | True                      | 
+ 473 |  case '2': /* sig usr2 */                | True                      | 
+ 474 |   sig = SIGUSR2;                         | True                      | 
+ 475 |   goto sendsig;                          | True                      | 
+ 476 |  }                                       | True                      | 
+ 477 |  return 1;                               | True                      | 
+ 478 |  sendsig:                                | True                      | 
+ 479 |  if ((s->state == S_RUN) && !custom(s, c | True                      | 
+ 480 |   kill(s->pid, sig);                     | True                      | 
+ 481 |  return 1;                               | True                      | 
+ 482 | }                                        | True                      | 
+ 483 |                                          | True                      | 
+ 484 | static void open_control(const char *f,  | True                      | 
+ 485 | {                                        | True                      | 
+ 486 |  struct stat st;                         | True                      | 
+ 487 |  mkfifo(f, 0600);                        | True                      | 
+ 488 |  if (stat(f, &st) == -1)                 | True                      | 
+ 489 |   fatal2_cannot("stat ", f);             | True                      | 
+ 490 |  if (!S_ISFIFO(st.st_mode))              | True                      | 
+ 491 |   bb_error_msg_and_die("%s: fatal: %s ex | True                      | 
+ 492 |  s->fdcontrol = xopen(f, O_RDONLY|O_NDEL | True                      | 
+ 493 |  close_on_exec_on(s->fdcontrol);         | True                      | 
+ 494 |  s->fdcontrolwrite = xopen(f, O_WRONLY|O | True                      | 
+ 495 |  close_on_exec_on(s->fdcontrolwrite);    | True                      | 
+ 496 |  update_status(s);                       | True                      | 
+ 497 | }                                        | True                      | 
+ 498 |                                          | True                      | 
+ 499 | int runsv_main(int argc, char **argv) MA | True                      | 
+ 500 | int runsv_main(int argc UNUSED_PARAM, ch | True                      | 
+ 501 | {                                        | True                      | 
+ 502 |  struct stat s;                          | True                      | 
+ 503 |  int fd;                                 | True                      | 
+ 504 |  int r;                                  | True                      | 
+ 505 |  char buf[256];                          | True                      | 
+ 506 |                                          | True                      | 
+ 507 |  INIT_G();                               | True                      | 
+ 508 |                                          | True                      | 
+ 509 |  dir = single_argv(argv);                | True                      | 
+ 510 |                                          | True                      | 
+ 511 |  xpiped_pair(selfpipe);                  | True                      | 
+ 512 |  close_on_exec_on(selfpipe.rd);          | True                      | 
+ 513 |  close_on_exec_on(selfpipe.wr);          | True                      | 
+ 514 |  ndelay_on(selfpipe.rd);                 | True                      | 
+ 515 |  ndelay_on(selfpipe.wr);                 | True                      | 
+ 516 |                                          | True                      | 
+ 517 |  sig_block(SIGCHLD);                     | True                      | 
+ 518 |  sig_block(SIGTERM);                     | True                      | 
+ 519 |  /* No particular reason why we don't se | True                      | 
+ 520 |   * (poll() wouldn't restart regardless  | True                      | 
+ 521 |   * we just follow what runit-2.1.2 does | True                      | 
+ 522 |   */                                     | True                      | 
+ 523 |  bb_signals_norestart(0                  | True                      | 
+ 524 |    + (1 << SIGCHLD)                      | True                      | 
+ 525 |    + (1 << SIGTERM)                      | True                      | 
+ 526 |    , s_chld_term);                       | True                      | 
+ 527 |                                          | True                      | 
+ 528 |  xchdir(dir);                            | True                      | 
+ 529 |  /* bss: svd[0].pid = 0; */              | True                      | 
+ 530 |  if (S_DOWN) svd[0].state = S_DOWN; /* o | True                      | 
+ 531 |  if (C_NOOP) svd[0].ctrl = C_NOOP;       | True                      | 
+ 532 |  if (W_UP) svd[0].sd_want = W_UP;        | True                      | 
+ 533 |  /* bss: svd[0].islog = 0; */            | True                      | 
+ 534 |  /* bss: svd[1].pid = 0; */              | True                      | 
+ 535 |  gettimeofday_ns(&svd[0].start);         | True                      | 
+ 536 |  if (stat("down", &s) != -1)             | True                      | 
+ 537 |   svd[0].sd_want = W_DOWN;               | True                      | 
+ 538 |                                          | True                      | 
+ 539 |  if (stat("log", &s) == -1) {            | True                      | 
+ 540 |   if (errno != ENOENT)                   | True                      | 
+ 541 |    warn_cannot("stat ./log");            | True                      | 
+ 542 |  } else {                                | True                      | 
+ 543 |   if (!S_ISDIR(s.st_mode)) {             | True                      | 
+ 544 |    errno = 0;                            | True                      | 
+ 545 |    warn_cannot("stat log/down: log is no | True                      | 
+ 546 |   } else {                               | True                      | 
+ 547 |    haslog = 1;                           | True                      | 
+ 548 |    svd[1].state = S_DOWN;                | True                      | 
+ 549 |    svd[1].ctrl = C_NOOP;                 | True                      | 
+ 550 |    svd[1].sd_want = W_UP;                | True                      | 
+ 551 |    svd[1].islog = 1;                     | True                      | 
+ 552 |    gettimeofday_ns(&svd[1].start);       | True                      | 
+ 553 |    if (stat("log/down", &s) != -1)       | True                      | 
+ 554 |     svd[1].sd_want = W_DOWN;             | True                      | 
+ 555 |    xpiped_pair(logpipe);                 | True                      | 
+ 556 |    close_on_exec_on(logpipe.rd);         | True                      | 
+ 557 |    close_on_exec_on(logpipe.wr);         | True                      | 
+ 558 |   }                                      | True                      | 
+ 559 |  }                                       | True                      | 
+ 560 |                                          | True                      | 
+ 561 |  if (mkdir("supervise", 0700) == -1) {   | True                      | 
+ 562 |   r = readlink("supervise", buf, sizeof( | True                      | 
+ 563 |   if (r != -1) {                         | True                      | 
+ 564 |    if (r == sizeof(buf))                 | True                      | 
+ 565 |     fatal2x_cannot("readlink ./supervise | True                      | 
+ 566 |    buf[r] = 0;                           | True                      | 
+ 567 |    mkdir(buf, 0700);                     | True                      | 
+ 568 |   } else {                               | True                      | 
+ 569 |    if ((errno != ENOENT) && (errno != EI | True                      | 
+ 570 |     fatal_cannot("readlink ./supervise") | True                      | 
+ 571 |   }                                      | True                      | 
+ 572 |  }                                       | True                      | 
+ 573 |  svd[0].fdlock = xopen3("log/supervise/l | True                      | 
+ 574 |    O_WRONLY|O_NDELAY|O_APPEND|O_CREAT, 0 | True                      | 
+ 575 |  if (flock(svd[0].fdlock, LOCK_EX | LOCK | True                      | 
+ 576 |   fatal_cannot("lock supervise/lock");   | True                      | 
+ 577 |  close_on_exec_on(svd[0].fdlock);        | True                      | 
+ 578 |  if (haslog) {                           | True                      | 
+ 579 |   if (mkdir("log/supervise", 0700) == -1 | True                      | 
+ 580 |    r = readlink("log/supervise", buf, 25 | True                      | 
+ 581 |    if (r != -1) {                        | True                      | 
+ 582 |     if (r == 256)                        | True                      | 
+ 583 |      fatal2x_cannot("readlink ./log/supe | True                      | 
+ 584 |     buf[r] = 0;                          | True                      | 
+ 585 |     fd = xopen(".", O_RDONLY|O_NDELAY);  | True                      | 
+ 586 |     xchdir("./log");                     | True                      | 
+ 587 |     mkdir(buf, 0700);                    | True                      | 
+ 588 |     if (fchdir(fd) == -1)                | True                      | 
+ 589 |      fatal_cannot("change back to servic | True                      | 
+ 590 |     close(fd);                           | True                      | 
+ 591 |    }                                     | True                      | 
+ 592 |    else {                                | True                      | 
+ 593 |     if ((errno != ENOENT) && (errno != E | True                      | 
+ 594 |      fatal_cannot("readlink ./log/superv | True                      | 
+ 595 |    }                                     | True                      | 
+ 596 |   }                                      | True                      | 
+ 597 |   svd[1].fdlock = xopen3("log/supervise/ | True                      | 
+ 598 |     O_WRONLY|O_NDELAY|O_APPEND|O_CREAT,  | True                      | 
+ 599 |   if (flock(svd[1].fdlock, LOCK_EX) == - | True                      | 
+ 600 |    fatal_cannot("lock log/supervise/lock | True                      | 
+ 601 |   close_on_exec_on(svd[1].fdlock);       | True                      | 
+ 602 |  }                                       | True                      | 
+ 603 |                                          | True                      | 
+ 604 |  open_control("log/supervise/control"+4, | True                      | 
+ 605 |  if (haslog) {                           | True                      | 
+ 606 |   open_control("log/supervise/control",  | True                      | 
+ 607 |  }                                       | True                      | 
+ 608 |  mkfifo("log/supervise/ok"+4, 0600);     | True                      | 
+ 609 |  fd = xopen("log/supervise/ok"+4, O_RDON | True                      | 
+ 610 |  close_on_exec_on(fd);                   | True                      | 
+ 611 |  if (haslog) {                           | True                      | 
+ 612 |   mkfifo("log/supervise/ok", 0600);      | True                      | 
+ 613 |   fd = xopen("log/supervise/ok", O_RDONL | True                      | 
+ 614 |   close_on_exec_on(fd);                  | True                      | 
+ 615 |  }                                       | True                      | 
+ 616 |  for (;;) {                              | True                      | 
+ 617 |   struct pollfd x[3];                    | True                      | 
+ 618 |   unsigned deadline;                     | True                      | 
+ 619 |   char ch;                               | True                      | 
+ 620 |                                          | True                      | 
+ 621 |   if (haslog)                            | True                      | 
+ 622 |    if (!svd[1].pid && svd[1].sd_want ==  | True                      | 
+ 623 |     startservice(&svd[1]);               | True                      | 
+ 624 |   if (!svd[0].pid)                       | True                      | 
+ 625 |    if (svd[0].sd_want == W_UP || svd[0]. | True                      | 
+ 626 |     startservice(&svd[0]);               | True                      | 
+ 627 |                                          | True                      | 
+ 628 |   x[0].fd = selfpipe.rd;                 | True                      | 
+ 629 |   x[0].events = POLLIN;                  | True                      | 
+ 630 |   x[1].fd = svd[0].fdcontrol;            | True                      | 
+ 631 |   x[1].events = POLLIN;                  | True                      | 
+ 632 |   /* x[2] is used only if haslog == 1 */ | True                      | 
+ 633 |   x[2].fd = svd[1].fdcontrol;            | True                      | 
+ 634 |   x[2].events = POLLIN;                  | True                      | 
+ 635 |   sig_unblock(SIGTERM);                  | True                      | 
+ 636 |   sig_unblock(SIGCHLD);                  | True                      | 
+ 637 |   poll(x, 2 + haslog, 3600*1000);        | True                      | 
+ 638 |   /* NB: signal handlers can trash errno | True                      | 
+ 639 |   sig_block(SIGTERM);                    | True                      | 
+ 640 |   sig_block(SIGCHLD);                    | True                      | 
+ 641 |                                          | True                      | 
+ 642 |   while (read(selfpipe.rd, &ch, 1) == 1) | True                      | 
+ 643 |    continue;                             | True                      | 
+ 644 |                                          | True                      | 
+ 645 |   for (;;) {                             | True                      | 
+ 646 |    pid_t child;                          | True                      | 
+ 647 |    int wstat;                            | True                      | 
+ 648 |                                          | True                      | 
+ 649 |    child = wait_any_nohang(&wstat);      | True                      | 
+ 650 |    if (!child)                           | True                      | 
+ 651 |     break;                               | True                      | 
+ 652 |    if ((child == -1) && (errno != EINTR) | True                      | 
+ 653 |     break;                               | True                      | 
+ 654 |    if (child == svd[0].pid) {            | True                      | 
+ 655 |     svd[0].wstat = wstat;                | True                      | 
+ 656 |     svd[0].pid = 0;                      | True                      | 
+ 657 |     pidchanged = 1;                      | True                      | 
+ 658 |     svd[0].ctrl &= ~C_TERM;              | True                      | 
+ 659 |     if (svd[0].state != S_FINISH) {      | True                      | 
+ 660 |      fd = open("finish", O_RDONLY|O_NDEL | True                      | 
+ 661 |      if (fd != -1) {                     | True                      | 
+ 662 |       close(fd);                         | True                      | 
+ 663 |       svd[0].state = S_FINISH;           | True                      | 
+ 664 |       update_status(&svd[0]);            | True                      | 
+ 665 |       continue;                          | True                      | 
+ 666 |      }                                   | True                      | 
+ 667 |     }                                    | True                      | 
+ 668 |     svd[0].state = S_DOWN;               | True                      | 
+ 669 |     deadline = svd[0].start.tv_sec + 1;  | True                      | 
+ 670 |     gettimeofday_ns(&svd[0].start);      | True                      | 
+ 671 |     update_status(&svd[0]);              | True                      | 
+ 672 |     if (LESS(svd[0].start.tv_sec, deadli | True                      | 
+ 673 |      sleep1();                           | True                      | 
+ 674 |    }                                     | True                      | 
+ 675 |    if (haslog) {                         | True                      | 
+ 676 |     if (child == svd[1].pid) {           | True                      | 
+ 677 |      svd[0].wstat = wstat;               | True                      | 
+ 678 |      svd[1].pid = 0;                     | True                      | 
+ 679 |      pidchanged = 1;                     | True                      | 
+ 680 |      svd[1].state = S_DOWN;              | True                      | 
+ 681 |      svd[1].ctrl &= ~C_TERM;             | True                      | 
+ 682 |      deadline = svd[1].start.tv_sec + 1; | True                      | 
+ 683 |      gettimeofday_ns(&svd[1].start);     | True                      | 
+ 684 |      update_status(&svd[1]);             | True                      | 
+ 685 |      if (LESS(svd[1].start.tv_sec, deadl | True                      | 
+ 686 |       sleep1();                          | True                      | 
+ 687 |     }                                    | True                      | 
+ 688 |    }                                     | True                      | 
+ 689 |   } /* for (;;) */                       | True                      | 
+ 690 |   if (read(svd[0].fdcontrol, &ch, 1) ==  | True                      | 
+ 691 |    ctrl(&svd[0], ch);                    | True                      | 
+ 692 |   if (haslog)                            | True                      | 
+ 693 |    if (read(svd[1].fdcontrol, &ch, 1) == | True                      | 
+ 694 |     ctrl(&svd[1], ch);                   | True                      | 
+ 695 |                                          | True                      | 
+ 696 |   if (sigterm) {                         | True                      | 
+ 697 |    ctrl(&svd[0], 'x');                   | True                      | 
+ 698 |    sigterm = 0;                          | True                      | 
+ 699 |   }                                      | True                      | 
+ 700 |                                          | True                      | 
+ 701 |   if (svd[0].sd_want == W_EXIT && svd[0] | True                      | 
+ 702 |    if (svd[1].pid == 0)                  | True                      | 
+ 703 |     _exit_SUCCESS();                     | True                      | 
+ 704 |    if (svd[1].sd_want != W_EXIT) {       | True                      | 
+ 705 |     svd[1].sd_want = W_EXIT;             | True                      | 
+ 706 |     /* stopservice(&svd[1]); */          | True                      | 
+ 707 |     update_status(&svd[1]);              | True                      | 
+ 708 |     close(logpipe.wr);                   | True                      | 
+ 709 |     close(logpipe.rd);                   | True                      | 
+ 710 |    }                                     | True                      | 
+ 711 |   }                                      | True                      | 
+ 712 |  } /* for (;;) */                        | True                      | 
+ 713 |  /* not reached */                       | True                      | 
+ 714 |  return 0;                               | True                      | 
+ 715 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +126MB, 302ms             | 

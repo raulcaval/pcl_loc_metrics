@@ -1,0 +1,1305 @@
+FILE: data/raw/busybox-1.38.0/archival/libarchive/decompress_gunzip.c
+Resultado PCLocator:
+   # | line of code                             | Merge                      | 
+-----+------------------------------------------+----------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                       | 
+   2 | /*                                       | True                       | 
+   3 |  * gunzip implementation for busybox     | True                       | 
+   4 |  *                                       | True                       | 
+   5 |  * Based on GNU gzip v1.2.4 Copyright (C | True                       | 
+   6 |  *                                       | True                       | 
+   7 |  * Originally adjusted for busybox by Sv | True                       | 
+   8 |  * based on gzip sources                 | True                       | 
+   9 |  *                                       | True                       | 
+  10 |  * Adjusted further by Erik Andersen <an | True                       | 
+  11 |  * files as well as stdin/stdout, and to | True                       | 
+  12 |  * command line handling.                | True                       | 
+  13 |  *                                       | True                       | 
+  14 |  * General cleanup to better adhere to t | True                       | 
+  15 |  * busybox functions by Glenn McGrath    | True                       | 
+  16 |  *                                       | True                       | 
+  17 |  * read_gz interface + associated hackin | True                       | 
+  18 |  *                                       | True                       | 
+  19 |  * Fixed huft_build() so decoding end-of | True                       | 
+  20 |  * than necessary (this is required by u | True                       | 
+  21 |  * to free leaked bytebuffer memory (use | True                       | 
+  22 |  * guide cleanups by Ed Clark            | True                       | 
+  23 |  *                                       | True                       | 
+  24 |  * gzip (GNU zip) -- compress files with | True                       | 
+  25 |  * Copyright (C) 1992-1993 Jean-loup Gai | True                       | 
+  26 |  * The unzip code was written and put in | True                       | 
+  27 |  * Portions of the lzw code are derived  | True                       | 
+  28 |  * written by Spencer Thomas, Joe Orost, | True                       | 
+  29 |  * Ken Turkowski, Dave Mack and Peter Ja | True                       | 
+  30 |  *                                       | True                       | 
+  31 |  * See the file algorithm.doc for the co | True                       | 
+  32 |  *                                       | True                       | 
+  33 |  * Licensed under GPLv2 or later, see fi | True                       | 
+  34 |  */                                      | True                       | 
+  35 | #include "libbb.h"                       | True                       | 
+  36 | #include "bb_archive.h"                  | True                       | 
+  37 |                                          | True                       | 
+  38 | typedef struct huft_t {                  | True                       | 
+  39 |  unsigned char e; /* number of extra bit | True                       | 
+  40 |  unsigned char b; /* number of bits in t | True                       | 
+  41 |  union {                                 | True                       | 
+  42 |   unsigned n; /* literal, length base, o | True                       | 
+  43 |   /* ^^^^^ was "unsigned short", but tha | True                       | 
+  44 |   struct huft_t *t; /* pointer to next l | True                       | 
+  45 |  } v;                                    | True                       | 
+  46 | } huft_t;                                | True                       | 
+  47 |                                          | True                       | 
+  48 | enum {                                   | True                       | 
+  49 |  /* gunzip_window size--must be a power  | True                       | 
+  50 |   * at least 32K for zip's deflate metho | True                       | 
+  51 |  GUNZIP_WSIZE = 0x8000,                  | True                       | 
+  52 |  /* If BMAX needs to be larger than 16,  | True                       | 
+  53 |  BMAX = 16, /* maximum bit length of any | True                       | 
+  54 |  N_MAX = 288, /* maximum number of codes | True                       | 
+  55 | };                                       | True                       | 
+  56 |                                          | True                       | 
+  57 |                                          | True                       | 
+  58 | /* This is somewhat complex-looking arra | True                       | 
+  59 |  * to place decompressor state either in | True                       | 
+  60 |  * malloc'ed space simply by changing #d | True                       | 
+  61 |  * Sizes on i386:                        | True                       | 
+  62 |  * text    data     bss     dec     hex  | True                       | 
+  63 |  * 5256       0     108    5364    14f4  | True                       | 
+  64 |  * 4915       0       0    4915    1333  | True                       | 
+  65 |  */                                      | True                       | 
+  66 | #define STATE_IN_BSS 0                   | True                       | 
+  67 | #define STATE_IN_MALLOC 1                | True                       | 
+  68 |                                          | True                       | 
+  69 |                                          | True                       | 
+  70 | typedef struct state_t {                 | True                       | 
+  71 |  off_t gunzip_bytes_out; /* number of ou | True                       | 
+  72 |  uint32_t gunzip_crc;                    | True                       | 
+  73 |                                          | True                       | 
+  74 |  int gunzip_src_fd;                      | True                       | 
+  75 |  unsigned gunzip_outbuf_count; /* bytes  | True                       | 
+  76 |                                          | True                       | 
+  77 |  unsigned char *gunzip_window;           | True                       | 
+  78 |                                          | True                       | 
+  79 |  uint32_t *gunzip_crc_table;             | True                       | 
+  80 |                                          | True                       | 
+  81 |  /* bitbuffer */                         | True                       | 
+  82 |  unsigned gunzip_bb; /* bit buffer */    | True                       | 
+  83 |  unsigned char gunzip_bk; /* bits in bit | True                       | 
+  84 |                                          | True                       | 
+  85 |  /* input (compressed) data */           | True                       | 
+  86 |  unsigned char *bytebuffer;      /* buff | True                       | 
+  87 |  off_t to_read;   /* compressed bytes to | True                       | 
+  88 | // unsigned bytebuffer_max;        /* bu | True                       | 
+  89 |  unsigned bytebuffer_offset;     /* buff | True                       | 
+  90 |  unsigned bytebuffer_size;       /* how  | True                       | 
+  91 |                                          | True                       | 
+  92 |  /* private data of inflate_codes() */   | True                       | 
+  93 |  unsigned inflate_codes_ml; /* masks for | True                       | 
+  94 |  unsigned inflate_codes_md; /* masks for | True                       | 
+  95 |  unsigned inflate_codes_bb; /* bit buffe | True                       | 
+  96 |  unsigned inflate_codes_k; /* number of  | True                       | 
+  97 |  unsigned inflate_codes_w; /* current gu | True                       | 
+  98 |  huft_t *inflate_codes_tl;               | True                       | 
+  99 |  huft_t *inflate_codes_td;               | True                       | 
+ 100 |  unsigned inflate_codes_bl;              | True                       | 
+ 101 |  unsigned inflate_codes_bd;              | True                       | 
+ 102 |  unsigned inflate_codes_nn; /* length an | True                       | 
+ 103 |  unsigned inflate_codes_dd;              | True                       | 
+ 104 |                                          | True                       | 
+ 105 |  smallint resume_copy;                   | True                       | 
+ 106 |                                          | True                       | 
+ 107 |  /* private data of inflate_get_next_win | True                       | 
+ 108 |  smallint method; /* method == -1 for st | True                       | 
+ 109 |  smallint need_another_block;            | True                       | 
+ 110 |  smallint end_reached;                   | True                       | 
+ 111 |                                          | True                       | 
+ 112 |  /* private data of inflate_stored() */  | True                       | 
+ 113 |  unsigned inflate_stored_n;              | True                       | 
+ 114 |  unsigned inflate_stored_b;              | True                       | 
+ 115 |  unsigned inflate_stored_k;              | True                       | 
+ 116 |  unsigned inflate_stored_w;              | True                       | 
+ 117 |                                          | True                       | 
+ 118 |  const char *error_msg;                  | True                       | 
+ 119 |  jmp_buf error_jmp;                      | True                       | 
+ 120 | } state_t;                               | True                       | 
+ 121 | #define gunzip_bytes_out    (S()gunzip_b | True                       | 
+ 122 | #define gunzip_crc          (S()gunzip_c | True                       | 
+ 123 | #define gunzip_src_fd       (S()gunzip_s | True                       | 
+ 124 | #define gunzip_outbuf_count (S()gunzip_o | True                       | 
+ 125 | #define gunzip_window       (S()gunzip_w | True                       | 
+ 126 | #define gunzip_crc_table    (S()gunzip_c | True                       | 
+ 127 | #define gunzip_bb           (S()gunzip_b | True                       | 
+ 128 | #define gunzip_bk           (S()gunzip_b | True                       | 
+ 129 | #define to_read             (S()to_read  | True                       | 
+ 130 | // #define bytebuffer_max   (S()bytebuff | True                       | 
+ 131 | // Both gunzip and unzip can use constan | True                       | 
+ 132 | #define bytebuffer_max      0x4000       | True                       | 
+ 133 | #define bytebuffer          (S()bytebuff | True                       | 
+ 134 | #define bytebuffer_offset   (S()bytebuff | True                       | 
+ 135 | #define bytebuffer_size     (S()bytebuff | True                       | 
+ 136 | #define inflate_codes_ml    (S()inflate_ | True                       | 
+ 137 | #define inflate_codes_md    (S()inflate_ | True                       | 
+ 138 | #define inflate_codes_bb    (S()inflate_ | True                       | 
+ 139 | #define inflate_codes_k     (S()inflate_ | True                       | 
+ 140 | #define inflate_codes_w     (S()inflate_ | True                       | 
+ 141 | #define inflate_codes_tl    (S()inflate_ | True                       | 
+ 142 | #define inflate_codes_td    (S()inflate_ | True                       | 
+ 143 | #define inflate_codes_bl    (S()inflate_ | True                       | 
+ 144 | #define inflate_codes_bd    (S()inflate_ | True                       | 
+ 145 | #define inflate_codes_nn    (S()inflate_ | True                       | 
+ 146 | #define inflate_codes_dd    (S()inflate_ | True                       | 
+ 147 | #define resume_copy         (S()resume_c | True                       | 
+ 148 | #define method              (S()method   | True                       | 
+ 149 | #define need_another_block  (S()need_ano | True                       | 
+ 150 | #define end_reached         (S()end_reac | True                       | 
+ 151 | #define inflate_stored_n    (S()inflate_ | True                       | 
+ 152 | #define inflate_stored_b    (S()inflate_ | True                       | 
+ 153 | #define inflate_stored_k    (S()inflate_ | True                       | 
+ 154 | #define inflate_stored_w    (S()inflate_ | True                       | 
+ 155 | #define error_msg           (S()error_ms | True                       | 
+ 156 | #define error_jmp           (S()error_jm | True                       | 
+ 157 |                                          | True                       | 
+ 158 | /* This is a generic part */             | True                       | 
+ 159 | #if STATE_IN_BSS /* Use global data segm | True                       | 
+ 160 | #define DECLARE_STATE /*nothing*/        | STATE_IN_BSS               | 
+ 161 | #define ALLOC_STATE /*nothing*/          | STATE_IN_BSS               | 
+ 162 | #define DEALLOC_STATE ((void)0)          | STATE_IN_BSS               | 
+ 163 | #define S() state.                       | STATE_IN_BSS               | 
+ 164 | #define PASS_STATE /*nothing*/           | STATE_IN_BSS               | 
+ 165 | #define PASS_STATE_ONLY /*nothing*/      | STATE_IN_BSS               | 
+ 166 | #define STATE_PARAM /*nothing*/          | STATE_IN_BSS               | 
+ 167 | #define STATE_PARAM_ONLY void            | STATE_IN_BSS               | 
+ 168 | static state_t state;                    | STATE_IN_BSS               | 
+ 169 | #endif                                   | True                       | 
+ 170 |                                          | True                       | 
+ 171 | #if STATE_IN_MALLOC /* Use malloc space  | True                       | 
+ 172 | #define DECLARE_STATE state_t *state     | STATE_IN_MALLOC            | 
+ 173 | #define ALLOC_STATE (state = xzalloc(siz | STATE_IN_MALLOC            | 
+ 174 | #define DEALLOC_STATE free(state)        | STATE_IN_MALLOC            | 
+ 175 | #define S() state->                      | STATE_IN_MALLOC            | 
+ 176 | #define PASS_STATE state,                | STATE_IN_MALLOC            | 
+ 177 | #define PASS_STATE_ONLY state            | STATE_IN_MALLOC            | 
+ 178 | #define STATE_PARAM state_t *state,      | STATE_IN_MALLOC            | 
+ 179 | #define STATE_PARAM_ONLY state_t *state  | STATE_IN_MALLOC            | 
+ 180 | #endif                                   | True                       | 
+ 181 |                                          | True                       | 
+ 182 |                                          | True                       | 
+ 183 | static const uint16_t mask_bits[] ALIGN2 | True                       | 
+ 184 |  0x0000, 0x0001, 0x0003, 0x0007, 0x000f, | True                       | 
+ 185 |  0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff, | True                       | 
+ 186 | };                                       | True                       | 
+ 187 |                                          | True                       | 
+ 188 | /* Put lengths/offsets and extra bits in | True                       | 
+ 189 |  * to make calls to huft_build() have on | True                       | 
+ 190 |  */                                      | True                       | 
+ 191 | struct cp_ext {                          | True                       | 
+ 192 |  uint16_t cp[31];                        | True                       | 
+ 193 |  uint8_t ext[31];                        | True                       | 
+ 194 | };                                       | True                       | 
+ 195 | /* Copy lengths and extra bits for liter | True                       | 
+ 196 | /* note: see note #13 above about the 25 | True                       | 
+ 197 | static const struct cp_ext lit ALIGN2 =  | True                       | 
+ 198 |  /*257 258 259 260 261 262 263 264 265 2 | True                       | 
+ 199 |  /*0   1   2   3   4   5   6   7   8   9 | True                       | 
+ 200 |  { 3,  4,  5,  6,  7,  8,  9,  10, 11, 1 | True                       | 
+ 201 |  { 0,  0,  0,  0,  0,  0,  0,   0,  1,   | True                       | 
+ 202 | };                                       | True                       | 
+ 203 | /* Copy offsets and extra bits for dista | True                       | 
+ 204 | static const struct cp_ext dist ALIGN2 = | True                       | 
+ 205 |  /*0   1   2   3   4   5   6   7   8   9 | True                       | 
+ 206 |  { 1,  2,  3,  4,  5,  7,  9,  13, 17, 2 | True                       | 
+ 207 |  { 0,  0,  0,  0,  1,  1,  2,   2,  3,   | True                       | 
+ 208 | };                                       | True                       | 
+ 209 |                                          | True                       | 
+ 210 | /* Tables for deflate from PKZIP's appno | True                       | 
+ 211 | /* Order of the bit length code lengths  | True                       | 
+ 212 | static const uint8_t border[] ALIGN1 = { | True                       | 
+ 213 |  16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4 | True                       | 
+ 214 | };                                       | True                       | 
+ 215 |                                          | True                       | 
+ 216 |                                          | True                       | 
+ 217 | /*                                       | True                       | 
+ 218 |  * Free the malloc'ed tables built by hu | True                       | 
+ 219 |  * list of the tables it made, with the  | True                       | 
+ 220 |  * each table.                           | True                       | 
+ 221 |  * t: table to free                      | True                       | 
+ 222 |  */                                      | True                       | 
+ 223 | #define BAD_HUFT(p) ((uintptr_t)(p) & 1) | True                       | 
+ 224 | #define ERR_RET     ((huft_t*)(uintptr_t | True                       | 
+ 225 | static void huft_free(huft_t *p)         | True                       | 
+ 226 | {                                        | True                       | 
+ 227 |  huft_t *q;                              | True                       | 
+ 228 |                                          | True                       | 
+ 229 |  /*                                      | True                       | 
+ 230 |   * If 'p' has the error bit set we have | True                       | 
+ 231 |   * into a segmentation fault or an inva | True                       | 
+ 232 |   */                                     | True                       | 
+ 233 |  //if (BAD_HUFT(p)) // commented out, si | True                       | 
+ 234 |   p = (huft_t*)((uintptr_t)p & ~(uintptr | True                       | 
+ 235 |                                          | True                       | 
+ 236 |  /* Go through linked list, freeing from | True                       | 
+ 237 |  while (p) {                             | True                       | 
+ 238 |   q = (--p)->v.t;                        | True                       | 
+ 239 |   free(p);                               | True                       | 
+ 240 |   p = q;                                 | True                       | 
+ 241 |  }                                       | True                       | 
+ 242 | }                                        | True                       | 
+ 243 |                                          | True                       | 
+ 244 | static void huft_free_all(STATE_PARAM_ON | True                       | 
+ 245 | {                                        | True                       | 
+ 246 |  huft_free(inflate_codes_tl);            | True                       | 
+ 247 |  huft_free(inflate_codes_td);            | True                       | 
+ 248 |  inflate_codes_tl = NULL;                | True                       | 
+ 249 |  inflate_codes_td = NULL;                | True                       | 
+ 250 | }                                        | True                       | 
+ 251 |                                          | True                       | 
+ 252 | static void abort_unzip(STATE_PARAM_ONLY | True                       | 
+ 253 | static void abort_unzip(STATE_PARAM_ONLY | True                       | 
+ 254 | {                                        | True                       | 
+ 255 |  huft_free_all(PASS_STATE_ONLY);         | True                       | 
+ 256 |  longjmp(error_jmp, 1);                  | True                       | 
+ 257 | }                                        | True                       | 
+ 258 |                                          | True                       | 
+ 259 | static unsigned fill_bitbuffer(STATE_PAR | True                       | 
+ 260 | {                                        | True                       | 
+ 261 |  while (*current < required) {           | True                       | 
+ 262 |   if (bytebuffer_offset >= bytebuffer_si | True                       | 
+ 263 |    unsigned sz = bytebuffer_max - 4;     | True                       | 
+ 264 |    if (to_read >= 0 && to_read < sz) /*  | True                       | 
+ 265 |     sz = to_read;                        | True                       | 
+ 266 |    /* Leave the first 4 bytes empty so w | True                       | 
+ 267 |     * to the front of the bytebuffer */  | True                       | 
+ 268 |    bytebuffer_size = safe_read(gunzip_sr | True                       | 
+ 269 |    if ((int)bytebuffer_size < 1) {       | True                       | 
+ 270 |     error_msg = "unexpected end of file" | True                       | 
+ 271 |     abort_unzip(PASS_STATE_ONLY);        | True                       | 
+ 272 |    }                                     | True                       | 
+ 273 |    if (to_read >= 0) /* unzip only */    | True                       | 
+ 274 |     to_read -= bytebuffer_size;          | True                       | 
+ 275 |    bytebuffer_size += 4;                 | True                       | 
+ 276 |    bytebuffer_offset = 4;                | True                       | 
+ 277 |   }                                      | True                       | 
+ 278 |   bitbuffer |= ((unsigned) bytebuffer[by | True                       | 
+ 279 |   bytebuffer_offset++;                   | True                       | 
+ 280 |   *current += 8;                         | True                       | 
+ 281 |  }                                       | True                       | 
+ 282 |  return bitbuffer;                       | True                       | 
+ 283 | }                                        | True                       | 
+ 284 |                                          | True                       | 
+ 285 |                                          | True                       | 
+ 286 | /* Given a list of code lengths and a ma | True                       | 
+ 287 |  * tables to decode that set of codes.   | True                       | 
+ 288 |  *                                       | True                       | 
+ 289 |  * b: code lengths in bits (all assumed  | True                       | 
+ 290 |  * n: number of codes (assumed <= N_MAX) | True                       | 
+ 291 |  * s: number of simple-valued codes (0.. | True                       | 
+ 292 |  * cp_ext->cp,ext: list of base values/e | True                       | 
+ 293 |  * m: maximum lookup bits, returns actua | True                       | 
+ 294 |  * result: starting table                | True                       | 
+ 295 |  *                                       | True                       | 
+ 296 |  * On error, returns a value with lowest | True                       | 
+ 297 |  * It can be just the value of 0x1,      | True                       | 
+ 298 |  * or a valid pointer to a Huffman table | True                       | 
+ 299 |  * is given: "fixed inflate" decoder fee | True                       | 
+ 300 |  */                                      | True                       | 
+ 301 | static huft_t* huft_build(const unsigned | True                       | 
+ 302 |    const unsigned s, const struct cp_ext | True                       | 
+ 303 |    unsigned *m)                          | True                       | 
+ 304 | {                                        | True                       | 
+ 305 |  unsigned a;             /* counter for  | True                       | 
+ 306 |  unsigned c[BMAX + 1];   /* bit length c | True                       | 
+ 307 |  unsigned eob_len;       /* length of en | True                       | 
+ 308 |  unsigned f;             /* i repeats in | True                       | 
+ 309 |  int g;                  /* maximum code | True                       | 
+ 310 |  int htl;                /* table level  | True                       | 
+ 311 |  unsigned i;             /* counter, cur | True                       | 
+ 312 |  unsigned j;             /* counter */   | True                       | 
+ 313 |  int k;                  /* number of bi | True                       | 
+ 314 |  const unsigned *p;      /* pointer into | True                       | 
+ 315 |  huft_t *q;              /* points to cu | True                       | 
+ 316 |  huft_t r;               /* table entry  | True                       | 
+ 317 |  huft_t *u[BMAX];        /* table stack  | True                       | 
+ 318 |  unsigned v[N_MAX + 1];  /* values in or | True                       | 
+ 319 |  int ws[BMAX + 1];       /* bits decoded | True                       | 
+ 320 |  int w;                  /* bits decoded | True                       | 
+ 321 |  unsigned x[BMAX + 1];   /* bit offsets, | True                       | 
+ 322 |  unsigned *xp;           /* pointer into | True                       | 
+ 323 |  int y;                  /* number of du | True                       | 
+ 324 |  unsigned z;             /* number of en | True                       | 
+ 325 |  huft_t *result;                         | True                       | 
+ 326 |  huft_t **t;                             | True                       | 
+ 327 |                                          | True                       | 
+ 328 |  /* Length of EOB code, if any */        | True                       | 
+ 329 |  eob_len = n > 256 ? b[256] : BMAX;      | True                       | 
+ 330 |                                          | True                       | 
+ 331 |  /* Generate counts for each bit length  | True                       | 
+ 332 |  memset(c, 0, sizeof(c));                | True                       | 
+ 333 |  p = b;                                  | True                       | 
+ 334 |  i = n;                                  | True                       | 
+ 335 |  do {                                    | True                       | 
+ 336 |   c[*p]++; /* assume all entries <= BMAX | True                       | 
+ 337 |   p++;     /* can't combine with above l | True                       | 
+ 338 |  } while (--i);                          | True                       | 
+ 339 |  if (c[0] == n) {  /* null input - all z | True                       | 
+ 340 |   q = xzalloc(3 * sizeof(*q));           | True                       | 
+ 341 |   //q[0].v.t = NULL;                     | True                       | 
+ 342 |   q[1].e = 99;    /* invalid code marker | True                       | 
+ 343 |   q[1].b = 1;                            | True                       | 
+ 344 |   q[2].e = 99;    /* invalid code marker | True                       | 
+ 345 |   q[2].b = 1;                            | True                       | 
+ 346 |   *m = 1;                                | True                       | 
+ 347 |   return q + 1;                          | True                       | 
+ 348 |  }                                       | True                       | 
+ 349 |                                          | True                       | 
+ 350 |  /* Find minimum and maximum length, bou | True                       | 
+ 351 |  for (j = 1; (j <= BMAX) && (c[j] == 0); | True                       | 
+ 352 |   continue;                              | True                       | 
+ 353 |  k = j; /* minimum code length */        | True                       | 
+ 354 |  for (i = BMAX; (c[i] == 0) && i; i--)   | True                       | 
+ 355 |   continue;                              | True                       | 
+ 356 |  g = i; /* maximum code length */        | True                       | 
+ 357 |  *m = (*m < j) ? j : ((*m > i) ? i : *m) | True                       | 
+ 358 |                                          | True                       | 
+ 359 |  /* Adjust last length count to fill out | True                       | 
+ 360 |  for (y = 1 << j; j < i; j++, y <<= 1) { | True                       | 
+ 361 |   y -= c[j];                             | True                       | 
+ 362 |   if (y < 0)                             | True                       | 
+ 363 |    return ERR_RET; /* bad input: more co | True                       | 
+ 364 |  }                                       | True                       | 
+ 365 |  y -= c[i];                              | True                       | 
+ 366 |  if (y < 0)                              | True                       | 
+ 367 |   return ERR_RET;                        | True                       | 
+ 368 |  c[i] += y;                              | True                       | 
+ 369 |                                          | True                       | 
+ 370 |  /* Generate starting offsets into the v | True                       | 
+ 371 |  x[1] = j = 0;                           | True                       | 
+ 372 |  p = c + 1;                              | True                       | 
+ 373 |  xp = x + 2;                             | True                       | 
+ 374 |  while (--i) { /* note that i == g from  | True                       | 
+ 375 |   j += *p++;                             | True                       | 
+ 376 |   *xp++ = j;                             | True                       | 
+ 377 |  }                                       | True                       | 
+ 378 |                                          | True                       | 
+ 379 |  /* Make a table of values in order of b | True                       | 
+ 380 |   * To detect bad input, unused v[i]'s a | True                       | 
+ 381 |   * In particular, last v[i] is never fi | True                       | 
+ 382 |   */                                     | True                       | 
+ 383 |  memset(v, 0xff, sizeof(v));             | True                       | 
+ 384 |  p = b;                                  | True                       | 
+ 385 |  i = 0;                                  | True                       | 
+ 386 |  do {                                    | True                       | 
+ 387 |   j = *p++;                              | True                       | 
+ 388 |   if (j != 0) {                          | True                       | 
+ 389 |    v[x[j]++] = i;                        | True                       | 
+ 390 |   }                                      | True                       | 
+ 391 |  } while (++i < n);                      | True                       | 
+ 392 |                                          | True                       | 
+ 393 |  /* Generate the Huffman codes and for e | True                       | 
+ 394 |  result = ERR_RET;                       | True                       | 
+ 395 |  t = &result;                            | True                       | 
+ 396 |  x[0] = i = 0;   /* first Huffman code i | True                       | 
+ 397 |  p = v;          /* grab values in bit o | True                       | 
+ 398 |  htl = -1;       /* no tables yet--level | True                       | 
+ 399 |  w = ws[0] = 0;  /* bits decoded */      | True                       | 
+ 400 |  u[0] = NULL;    /* just to keep compile | True                       | 
+ 401 |  q = NULL;       /* ditto */             | True                       | 
+ 402 |  z = 0;          /* ditto */             | True                       | 
+ 403 |                                          | True                       | 
+ 404 |  /* go through the bit lengths (k alread | True                       | 
+ 405 |  for (; k <= g; k++) {                   | True                       | 
+ 406 |   a = c[k];                              | True                       | 
+ 407 |   while (a--) {                          | True                       | 
+ 408 |    /* here i is the Huffman code of leng | True                       | 
+ 409 |    /* make tables up to required level * | True                       | 
+ 410 |    while (k > ws[htl + 1]) {             | True                       | 
+ 411 |     w = ws[++htl];                       | True                       | 
+ 412 |                                          | True                       | 
+ 413 |     /* compute minimum size table less t | True                       | 
+ 414 |     z = g - w;                           | True                       | 
+ 415 |     z = z > *m ? *m : z; /* upper limit  | True                       | 
+ 416 |     j = k - w;                           | True                       | 
+ 417 |     f = 1 << j;                          | True                       | 
+ 418 |     if (f > a + 1) { /* try a k-w bit ta | True                       | 
+ 419 |      /* too few codes for k-w bit table  | True                       | 
+ 420 |      f -= a + 1; /* deduct codes from pa | True                       | 
+ 421 |      xp = c + k;                         | True                       | 
+ 422 |      while (++j < z) { /* try smaller ta | True                       | 
+ 423 |       f <<= 1;                           | True                       | 
+ 424 |       if (f <= *++xp) {                  | True                       | 
+ 425 |        break; /* enough codes to use up  | True                       | 
+ 426 |       }                                  | True                       | 
+ 427 |       f -= *xp; /* else deduct codes fro | True                       | 
+ 428 |      }                                   | True                       | 
+ 429 |     }                                    | True                       | 
+ 430 |     j = (w + j > eob_len && w < eob_len) | True                       | 
+ 431 |     z = 1 << j; /* table entries for j-b | True                       | 
+ 432 |     ws[htl+1] = w + j; /* set bits decod | True                       | 
+ 433 |                                          | True                       | 
+ 434 |     /* allocate and link in new table */ | True                       | 
+ 435 |     q = xzalloc((z + 1) * sizeof(huft_t) | True                       | 
+ 436 |     *t = q + 1; /* link to list for huft | True                       | 
+ 437 |     t = &(q->v.t);                       | True                       | 
+ 438 |     u[htl] = ++q; /* table starts after  | True                       | 
+ 439 |                                          | True                       | 
+ 440 |     /* connect to last table, if there i | True                       | 
+ 441 |     if (htl) {                           | True                       | 
+ 442 |      x[htl] = i; /* save pattern for bac | True                       | 
+ 443 |      r.b = (unsigned char) (w - ws[htl - | True                       | 
+ 444 |      r.e = (unsigned char) (16 + j); /*  | True                       | 
+ 445 |      r.v.t = q; /* pointer to this table | True                       | 
+ 446 |      j = (i & ((1 << w) - 1)) >> ws[htl  | True                       | 
+ 447 |      u[htl - 1][j] = r; /* connect to la | True                       | 
+ 448 |     }                                    | True                       | 
+ 449 |    }                                     | True                       | 
+ 450 |                                          | True                       | 
+ 451 |    /* set up table entry in r */         | True                       | 
+ 452 |    r.b = (unsigned char) (k - w);        | True                       | 
+ 453 |    if (/*p >= v + n || -- redundant, cau | True                       | 
+ 454 |        *p == UINT_MAX /* do we access un | True                       | 
+ 455 |    ) {                                   | True                       | 
+ 456 |     r.e = 99; /* out of values--invalid  | True                       | 
+ 457 |    } else if (*p < s) {                  | True                       | 
+ 458 |     r.e = (unsigned char) (*p < 256 ? 16 | True                       | 
+ 459 |     r.v.n = (unsigned short) (*p++); /*  | True                       | 
+ 460 |    } else {                              | True                       | 
+ 461 |     r.e = (unsigned char) cp_ext->ext[*p | True                       | 
+ 462 |     r.v.n = cp_ext->cp[*p++ - s];        | True                       | 
+ 463 |    }                                     | True                       | 
+ 464 |                                          | True                       | 
+ 465 |    /* fill code-like entries with r */   | True                       | 
+ 466 |    f = 1 << (k - w);                     | True                       | 
+ 467 |    for (j = i >> w; j < z; j += f) {     | True                       | 
+ 468 |     q[j] = r;                            | True                       | 
+ 469 |    }                                     | True                       | 
+ 470 |                                          | True                       | 
+ 471 |    /* backwards increment the k-bit code | True                       | 
+ 472 |    for (j = 1 << (k - 1); i & j; j >>= 1 | True                       | 
+ 473 |     i ^= j;                              | True                       | 
+ 474 |    }                                     | True                       | 
+ 475 |    i ^= j;                               | True                       | 
+ 476 |                                          | True                       | 
+ 477 |    /* backup over finished tables */     | True                       | 
+ 478 |    while ((i & ((1 << w) - 1)) != x[htl] | True                       | 
+ 479 |     w = ws[--htl];                       | True                       | 
+ 480 |    }                                     | True                       | 
+ 481 |   }                                      | True                       | 
+ 482 |  }                                       | True                       | 
+ 483 |                                          | True                       | 
+ 484 |  /* return actual size of base table */  | True                       | 
+ 485 |  *m = ws[1];                             | True                       | 
+ 486 |                                          | True                       | 
+ 487 |  if (y != 0 && g != 1) /* we were given  | True                       | 
+ 488 |   /* return "result" ORed with 1 */      | True                       | 
+ 489 |   return (void*)((uintptr_t)result | 1); | True                       | 
+ 490 |                                          | True                       | 
+ 491 |  return result;                          | True                       | 
+ 492 | }                                        | True                       | 
+ 493 |                                          | True                       | 
+ 494 |                                          | True                       | 
+ 495 | /*                                       | True                       | 
+ 496 |  * inflate (decompress) the codes in a d | True                       | 
+ 497 |  * Return an error code or zero if it al | True                       | 
+ 498 |  *                                       | True                       | 
+ 499 |  * tl, td: literal/length and distance d | True                       | 
+ 500 |  * bl, bd: number of bits decoded by tl[ | True                       | 
+ 501 |  */                                      | True                       | 
+ 502 | /* called once from inflate_block */     | True                       | 
+ 503 |                                          | True                       | 
+ 504 | /* map formerly local static variables t | True                       | 
+ 505 | #define ml inflate_codes_ml              | True                       | 
+ 506 | #define md inflate_codes_md              | True                       | 
+ 507 | #define bb inflate_codes_bb              | True                       | 
+ 508 | #define k  inflate_codes_k               | True                       | 
+ 509 | #define w  inflate_codes_w               | True                       | 
+ 510 | #define tl inflate_codes_tl              | True                       | 
+ 511 | #define td inflate_codes_td              | True                       | 
+ 512 | #define bl inflate_codes_bl              | True                       | 
+ 513 | #define bd inflate_codes_bd              | True                       | 
+ 514 | #define nn inflate_codes_nn              | True                       | 
+ 515 | #define dd inflate_codes_dd              | True                       | 
+ 516 | static void inflate_codes_setup(STATE_PA | True                       | 
+ 517 | {                                        | True                       | 
+ 518 |  bl = my_bl;                             | True                       | 
+ 519 |  bd = my_bd;                             | True                       | 
+ 520 |  /* make local copies of globals */      | True                       | 
+ 521 |  bb = gunzip_bb;   /* initialize bit buf | True                       | 
+ 522 |  k = gunzip_bk;                          | True                       | 
+ 523 |  w = gunzip_outbuf_count; /* initialize  | True                       | 
+ 524 |  /* inflate the coded data */            | True                       | 
+ 525 |  ml = mask_bits[bl];  /* precompute mask | True                       | 
+ 526 |  md = mask_bits[bd];                     | True                       | 
+ 527 | }                                        | True                       | 
+ 528 | /* called once from inflate_get_next_win | True                       | 
+ 529 | static NOINLINE int inflate_codes(STATE_ | True                       | 
+ 530 | {                                        | True                       | 
+ 531 |  unsigned e; /* table entry flag/number  | True                       | 
+ 532 |  huft_t *t; /* pointer to table entry */ | True                       | 
+ 533 |                                          | True                       | 
+ 534 |  if (resume_copy)                        | True                       | 
+ 535 |   goto do_copy;                          | True                       | 
+ 536 |                                          | True                       | 
+ 537 |  while (1) {   /* do until end of block  | True                       | 
+ 538 |   bb = fill_bitbuffer(PASS_STATE bb, &k, | True                       | 
+ 539 |   t = tl + ((unsigned) bb & ml);         | True                       | 
+ 540 |   e = t->e;                              | True                       | 
+ 541 |   if (e > 16)                            | True                       | 
+ 542 |    do {                                  | True                       | 
+ 543 |     if (e == 99) {                       | True                       | 
+ 544 |      abort_unzip(PASS_STATE_ONLY);       | True                       | 
+ 545 |     }                                    | True                       | 
+ 546 |     bb >>= t->b;                         | True                       | 
+ 547 |     k -= t->b;                           | True                       | 
+ 548 |     e -= 16;                             | True                       | 
+ 549 |     bb = fill_bitbuffer(PASS_STATE bb, & | True                       | 
+ 550 |     t = t->v.t + ((unsigned) bb & mask_b | True                       | 
+ 551 |     e = t->e;                            | True                       | 
+ 552 |    } while (e > 16);                     | True                       | 
+ 553 |   bb >>= t->b;                           | True                       | 
+ 554 |   k -= t->b;                             | True                       | 
+ 555 |   if (e == 16) { /* then it's a literal  | True                       | 
+ 556 |    gunzip_window[w++] = (unsigned char)  | True                       | 
+ 557 |    if (w == GUNZIP_WSIZE) {              | True                       | 
+ 558 |     gunzip_outbuf_count = w;             | True                       | 
+ 559 |     //flush_gunzip_window();             | True                       | 
+ 560 |     w = 0;                               | True                       | 
+ 561 |     return 1; // We have a block to read | True                       | 
+ 562 |    }                                     | True                       | 
+ 563 |   } else {  /* it's an EOB or a length * | True                       | 
+ 564 |    /* exit if end of block */            | True                       | 
+ 565 |    if (e == 15) {                        | True                       | 
+ 566 |     break;                               | True                       | 
+ 567 |    }                                     | True                       | 
+ 568 |                                          | True                       | 
+ 569 |    /* get length of block to copy */     | True                       | 
+ 570 |    bb = fill_bitbuffer(PASS_STATE bb, &k | True                       | 
+ 571 |    nn = t->v.n + ((unsigned) bb & mask_b | True                       | 
+ 572 |    bb >>= e;                             | True                       | 
+ 573 |    k -= e;                               | True                       | 
+ 574 |                                          | True                       | 
+ 575 |    /* decode distance of block to copy * | True                       | 
+ 576 |    bb = fill_bitbuffer(PASS_STATE bb, &k | True                       | 
+ 577 |    t = td + ((unsigned) bb & md);        | True                       | 
+ 578 |    e = t->e;                             | True                       | 
+ 579 |    if (e > 16)                           | True                       | 
+ 580 |     do {                                 | True                       | 
+ 581 |      if (e == 99) {                      | True                       | 
+ 582 |       abort_unzip(PASS_STATE_ONLY);      | True                       | 
+ 583 |      }                                   | True                       | 
+ 584 |      bb >>= t->b;                        | True                       | 
+ 585 |      k -= t->b;                          | True                       | 
+ 586 |      e -= 16;                            | True                       | 
+ 587 |      bb = fill_bitbuffer(PASS_STATE bb,  | True                       | 
+ 588 |      t = t->v.t + ((unsigned) bb & mask_ | True                       | 
+ 589 |      e = t->e;                           | True                       | 
+ 590 |     } while (e > 16);                    | True                       | 
+ 591 |    bb >>= t->b;                          | True                       | 
+ 592 |    k -= t->b;                            | True                       | 
+ 593 |    bb = fill_bitbuffer(PASS_STATE bb, &k | True                       | 
+ 594 |    dd = w - t->v.n - ((unsigned) bb & ma | True                       | 
+ 595 |    bb >>= e;                             | True                       | 
+ 596 |    k -= e;                               | True                       | 
+ 597 |                                          | True                       | 
+ 598 |    /* do the copy */                     | True                       | 
+ 599 |  do_copy:                                | True                       | 
+ 600 |    do {                                  | True                       | 
+ 601 |     /* Was: nn -= (e = (e = GUNZIP_WSIZE | True                       | 
+ 602 |     /* Who wrote THAT?? rewritten as: */ | True                       | 
+ 603 |     unsigned delta;                      | True                       | 
+ 604 |                                          | True                       | 
+ 605 |     dd &= GUNZIP_WSIZE - 1;              | True                       | 
+ 606 |     e = GUNZIP_WSIZE - (dd > w ? dd : w) | True                       | 
+ 607 |     delta = w > dd ? w - dd : dd - w;    | True                       | 
+ 608 |     if (e > nn) e = nn;                  | True                       | 
+ 609 |     nn -= e;                             | True                       | 
+ 610 |                                          | True                       | 
+ 611 |     /* copy to new buffer to prevent pos | True                       | 
+ 612 |     if (delta >= e) {                    | True                       | 
+ 613 |      memcpy(gunzip_window + w, gunzip_wi | True                       | 
+ 614 |      w += e;                             | True                       | 
+ 615 |      dd += e;                            | True                       | 
+ 616 |     } else {                             | True                       | 
+ 617 |      /* do it slow to avoid memcpy() ove | True                       | 
+ 618 |      /* !NOMEMCPY */                     | True                       | 
+ 619 |      do {                                | True                       | 
+ 620 |       gunzip_window[w++] = gunzip_window | True                       | 
+ 621 |      } while (--e);                      | True                       | 
+ 622 |     }                                    | True                       | 
+ 623 |     if (w == GUNZIP_WSIZE) {             | True                       | 
+ 624 |      gunzip_outbuf_count = w;            | True                       | 
+ 625 |      resume_copy = (nn != 0);            | True                       | 
+ 626 |      //flush_gunzip_window();            | True                       | 
+ 627 |      w = 0;                              | True                       | 
+ 628 |      return 1;                           | True                       | 
+ 629 |     }                                    | True                       | 
+ 630 |    } while (nn);                         | True                       | 
+ 631 |    resume_copy = 0;                      | True                       | 
+ 632 |   }                                      | True                       | 
+ 633 |  }                                       | True                       | 
+ 634 |                                          | True                       | 
+ 635 |  /* restore the globals from the locals  | True                       | 
+ 636 |  gunzip_outbuf_count = w; /* restore glo | True                       | 
+ 637 |  gunzip_bb = bb;   /* restore global bit | True                       | 
+ 638 |  gunzip_bk = k;                          | True                       | 
+ 639 |                                          | True                       | 
+ 640 |  /* normally just after call to inflate_ | True                       | 
+ 641 |  /* free the decoding tables (tl and td) | True                       | 
+ 642 |  huft_free_all(PASS_STATE_ONLY);         | True                       | 
+ 643 |                                          | True                       | 
+ 644 |  /* done */                              | True                       | 
+ 645 |  return 0;                               | True                       | 
+ 646 | }                                        | True                       | 
+ 647 | #undef ml                                | True                       | 
+ 648 | #undef md                                | True                       | 
+ 649 | #undef bb                                | True                       | 
+ 650 | #undef k                                 | True                       | 
+ 651 | #undef w                                 | True                       | 
+ 652 | #undef tl                                | True                       | 
+ 653 | #undef td                                | True                       | 
+ 654 | #undef bl                                | True                       | 
+ 655 | #undef bd                                | True                       | 
+ 656 | #undef nn                                | True                       | 
+ 657 | #undef dd                                | True                       | 
+ 658 |                                          | True                       | 
+ 659 |                                          | True                       | 
+ 660 | /* called once from inflate_block */     | True                       | 
+ 661 | static void inflate_stored_setup(STATE_P | True                       | 
+ 662 | {                                        | True                       | 
+ 663 |  inflate_stored_n = my_n;                | True                       | 
+ 664 |  inflate_stored_b = my_b;                | True                       | 
+ 665 |  inflate_stored_k = my_k;                | True                       | 
+ 666 |  /* initialize gunzip_window position */ | True                       | 
+ 667 |  inflate_stored_w = gunzip_outbuf_count; | True                       | 
+ 668 | }                                        | True                       | 
+ 669 | /* called once from inflate_get_next_win | True                       | 
+ 670 | static int inflate_stored(STATE_PARAM_ON | True                       | 
+ 671 | {                                        | True                       | 
+ 672 |  /* read and output the compressed data  | True                       | 
+ 673 |  while (inflate_stored_n--) {            | True                       | 
+ 674 |   inflate_stored_b = fill_bitbuffer(PASS | True                       | 
+ 675 |   gunzip_window[inflate_stored_w++] = (u | True                       | 
+ 676 |   if (inflate_stored_w == GUNZIP_WSIZE)  | True                       | 
+ 677 |    gunzip_outbuf_count = inflate_stored_ | True                       | 
+ 678 |    //flush_gunzip_window();              | True                       | 
+ 679 |    inflate_stored_w = 0;                 | True                       | 
+ 680 |    inflate_stored_b >>= 8;               | True                       | 
+ 681 |    inflate_stored_k -= 8;                | True                       | 
+ 682 |    return 1; /* We have a block */       | True                       | 
+ 683 |   }                                      | True                       | 
+ 684 |   inflate_stored_b >>= 8;                | True                       | 
+ 685 |   inflate_stored_k -= 8;                 | True                       | 
+ 686 |  }                                       | True                       | 
+ 687 |                                          | True                       | 
+ 688 |  /* restore the globals from the locals  | True                       | 
+ 689 |  gunzip_outbuf_count = inflate_stored_w; | True                       | 
+ 690 |  gunzip_bb = inflate_stored_b; /* restor | True                       | 
+ 691 |  gunzip_bk = inflate_stored_k;           | True                       | 
+ 692 |  return 0; /* Finished */                | True                       | 
+ 693 | }                                        | True                       | 
+ 694 |                                          | True                       | 
+ 695 |                                          | True                       | 
+ 696 | /*                                       | True                       | 
+ 697 |  * decompress an inflated block          | True                       | 
+ 698 |  * e: last block flag                    | True                       | 
+ 699 |  *                                       | True                       | 
+ 700 |  * GLOBAL VARIABLES: bb, kk,             | True                       | 
+ 701 |  */                                      | True                       | 
+ 702 | /* Return values: -1 = inflate_stored, - | True                       | 
+ 703 | /* One callsite in inflate_get_next_wind | True                       | 
+ 704 | static int inflate_block(STATE_PARAM sma | True                       | 
+ 705 | {                                        | True                       | 
+ 706 |  unsigned ll[286 + 30];  /* literal/leng | True                       | 
+ 707 |  unsigned t;     /* block type */        | True                       | 
+ 708 |  unsigned b;     /* bit buffer */        | True                       | 
+ 709 |  unsigned k;     /* number of bits in bi | True                       | 
+ 710 |                                          | True                       | 
+ 711 |  /* make local bit buffer */             | True                       | 
+ 712 |                                          | True                       | 
+ 713 |  b = gunzip_bb;                          | True                       | 
+ 714 |  k = gunzip_bk;                          | True                       | 
+ 715 |                                          | True                       | 
+ 716 |  /* read in last block bit */            | True                       | 
+ 717 |  b = fill_bitbuffer(PASS_STATE b, &k, 1) | True                       | 
+ 718 |  *e = b & 1;                             | True                       | 
+ 719 |  b >>= 1;                                | True                       | 
+ 720 |  k -= 1;                                 | True                       | 
+ 721 |                                          | True                       | 
+ 722 |  /* read in block type */                | True                       | 
+ 723 |  b = fill_bitbuffer(PASS_STATE b, &k, 2) | True                       | 
+ 724 |  t = (unsigned) b & 3;                   | True                       | 
+ 725 |  b >>= 2;                                | True                       | 
+ 726 |  k -= 2;                                 | True                       | 
+ 727 |                                          | True                       | 
+ 728 |  /* restore the global bit buffer */     | True                       | 
+ 729 |  gunzip_bb = b;                          | True                       | 
+ 730 |  gunzip_bk = k;                          | True                       | 
+ 731 |                                          | True                       | 
+ 732 |  /* Do we see block type 1 often? Yes!   | True                       | 
+ 733 |   * TODO: fix performance problem (see b | True                       | 
+ 734 |  //bb_error_msg("blktype %d", t);        | True                       | 
+ 735 |                                          | True                       | 
+ 736 |  /* inflate that block type */           | True                       | 
+ 737 |  switch (t) {                            | True                       | 
+ 738 |  case 0: /* Inflate stored */            | True                       | 
+ 739 |  {                                       | True                       | 
+ 740 |   unsigned n; /* number of bytes in bloc | True                       | 
+ 741 |   unsigned b_stored; /* bit buffer */    | True                       | 
+ 742 |   unsigned k_stored; /* number of bits i | True                       | 
+ 743 |                                          | True                       | 
+ 744 |   /* make local copies of globals */     | True                       | 
+ 745 |   b_stored = gunzip_bb; /* initialize bi | True                       | 
+ 746 |   k_stored = gunzip_bk;                  | True                       | 
+ 747 |                                          | True                       | 
+ 748 |   /* go to byte boundary */              | True                       | 
+ 749 |   n = k_stored & 7;                      | True                       | 
+ 750 |   b_stored >>= n;                        | True                       | 
+ 751 |   k_stored -= n;                         | True                       | 
+ 752 |                                          | True                       | 
+ 753 |   /* get the length and its complement * | True                       | 
+ 754 |   b_stored = fill_bitbuffer(PASS_STATE b | True                       | 
+ 755 |   n = ((unsigned) b_stored & 0xffff);    | True                       | 
+ 756 |   b_stored >>= 16;                       | True                       | 
+ 757 |   k_stored -= 16;                        | True                       | 
+ 758 |                                          | True                       | 
+ 759 |   b_stored = fill_bitbuffer(PASS_STATE b | True                       | 
+ 760 |   if (n != (unsigned) ((~b_stored) & 0xf | True                       | 
+ 761 |    abort_unzip(PASS_STATE_ONLY); /* erro | True                       | 
+ 762 |   }                                      | True                       | 
+ 763 |   b_stored >>= 16;                       | True                       | 
+ 764 |   k_stored -= 16;                        | True                       | 
+ 765 |                                          | True                       | 
+ 766 |   inflate_stored_setup(PASS_STATE n, b_s | True                       | 
+ 767 |                                          | True                       | 
+ 768 |   return -1;                             | True                       | 
+ 769 |  }                                       | True                       | 
+ 770 |  case 1:                                 | True                       | 
+ 771 |  /* Inflate fixed                        | True                       | 
+ 772 |   * decompress an inflated type 1 (fixed | True                       | 
+ 773 |   * either replace this with a custom de | True                       | 
+ 774 |   * Huffman tables. TODO */              | True                       | 
+ 775 |  {                                       | True                       | 
+ 776 |   int i;                  /* temporary v | True                       | 
+ 777 |   unsigned bl;            /* lookup bits | True                       | 
+ 778 |   unsigned bd;            /* lookup bits | True                       | 
+ 779 |   /* gcc 4.2.1 is too dumb to reuse stac | True                       | 
+ 780 |   //unsigned ll[288];     /* length list | True                       | 
+ 781 |                                          | True                       | 
+ 782 |   /* set up literal table */             | True                       | 
+ 783 |   for (i = 0; i < 144; i++)              | True                       | 
+ 784 |    ll[i] = 8;                            | True                       | 
+ 785 |   for (; i < 256; i++)                   | True                       | 
+ 786 |    ll[i] = 9;                            | True                       | 
+ 787 |   for (; i < 280; i++)                   | True                       | 
+ 788 |    ll[i] = 7;                            | True                       | 
+ 789 |   for (; i < 288; i++) /* make a complet | True                       | 
+ 790 |    ll[i] = 8;                            | True                       | 
+ 791 |   bl = 7;                                | True                       | 
+ 792 |   inflate_codes_tl = huft_build(ll, 288, | True                       | 
+ 793 |   /* ^^^ never returns error here - we u | True                       | 
+ 794 |                                          | True                       | 
+ 795 |   /* set up distance table */            | True                       | 
+ 796 |   for (i = 0; i < 30; i++) /* make an in | True                       | 
+ 797 |    ll[i] = 5;                            | True                       | 
+ 798 |   bd = 5;                                | True                       | 
+ 799 |   inflate_codes_td = huft_build(ll, 30,  | True                       | 
+ 800 |   /* ^^^ does return error here! (lsb bi | True                       | 
+ 801 |   /* clearing error bit: */              | True                       | 
+ 802 |   inflate_codes_td = (void*)((uintptr_t) | True                       | 
+ 803 |                                          | True                       | 
+ 804 |   /* set up data for inflate_codes() */  | True                       | 
+ 805 |   inflate_codes_setup(PASS_STATE bl, bd) | True                       | 
+ 806 |                                          | True                       | 
+ 807 |   /* huft_free code moved into inflate_c | True                       | 
+ 808 |                                          | True                       | 
+ 809 |   return -2;                             | True                       | 
+ 810 |  }                                       | True                       | 
+ 811 |  case 2: /* Inflate dynamic */           | True                       | 
+ 812 |  {                                       | True                       | 
+ 813 |   enum { dbits = 6 };     /* bits in bas | True                       | 
+ 814 |   enum { lbits = 9 };     /* bits in bas | True                       | 
+ 815 |                                          | True                       | 
+ 816 |   huft_t *td;             /* distance co | True                       | 
+ 817 |   unsigned i;             /* temporary v | True                       | 
+ 818 |   unsigned j;                            | True                       | 
+ 819 |   unsigned l;             /* last length | True                       | 
+ 820 |   unsigned m;             /* mask for bi | True                       | 
+ 821 |   unsigned n;             /* number of l | True                       | 
+ 822 |   unsigned bl;            /* lookup bits | True                       | 
+ 823 |   unsigned bd;            /* lookup bits | True                       | 
+ 824 |   unsigned nb;            /* number of b | True                       | 
+ 825 |   unsigned nl;            /* number of l | True                       | 
+ 826 |   unsigned nd;            /* number of d | True                       | 
+ 827 |                                          | True                       | 
+ 828 |   //unsigned ll[286 + 30];/* literal/len | True                       | 
+ 829 |   unsigned b_dynamic;     /* bit buffer  | True                       | 
+ 830 |   unsigned k_dynamic;     /* number of b | True                       | 
+ 831 |                                          | True                       | 
+ 832 |   /* make local bit buffer */            | True                       | 
+ 833 |   b_dynamic = gunzip_bb;                 | True                       | 
+ 834 |   k_dynamic = gunzip_bk;                 | True                       | 
+ 835 |                                          | True                       | 
+ 836 |   /* read in table lengths */            | True                       | 
+ 837 |   b_dynamic = fill_bitbuffer(PASS_STATE  | True                       | 
+ 838 |   nl = 257 + ((unsigned) b_dynamic & 0x1 | True                       | 
+ 839 |                                          | True                       | 
+ 840 |   b_dynamic >>= 5;                       | True                       | 
+ 841 |   k_dynamic -= 5;                        | True                       | 
+ 842 |   b_dynamic = fill_bitbuffer(PASS_STATE  | True                       | 
+ 843 |   nd = 1 + ((unsigned) b_dynamic & 0x1f) | True                       | 
+ 844 |                                          | True                       | 
+ 845 |   b_dynamic >>= 5;                       | True                       | 
+ 846 |   k_dynamic -= 5;                        | True                       | 
+ 847 |   b_dynamic = fill_bitbuffer(PASS_STATE  | True                       | 
+ 848 |   nb = 4 + ((unsigned) b_dynamic & 0xf); | True                       | 
+ 849 |                                          | True                       | 
+ 850 |   b_dynamic >>= 4;                       | True                       | 
+ 851 |   k_dynamic -= 4;                        | True                       | 
+ 852 |   if (nl > 286 || nd > 30) {             | True                       | 
+ 853 |    abort_unzip(PASS_STATE_ONLY); /* bad  | True                       | 
+ 854 |   }                                      | True                       | 
+ 855 |                                          | True                       | 
+ 856 |   /* read in bit-length-code lengths */  | True                       | 
+ 857 |   for (j = 0; j < nb; j++) {             | True                       | 
+ 858 |    b_dynamic = fill_bitbuffer(PASS_STATE | True                       | 
+ 859 |    ll[border[j]] = (unsigned) b_dynamic  | True                       | 
+ 860 |    b_dynamic >>= 3;                      | True                       | 
+ 861 |    k_dynamic -= 3;                       | True                       | 
+ 862 |   }                                      | True                       | 
+ 863 |   for (; j < 19; j++)                    | True                       | 
+ 864 |    ll[border[j]] = 0;                    | True                       | 
+ 865 |                                          | True                       | 
+ 866 |   /* build decoding table for trees - si | True                       | 
+ 867 |   bl = 7;                                | True                       | 
+ 868 |   inflate_codes_tl = huft_build(ll, 19,  | True                       | 
+ 869 |   if (BAD_HUFT(inflate_codes_tl)) {      | True                       | 
+ 870 |    abort_unzip(PASS_STATE_ONLY); /* inco | True                       | 
+ 871 |   }                                      | True                       | 
+ 872 |                                          | True                       | 
+ 873 |   /* read in literal and distance code l | True                       | 
+ 874 |   n = nl + nd;                           | True                       | 
+ 875 |   m = mask_bits[bl];                     | True                       | 
+ 876 |   i = l = 0;                             | True                       | 
+ 877 |   while ((unsigned) i < n) {             | True                       | 
+ 878 |    b_dynamic = fill_bitbuffer(PASS_STATE | True                       | 
+ 879 |    td = inflate_codes_tl + ((unsigned) b | True                       | 
+ 880 |    j = td->b;                            | True                       | 
+ 881 |    b_dynamic >>= j;                      | True                       | 
+ 882 |    k_dynamic -= j;                       | True                       | 
+ 883 |    j = td->v.n;                          | True                       | 
+ 884 |    if (j < 16) { /* length of code in bi | True                       | 
+ 885 |     ll[i++] = l = j; /* save last length | True                       | 
+ 886 |    } else if (j == 16) { /* repeat last  | True                       | 
+ 887 |     b_dynamic = fill_bitbuffer(PASS_STAT | True                       | 
+ 888 |     j = 3 + ((unsigned) b_dynamic & 3);  | True                       | 
+ 889 |     b_dynamic >>= 2;                     | True                       | 
+ 890 |     k_dynamic -= 2;                      | True                       | 
+ 891 |     if ((unsigned) i + j > n) {          | True                       | 
+ 892 |      abort_unzip(PASS_STATE_ONLY); //ret | True                       | 
+ 893 |     }                                    | True                       | 
+ 894 |     while (j--) {                        | True                       | 
+ 895 |      ll[i++] = l;                        | True                       | 
+ 896 |     }                                    | True                       | 
+ 897 |    } else if (j == 17) { /* 3 to 10 zero | True                       | 
+ 898 |     b_dynamic = fill_bitbuffer(PASS_STAT | True                       | 
+ 899 |     j = 3 + ((unsigned) b_dynamic & 7);  | True                       | 
+ 900 |     b_dynamic >>= 3;                     | True                       | 
+ 901 |     k_dynamic -= 3;                      | True                       | 
+ 902 |     if ((unsigned) i + j > n) {          | True                       | 
+ 903 |      abort_unzip(PASS_STATE_ONLY); //ret | True                       | 
+ 904 |     }                                    | True                       | 
+ 905 |     while (j--) {                        | True                       | 
+ 906 |      ll[i++] = 0;                        | True                       | 
+ 907 |     }                                    | True                       | 
+ 908 |     l = 0;                               | True                       | 
+ 909 |    } else { /* j == 18: 11 to 138 zero l | True                       | 
+ 910 |     b_dynamic = fill_bitbuffer(PASS_STAT | True                       | 
+ 911 |     j = 11 + ((unsigned) b_dynamic & 0x7 | True                       | 
+ 912 |     b_dynamic >>= 7;                     | True                       | 
+ 913 |     k_dynamic -= 7;                      | True                       | 
+ 914 |     if ((unsigned) i + j > n) {          | True                       | 
+ 915 |      abort_unzip(PASS_STATE_ONLY); //ret | True                       | 
+ 916 |     }                                    | True                       | 
+ 917 |     while (j--) {                        | True                       | 
+ 918 |      ll[i++] = 0;                        | True                       | 
+ 919 |     }                                    | True                       | 
+ 920 |     l = 0;                               | True                       | 
+ 921 |    }                                     | True                       | 
+ 922 |   }                                      | True                       | 
+ 923 |                                          | True                       | 
+ 924 |   /* free decoding table for trees */    | True                       | 
+ 925 |   huft_free(inflate_codes_tl);           | True                       | 
+ 926 |                                          | True                       | 
+ 927 |   /* restore the global bit buffer */    | True                       | 
+ 928 |   gunzip_bb = b_dynamic;                 | True                       | 
+ 929 |   gunzip_bk = k_dynamic;                 | True                       | 
+ 930 |                                          | True                       | 
+ 931 |   /* build the decoding tables for liter | True                       | 
+ 932 |   bl = lbits;                            | True                       | 
+ 933 |   inflate_codes_tl = huft_build(ll, nl,  | True                       | 
+ 934 |   if (BAD_HUFT(inflate_codes_tl)) {      | True                       | 
+ 935 |    abort_unzip(PASS_STATE_ONLY);         | True                       | 
+ 936 |   }                                      | True                       | 
+ 937 |   bd = dbits;                            | True                       | 
+ 938 |   inflate_codes_td = huft_build(ll + nl, | True                       | 
+ 939 |   if (BAD_HUFT(inflate_codes_td)) {      | True                       | 
+ 940 |    abort_unzip(PASS_STATE_ONLY);         | True                       | 
+ 941 |   }                                      | True                       | 
+ 942 |                                          | True                       | 
+ 943 |   /* set up data for inflate_codes() */  | True                       | 
+ 944 |   inflate_codes_setup(PASS_STATE bl, bd) | True                       | 
+ 945 |                                          | True                       | 
+ 946 |   /* huft_free code moved into inflate_c | True                       | 
+ 947 |                                          | True                       | 
+ 948 |   return -2;                             | True                       | 
+ 949 |  }                                       | True                       | 
+ 950 |  default:                                | True                       | 
+ 951 |   abort_unzip(PASS_STATE_ONLY);          | True                       | 
+ 952 |  }                                       | True                       | 
+ 953 | }                                        | True                       | 
+ 954 |                                          | True                       | 
+ 955 | /* Two callsites, both in inflate_get_ne | True                       | 
+ 956 | static void calculate_gunzip_crc(STATE_P | True                       | 
+ 957 | {                                        | True                       | 
+ 958 |  gunzip_crc = crc32_block_endian0(gunzip | True                       | 
+ 959 |  gunzip_bytes_out += gunzip_outbuf_count | True                       | 
+ 960 | }                                        | True                       | 
+ 961 |                                          | True                       | 
+ 962 | /* One callsite in inflate_unzip_interna | True                       | 
+ 963 | static int inflate_get_next_window(STATE | True                       | 
+ 964 | {                                        | True                       | 
+ 965 |  gunzip_outbuf_count = 0;                | True                       | 
+ 966 |                                          | True                       | 
+ 967 |  while (1) {                             | True                       | 
+ 968 |   int ret;                               | True                       | 
+ 969 |                                          | True                       | 
+ 970 |   if (need_another_block) {              | True                       | 
+ 971 |    if (end_reached) {                    | True                       | 
+ 972 |     calculate_gunzip_crc(PASS_STATE_ONLY | True                       | 
+ 973 |     end_reached = 0;                     | True                       | 
+ 974 |     /* NB: need_another_block is still s | True                       | 
+ 975 |     return 0; /* Last block */           | True                       | 
+ 976 |    }                                     | True                       | 
+ 977 |    method = inflate_block(PASS_STATE &en | True                       | 
+ 978 |    need_another_block = 0;               | True                       | 
+ 979 |   }                                      | True                       | 
+ 980 |                                          | True                       | 
+ 981 |   switch (method) {                      | True                       | 
+ 982 |   case -1:                               | True                       | 
+ 983 |    ret = inflate_stored(PASS_STATE_ONLY) | True                       | 
+ 984 |    break;                                | True                       | 
+ 985 |   case -2:                               | True                       | 
+ 986 |    ret = inflate_codes(PASS_STATE_ONLY); | True                       | 
+ 987 |    break;                                | True                       | 
+ 988 |   default: /* cannot happen */           | True                       | 
+ 989 |    abort_unzip(PASS_STATE_ONLY);         | True                       | 
+ 990 |   }                                      | True                       | 
+ 991 |                                          | True                       | 
+ 992 |   if (ret == 1) {                        | True                       | 
+ 993 |    calculate_gunzip_crc(PASS_STATE_ONLY) | True                       | 
+ 994 |    return 1; /* more data left */        | True                       | 
+ 995 |   }                                      | True                       | 
+ 996 |   need_another_block = 1; /* end of that | True                       | 
+ 997 |  }                                       | True                       | 
+ 998 |  /* Doesnt get here */                   | True                       | 
+ 999 | }                                        | True                       | 
+1000 |                                          | True                       | 
+1001 |                                          | True                       | 
+1002 | /* Called from unpack_gz_stream() and in | True                       | 
+1003 | static IF_DESKTOP(long long) int         | True                       | 
+1004 | inflate_unzip_internal(STATE_PARAM trans | True                       | 
+1005 | {                                        | True                       | 
+1006 |  IF_DESKTOP(long long) int n = 0;        | True                       | 
+1007 |  ssize_t nwrote;                         | True                       | 
+1008 |                                          | True                       | 
+1009 |  /* Allocate all global buffers (for DYN | True                       | 
+1010 |  gunzip_window = xmalloc(GUNZIP_WSIZE);  | True                       | 
+1011 |  gunzip_outbuf_count = 0;                | True                       | 
+1012 |  gunzip_bytes_out = 0;                   | True                       | 
+1013 |  gunzip_src_fd = xstate->src_fd;         | True                       | 
+1014 |                                          | True                       | 
+1015 |  /* (re) initialize state */             | True                       | 
+1016 |  method = -1;                            | True                       | 
+1017 |  need_another_block = 1;                 | True                       | 
+1018 |  resume_copy = 0;                        | True                       | 
+1019 |  gunzip_bk = 0;                          | True                       | 
+1020 |  gunzip_bb = 0;                          | True                       | 
+1021 |                                          | True                       | 
+1022 |  /* Create the crc table */              | True                       | 
+1023 |  gunzip_crc_table = crc32_new_table_le() | True                       | 
+1024 |  gunzip_crc = ~0;                        | True                       | 
+1025 |                                          | True                       | 
+1026 |  error_msg = "corrupted data";           | True                       | 
+1027 |  if (setjmp(error_jmp)) {                | True                       | 
+1028 |   /* Error from deep inside zip machiner | True                       | 
+1029 |   bb_simple_error_msg(error_msg);        | True                       | 
+1030 |   n = -1;                                | True                       | 
+1031 |   goto ret;                              | True                       | 
+1032 |  }                                       | True                       | 
+1033 |                                          | True                       | 
+1034 |  while (1) {                             | True                       | 
+1035 |   int r = inflate_get_next_window(PASS_S | True                       | 
+1036 |   nwrote = transformer_write(xstate, gun | True                       | 
+1037 |   if (nwrote == (ssize_t)-1) {           | True                       | 
+1038 |    n = -1;                               | True                       | 
+1039 |    goto ret;                             | True                       | 
+1040 |   }                                      | True                       | 
+1041 |   IF_DESKTOP(n += nwrote;)               | True                       | 
+1042 |   if (r == 0) break;                     | True                       | 
+1043 |  }                                       | True                       | 
+1044 |                                          | True                       | 
+1045 |  /* Store unused bytes in a global buffe | True                       | 
+1046 |  if (gunzip_bk >= 8) {                   | True                       | 
+1047 |   /* Undo too much lookahead. The next r | True                       | 
+1048 |    * so we can discard unused bits in th | True                       | 
+1049 |   bytebuffer_offset--;                   | True                       | 
+1050 |   bytebuffer[bytebuffer_offset] = gunzip | True                       | 
+1051 |   gunzip_bb >>= 8;                       | True                       | 
+1052 |   gunzip_bk -= 8;                        | True                       | 
+1053 |  }                                       | True                       | 
+1054 |  ret:                                    | True                       | 
+1055 |  /* Cleanup */                           | True                       | 
+1056 |  free(gunzip_window);                    | True                       | 
+1057 |  free(gunzip_crc_table);                 | True                       | 
+1058 |  return n;                               | True                       | 
+1059 | }                                        | True                       | 
+1060 |                                          | True                       | 
+1061 |                                          | True                       | 
+1062 | /* External entry points */              | True                       | 
+1063 |                                          | True                       | 
+1064 | /* For unzip */                          | True                       | 
+1065 |                                          | True                       | 
+1066 | IF_DESKTOP(long long) int FAST_FUNC      | True                       | 
+1067 | inflate_unzip(transformer_state_t *xstat | True                       | 
+1068 | {                                        | True                       | 
+1069 |  IF_DESKTOP(long long) int n;            | True                       | 
+1070 |  DECLARE_STATE;                          | True                       | 
+1071 |                                          | True                       | 
+1072 |  ALLOC_STATE;                            | True                       | 
+1073 |                                          | True                       | 
+1074 |  to_read = xstate->bytes_in;             | True                       | 
+1075 | // bytebuffer_max = 0x8000;              | True                       | 
+1076 |  bytebuffer_offset = 4;                  | True                       | 
+1077 |  bytebuffer = xmalloc(bytebuffer_max);   | True                       | 
+1078 |  n = inflate_unzip_internal(PASS_STATE x | True                       | 
+1079 |  free(bytebuffer);                       | True                       | 
+1080 |                                          | True                       | 
+1081 |  xstate->crc32 = gunzip_crc;             | True                       | 
+1082 |  xstate->bytes_out = gunzip_bytes_out;   | True                       | 
+1083 |  DEALLOC_STATE;                          | True                       | 
+1084 |  return n;                               | True                       | 
+1085 | }                                        | True                       | 
+1086 |                                          | True                       | 
+1087 |                                          | True                       | 
+1088 | /* For gunzip */                         | True                       | 
+1089 |                                          | True                       | 
+1090 | /* helpers first */                      | True                       | 
+1091 |                                          | True                       | 
+1092 | /* Top up the input buffer with at least | True                       | 
+1093 | static int top_up(STATE_PARAM unsigned n | True                       | 
+1094 | {                                        | True                       | 
+1095 |  int count = bytebuffer_size - bytebuffe | True                       | 
+1096 |                                          | True                       | 
+1097 |  if (count < (int)n) {                   | True                       | 
+1098 |   memmove(bytebuffer, &bytebuffer[bytebu | True                       | 
+1099 |   bytebuffer_offset = 0;                 | True                       | 
+1100 |   bytebuffer_size = full_read(gunzip_src | True                       | 
+1101 |   if ((int)bytebuffer_size < 0) {        | True                       | 
+1102 |    bb_simple_error_msg(bb_msg_read_error | True                       | 
+1103 |    return 0;                             | True                       | 
+1104 |   }                                      | True                       | 
+1105 |   bytebuffer_size += count;              | True                       | 
+1106 |   if (bytebuffer_size < n)               | True                       | 
+1107 |    return 0;                             | True                       | 
+1108 |  }                                       | True                       | 
+1109 |  return 1;                               | True                       | 
+1110 | }                                        | True                       | 
+1111 |                                          | True                       | 
+1112 | static uint16_t buffer_read_le_u16(STATE | True                       | 
+1113 | {                                        | True                       | 
+1114 |  uint16_t res;                           | True                       | 
+1115 | #if BB_LITTLE_ENDIAN                     | True                       | 
+1116 |  move_from_unaligned16(res, &bytebuffer[ | BB_LITTLE_ENDIAN           | 
+1117 | #else                                    | True                       | 
+1118 |  res = bytebuffer[bytebuffer_offset];    | !BB_LITTLE_ENDIAN          | 
+1119 |  res |= bytebuffer[bytebuffer_offset + 1 | !BB_LITTLE_ENDIAN          | 
+1120 | #endif                                   | True                       | 
+1121 |  bytebuffer_offset += 2;                 | True                       | 
+1122 |  return res;                             | True                       | 
+1123 | }                                        | True                       | 
+1124 |                                          | True                       | 
+1125 | static uint32_t buffer_read_le_u32(STATE | True                       | 
+1126 | {                                        | True                       | 
+1127 |  uint32_t res;                           | True                       | 
+1128 | #if BB_LITTLE_ENDIAN                     | True                       | 
+1129 |  move_from_unaligned32(res, &bytebuffer[ | BB_LITTLE_ENDIAN           | 
+1130 | #else                                    | True                       | 
+1131 |  res = bytebuffer[bytebuffer_offset];    | !BB_LITTLE_ENDIAN          | 
+1132 |  res |= bytebuffer[bytebuffer_offset + 1 | !BB_LITTLE_ENDIAN          | 
+1133 |  res |= bytebuffer[bytebuffer_offset + 2 | !BB_LITTLE_ENDIAN          | 
+1134 |  res |= bytebuffer[bytebuffer_offset + 3 | !BB_LITTLE_ENDIAN          | 
+1135 | #endif                                   | True                       | 
+1136 |  bytebuffer_offset += 4;                 | True                       | 
+1137 |  return res;                             | True                       | 
+1138 | }                                        | True                       | 
+1139 |                                          | True                       | 
+1140 | static int check_header_gzip(STATE_PARAM | True                       | 
+1141 | {                                        | True                       | 
+1142 |  union {                                 | True                       | 
+1143 |   unsigned char raw[8];                  | True                       | 
+1144 |   struct {                               | True                       | 
+1145 |    uint8_t gz_method;                    | True                       | 
+1146 |    uint8_t flags;                        | True                       | 
+1147 |    uint32_t mtime;                       | True                       | 
+1148 |    uint8_t xtra_flags_UNUSED;            | True                       | 
+1149 |    uint8_t os_flags_UNUSED;              | True                       | 
+1150 |   } PACKED formatted;                    | True                       | 
+1151 |  } header;                               | True                       | 
+1152 |                                          | True                       | 
+1153 |  BUILD_BUG_ON(sizeof(header) != 8);      | True                       | 
+1154 |                                          | True                       | 
+1155 |  /*                                      | True                       | 
+1156 |   * Rewind bytebuffer. We use the beginn | True                       | 
+1157 |   * bytes, leaving enough for unwinding  | True                       | 
+1158 |   */                                     | True                       | 
+1159 |  bytebuffer_size -= bytebuffer_offset;   | True                       | 
+1160 |  memmove(bytebuffer, &bytebuffer[bytebuf | True                       | 
+1161 |  bytebuffer_offset = 0;                  | True                       | 
+1162 |                                          | True                       | 
+1163 |  if (!top_up(PASS_STATE 8))              | True                       | 
+1164 |   return 0;                              | True                       | 
+1165 |  memcpy(header.raw, &bytebuffer[bytebuff | True                       | 
+1166 |  bytebuffer_offset += 8;                 | True                       | 
+1167 |                                          | True                       | 
+1168 |  /* Check the compression method */      | True                       | 
+1169 |  if (header.formatted.gz_method != 8) {  | True                       | 
+1170 |   return 0;                              | True                       | 
+1171 |  }                                       | True                       | 
+1172 |                                          | True                       | 
+1173 |  if (header.formatted.flags & 0x04) {    | True                       | 
+1174 |   /* bit 2 set: extra field present */   | True                       | 
+1175 |   unsigned extra_short;                  | True                       | 
+1176 |                                          | True                       | 
+1177 |   if (!top_up(PASS_STATE 2))             | True                       | 
+1178 |    return 0;                             | True                       | 
+1179 |   extra_short = buffer_read_le_u16(PASS_ | True                       | 
+1180 |   if (!top_up(PASS_STATE extra_short))   | True                       | 
+1181 |    return 0;                             | True                       | 
+1182 |   /* Ignore extra field */               | True                       | 
+1183 |   bytebuffer_offset += extra_short;      | True                       | 
+1184 |  }                                       | True                       | 
+1185 |                                          | True                       | 
+1186 |  /* Discard original name and file comme | True                       | 
+1187 |  /* bit 3 set: original file name presen | True                       | 
+1188 |  /* bit 4 set: file comment present */   | True                       | 
+1189 |  if (header.formatted.flags & 0x18) {    | True                       | 
+1190 |   while (1) {                            | True                       | 
+1191 |    do {                                  | True                       | 
+1192 |     if (!top_up(PASS_STATE 1))           | True                       | 
+1193 |      return 0;                           | True                       | 
+1194 |    } while (bytebuffer[bytebuffer_offset | True                       | 
+1195 |    if ((header.formatted.flags & 0x18) ! | True                       | 
+1196 |     break;                               | True                       | 
+1197 |    header.formatted.flags &= ~0x18;      | True                       | 
+1198 |   }                                      | True                       | 
+1199 |  }                                       | True                       | 
+1200 |                                          | True                       | 
+1201 |  xstate->mtime = SWAP_LE32(header.format | True                       | 
+1202 |                                          | True                       | 
+1203 |  /* Read the header checksum */          | True                       | 
+1204 |  if (header.formatted.flags & 0x02) {    | True                       | 
+1205 |   if (!top_up(PASS_STATE 2))             | True                       | 
+1206 |    return 0;                             | True                       | 
+1207 |   bytebuffer_offset += 2;                | True                       | 
+1208 |  }                                       | True                       | 
+1209 |  return 1;                               | True                       | 
+1210 | }                                        | True                       | 
+1211 |                                          | True                       | 
+1212 | IF_DESKTOP(long long) int FAST_FUNC      | True                       | 
+1213 | unpack_gz_stream(transformer_state_t *xs | True                       | 
+1214 | {                                        | True                       | 
+1215 |  uint32_t v32;                           | True                       | 
+1216 |  IF_DESKTOP(long long) int total, n;     | True                       | 
+1217 |  DECLARE_STATE;                          | True                       | 
+1218 |                                          | True                       | 
+1219 | #if !ENABLE_FEATURE_SEAMLESS_Z           | True                       | 
+1220 |  if (check_signature16(xstate, GZIP_MAGI | !ENABLE_FEATURE_SEAMLESS_Z | 
+1221 |   return -1;                             | !ENABLE_FEATURE_SEAMLESS_Z | 
+1222 | #else                                    | True                       | 
+1223 |  if (!xstate->signature_skipped) {       | ENABLE_FEATURE_SEAMLESS_Z  | 
+1224 |   uint16_t magic2;                       | ENABLE_FEATURE_SEAMLESS_Z  | 
+1225 |                                          | ENABLE_FEATURE_SEAMLESS_Z  | 
+1226 |   if (full_read(xstate->src_fd, &magic2, | ENABLE_FEATURE_SEAMLESS_Z  | 
+1227 |  bad_magic:                              | ENABLE_FEATURE_SEAMLESS_Z  | 
+1228 |    bb_simple_error_msg("invalid magic"); | ENABLE_FEATURE_SEAMLESS_Z  | 
+1229 |    return -1;                            | ENABLE_FEATURE_SEAMLESS_Z  | 
+1230 |   }                                      | ENABLE_FEATURE_SEAMLESS_Z  | 
+1231 |   if (magic2 == COMPRESS_MAGIC) {        | ENABLE_FEATURE_SEAMLESS_Z  | 
+1232 |    xstate->signature_skipped = 2;        | ENABLE_FEATURE_SEAMLESS_Z  | 
+1233 |    return unpack_Z_stream(xstate);       | ENABLE_FEATURE_SEAMLESS_Z  | 
+1234 |   }                                      | ENABLE_FEATURE_SEAMLESS_Z  | 
+1235 |   if (magic2 != GZIP_MAGIC)              | ENABLE_FEATURE_SEAMLESS_Z  | 
+1236 |    goto bad_magic;                       | ENABLE_FEATURE_SEAMLESS_Z  | 
+1237 |  }                                       | ENABLE_FEATURE_SEAMLESS_Z  | 
+1238 | #endif                                   | True                       | 
+1239 |                                          | True                       | 
+1240 |  total = 0;                              | True                       | 
+1241 |                                          | True                       | 
+1242 |  ALLOC_STATE;                            | True                       | 
+1243 |  to_read = -1;                           | True                       | 
+1244 | // bytebuffer_max = 0x8000;              | True                       | 
+1245 |  bytebuffer = xmalloc(bytebuffer_max);   | True                       | 
+1246 |  gunzip_src_fd = xstate->src_fd;         | True                       | 
+1247 |                                          | True                       | 
+1248 |  again:                                  | True                       | 
+1249 |  if (!check_header_gzip(PASS_STATE xstat | True                       | 
+1250 |   bb_simple_error_msg("corrupted data"); | True                       | 
+1251 |   total = -1;                            | True                       | 
+1252 |   goto ret;                              | True                       | 
+1253 |  }                                       | True                       | 
+1254 |                                          | True                       | 
+1255 |  n = inflate_unzip_internal(PASS_STATE x | True                       | 
+1256 |  if (n < 0) {                            | True                       | 
+1257 |   total = -1;                            | True                       | 
+1258 |   goto ret;                              | True                       | 
+1259 |  }                                       | True                       | 
+1260 |  total += n;                             | True                       | 
+1261 |                                          | True                       | 
+1262 |  if (!top_up(PASS_STATE 8)) {            | True                       | 
+1263 |   bb_simple_error_msg("corrupted data"); | True                       | 
+1264 |   total = -1;                            | True                       | 
+1265 |   goto ret;                              | True                       | 
+1266 |  }                                       | True                       | 
+1267 |                                          | True                       | 
+1268 |  /* Validate decompression - crc */      | True                       | 
+1269 |  v32 = buffer_read_le_u32(PASS_STATE_ONL | True                       | 
+1270 |  if ((~gunzip_crc) != v32) {             | True                       | 
+1271 |   bb_simple_error_msg("crc error");      | True                       | 
+1272 |   total = -1;                            | True                       | 
+1273 |   goto ret;                              | True                       | 
+1274 |  }                                       | True                       | 
+1275 |                                          | True                       | 
+1276 |  /* Validate decompression - size */     | True                       | 
+1277 |  v32 = buffer_read_le_u32(PASS_STATE_ONL | True                       | 
+1278 |  if ((uint32_t)gunzip_bytes_out != v32)  | True                       | 
+1279 |   bb_simple_error_msg("incorrect length" | True                       | 
+1280 |   total = -1;                            | True                       | 
+1281 |  }                                       | True                       | 
+1282 |                                          | True                       | 
+1283 |  if (!top_up(PASS_STATE 2))              | True                       | 
+1284 |   goto ret; /* EOF */                    | True                       | 
+1285 |                                          | True                       | 
+1286 |  if (bytebuffer[bytebuffer_offset] == 0x | True                       | 
+1287 |   && bytebuffer[bytebuffer_offset + 1] = | True                       | 
+1288 |  ) {                                     | True                       | 
+1289 |   bytebuffer_offset += 2;                | True                       | 
+1290 |   goto again;                            | True                       | 
+1291 |  }                                       | True                       | 
+1292 |  /* GNU gzip says: */                    | True                       | 
+1293 |  /*bb_error_msg("decompression OK, trail | True                       | 
+1294 |                                          | True                       | 
+1295 |  ret:                                    | True                       | 
+1296 |  free(bytebuffer);                       | True                       | 
+1297 |  DEALLOC_STATE;                          | True                       | 
+1298 |  return total;                           | True                       | 
+1299 | }                                        | True                       | 
+-----+------------------------------------------+----------------------------+
+     |                                          | +147MB, 284ms              | 

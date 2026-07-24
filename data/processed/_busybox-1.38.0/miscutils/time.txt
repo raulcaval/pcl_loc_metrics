@@ -1,0 +1,496 @@
+FILE: data/raw/busybox-1.38.0/miscutils/time.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                                           | 
+-----+------------------------------------------+---------------------------------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                                            | 
+   2 | /*                                       | True                                                                            | 
+   3 |  * 'time' utility to display resource us | True                                                                            | 
+   4 |  * Copyright (C) 1990, 91, 92, 93, 96 Fr | True                                                                            | 
+   5 |  *                                       | True                                                                            | 
+   6 |  * Licensed under GPLv2, see file LICENS | True                                                                            | 
+   7 |  */                                      | True                                                                            | 
+   8 | /* Originally written by David Keppel <p | True                                                                            | 
+   9 |  * Heavily modified by David MacKenzie < | True                                                                            | 
+  10 |  * Heavily modified for busybox by Erik  | True                                                                            | 
+  11 |  */                                      | True                                                                            | 
+  12 | //config:config TIME                     | True                                                                            | 
+  13 | //config: bool "time (8.1 kb)"           | True                                                                            | 
+  14 | //config: default y                      | True                                                                            | 
+  15 | //config: help                           | True                                                                            | 
+  16 | //config: The time command runs the spec | True                                                                            | 
+  17 | //config: When the command finishes, tim | True                                                                            | 
+  18 | //config: giving timing statistics about | True                                                                            | 
+  19 |                                          | True                                                                            | 
+  20 | //applet:IF_TIME(APPLET(time, BB_DIR_USR | True                                                                            | 
+  21 |                                          | True                                                                            | 
+  22 | //kbuild:lib-$(CONFIG_TIME) += time.o    | True                                                                            | 
+  23 |                                          | True                                                                            | 
+  24 | //usage:#define time_trivial_usage       | True                                                                            | 
+  25 | //usage:       "[-vpa] [-o FILE] PROG AR | True                                                                            | 
+  26 | //usage:#define time_full_usage "\n\n"   | True                                                                            | 
+  27 | //usage:       "Run PROG, display resour | True                                                                            | 
+  28 | //usage:     "\n -v Verbose"             | True                                                                            | 
+  29 | //usage:     "\n -p POSIX output format" | True                                                                            | 
+  30 | //usage:     "\n -f FMT Custom format"   | True                                                                            | 
+  31 | //usage:     "\n -o FILE Write result to | True                                                                            | 
+  32 | //usage:     "\n -a Append (else overwri | True                                                                            | 
+  33 |                                          | True                                                                            | 
+  34 | #include "libbb.h"                       | True                                                                            | 
+  35 |                                          | True                                                                            | 
+  36 | #ifndef HAVE_WAIT3                       | True                                                                            | 
+  37 | static pid_t wait3(int *status, int opti | !(HAVE_WAIT3)                                                                   | 
+  38 | {                                        | !(HAVE_WAIT3)                                                                   | 
+  39 |  return wait4(-1, status, options, rusag | !(HAVE_WAIT3)                                                                   | 
+  40 | }                                        | !(HAVE_WAIT3)                                                                   | 
+  41 | #endif                                   | True                                                                            | 
+  42 |                                          | True                                                                            | 
+  43 | /* Information on the resources used by  | True                                                                            | 
+  44 | typedef struct {                         | True                                                                            | 
+  45 |  int waitstatus;                         | True                                                                            | 
+  46 |  struct rusage ru;                       | True                                                                            | 
+  47 |  unsigned elapsed_ms; /* Wallclock time  | True                                                                            | 
+  48 | } resource_t;                            | True                                                                            | 
+  49 |                                          | True                                                                            | 
+  50 | /* msec = milliseconds = 1/1,000 (1*10e- | True                                                                            | 
+  51 |    usec = microseconds = 1/1,000,000 (1* | True                                                                            | 
+  52 |                                          | True                                                                            | 
+  53 | #define UL unsigned long                 | True                                                                            | 
+  54 |                                          | True                                                                            | 
+  55 | static const char default_format[] ALIGN | True                                                                            | 
+  56 |                                          | True                                                                            | 
+  57 | /* The output format for the -p option . | True                                                                            | 
+  58 | static const char posix_format[] ALIGN1  | True                                                                            | 
+  59 |                                          | True                                                                            | 
+  60 | /* Format string for printing all statis | True                                                                            | 
+  61 |    Keep this output to 24 lines so users | True                                                                            | 
+  62 | static const char long_format[] ALIGN1 = | True                                                                            | 
+  63 |  "\tCommand being timed: \"%C\"\n"       | True                                                                            | 
+  64 |  "\tUser time (seconds): %U\n"           | True                                                                            | 
+  65 |  "\tSystem time (seconds): %S\n"         | True                                                                            | 
+  66 |  "\tPercent of CPU this job got: %P\n"   | True                                                                            | 
+  67 |  "\tElapsed (wall clock) time (h:mm:ss o | True                                                                            | 
+  68 |  "\tAverage shared text size (kbytes): % | True                                                                            | 
+  69 |  "\tAverage unshared data size (kbytes): | True                                                                            | 
+  70 |  "\tAverage stack size (kbytes): %p\n"   | True                                                                            | 
+  71 |  "\tAverage total size (kbytes): %K\n"   | True                                                                            | 
+  72 |  "\tMaximum resident set size (kbytes):  | True                                                                            | 
+  73 |  "\tAverage resident set size (kbytes):  | True                                                                            | 
+  74 |  "\tMajor (requiring I/O) page faults: % | True                                                                            | 
+  75 |  "\tMinor (reclaiming a frame) page faul | True                                                                            | 
+  76 |  "\tVoluntary context switches: %w\n"    | True                                                                            | 
+  77 |  "\tInvoluntary context switches: %c\n"  | True                                                                            | 
+  78 |  "\tSwaps: %W\n"                         | True                                                                            | 
+  79 |  "\tFile system inputs: %I\n"            | True                                                                            | 
+  80 |  "\tFile system outputs: %O\n"           | True                                                                            | 
+  81 |  "\tSocket messages sent: %s\n"          | True                                                                            | 
+  82 |  "\tSocket messages received: %r\n"      | True                                                                            | 
+  83 |  "\tSignals delivered: %k\n"             | True                                                                            | 
+  84 |  "\tPage size (bytes): %Z\n"             | True                                                                            | 
+  85 |  "\tExit status: %x";                    | True                                                                            | 
+  86 |                                          | True                                                                            | 
+  87 | /* Wait for and fill in data on child pr | True                                                                            | 
+  88 |    Return 0 on error, 1 if ok.  */       | True                                                                            | 
+  89 | /* pid_t is short on BSDI, so don't try  | True                                                                            | 
+  90 | static void resuse_end(pid_t pid, resour | True                                                                            | 
+  91 | {                                        | True                                                                            | 
+  92 |  pid_t caught;                           | True                                                                            | 
+  93 |                                          | True                                                                            | 
+  94 |  /* Ignore signals, but don't ignore the | True                                                                            | 
+  95 |   * returns the child process, set the t | True                                                                            | 
+  96 |  while ((caught = wait3(&resp->waitstatu | True                                                                            | 
+  97 |   if (caught == -1 && errno != EINTR) {  | True                                                                            | 
+  98 |    bb_simple_perror_msg("wait");         | True                                                                            | 
+  99 |    return;                               | True                                                                            | 
+ 100 |   }                                      | True                                                                            | 
+ 101 |  }                                       | True                                                                            | 
+ 102 |  resp->elapsed_ms = monotonic_ms() - res | True                                                                            | 
+ 103 | }                                        | True                                                                            | 
+ 104 |                                          | True                                                                            | 
+ 105 | static void printargv(char *const *argv) | True                                                                            | 
+ 106 | {                                        | True                                                                            | 
+ 107 |  const char *fmt = " %s" + 1;            | True                                                                            | 
+ 108 |  do {                                    | True                                                                            | 
+ 109 |   printf(fmt, *argv);                    | True                                                                            | 
+ 110 |   fmt = " %s";                           | True                                                                            | 
+ 111 |  } while (*++argv);                      | True                                                                            | 
+ 112 | }                                        | True                                                                            | 
+ 113 |                                          | True                                                                            | 
+ 114 | #ifdef UNUSED                            | True                                                                            | 
+ 115 | /* Return the number of kilobytes corres | (UNUSED)                                                                        | 
+ 116 |    (Actually, we use it to convert pages | (UNUSED)                                                                        | 
+ 117 |                                          | (UNUSED)                                                                        | 
+ 118 |    Try to do arithmetic so that the risk | (UNUSED)                                                                        | 
+ 119 |    This is funky since the pagesize coul | (UNUSED)                                                                        | 
+ 120 |    Note: Some machines express getrusage | (UNUSED)                                                                        | 
+ 121 |    others in terms of pages.  */         | (UNUSED)                                                                        | 
+ 122 | #ifdef BB_ARCH_FIXED_PAGESIZE            | (UNUSED)                                                                        | 
+ 123 | # define pagesize BB_ARCH_FIXED_PAGESIZE | (UNUSED)&&(BB_ARCH_FIXED_PAGESIZE)                                              | 
+ 124 | # define ptok(pagesize, pages) ptok(page | (UNUSED)&&(BB_ARCH_FIXED_PAGESIZE)                                              | 
+ 125 | #endif                                   | (UNUSED)                                                                        | 
+ 126 | static unsigned long ptok(const unsigned | (UNUSED)                                                                        | 
+ 127 | {                                        | (UNUSED)                                                                        | 
+ 128 |  unsigned long tmp;                      | (UNUSED)                                                                        | 
+ 129 |                                          | (UNUSED)                                                                        | 
+ 130 |  /* Conversion.  */                      | (UNUSED)                                                                        | 
+ 131 |  if (pages > (LONG_MAX / pagesize)) { /* | (UNUSED)                                                                        | 
+ 132 |   tmp = pages / 1024;     /* Smaller fir | (UNUSED)                                                                        | 
+ 133 |   return tmp * pagesize;  /* then larger | (UNUSED)                                                                        | 
+ 134 |  }                                       | (UNUSED)                                                                        | 
+ 135 |  /* Could underflow.  */                 | (UNUSED)                                                                        | 
+ 136 |  tmp = pages * pagesize; /* Larger first | (UNUSED)                                                                        | 
+ 137 |  return tmp / 1024;      /* then smaller | (UNUSED)                                                                        | 
+ 138 | }                                        | (UNUSED)                                                                        | 
+ 139 | #undef pagesize                          | (UNUSED)                                                                        | 
+ 140 | #endif /* UNUSED */                      | True                                                                            | 
+ 141 |                                          | True                                                                            | 
+ 142 | /* summarize: Report on the system use o | True                                                                            | 
+ 143 |                                          | True                                                                            | 
+ 144 |    Print the FMT argument except that '% | True                                                                            | 
+ 145 |    have special meaning, and '\n' and '\ | True                                                                            | 
+ 146 |    newline and tab, respectively, and '\ | True                                                                            | 
+ 147 |                                          | True                                                                            | 
+ 148 |    The character following a '%' can be: | True                                                                            | 
+ 149 |    (* means the tcsh time builtin also r | True                                                                            | 
+ 150 |    % == a literal '%'                    | True                                                                            | 
+ 151 |    C == command name and arguments       | True                                                                            | 
+ 152 | *  D == average unshared data size in K  | True                                                                            | 
+ 153 | *  E == elapsed real (wall clock) time i | True                                                                            | 
+ 154 | *  F == major page faults (required phys | True                                                                            | 
+ 155 | *  I == file system inputs (ru_inblock)  | True                                                                            | 
+ 156 | *  K == average total mem usage (ru_idrs | True                                                                            | 
+ 157 | *  M == maximum resident set size in K ( | True                                                                            | 
+ 158 | *  O == file system outputs (ru_oublock) | True                                                                            | 
+ 159 | *  P == percent of CPU this job got (tot | True                                                                            | 
+ 160 | *  R == minor page faults (reclaims; no  | True                                                                            | 
+ 161 | *  S == system (kernel) time (seconds) ( | True                                                                            | 
+ 162 | *  T == system time in [hour:]min:sec    | True                                                                            | 
+ 163 | *  U == user time (seconds) (ru_utime)   | True                                                                            | 
+ 164 | *  u == user time in [hour:]min:sec      | True                                                                            | 
+ 165 | *  W == times swapped out (ru_nswap)     | True                                                                            | 
+ 166 | *  X == average amount of shared text in | True                                                                            | 
+ 167 |    Z == page size                        | True                                                                            | 
+ 168 | *  c == involuntary context switches (ru | True                                                                            | 
+ 169 |    e == elapsed real time in seconds     | True                                                                            | 
+ 170 | *  k == signals delivered (ru_nsignals)  | True                                                                            | 
+ 171 |    p == average unshared stack size in K | True                                                                            | 
+ 172 | *  r == socket messages received (ru_msg | True                                                                            | 
+ 173 | *  s == socket messages sent (ru_msgsnd) | True                                                                            | 
+ 174 |    t == average resident set size in K ( | True                                                                            | 
+ 175 | *  w == voluntary context switches (ru_n | True                                                                            | 
+ 176 |    x == exit status of command           | True                                                                            | 
+ 177 |                                          | True                                                                            | 
+ 178 |    Various memory usages are found by co | True                                                                            | 
+ 179 |    to kbytes by multiplying by the page  | True                                                                            | 
+ 180 |    and dividing by elapsed real time.    | True                                                                            | 
+ 181 |                                          | True                                                                            | 
+ 182 |    FMT is the format string, interpreted | True                                                                            | 
+ 183 |    COMMAND is the command and args that  | True                                                                            | 
+ 184 |    RESP is resource information on the c | True                                                                            | 
+ 185 |                                          | True                                                                            | 
+ 186 | #ifndef TICKS_PER_SEC                    | True                                                                            | 
+ 187 | #define TICKS_PER_SEC 100                | !(TICKS_PER_SEC)                                                                | 
+ 188 | #endif                                   | True                                                                            | 
+ 189 |                                          | True                                                                            | 
+ 190 | static void summarize(const char *fmt, c | True                                                                            | 
+ 191 | {                                        | True                                                                            | 
+ 192 |  unsigned vv_ms;     /* Elapsed virtual  | True                                                                            | 
+ 193 |  unsigned cpu_ticks; /* Same, in "CPU ti | True                                                                            | 
+ 194 |  unsigned pagesize = bb_getpagesize();   | True                                                                            | 
+ 195 |                                          | True                                                                            | 
+ 196 |  /* Impossible: we do not use WUNTRACED  | True                                                                            | 
+ 197 |  if (WIFSTOPPED(resp->waitstatus))       | True                                                                            | 
+ 198 |   printf("Command stopped by signal %u\n | True                                                                            | 
+ 199 |     WSTOPSIG(resp->waitstatus));         | True                                                                            | 
+ 200 |  else */                                 | True                                                                            | 
+ 201 |  if (WIFSIGNALED(resp->waitstatus))      | True                                                                            | 
+ 202 |   printf("Command terminated by signal % | True                                                                            | 
+ 203 |     WTERMSIG(resp->waitstatus));         | True                                                                            | 
+ 204 |  else if (WIFEXITED(resp->waitstatus) && | True                                                                            | 
+ 205 |   printf("Command exited with non-zero s | True                                                                            | 
+ 206 |     WEXITSTATUS(resp->waitstatus));      | True                                                                            | 
+ 207 |                                          | True                                                                            | 
+ 208 |  vv_ms = (resp->ru.ru_utime.tv_sec + res | True                                                                            | 
+ 209 |        + (resp->ru.ru_utime.tv_usec + re | True                                                                            | 
+ 210 |                                          | True                                                                            | 
+ 211 | #if (1000 / TICKS_PER_SEC) * TICKS_PER_S | True                                                                            | 
+ 212 |  /* 1000 is exactly divisible by TICKS_P | !(TICKS_PER_SEC)||(TICKS_PER_SEC)&&(((1000/TICKS_PER_SEC)*TICKS_PER_SEC)==1000) | 
+ 213 |  cpu_ticks = vv_ms / (1000 / TICKS_PER_S | !(TICKS_PER_SEC)||(TICKS_PER_SEC)&&(((1000/TICKS_PER_SEC)*TICKS_PER_SEC)==1000) | 
+ 214 | #else                                    | True                                                                            | 
+ 215 |  cpu_ticks = vv_ms * (unsigned long long | (TICKS_PER_SEC)&&!(((1000/TICKS_PER_SEC)*TICKS_PER_SEC)==1000)                  | 
+ 216 | #endif                                   | True                                                                            | 
+ 217 |  if (!cpu_ticks) cpu_ticks = 1; /* we di | True                                                                            | 
+ 218 |                                          | True                                                                            | 
+ 219 |  while (*fmt) {                          | True                                                                            | 
+ 220 |   /* Handle leading literal part */      | True                                                                            | 
+ 221 |   int n = strcspn(fmt, "%\\");           | True                                                                            | 
+ 222 |   if (n) {                               | True                                                                            | 
+ 223 |    printf("%.*s", n, fmt);               | True                                                                            | 
+ 224 |    fmt += n;                             | True                                                                            | 
+ 225 |    continue;                             | True                                                                            | 
+ 226 |   }                                      | True                                                                            | 
+ 227 |                                          | True                                                                            | 
+ 228 |   switch (*fmt) {                        | True                                                                            | 
+ 229 |   case '%':                              | True                                                                            | 
+ 230 |    switch (*++fmt) {                     | True                                                                            | 
+ 231 |    default:                              | True                                                                            | 
+ 232 |     /* Unknown %<char> is printed as "?< | True                                                                            | 
+ 233 |     bb_putchar('?');                     | True                                                                            | 
+ 234 |     if (!*fmt) {                         | True                                                                            | 
+ 235 |      /* Trailing -f '...%' prints "...?" | True                                                                            | 
+ 236 |      goto ret;                           | True                                                                            | 
+ 237 |     }                                    | True                                                                            | 
+ 238 |     /*FALLTHROUGH*/                      | True                                                                            | 
+ 239 |    case '%':                             | True                                                                            | 
+ 240 |     bb_putchar(*fmt);                    | True                                                                            | 
+ 241 |     break;                               | True                                                                            | 
+ 242 |    case 'C': /* The command that got tim | True                                                                            | 
+ 243 |     printargv(command);                  | True                                                                            | 
+ 244 |     break;                               | True                                                                            | 
+ 245 |    case 'D': /* Average unshared data si | True                                                                            | 
+ 246 |     /* (linux kernel sets ru_idrss/isrss | True                                                                            | 
+ 247 |      * docs say the value is in kbytes,  | True                                                                            | 
+ 248 |     printf("%lu",                        | True                                                                            | 
+ 249 |      (/*ptok(pagesize,*/ (UL) resp->ru.r | True                                                                            | 
+ 250 |       (UL) resp->ru.ru_isrss             | True                                                                            | 
+ 251 |      ) / cpu_ticks                       | True                                                                            | 
+ 252 |     );                                   | True                                                                            | 
+ 253 |     break;                               | True                                                                            | 
+ 254 |    case 'E': { /* Elapsed real (wall clo | True                                                                            | 
+ 255 |     unsigned seconds = resp->elapsed_ms  | True                                                                            | 
+ 256 |     if (seconds >= 3600) /* One hour ->  | True                                                                            | 
+ 257 |      printf("%uh %um %02us",             | True                                                                            | 
+ 258 |        seconds / 3600,                   | True                                                                            | 
+ 259 |        (seconds % 3600) / 60,            | True                                                                            | 
+ 260 |        seconds % 60);                    | True                                                                            | 
+ 261 |     else                                 | True                                                                            | 
+ 262 |      printf("%um %u.%02us", /* -> m:s.   | True                                                                            | 
+ 263 |        seconds / 60,                     | True                                                                            | 
+ 264 |        seconds % 60,                     | True                                                                            | 
+ 265 |        (unsigned)(resp->elapsed_ms / 10) | True                                                                            | 
+ 266 |     break;                               | True                                                                            | 
+ 267 |    }                                     | True                                                                            | 
+ 268 |    case 'F': /* Major page faults.  */   | True                                                                            | 
+ 269 |     printf("%lu", resp->ru.ru_majflt);   | True                                                                            | 
+ 270 |     break;                               | True                                                                            | 
+ 271 |    case 'I': /* Inputs.  */              | True                                                                            | 
+ 272 |     printf("%lu", resp->ru.ru_inblock);  | True                                                                            | 
+ 273 |     break;                               | True                                                                            | 
+ 274 |    case 'K': /* Average mem usage == dat | True                                                                            | 
+ 275 |     /* (linux kernel sets ru_idrss/isrss | True                                                                            | 
+ 276 |      * docs say the value is in kbytes,  | True                                                                            | 
+ 277 |     printf("%lu",                        | True                                                                            | 
+ 278 |      (/*ptok(pagesize,*/ (UL) resp->ru.r | True                                                                            | 
+ 279 |       (UL) resp->ru.ru_isrss +           | True                                                                            | 
+ 280 |       (UL) resp->ru.ru_ixrss             | True                                                                            | 
+ 281 |      ) / cpu_ticks                       | True                                                                            | 
+ 282 |     );                                   | True                                                                            | 
+ 283 |     break;                               | True                                                                            | 
+ 284 |    case 'M': /* Maximum resident set siz | True                                                                            | 
+ 285 |     printf("%lu", (UL) resp->ru.ru_maxrs | True                                                                            | 
+ 286 |     break;                               | True                                                                            | 
+ 287 |    case 'O': /* Outputs.  */             | True                                                                            | 
+ 288 |     printf("%lu", resp->ru.ru_oublock);  | True                                                                            | 
+ 289 |     break;                               | True                                                                            | 
+ 290 |    case 'P': /* Percent of CPU this job  | True                                                                            | 
+ 291 |     /* % cpu is (total cpu time)/(elapse | True                                                                            | 
+ 292 |     if (resp->elapsed_ms > 0)            | True                                                                            | 
+ 293 |      printf("%u%%", (unsigned)(vv_ms * 1 | True                                                                            | 
+ 294 |     else                                 | True                                                                            | 
+ 295 |      printf("?%%");                      | True                                                                            | 
+ 296 |     break;                               | True                                                                            | 
+ 297 |    case 'R': /* Minor page faults (recla | True                                                                            | 
+ 298 |     printf("%lu", resp->ru.ru_minflt);   | True                                                                            | 
+ 299 |     break;                               | True                                                                            | 
+ 300 |    case 'S': /* System time.  */         | True                                                                            | 
+ 301 |     printf("%u.%02u",                    | True                                                                            | 
+ 302 |       (unsigned)resp->ru.ru_stime.tv_sec | True                                                                            | 
+ 303 |       (unsigned)(resp->ru.ru_stime.tv_us | True                                                                            | 
+ 304 |     break;                               | True                                                                            | 
+ 305 |    case 'T': /* System time.  */         | True                                                                            | 
+ 306 |     if (resp->ru.ru_stime.tv_sec >= 3600 | True                                                                            | 
+ 307 |      printf("%uh %um %02us",             | True                                                                            | 
+ 308 |        (unsigned)(resp->ru.ru_stime.tv_s | True                                                                            | 
+ 309 |        (unsigned)(resp->ru.ru_stime.tv_s | True                                                                            | 
+ 310 |        (unsigned)(resp->ru.ru_stime.tv_s | True                                                                            | 
+ 311 |     else                                 | True                                                                            | 
+ 312 |      printf("%um %u.%02us", /* -> m:s.   | True                                                                            | 
+ 313 |        (unsigned)(resp->ru.ru_stime.tv_s | True                                                                            | 
+ 314 |        (unsigned)(resp->ru.ru_stime.tv_s | True                                                                            | 
+ 315 |        (unsigned)(resp->ru.ru_stime.tv_u | True                                                                            | 
+ 316 |     break;                               | True                                                                            | 
+ 317 |    case 'U': /* User time.  */           | True                                                                            | 
+ 318 |     printf("%u.%02u",                    | True                                                                            | 
+ 319 |       (unsigned)resp->ru.ru_utime.tv_sec | True                                                                            | 
+ 320 |       (unsigned)(resp->ru.ru_utime.tv_us | True                                                                            | 
+ 321 |     break;                               | True                                                                            | 
+ 322 |    case 'u': /* User time.  */           | True                                                                            | 
+ 323 |     if (resp->ru.ru_utime.tv_sec >= 3600 | True                                                                            | 
+ 324 |      printf("%uh %um %02us",             | True                                                                            | 
+ 325 |        (unsigned)(resp->ru.ru_utime.tv_s | True                                                                            | 
+ 326 |        (unsigned)(resp->ru.ru_utime.tv_s | True                                                                            | 
+ 327 |        (unsigned)(resp->ru.ru_utime.tv_s | True                                                                            | 
+ 328 |     else                                 | True                                                                            | 
+ 329 |      printf("%um %u.%02us", /* -> m:s.   | True                                                                            | 
+ 330 |        (unsigned)(resp->ru.ru_utime.tv_s | True                                                                            | 
+ 331 |        (unsigned)(resp->ru.ru_utime.tv_s | True                                                                            | 
+ 332 |        (unsigned)(resp->ru.ru_utime.tv_u | True                                                                            | 
+ 333 |     break;                               | True                                                                            | 
+ 334 |    case 'W': /* Times swapped out.  */   | True                                                                            | 
+ 335 |     printf("%lu", resp->ru.ru_nswap);    | True                                                                            | 
+ 336 |     break;                               | True                                                                            | 
+ 337 |    case 'X': /* Average shared text size | True                                                                            | 
+ 338 |     printf("%lu", /*ptok(pagesize,*/ (UL | True                                                                            | 
+ 339 |     break;                               | True                                                                            | 
+ 340 |    case 'Z': /* Page size.  */           | True                                                                            | 
+ 341 |     printf("%u", pagesize);              | True                                                                            | 
+ 342 |     break;                               | True                                                                            | 
+ 343 |    case 'c': /* Involuntary context swit | True                                                                            | 
+ 344 |     printf("%lu", resp->ru.ru_nivcsw);   | True                                                                            | 
+ 345 |     break;                               | True                                                                            | 
+ 346 |    case 'e': /* Elapsed real time in sec | True                                                                            | 
+ 347 |     printf("%u.%02u",                    | True                                                                            | 
+ 348 |       (unsigned)resp->elapsed_ms / 1000, | True                                                                            | 
+ 349 |       (unsigned)(resp->elapsed_ms / 10)  | True                                                                            | 
+ 350 |     break;                               | True                                                                            | 
+ 351 |    case 'k': /* Signals delivered.  */   | True                                                                            | 
+ 352 |     printf("%lu", resp->ru.ru_nsignals); | True                                                                            | 
+ 353 |     break;                               | True                                                                            | 
+ 354 |    case 'p': /* Average stack segment.   | True                                                                            | 
+ 355 |     printf("%lu", /*ptok(pagesize,*/ (UL | True                                                                            | 
+ 356 |     break;                               | True                                                                            | 
+ 357 |    case 'r': /* Incoming socket messages | True                                                                            | 
+ 358 |     printf("%lu", resp->ru.ru_msgrcv);   | True                                                                            | 
+ 359 |     break;                               | True                                                                            | 
+ 360 |    case 's': /* Outgoing socket messages | True                                                                            | 
+ 361 |     printf("%lu", resp->ru.ru_msgsnd);   | True                                                                            | 
+ 362 |     break;                               | True                                                                            | 
+ 363 |    case 't': /* Average resident set siz | True                                                                            | 
+ 364 |     printf("%lu", /*ptok(pagesize,*/ (UL | True                                                                            | 
+ 365 |     break;                               | True                                                                            | 
+ 366 |    case 'w': /* Voluntary context switch | True                                                                            | 
+ 367 |     printf("%lu", resp->ru.ru_nvcsw);    | True                                                                            | 
+ 368 |     break;                               | True                                                                            | 
+ 369 |    case 'x': /* Exit status.  */         | True                                                                            | 
+ 370 |     printf("%u", WEXITSTATUS(resp->waits | True                                                                            | 
+ 371 |     break;                               | True                                                                            | 
+ 372 |    }                                     | True                                                                            | 
+ 373 |    break;                                | True                                                                            | 
+ 374 |                                          | True                                                                            | 
+ 375 |   default: /* *fmt is '\': format escape | True                                                                            | 
+ 376 |    switch (*++fmt) {                     | True                                                                            | 
+ 377 |    default:                              | True                                                                            | 
+ 378 |     /* Unknown \<char> is printed as "?\ | True                                                                            | 
+ 379 |     bb_putchar('?');                     | True                                                                            | 
+ 380 |     bb_putchar('\\');                    | True                                                                            | 
+ 381 |     if (!*fmt) {                         | True                                                                            | 
+ 382 |      /* Trailing -f '...\': GNU time 1.9 | True                                                                            | 
+ 383 |       * "...?\COMMAND" (it's probably a  | True                                                                            | 
+ 384 |       */                                 | True                                                                            | 
+ 385 |      puts(command[0]);                   | True                                                                            | 
+ 386 |      goto ret;                           | True                                                                            | 
+ 387 |     }                                    | True                                                                            | 
+ 388 |     /*FALLTHROUGH*/                      | True                                                                            | 
+ 389 |    case '\\':                            | True                                                                            | 
+ 390 |     bb_putchar(*fmt);                    | True                                                                            | 
+ 391 |     break;                               | True                                                                            | 
+ 392 |    case 't':                             | True                                                                            | 
+ 393 |     bb_putchar('\t');                    | True                                                                            | 
+ 394 |     break;                               | True                                                                            | 
+ 395 |    case 'n':                             | True                                                                            | 
+ 396 |     bb_putchar('\n');                    | True                                                                            | 
+ 397 |     break;                               | True                                                                            | 
+ 398 |    }                                     | True                                                                            | 
+ 399 |    break;                                | True                                                                            | 
+ 400 |   }                                      | True                                                                            | 
+ 401 |   ++fmt;                                 | True                                                                            | 
+ 402 |  }                                       | True                                                                            | 
+ 403 |  bb_putchar('\n');                       | True                                                                            | 
+ 404 |  ret: ;                                  | True                                                                            | 
+ 405 | }                                        | True                                                                            | 
+ 406 |                                          | True                                                                            | 
+ 407 | /* Run command CMD and return statistics | True                                                                            | 
+ 408 |    Put the statistics in *RESP.  */      | True                                                                            | 
+ 409 | static void run_command(char *const *cmd | True                                                                            | 
+ 410 | {                                        | True                                                                            | 
+ 411 |  pid_t pid;                              | True                                                                            | 
+ 412 |  void (*interrupt_signal)(int);          | True                                                                            | 
+ 413 |  void (*quit_signal)(int);               | True                                                                            | 
+ 414 |                                          | True                                                                            | 
+ 415 |  resp->elapsed_ms = monotonic_ms();      | True                                                                            | 
+ 416 |  pid = xvfork();                         | True                                                                            | 
+ 417 |  if (pid == 0) {                         | True                                                                            | 
+ 418 |   /* Child */                            | True                                                                            | 
+ 419 |   BB_EXECVP_or_die((char**)cmd);         | True                                                                            | 
+ 420 |  }                                       | True                                                                            | 
+ 421 |                                          | True                                                                            | 
+ 422 |  /* Have signals kill the child but not  | True                                                                            | 
+ 423 | //TODO: just block all sigs? and re-enab | True                                                                            | 
+ 424 |  interrupt_signal = signal(SIGINT, SIG_I | True                                                                            | 
+ 425 |  quit_signal = signal(SIGQUIT, SIG_IGN); | True                                                                            | 
+ 426 |                                          | True                                                                            | 
+ 427 |  resuse_end(pid, resp);                  | True                                                                            | 
+ 428 |                                          | True                                                                            | 
+ 429 |  /* Re-enable signals.  */               | True                                                                            | 
+ 430 |  signal(SIGINT, interrupt_signal);       | True                                                                            | 
+ 431 |  signal(SIGQUIT, quit_signal);           | True                                                                            | 
+ 432 | }                                        | True                                                                            | 
+ 433 |                                          | True                                                                            | 
+ 434 | int time_main(int argc, char **argv) MAI | True                                                                            | 
+ 435 | int time_main(int argc UNUSED_PARAM, cha | True                                                                            | 
+ 436 | {                                        | True                                                                            | 
+ 437 |  resource_t res;                         | True                                                                            | 
+ 438 |  /* $TIME has lowest prio (-v,-p,-f FMT  | True                                                                            | 
+ 439 |  const char *output_format = getenv("TIM | True                                                                            | 
+ 440 |  char *output_filename;                  | True                                                                            | 
+ 441 |  int output_fd;                          | True                                                                            | 
+ 442 |  int opt;                                | True                                                                            | 
+ 443 |  int ex;                                 | True                                                                            | 
+ 444 |  enum {                                  | True                                                                            | 
+ 445 |   OPT_v = (1 << 0),                      | True                                                                            | 
+ 446 |   OPT_p = (1 << 1),                      | True                                                                            | 
+ 447 |   OPT_a = (1 << 2),                      | True                                                                            | 
+ 448 |   OPT_o = (1 << 3),                      | True                                                                            | 
+ 449 |   OPT_f = (1 << 4),                      | True                                                                            | 
+ 450 |  };                                      | True                                                                            | 
+ 451 |                                          | True                                                                            | 
+ 452 |  /* "+": stop on first non-option */     | True                                                                            | 
+ 453 |  opt = getopt32(argv, "^+" "vpao:f:" "\0 | True                                                                            | 
+ 454 |     &output_filename, &output_format     | True                                                                            | 
+ 455 |  );                                      | True                                                                            | 
+ 456 |  argv += optind;                         | True                                                                            | 
+ 457 |  if (opt & OPT_v)                        | True                                                                            | 
+ 458 |   output_format = long_format;           | True                                                                            | 
+ 459 |  if (opt & OPT_p)                        | True                                                                            | 
+ 460 |   output_format = posix_format;          | True                                                                            | 
+ 461 |  output_fd = STDERR_FILENO;              | True                                                                            | 
+ 462 |  if (opt & OPT_o) {                      | True                                                                            | 
+ 463 | #ifndef O_CLOEXEC                        | True                                                                            | 
+ 464 | # define O_CLOEXEC 0                     | !(O_CLOEXEC)                                                                    | 
+ 465 | #endif                                   | True                                                                            | 
+ 466 |   output_fd = xopen(output_filename,     | True                                                                            | 
+ 467 |    (opt & OPT_a) /* append? */           | True                                                                            | 
+ 468 |    ? (O_CREAT | O_WRONLY | O_CLOEXEC | O | True                                                                            | 
+ 469 |    : (O_CREAT | O_WRONLY | O_CLOEXEC | O | True                                                                            | 
+ 470 |   );                                     | True                                                                            | 
+ 471 |   if (!O_CLOEXEC)                        | True                                                                            | 
+ 472 |    close_on_exec_on(output_fd);          | True                                                                            | 
+ 473 |  }                                       | True                                                                            | 
+ 474 |                                          | True                                                                            | 
+ 475 |  run_command(argv, &res);                | True                                                                            | 
+ 476 |                                          | True                                                                            | 
+ 477 |  /* Cheat. printf's are shorter :) */    | True                                                                            | 
+ 478 |  xdup2(output_fd, STDOUT_FILENO);        | True                                                                            | 
+ 479 |  summarize(output_format, argv, &res);   | True                                                                            | 
+ 480 |                                          | True                                                                            | 
+ 481 |  ex = WEXITSTATUS(res.waitstatus);       | True                                                                            | 
+ 482 |  /* Impossible: we do not use WUNTRACED  | True                                                                            | 
+ 483 |  if (WIFSTOPPED(res.waitstatus))         | True                                                                            | 
+ 484 |   ex = WSTOPSIG(res.waitstatus);         | True                                                                            | 
+ 485 |  */                                      | True                                                                            | 
+ 486 |  if (WIFSIGNALED(res.waitstatus))        | True                                                                            | 
+ 487 |   ex = WTERMSIG(res.waitstatus);         | True                                                                            | 
+ 488 |                                          | True                                                                            | 
+ 489 |  fflush_stdout_and_exit(ex);             | True                                                                            | 
+ 490 | }                                        | True                                                                            | 
+-----+------------------------------------------+---------------------------------------------------------------------------------+
+     |                                          | +116MB, 259ms                                                                   | 

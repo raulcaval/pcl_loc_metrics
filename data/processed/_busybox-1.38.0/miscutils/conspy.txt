@@ -1,0 +1,579 @@
+FILE: data/raw/busybox-1.38.0/miscutils/conspy.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * A text-mode VNC like program for Linu | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * pascal.bellard@ads-lu.com             | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Based on Russell Stuart's conspy.c    | True                      | 
+   8 |  *   http://ace-host.stuart.id.au/russel | True                      | 
+   9 |  *                                       | True                      | 
+  10 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  11 |  */                                      | True                      | 
+  12 | //config:config CONSPY                   | True                      | 
+  13 | //config: bool "conspy (10 kb)"          | True                      | 
+  14 | //config: default y                      | True                      | 
+  15 | //config: help                           | True                      | 
+  16 | //config: A text-mode VNC like program f | True                      | 
+  17 | //config: example:  conspy NUM      shar | True                      | 
+  18 | //config: or        conspy -nd NUM  scre | True                      | 
+  19 | //config: or        conspy -cs NUM  poor | True                      | 
+  20 |                                          | True                      | 
+  21 | //applet:IF_CONSPY(APPLET(conspy, BB_DIR | True                      | 
+  22 |                                          | True                      | 
+  23 | //kbuild:lib-$(CONFIG_CONSPY) += conspy. | True                      | 
+  24 |                                          | True                      | 
+  25 | //usage:#define conspy_trivial_usage     | True                      | 
+  26 | //usage: "[-vcsndfFQ] [-x COL] [-y LINE] | True                      | 
+  27 | //usage:#define conspy_full_usage "\n\n" | True                      | 
+  28 | //usage:     "A text-mode VNC like progr | True                      | 
+  29 | //usage:     "\nTo exit, quickly press E | True                      | 
+  30 | //usage:     "\n"                        | True                      | 
+  31 | //usage:     "\n -v Don't send keystroke | True                      | 
+  32 | //usage:     "\n -c Create missing /dev/ | True                      | 
+  33 | //usage:     "\n -s Open a SHELL session | True                      | 
+  34 | //usage:     "\n -n Black & white"       | True                      | 
+  35 | //usage:     "\n -d Dump console to stdo | True                      | 
+  36 | //usage:     "\n -f Follow cursor"       | True                      | 
+  37 | //usage:     "\n -F Assume console is on | True                      | 
+  38 | //usage:     "\n -Q Disable exit on ESC- | True                      | 
+  39 | //usage:     "\n -x COL Starting column" | True                      | 
+  40 | //usage:     "\n -y LINE Starting line"  | True                      | 
+  41 |                                          | True                      | 
+  42 | #include "libbb.h"                       | True                      | 
+  43 | #include "common_bufsiz.h"               | True                      | 
+  44 | #include <sys/kd.h>                      | True                      | 
+  45 |                                          | True                      | 
+  46 | #define ESC "\033"                       | True                      | 
+  47 | #define CURSOR_ON -1                     | True                      | 
+  48 | #define CURSOR_OFF 1                     | True                      | 
+  49 |                                          | True                      | 
+  50 | #define DEV_TTY  "/dev/tty"              | True                      | 
+  51 | #define DEV_VCSA "/dev/vcsa"             | True                      | 
+  52 |                                          | True                      | 
+  53 | struct screen_info {                     | True                      | 
+  54 |  unsigned char lines, cols, cursor_x, cu | True                      | 
+  55 | };                                       | True                      | 
+  56 |                                          | True                      | 
+  57 | #define CHAR(x) (*(uint8_t*)(x))         | True                      | 
+  58 | #define ATTR(x) (((uint8_t*)(x))[1])     | True                      | 
+  59 | #define NEXT(x) ((x) += 2)               | True                      | 
+  60 | #define DATA(x) (*(uint16_t*)(x))        | True                      | 
+  61 |                                          | True                      | 
+  62 | struct globals {                         | True                      | 
+  63 |  char* data;                             | True                      | 
+  64 |  int size;                               | True                      | 
+  65 |  int x, y;                               | True                      | 
+  66 |  int kbd_fd;                             | True                      | 
+  67 |  int ioerror_count;                      | True                      | 
+  68 |  int key_count;                          | True                      | 
+  69 |  int escape_count;                       | True                      | 
+  70 |  int nokeys;                             | True                      | 
+  71 |  int current;                            | True                      | 
+  72 |  int first_line_offset;                  | True                      | 
+  73 |  int last_attr;                          | True                      | 
+  74 |  // cached local tty parameters          | True                      | 
+  75 |  unsigned width;                         | True                      | 
+  76 |  unsigned height;                        | True                      | 
+  77 |  unsigned col;                           | True                      | 
+  78 |  unsigned line;                          | True                      | 
+  79 |  smallint curoff; // unknown:0 cursor on | True                      | 
+  80 |  char attrbuf[sizeof("0;1;5;30;40m")];   | True                      | 
+  81 |  // remote console                       | True                      | 
+  82 |  struct screen_info remote;              | True                      | 
+  83 |  // saved local tty terminfo             | True                      | 
+  84 |  struct termios term_orig;               | True                      | 
+  85 |  char vcsa_name[sizeof(DEV_VCSA "NN")];  | True                      | 
+  86 | };                                       | True                      | 
+  87 |                                          | True                      | 
+  88 | #define G (*ptr_to_globals)              | True                      | 
+  89 | #define INIT_G() do { \                  | True                      | 
+  90 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+  91 |  G.width = G.height = UINT_MAX; \        | True                      | 
+  92 |  G.last_attr--; \                        | True                      | 
+  93 | } while (0)                              | True                      | 
+  94 |                                          | True                      | 
+  95 | enum {                                   | True                      | 
+  96 |  FLAG_v,  // view only                   | True                      | 
+  97 |  FLAG_c,  // create device if need       | True                      | 
+  98 |  FLAG_Q,  // never exit                  | True                      | 
+  99 |  FLAG_s,  // session                     | True                      | 
+ 100 |  FLAG_n,  // no colors                   | True                      | 
+ 101 |  FLAG_d,  // dump screen                 | True                      | 
+ 102 |  FLAG_f,  // follow cursor               | True                      | 
+ 103 |  FLAG_F,  // framebuffer                 | True                      | 
+ 104 | };                                       | True                      | 
+ 105 | #define FLAG(x) (1 << FLAG_##x)          | True                      | 
+ 106 | #define BW (option_mask32 & FLAG(n))     | True                      | 
+ 107 |                                          | True                      | 
+ 108 | static void putcsi(const char *s)        | True                      | 
+ 109 | {                                        | True                      | 
+ 110 |  fputs_stdout(ESC"[");                   | True                      | 
+ 111 |  fputs_stdout(s);                        | True                      | 
+ 112 | }                                        | True                      | 
+ 113 |                                          | True                      | 
+ 114 | static void clrscr(void)                 | True                      | 
+ 115 | {                                        | True                      | 
+ 116 |  // Home, clear till end of screen       | True                      | 
+ 117 |  putcsi("1;1H" ESC"[J");                 | True                      | 
+ 118 |  G.col = G.line = 0;                     | True                      | 
+ 119 | }                                        | True                      | 
+ 120 |                                          | True                      | 
+ 121 | static void set_cursor(int state)        | True                      | 
+ 122 | {                                        | True                      | 
+ 123 |  if (G.curoff != state) {                | True                      | 
+ 124 |   G.curoff = state;                      | True                      | 
+ 125 |   putcsi("?25");                         | True                      | 
+ 126 |   bb_putchar("h?l"[1 + state]);          | True                      | 
+ 127 |  }                                       | True                      | 
+ 128 | }                                        | True                      | 
+ 129 |                                          | True                      | 
+ 130 | static void gotoxy(int col, int line)    | True                      | 
+ 131 | {                                        | True                      | 
+ 132 |  if (G.col != col || G.line != line) {   | True                      | 
+ 133 |   G.col = col;                           | True                      | 
+ 134 |   G.line = line;                         | True                      | 
+ 135 |   printf(ESC"[%u;%uH", line + 1, col + 1 | True                      | 
+ 136 |  }                                       | True                      | 
+ 137 | }                                        | True                      | 
+ 138 |                                          | True                      | 
+ 139 | static void cleanup(int code) NORETURN;  | True                      | 
+ 140 | static void cleanup(int code)            | True                      | 
+ 141 | {                                        | True                      | 
+ 142 |  set_cursor(CURSOR_ON);                  | True                      | 
+ 143 |  tcsetattr(G.kbd_fd, TCSANOW, &G.term_or | True                      | 
+ 144 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 145 |   close(G.kbd_fd);                       | True                      | 
+ 146 |  }                                       | True                      | 
+ 147 |  // Reset attributes                     | True                      | 
+ 148 |  if (!BW)                                | True                      | 
+ 149 |   putcsi("0m");                          | True                      | 
+ 150 |  bb_putchar('\n');                       | True                      | 
+ 151 |  if (code > EXIT_FAILURE)                | True                      | 
+ 152 |   kill_myself_with_sig(code);            | True                      | 
+ 153 |  exit(code);                             | True                      | 
+ 154 | }                                        | True                      | 
+ 155 |                                          | True                      | 
+ 156 | static void screen_read_close(void)      | True                      | 
+ 157 | {                                        | True                      | 
+ 158 |  unsigned i, j;                          | True                      | 
+ 159 |  int vcsa_fd;                            | True                      | 
+ 160 |  char *data;                             | True                      | 
+ 161 |                                          | True                      | 
+ 162 |  // Close & re-open vcsa in case they ha | True                      | 
+ 163 |  vcsa_fd = xopen(G.vcsa_name, O_RDONLY); | True                      | 
+ 164 |  xread(vcsa_fd, &G.remote, 4);           | True                      | 
+ 165 |  i = G.remote.cols * 2;                  | True                      | 
+ 166 |  G.first_line_offset = G.y * i;          | True                      | 
+ 167 |  i *= G.remote.lines;                    | True                      | 
+ 168 |  if (G.data == NULL) {                   | True                      | 
+ 169 |   G.size = i;                            | True                      | 
+ 170 |   G.data = xzalloc(2 * i);               | True                      | 
+ 171 |  }                                       | True                      | 
+ 172 |  if (G.size != i) {                      | True                      | 
+ 173 |   cleanup(EXIT_FAILURE);                 | True                      | 
+ 174 |  }                                       | True                      | 
+ 175 |  data = G.data + G.current;              | True                      | 
+ 176 |  xread(vcsa_fd, data, G.size);           | True                      | 
+ 177 |  close(vcsa_fd);                         | True                      | 
+ 178 |  for (i = 0; i < G.remote.lines; i++) {  | True                      | 
+ 179 |   for (j = 0; j < G.remote.cols; j++, NE | True                      | 
+ 180 |    unsigned x = j - G.x; // if will catc | True                      | 
+ 181 |    unsigned y = i - G.y; // if will catc | True                      | 
+ 182 |                                          | True                      | 
+ 183 |    if (y >= G.height || x >= G.width)    | True                      | 
+ 184 |     DATA(data) = 0;                      | True                      | 
+ 185 |    else {                                | True                      | 
+ 186 |     uint8_t ch = CHAR(data);             | True                      | 
+ 187 |     if (ch < ' ')                        | True                      | 
+ 188 |      CHAR(data) = ch | 0x40;             | True                      | 
+ 189 |     else if (ch > 0x7e)                  | True                      | 
+ 190 |      CHAR(data) = '?';                   | True                      | 
+ 191 |    }                                     | True                      | 
+ 192 |   }                                      | True                      | 
+ 193 |  }                                       | True                      | 
+ 194 | }                                        | True                      | 
+ 195 |                                          | True                      | 
+ 196 | static void screen_char(char *data)      | True                      | 
+ 197 | {                                        | True                      | 
+ 198 |  if (!BW) {                              | True                      | 
+ 199 |   uint8_t attr_diff;                     | True                      | 
+ 200 |   uint8_t attr = ATTR(data);             | True                      | 
+ 201 |                                          | True                      | 
+ 202 |   if (option_mask32 & FLAG(F)) {         | True                      | 
+ 203 |    attr >>= 1;                           | True                      | 
+ 204 |   }                                      | True                      | 
+ 205 |   attr_diff = G.last_attr ^ attr;        | True                      | 
+ 206 |   if (attr_diff) {                       | True                      | 
+ 207 | // Attribute layout for VGA compatible t | True                      | 
+ 208 | // blinking text                         | True                      | 
+ 209 | // |red bkgd                             | True                      | 
+ 210 | // ||green bkgd                          | True                      | 
+ 211 | // |||blue bkgd                          | True                      | 
+ 212 | // vvvv                                  | True                      | 
+ 213 | // 00000000 <- lsb bit on the right      | True                      | 
+ 214 | //     bold text / text 8th bit          | True                      | 
+ 215 | //      red text                         | True                      | 
+ 216 | //       green text                      | True                      | 
+ 217 | //        blue text                      | True                      | 
+ 218 | // TODO: apparently framebuffer-based co | True                      | 
+ 219 | // (bug? attempt to get 8th text bit in  | True                      | 
+ 220 | // red bkgd                              | True                      | 
+ 221 | // |green bkgd                           | True                      | 
+ 222 | // ||blue bkgd                           | True                      | 
+ 223 | // vvv                                   | True                      | 
+ 224 | // 00000000 <- lsb bit on the right      | True                      | 
+ 225 | //    bold text                          | True                      | 
+ 226 | //     red text                          | True                      | 
+ 227 | //      green text                       | True                      | 
+ 228 | //       blue text                       | True                      | 
+ 229 | //        text 8th bit                   | True                      | 
+ 230 |    // converting RGB color bit triad to  | True                      | 
+ 231 |    static const char color[8] = "0426153 | True                      | 
+ 232 |    const uint8_t fg_mask = 0x07, bold_ma | True                      | 
+ 233 |    const uint8_t bg_mask = 0x70, blink_m | True                      | 
+ 234 |    char *ptr;                            | True                      | 
+ 235 |                                          | True                      | 
+ 236 |    ptr = G.attrbuf;                      | True                      | 
+ 237 |                                          | True                      | 
+ 238 |    // (G.last_attr & ~attr) has 1 only w | True                      | 
+ 239 |    // G.last_attr has 1 but attr has 0.  | True                      | 
+ 240 |    // Here we check whether we have tran | True                      | 
+ 241 |    // bold->non-bold or blink->non-blink | True                      | 
+ 242 |    if (G.last_attr < 0  // initial value | True                      | 
+ 243 |     || ((G.last_attr & ~attr) & (bold_ma | True                      | 
+ 244 |    ) {                                   | True                      | 
+ 245 |     *ptr++ = '0'; // "reset all attrs"   | True                      | 
+ 246 |     *ptr++ = ';';                        | True                      | 
+ 247 |     // must set fg & bg, maybe need to s | True                      | 
+ 248 |     attr_diff = attr | ~(bold_mask | bli | True                      | 
+ 249 |    }                                     | True                      | 
+ 250 |    G.last_attr = attr;                   | True                      | 
+ 251 |    if (attr_diff & bold_mask) {          | True                      | 
+ 252 |     *ptr++ = '1';                        | True                      | 
+ 253 |     *ptr++ = ';';                        | True                      | 
+ 254 |    }                                     | True                      | 
+ 255 |    if (attr_diff & blink_mask) {         | True                      | 
+ 256 |     *ptr++ = '5';                        | True                      | 
+ 257 |     *ptr++ = ';';                        | True                      | 
+ 258 |    }                                     | True                      | 
+ 259 |    if (attr_diff & fg_mask) {            | True                      | 
+ 260 |     *ptr++ = '3';                        | True                      | 
+ 261 |     *ptr++ = color[attr & fg_mask];      | True                      | 
+ 262 |     *ptr++ = ';';                        | True                      | 
+ 263 |    }                                     | True                      | 
+ 264 |    if (attr_diff & bg_mask) {            | True                      | 
+ 265 |     *ptr++ = '4';                        | True                      | 
+ 266 |     *ptr++ = color[(attr & bg_mask) >> 4 | True                      | 
+ 267 |     ptr++; // last attribute             | True                      | 
+ 268 |    }                                     | True                      | 
+ 269 |    if (ptr != G.attrbuf) {               | True                      | 
+ 270 |     ptr[-1] = 'm';                       | True                      | 
+ 271 |     *ptr = '\0';                         | True                      | 
+ 272 |     putcsi(G.attrbuf);                   | True                      | 
+ 273 |    }                                     | True                      | 
+ 274 |   }                                      | True                      | 
+ 275 |  }                                       | True                      | 
+ 276 |  putchar(CHAR(data));                    | True                      | 
+ 277 |  G.col++;                                | True                      | 
+ 278 | }                                        | True                      | 
+ 279 |                                          | True                      | 
+ 280 | static void screen_dump(void)            | True                      | 
+ 281 | {                                        | True                      | 
+ 282 |  int linefeed_cnt;                       | True                      | 
+ 283 |  int line, col;                          | True                      | 
+ 284 |  int linecnt = G.remote.lines - G.y;     | True                      | 
+ 285 |  char *data = G.data + G.current + G.fir | True                      | 
+ 286 |                                          | True                      | 
+ 287 |  linefeed_cnt = 0;                       | True                      | 
+ 288 |  for (line = 0; line < linecnt && line < | True                      | 
+ 289 |   int space_cnt = 0;                     | True                      | 
+ 290 |   for (col = 0; col < G.remote.cols; col | True                      | 
+ 291 |    unsigned tty_col = col - G.x; // if w | True                      | 
+ 292 |                                          | True                      | 
+ 293 |    if (tty_col >= G.width)               | True                      | 
+ 294 |     continue;                            | True                      | 
+ 295 |    space_cnt++;                          | True                      | 
+ 296 |    if (BW && CHAR(data) == ' ')          | True                      | 
+ 297 |     continue;                            | True                      | 
+ 298 |    while (linefeed_cnt != 0) {           | True                      | 
+ 299 |     //bb_putchar('\r'); - tty driver doe | True                      | 
+ 300 |     bb_putchar('\n');                    | True                      | 
+ 301 |     linefeed_cnt--;                      | True                      | 
+ 302 |    }                                     | True                      | 
+ 303 |    while (--space_cnt)                   | True                      | 
+ 304 |     bb_putchar(' ');                     | True                      | 
+ 305 |    screen_char(data);                    | True                      | 
+ 306 |   }                                      | True                      | 
+ 307 |   linefeed_cnt++;                        | True                      | 
+ 308 |  }                                       | True                      | 
+ 309 | }                                        | True                      | 
+ 310 |                                          | True                      | 
+ 311 | static void curmove(void)                | True                      | 
+ 312 | {                                        | True                      | 
+ 313 |  unsigned cx = G.remote.cursor_x - G.x;  | True                      | 
+ 314 |  unsigned cy = G.remote.cursor_y - G.y;  | True                      | 
+ 315 |  int cursor = CURSOR_OFF;                | True                      | 
+ 316 |                                          | True                      | 
+ 317 |  if (cx < G.width && cy < G.height) {    | True                      | 
+ 318 |   gotoxy(cx, cy);                        | True                      | 
+ 319 |   cursor = CURSOR_ON;                    | True                      | 
+ 320 |  }                                       | True                      | 
+ 321 |  set_cursor(cursor);                     | True                      | 
+ 322 | }                                        | True                      | 
+ 323 |                                          | True                      | 
+ 324 | static void create_cdev_if_doesnt_exist( | True                      | 
+ 325 | {                                        | True                      | 
+ 326 |  int fd = open(name, O_RDONLY);          | True                      | 
+ 327 |  if (fd != -1)                           | True                      | 
+ 328 |   close(fd);                             | True                      | 
+ 329 |  else if (errno == ENOENT)               | True                      | 
+ 330 |   mknod(name, S_IFCHR | 0660, dev);      | True                      | 
+ 331 | }                                        | True                      | 
+ 332 |                                          | True                      | 
+ 333 | static NOINLINE void start_shell_in_chil | True                      | 
+ 334 | {                                        | True                      | 
+ 335 |  int pid = xvfork();                     | True                      | 
+ 336 |  if (pid == 0) {                         | True                      | 
+ 337 |   struct termios termchild;              | True                      | 
+ 338 |   const char *shell = get_shell_name();  | True                      | 
+ 339 |                                          | True                      | 
+ 340 |   signal(SIGHUP, SIG_IGN);               | True                      | 
+ 341 |   // set tty as a controlling tty        | True                      | 
+ 342 |   setsid();                              | True                      | 
+ 343 |   // make tty to be input, output, error | True                      | 
+ 344 |   close(0);                              | True                      | 
+ 345 |   xopen(tty_name, O_RDWR); // uses fd 0  | True                      | 
+ 346 |   xdup2(0, 1);                           | True                      | 
+ 347 |   xdup2(0, 2);                           | True                      | 
+ 348 |   ioctl(0, TIOCSCTTY, 1);                | True                      | 
+ 349 |   tcsetpgrp(0, getpid());                | True                      | 
+ 350 |   tcgetattr(0, &termchild);              | True                      | 
+ 351 |   termchild.c_lflag |= ECHO;             | True                      | 
+ 352 |   termchild.c_oflag |= ONLCR | XTABS;    | True                      | 
+ 353 |   termchild.c_iflag |= ICRNL;            | True                      | 
+ 354 |   termchild.c_iflag &= ~IXOFF;           | True                      | 
+ 355 |   tcsetattr_stdin_TCSANOW(&termchild);   | True                      | 
+ 356 |   execl(shell, shell, "-i", (char *) NUL | True                      | 
+ 357 |   bb_simple_perror_msg_and_die(shell);   | True                      | 
+ 358 |  }                                       | True                      | 
+ 359 | }                                        | True                      | 
+ 360 |                                          | True                      | 
+ 361 | int conspy_main(int argc, char **argv) M | True                      | 
+ 362 | int conspy_main(int argc UNUSED_PARAM, c | True                      | 
+ 363 | {                                        | True                      | 
+ 364 |  char tty_name[sizeof(DEV_TTY "NN")];    | True                      | 
+ 365 |  unsigned opts;                          | True                      | 
+ 366 |  unsigned ttynum;                        | True                      | 
+ 367 |  int poll_timeout_ms;                    | True                      | 
+ 368 | #if ENABLE_LONG_OPTS                     | True                      | 
+ 369 |  static const char conspy_longopts[] ALI | ENABLE_LONG_OPTS          | 
+ 370 |   "viewonly\0"     No_argument "v"       | ENABLE_LONG_OPTS          | 
+ 371 |   "createdevice\0" No_argument "c"       | ENABLE_LONG_OPTS          | 
+ 372 |   "neverquit\0"    No_argument "Q"       | ENABLE_LONG_OPTS          | 
+ 373 |   "session\0"      No_argument "s"       | ENABLE_LONG_OPTS          | 
+ 374 |   "nocolors\0"     No_argument "n"       | ENABLE_LONG_OPTS          | 
+ 375 |   "dump\0"         No_argument "d"       | ENABLE_LONG_OPTS          | 
+ 376 |   "follow\0"       No_argument "f"       | ENABLE_LONG_OPTS          | 
+ 377 |   "framebuffer\0"  No_argument "F"       | ENABLE_LONG_OPTS          | 
+ 378 |   ;                                      | ENABLE_LONG_OPTS          | 
+ 379 | #endif                                   | True                      | 
+ 380 | #define keybuf bb_common_bufsiz1         | True                      | 
+ 381 |  setup_common_bufsiz();                  | True                      | 
+ 382 |                                          | True                      | 
+ 383 |  INIT_G();                               | True                      | 
+ 384 |  strcpy(G.vcsa_name, DEV_VCSA);          | True                      | 
+ 385 |                                          | True                      | 
+ 386 |  // numeric params                       | True                      | 
+ 387 |  opts = getopt32long(argv, "vcQsndfFx:+y | True                      | 
+ 388 |  argv += optind;                         | True                      | 
+ 389 |  ttynum = 0;                             | True                      | 
+ 390 |  if (argv[0]) {                          | True                      | 
+ 391 |   ttynum = xatou_range(argv[0], 0, 63);  | True                      | 
+ 392 |   sprintf(G.vcsa_name + sizeof(DEV_VCSA) | True                      | 
+ 393 |  }                                       | True                      | 
+ 394 |  sprintf(tty_name, "%s%u", DEV_TTY, ttyn | True                      | 
+ 395 |  if (opts & FLAG(c)) {                   | True                      | 
+ 396 |   if ((opts & (FLAG(s)|FLAG(v))) != FLAG | True                      | 
+ 397 |    create_cdev_if_doesnt_exist(tty_name, | True                      | 
+ 398 |   create_cdev_if_doesnt_exist(G.vcsa_nam | True                      | 
+ 399 |  }                                       | True                      | 
+ 400 |  if ((opts & FLAG(s)) && ttynum) {       | True                      | 
+ 401 |   start_shell_in_child(tty_name);        | True                      | 
+ 402 |  }                                       | True                      | 
+ 403 |                                          | True                      | 
+ 404 |  screen_read_close();                    | True                      | 
+ 405 |  if (opts & FLAG(d)) {                   | True                      | 
+ 406 |   screen_dump();                         | True                      | 
+ 407 |   bb_putchar('\n');                      | True                      | 
+ 408 |   return 0;                              | True                      | 
+ 409 |  }                                       | True                      | 
+ 410 |                                          | True                      | 
+ 411 |  bb_signals(BB_FATAL_SIGS, cleanup);     | True                      | 
+ 412 |                                          | True                      | 
+ 413 |  G.kbd_fd = xopen(CURRENT_TTY, O_RDONLY) | True                      | 
+ 414 |                                          | True                      | 
+ 415 |  // All characters must be passed throug | True                      | 
+ 416 |  set_termios_to_raw(G.kbd_fd, &G.term_or | True                      | 
+ 417 |   | TERMIOS_CLEAR_ISIG // no signals on  | True                      | 
+ 418 |   | TERMIOS_RAW_INPUT  // turn off all i | True                      | 
+ 419 |  );                                      | True                      | 
+ 420 |  //Note: termios.c_oflag &= ~(OPOST); -  | True                      | 
+ 421 |                                          | True                      | 
+ 422 |  poll_timeout_ms = 250;                  | True                      | 
+ 423 |  while (1) {                             | True                      | 
+ 424 |   struct pollfd pfd;                     | True                      | 
+ 425 |   int bytes_read;                        | True                      | 
+ 426 |   int i, j;                              | True                      | 
+ 427 |   char *data, *old;                      | True                      | 
+ 428 |                                          | True                      | 
+ 429 |   // in the first loop G.width = G.heigh | True                      | 
+ 430 |   i = G.width;                           | True                      | 
+ 431 |   j = G.height;                          | True                      | 
+ 432 |   get_terminal_width_height(G.kbd_fd, &G | True                      | 
+ 433 |   if (option_mask32 & FLAG(f)) {         | True                      | 
+ 434 |    int nx = G.remote.cursor_x - G.width  | True                      | 
+ 435 |    int ny = G.remote.cursor_y - G.height | True                      | 
+ 436 |                                          | True                      | 
+ 437 |    if (G.remote.cursor_x < G.x) {        | True                      | 
+ 438 |     G.x = G.remote.cursor_x;             | True                      | 
+ 439 |     i = 0; // force refresh              | True                      | 
+ 440 |    }                                     | True                      | 
+ 441 |    if (nx > G.x) {                       | True                      | 
+ 442 |     G.x = nx;                            | True                      | 
+ 443 |     i = 0; // force refresh              | True                      | 
+ 444 |    }                                     | True                      | 
+ 445 |    if (G.remote.cursor_y < G.y) {        | True                      | 
+ 446 |     G.y = G.remote.cursor_y;             | True                      | 
+ 447 |     i = 0; // force refresh              | True                      | 
+ 448 |    }                                     | True                      | 
+ 449 |    if (ny > G.y) {                       | True                      | 
+ 450 |     G.y = ny;                            | True                      | 
+ 451 |     i = 0; // force refresh              | True                      | 
+ 452 |    }                                     | True                      | 
+ 453 |   }                                      | True                      | 
+ 454 |                                          | True                      | 
+ 455 |   // Scan console data and redraw our tt | True                      | 
+ 456 |   old = G.data + G.current;              | True                      | 
+ 457 |   G.current = G.size - G.current;        | True                      | 
+ 458 |   data = G.data + G.current;             | True                      | 
+ 459 |   screen_read_close();                   | True                      | 
+ 460 |   if (i != G.width || j != G.height) {   | True                      | 
+ 461 |    clrscr();                             | True                      | 
+ 462 |    screen_dump();                        | True                      | 
+ 463 |   } else {                               | True                      | 
+ 464 |    // For each remote line               | True                      | 
+ 465 |    old += G.first_line_offset;           | True                      | 
+ 466 |    data += G.first_line_offset;          | True                      | 
+ 467 |    for (i = G.y; i < G.remote.lines; i++ | True                      | 
+ 468 |     char *first = NULL; // first char wh | True                      | 
+ 469 |     char *last = last;  // last char whi | True                      | 
+ 470 |     unsigned iy = i - G.y;               | True                      | 
+ 471 |                                          | True                      | 
+ 472 |     if (iy >= G.height)                  | True                      | 
+ 473 |      break;                              | True                      | 
+ 474 |     for (j = 0; j < G.remote.cols; j++,  | True                      | 
+ 475 |      unsigned jx = j - G.x; // if will c | True                      | 
+ 476 |                                          | True                      | 
+ 477 |      if (jx < G.width && DATA(data) != D | True                      | 
+ 478 |       last = data;                       | True                      | 
+ 479 |       if (!first) {                      | True                      | 
+ 480 |        first = data;                     | True                      | 
+ 481 |        gotoxy(jx, iy);                   | True                      | 
+ 482 |       }                                  | True                      | 
+ 483 |      }                                   | True                      | 
+ 484 |     }                                    | True                      | 
+ 485 |     if (first) {                         | True                      | 
+ 486 |      // Rewrite updated data on the loca | True                      | 
+ 487 |      for (; first <= last; NEXT(first))  | True                      | 
+ 488 |       screen_char(first);                | True                      | 
+ 489 |     }                                    | True                      | 
+ 490 |    }                                     | True                      | 
+ 491 |   }                                      | True                      | 
+ 492 |   curmove();                             | True                      | 
+ 493 |                                          | True                      | 
+ 494 |   // Wait for local user keypresses      | True                      | 
+ 495 |   fflush_all();                          | True                      | 
+ 496 |   pfd.fd = G.kbd_fd;                     | True                      | 
+ 497 |   pfd.events = POLLIN;                   | True                      | 
+ 498 |   bytes_read = 0;                        | True                      | 
+ 499 |   switch (poll(&pfd, 1, poll_timeout_ms) | True                      | 
+ 500 |    char *k;                              | True                      | 
+ 501 |   case -1:                               | True                      | 
+ 502 |    if (errno != EINTR)                   | True                      | 
+ 503 |     goto abort;                          | True                      | 
+ 504 |    break;                                | True                      | 
+ 505 |   case 0:                                | True                      | 
+ 506 |    if (++G.nokeys >= 4)                  | True                      | 
+ 507 |     G.nokeys = G.escape_count = 0;       | True                      | 
+ 508 |    break;                                | True                      | 
+ 509 |   default:                               | True                      | 
+ 510 |    // Read the keys pressed              | True                      | 
+ 511 |    k = keybuf + G.key_count;             | True                      | 
+ 512 |    bytes_read = read(G.kbd_fd, k, COMMON | True                      | 
+ 513 |    if (bytes_read < 0)                   | True                      | 
+ 514 |     goto abort;                          | True                      | 
+ 515 |                                          | True                      | 
+ 516 |    // Do exit processing                 | True                      | 
+ 517 |    if (!(option_mask32 & FLAG(Q))) {     | True                      | 
+ 518 |     for (i = 0; i < bytes_read; i++) {   | True                      | 
+ 519 |      if (k[i] != '\033')                 | True                      | 
+ 520 |       G.escape_count = -1;               | True                      | 
+ 521 |      if (++G.escape_count >= 3)          | True                      | 
+ 522 |       cleanup(EXIT_SUCCESS);             | True                      | 
+ 523 |     }                                    | True                      | 
+ 524 |    }                                     | True                      | 
+ 525 |   }                                      | True                      | 
+ 526 |   poll_timeout_ms = 250;                 | True                      | 
+ 527 |   if (option_mask32 & FLAG(v)) continue; | True                      | 
+ 528 |                                          | True                      | 
+ 529 |   // Insert all keys pressed into the vi | True                      | 
+ 530 |   // buffer.  Don't do this if the virtu | True                      | 
+ 531 |   // code mode - giving ASCII characters | True                      | 
+ 532 |   // scan codes will confuse it.         | True                      | 
+ 533 |   G.key_count += bytes_read;             | True                      | 
+ 534 |   if (G.escape_count == 0) {             | True                      | 
+ 535 |    int handle, result;                   | True                      | 
+ 536 |    long kbd_mode;                        | True                      | 
+ 537 |                                          | True                      | 
+ 538 |    handle = xopen(tty_name, O_WRONLY);   | True                      | 
+ 539 |    result = ioctl(handle, KDGKBMODE, &kb | True                      | 
+ 540 |    if (result >= 0) {                    | True                      | 
+ 541 |     char *p = keybuf;                    | True                      | 
+ 542 |                                          | True                      | 
+ 543 |     G.ioerror_count = 0;                 | True                      | 
+ 544 |     if (kbd_mode != K_XLATE && kbd_mode  | True                      | 
+ 545 |      G.key_count = 0; // scan code mode  | True                      | 
+ 546 |     }                                    | True                      | 
+ 547 |     for (; G.key_count != 0; p++, G.key_ | True                      | 
+ 548 |      result = ioctl(handle, TIOCSTI, p); | True                      | 
+ 549 |      if (result < 0) {                   | True                      | 
+ 550 |       memmove(keybuf, p, G.key_count);   | True                      | 
+ 551 |       break;                             | True                      | 
+ 552 |      }                                   | True                      | 
+ 553 |      // If there is an application on co | True                      | 
+ 554 |      // to keypresses, we need to make o | True                      | 
+ 555 |      // shorter to quickly redraw whatev | True                      | 
+ 556 |      poll_timeout_ms = 20;               | True                      | 
+ 557 |     }                                    | True                      | 
+ 558 |    }                                     | True                      | 
+ 559 |    // We sometimes get spurious IO error | True                      | 
+ 560 |    // as programs close and re-open it   | True                      | 
+ 561 |    else if (errno != EIO || ++G.ioerror_ | True                      | 
+ 562 |     if (ENABLE_FEATURE_CLEAN_UP)         | True                      | 
+ 563 |      close(handle);                      | True                      | 
+ 564 |     goto abort;                          | True                      | 
+ 565 |    }                                     | True                      | 
+ 566 |    // Close & re-open tty in case they h | True                      | 
+ 567 |    // swapped virtual consoles           | True                      | 
+ 568 |    close(handle);                        | True                      | 
+ 569 |   }                                      | True                      | 
+ 570 |  } /* while (1) */                       | True                      | 
+ 571 |   abort:                                 | True                      | 
+ 572 |  cleanup(EXIT_FAILURE);                  | True                      | 
+ 573 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +118MB, 297ms             | 

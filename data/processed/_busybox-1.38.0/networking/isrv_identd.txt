@@ -1,0 +1,175 @@
+FILE: data/raw/busybox-1.38.0/networking/isrv_identd.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Fake identd server.                   | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2007 Denys Vlasenko     | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config FAKEIDENTD               | True                      | 
+  10 | //config: bool "fakeidentd (9 kb)"       | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: select FEATURE_SYSLOG          | True                      | 
+  13 | //config: help                           | True                      | 
+  14 | //config: fakeidentd listens on the iden | True                      | 
+  15 | //config: fake value on any query.       | True                      | 
+  16 |                                          | True                      | 
+  17 | //applet:IF_FAKEIDENTD(APPLET(fakeidentd | True                      | 
+  18 |                                          | True                      | 
+  19 | //kbuild:lib-$(CONFIG_FAKEIDENTD) += isr | True                      | 
+  20 |                                          | True                      | 
+  21 | //usage:#define fakeidentd_trivial_usage | True                      | 
+  22 | //usage:       "[-fiw] [-b ADDR] [STRING | True                      | 
+  23 | //usage:#define fakeidentd_full_usage "\ | True                      | 
+  24 | //usage:       "Provide fake ident (auth | True                      | 
+  25 | //usage:     "\n -f Run in foreground"   | True                      | 
+  26 | //usage:     "\n -i Inetd mode"          | True                      | 
+  27 | //usage:     "\n -w Inetd 'wait' mode"   | True                      | 
+  28 | //usage:     "\n -b ADDR Bind to specifi | True                      | 
+  29 | //usage:     "\n STRING Ident answer str | True                      | 
+  30 |                                          | True                      | 
+  31 | #include "libbb.h"                       | True                      | 
+  32 | #include "common_bufsiz.h"               | True                      | 
+  33 | #include <syslog.h>                      | True                      | 
+  34 | #include "isrv.h"                        | True                      | 
+  35 |                                          | True                      | 
+  36 | enum { TIMEOUT = 20 };                   | True                      | 
+  37 |                                          | True                      | 
+  38 | typedef struct identd_buf_t {            | True                      | 
+  39 |  int pos;                                | True                      | 
+  40 |  char buf[64 - sizeof(int)];             | True                      | 
+  41 | } identd_buf_t;                          | True                      | 
+  42 |                                          | True                      | 
+  43 | #define bogouser bb_common_bufsiz1       | True                      | 
+  44 |                                          | True                      | 
+  45 | static int new_peer(isrv_state_t *state, | True                      | 
+  46 | {                                        | True                      | 
+  47 |  int peer;                               | True                      | 
+  48 |  identd_buf_t *buf = xzalloc(sizeof(*buf | True                      | 
+  49 |                                          | True                      | 
+  50 |  peer = isrv_register_peer(state, buf);  | True                      | 
+  51 |  if (peer < 0)                           | True                      | 
+  52 |   return 0; /* failure */                | True                      | 
+  53 |  if (isrv_register_fd(state, peer, fd) < | True                      | 
+  54 |   return peer; /* failure, unregister pe | True                      | 
+  55 |                                          | True                      | 
+  56 |  ndelay_on(fd);                          | True                      | 
+  57 |  isrv_want_rd(state, fd);                | True                      | 
+  58 |  return 0;                               | True                      | 
+  59 | }                                        | True                      | 
+  60 |                                          | True                      | 
+  61 | static int do_rd(int fd, void **paramp)  | True                      | 
+  62 | {                                        | True                      | 
+  63 |  identd_buf_t *buf = *paramp;            | True                      | 
+  64 |  char *cur, *p;                          | True                      | 
+  65 |  int sz;                                 | True                      | 
+  66 |                                          | True                      | 
+  67 |  cur = buf->buf + buf->pos;              | True                      | 
+  68 |                                          | True                      | 
+  69 |  sz = safe_read(fd, cur, sizeof(buf->buf | True                      | 
+  70 |                                          | True                      | 
+  71 |  if (sz < 0) {                           | True                      | 
+  72 |   if (errno != EAGAIN)                   | True                      | 
+  73 |    goto term;                            | True                      | 
+  74 |   return 0; /* "session is ok" */        | True                      | 
+  75 |  }                                       | True                      | 
+  76 |                                          | True                      | 
+  77 |  buf->pos += sz;                         | True                      | 
+  78 |  buf->buf[buf->pos] = '\0';              | True                      | 
+  79 |  p = strpbrk(cur, "\r\n");               | True                      | 
+  80 |  if (p)                                  | True                      | 
+  81 |   *p = '\0';                             | True                      | 
+  82 |  if (!p && sz)                           | True                      | 
+  83 |   return 0;  /* "session is ok" */       | True                      | 
+  84 |                                          | True                      | 
+  85 |  /* Terminate session. If we are in serv | True                      | 
+  86 |   * fd is still in nonblocking mode - we | True                      | 
+  87 |  if (fd == 0)                            | True                      | 
+  88 |   fd++; /* inetd mode? then write to fd  | True                      | 
+  89 |  fdprintf(fd, "%s : USERID : UNIX : %s\r | True                      | 
+  90 |  /*                                      | True                      | 
+  91 |   * Why bother if we are going to close  | True                      | 
+  92 |   * if (server)                          | True                      | 
+  93 |   * ndelay_off(fd);                      | True                      | 
+  94 |   */                                     | True                      | 
+  95 |  term:                                   | True                      | 
+  96 |  free(buf);                              | True                      | 
+  97 |  return 1; /* "terminate" */             | True                      | 
+  98 | }                                        | True                      | 
+  99 |                                          | True                      | 
+ 100 | static int do_timeout(void **paramp UNUS | True                      | 
+ 101 | {                                        | True                      | 
+ 102 |  return 1; /* terminate session */       | True                      | 
+ 103 | }                                        | True                      | 
+ 104 |                                          | True                      | 
+ 105 | static void inetd_mode(void)             | True                      | 
+ 106 | {                                        | True                      | 
+ 107 |  identd_buf_t *buf = xzalloc(sizeof(*buf | True                      | 
+ 108 |  /* buf->pos = 0; - xzalloc did it */    | True                      | 
+ 109 |  do                                      | True                      | 
+ 110 |   alarm(TIMEOUT);                        | True                      | 
+ 111 |   /* Note: we do NOT want nonblocking I/ | True                      | 
+ 112 |  while (do_rd(0, (void*)&buf) == 0);     | True                      | 
+ 113 | }                                        | True                      | 
+ 114 |                                          | True                      | 
+ 115 | int fakeidentd_main(int argc, char **arg | True                      | 
+ 116 | int fakeidentd_main(int argc UNUSED_PARA | True                      | 
+ 117 | {                                        | True                      | 
+ 118 |  enum {                                  | True                      | 
+ 119 |   OPT_foreground = 0x1,                  | True                      | 
+ 120 |   OPT_inetd      = 0x2,                  | True                      | 
+ 121 |   OPT_inetdwait  = 0x4,                  | True                      | 
+ 122 |   OPT_fiw        = 0x7,                  | True                      | 
+ 123 |   OPT_bindaddr   = 0x8,                  | True                      | 
+ 124 |  };                                      | True                      | 
+ 125 |                                          | True                      | 
+ 126 |  const char *bind_address = NULL;        | True                      | 
+ 127 |  unsigned opt;                           | True                      | 
+ 128 |  int fd;                                 | True                      | 
+ 129 |                                          | True                      | 
+ 130 |  setup_common_bufsiz();                  | True                      | 
+ 131 |                                          | True                      | 
+ 132 |  opt = getopt32(argv, "fiwb:", &bind_add | True                      | 
+ 133 |  strcpy(bogouser, "nobody");             | True                      | 
+ 134 |  if (argv[optind])                       | True                      | 
+ 135 |   strncpy(bogouser, argv[optind], COMMON | True                      | 
+ 136 |                                          | True                      | 
+ 137 |  /* Daemonize if no -f and no -i and no  | True                      | 
+ 138 |  if (!(opt & OPT_fiw))                   | True                      | 
+ 139 |   bb_daemonize_or_rexec(0, argv);        | True                      | 
+ 140 |                                          | True                      | 
+ 141 |  /* Where to log in inetd modes? "Classi | True                      | 
+ 142 |   * probably has its stderr /dev/null'ed | True                      | 
+ 143 |   * but daemontools-like utilities usual | True                      | 
+ 144 |   * log to stderr. I like daemontools mo | True                      | 
+ 145 |   * (Or maybe we need yet another option | True                      | 
+ 146 |  if (!(opt & OPT_fiw) /* || (opt & OPT_s | True                      | 
+ 147 |   openlog(applet_name, LOG_PID, LOG_DAEM | True                      | 
+ 148 |   logmode = LOGMODE_SYSLOG;              | True                      | 
+ 149 |  }                                       | True                      | 
+ 150 |                                          | True                      | 
+ 151 |  if (opt & OPT_inetd) {                  | True                      | 
+ 152 |   inetd_mode();                          | True                      | 
+ 153 |   return 0;                              | True                      | 
+ 154 |  }                                       | True                      | 
+ 155 |                                          | True                      | 
+ 156 |  /* Ignore closed connections when writi | True                      | 
+ 157 |  signal(SIGPIPE, SIG_IGN);               | True                      | 
+ 158 |                                          | True                      | 
+ 159 |  fd = 0;                                 | True                      | 
+ 160 |  if (!(opt & OPT_inetdwait)) {           | True                      | 
+ 161 |   fd = create_and_bind_stream_or_die(bin | True                      | 
+ 162 |     bb_lookup_std_port("identd", "tcp",  | True                      | 
+ 163 |   xlisten(fd, 5);                        | True                      | 
+ 164 |  }                                       | True                      | 
+ 165 |                                          | True                      | 
+ 166 |  isrv_run(fd, new_peer, do_rd, /*do_wr:* | True                      | 
+ 167 |    TIMEOUT, (opt & OPT_inetdwait) ? TIME | True                      | 
+ 168 |  return 0;                               | True                      | 
+ 169 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +110MB, 275ms             | 

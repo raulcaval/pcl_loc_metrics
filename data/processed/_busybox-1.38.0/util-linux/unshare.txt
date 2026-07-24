@@ -1,0 +1,390 @@
+FILE: data/raw/busybox-1.38.0/util-linux/unshare.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Mini unshare implementation for busyb | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2016 by Bartosz Golasze | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config UNSHARE                  | True                      | 
+  10 | //config: bool "unshare (7.3 kb)"        | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: depends on !NOMMU              | True                      | 
+  13 | //config: select LONG_OPTS               | True                      | 
+  14 | //config: help                           | True                      | 
+  15 | //config: Run program with some namespac | True                      | 
+  16 |                                          | True                      | 
+  17 | // needs LONG_OPTS: it is awkward to exc | True                      | 
+  18 | // and --setgroups based on LONG_OPTS, s | True                      | 
+  19 | // depends on !NOMMU: we need fork()     | True                      | 
+  20 |                                          | True                      | 
+  21 | //applet:IF_UNSHARE(APPLET(unshare, BB_D | True                      | 
+  22 |                                          | True                      | 
+  23 | //kbuild:lib-$(CONFIG_UNSHARE) += unshar | True                      | 
+  24 |                                          | True                      | 
+  25 | //usage:#define unshare_trivial_usage    | True                      | 
+  26 | //usage:       "[OPTIONS] [PROG ARGS]"   | True                      | 
+  27 | //usage:#define unshare_full_usage "\n"  | True                      | 
+  28 | //usage:     "\n -m,--mount[=FILE] Unsha | True                      | 
+  29 | //usage:     "\n -u,--uts[=FILE]  Unshar | True                      | 
+  30 | //usage:     "\n -i,--ipc[=FILE]  Unshar | True                      | 
+  31 | //usage:     "\n -n,--net[=FILE]  Unshar | True                      | 
+  32 | //usage:     "\n -p,--pid[=FILE]  Unshar | True                      | 
+  33 | //usage:     "\n -U,--user[=FILE] Unshar | True                      | 
+  34 | //usage:     "\n -f   Fork before execin | True                      | 
+  35 | //usage:     "\n -r   Map current user t | True                      | 
+  36 | //usage:     "\n --mount-proc[=DIR] Moun | True                      | 
+  37 | //usage:     "\n --propagation slave|sha | True                      | 
+  38 | //usage:     "\n    Modify mount propaga | True                      | 
+  39 | //usage:     "\n --setgroups allow|deny  | True                      | 
+  40 |                                          | True                      | 
+  41 | #include <sched.h>                       | True                      | 
+  42 | #ifndef CLONE_NEWUTS                     | True                      | 
+  43 | # define CLONE_NEWUTS  0x04000000        | !(CLONE_NEWUTS)           | 
+  44 | #endif                                   | True                      | 
+  45 | #ifndef CLONE_NEWIPC                     | True                      | 
+  46 | # define CLONE_NEWIPC  0x08000000        | !(CLONE_NEWIPC)           | 
+  47 | #endif                                   | True                      | 
+  48 | #ifndef CLONE_NEWUSER                    | True                      | 
+  49 | # define CLONE_NEWUSER 0x10000000        | !(CLONE_NEWUSER)          | 
+  50 | #endif                                   | True                      | 
+  51 | #ifndef CLONE_NEWPID                     | True                      | 
+  52 | # define CLONE_NEWPID  0x20000000        | !(CLONE_NEWPID)           | 
+  53 | #endif                                   | True                      | 
+  54 | #ifndef CLONE_NEWNET                     | True                      | 
+  55 | # define CLONE_NEWNET  0x40000000        | !(CLONE_NEWNET)           | 
+  56 | #endif                                   | True                      | 
+  57 |                                          | True                      | 
+  58 | #include <sys/mount.h>                   | True                      | 
+  59 | #ifndef MS_REC                           | True                      | 
+  60 | # define MS_REC     (1 << 14)            | !(MS_REC)                 | 
+  61 | #endif                                   | True                      | 
+  62 | #ifndef MS_PRIVATE                       | True                      | 
+  63 | # define MS_PRIVATE (1 << 18)            | !(MS_PRIVATE)             | 
+  64 | #endif                                   | True                      | 
+  65 | #ifndef MS_SLAVE                         | True                      | 
+  66 | # define MS_SLAVE   (1 << 19)            | !(MS_SLAVE)               | 
+  67 | #endif                                   | True                      | 
+  68 | #ifndef MS_SHARED                        | True                      | 
+  69 | # define MS_SHARED  (1 << 20)            | !(MS_SHARED)              | 
+  70 | #endif                                   | True                      | 
+  71 |                                          | True                      | 
+  72 | #include "libbb.h"                       | True                      | 
+  73 |                                          | True                      | 
+  74 | static void mount_or_die(const char *sou | True                      | 
+  75 |   const char *fstype, unsigned long moun | True                      | 
+  76 | {                                        | True                      | 
+  77 |  if (mount(source, target, fstype, mount | True                      | 
+  78 |   bb_perror_msg_and_die("can't mount %s  | True                      | 
+  79 |    source, target, mountflags);          | True                      | 
+  80 |   /* fstype is always either NULL or "pr | True                      | 
+  81 |    * "proc" is only used to mount /proc. | True                      | 
+  82 |    * No need to clutter up error message | True                      | 
+  83 |    * it is easily deductible.            | True                      | 
+  84 |    */                                    | True                      | 
+  85 |  }                                       | True                      | 
+  86 | }                                        | True                      | 
+  87 |                                          | True                      | 
+  88 | #define PATH_PROC_SETGROUPS "/proc/self/ | True                      | 
+  89 | #define PATH_PROC_UIDMAP "/proc/self/uid | True                      | 
+  90 | #define PATH_PROC_GIDMAP "/proc/self/gid | True                      | 
+  91 |                                          | True                      | 
+  92 | struct namespace_descr {                 | True                      | 
+  93 |  int flag;                               | True                      | 
+  94 |  const char nsfile4[4];                  | True                      | 
+  95 | };                                       | True                      | 
+  96 |                                          | True                      | 
+  97 | struct namespace_ctx {                   | True                      | 
+  98 |  char *path;                             | True                      | 
+  99 | };                                       | True                      | 
+ 100 |                                          | True                      | 
+ 101 | enum {                                   | True                      | 
+ 102 |  OPT_mount = 1 << 0,                     | True                      | 
+ 103 |  OPT_uts  = 1 << 1,                      | True                      | 
+ 104 |  OPT_ipc  = 1 << 2,                      | True                      | 
+ 105 |  OPT_net  = 1 << 3,                      | True                      | 
+ 106 |  OPT_pid  = 1 << 4,                      | True                      | 
+ 107 |  OPT_user = 1 << 5, /* OPT_user, NS_USR_ | True                      | 
+ 108 |  OPT_fork = 1 << 6,                      | True                      | 
+ 109 |  OPT_map_root = 1 << 7,                  | True                      | 
+ 110 |  OPT_mount_proc = 1 << 8,                | True                      | 
+ 111 |  OPT_propagation = 1 << 9,               | True                      | 
+ 112 |  OPT_setgroups = 1 << 10,                | True                      | 
+ 113 | };                                       | True                      | 
+ 114 | enum {                                   | True                      | 
+ 115 |  NS_MNT_POS = 0,                         | True                      | 
+ 116 |  NS_UTS_POS,                             | True                      | 
+ 117 |  NS_IPC_POS,                             | True                      | 
+ 118 |  NS_NET_POS,                             | True                      | 
+ 119 |  NS_PID_POS,                             | True                      | 
+ 120 |  NS_USR_POS, /* OPT_user, NS_USR_POS, an | True                      | 
+ 121 |  NS_COUNT,                               | True                      | 
+ 122 | };                                       | True                      | 
+ 123 | static const struct namespace_descr ns_l | True                      | 
+ 124 |  { CLONE_NEWNS,   "mnt"  },              | True                      | 
+ 125 |  { CLONE_NEWUTS,  "uts"  },              | True                      | 
+ 126 |  { CLONE_NEWIPC,  "ipc"  },              | True                      | 
+ 127 |  { CLONE_NEWNET,  "net"  },              | True                      | 
+ 128 |  { CLONE_NEWPID,  "pid"  },              | True                      | 
+ 129 |  { CLONE_NEWUSER, "user" }, /* OPT_user, | True                      | 
+ 130 | };                                       | True                      | 
+ 131 |                                          | True                      | 
+ 132 | /*                                       | True                      | 
+ 133 |  * Upstream unshare doesn't support shor | True                      | 
+ 134 |  * --propagation, --setgroups.           | True                      | 
+ 135 |  * Optional arguments (namespace mountpo | True                      | 
+ 136 |  * we are forced to use "fake" letters f | True                      | 
+ 137 |  * '+': stop at first non-option.        | True                      | 
+ 138 |  */                                      | True                      | 
+ 139 | #define OPT_STR "+muinpU""fr""\xfd::""\x | True                      | 
+ 140 | static const char unshare_longopts[] ALI | True                      | 
+ 141 |  "mount\0"  Optional_argument "\xf0"     | True                      | 
+ 142 |  "uts\0"   Optional_argument "\xf1"      | True                      | 
+ 143 |  "ipc\0"   Optional_argument "\xf2"      | True                      | 
+ 144 |  "net\0"   Optional_argument "\xf3"      | True                      | 
+ 145 |  "pid\0"   Optional_argument "\xf4"      | True                      | 
+ 146 |  "user\0"  Optional_argument "\xf5"      | True                      | 
+ 147 |  "fork\0"  No_argument  "f"              | True                      | 
+ 148 |  "map-root-user\0" No_argument  "r"      | True                      | 
+ 149 |  "mount-proc\0"  Optional_argument "\xfd | True                      | 
+ 150 |  "propagation\0"  Required_argument "\xf | True                      | 
+ 151 |  "setgroups\0"  Required_argument "\xff" | True                      | 
+ 152 | ;                                        | True                      | 
+ 153 |                                          | True                      | 
+ 154 | /* Ugly-looking string reuse trick */    | True                      | 
+ 155 | #define PRIVATE_STR   "private\0""unchan | True                      | 
+ 156 | #define PRIVATE_UNCHANGED_SHARED_SLAVE   | True                      | 
+ 157 |                                          | True                      | 
+ 158 | static unsigned long parse_propagation(c | True                      | 
+ 159 | {                                        | True                      | 
+ 160 |  int i = index_in_strings(PRIVATE_UNCHAN | True                      | 
+ 161 |  if (i < 0)                              | True                      | 
+ 162 |   bb_error_msg_and_die("unrecognized: -- | True                      | 
+ 163 |  if (i == 0)                             | True                      | 
+ 164 |   return MS_REC | MS_PRIVATE;            | True                      | 
+ 165 |  if (i == 1)                             | True                      | 
+ 166 |   return 0;                              | True                      | 
+ 167 |  if (i == 2)                             | True                      | 
+ 168 |   return MS_REC | MS_SHARED;             | True                      | 
+ 169 |  return MS_REC | MS_SLAVE;               | True                      | 
+ 170 | }                                        | True                      | 
+ 171 |                                          | True                      | 
+ 172 | static void mount_namespaces(pid_t pid,  | True                      | 
+ 173 | {                                        | True                      | 
+ 174 |  const struct namespace_descr *ns;       | True                      | 
+ 175 |  struct namespace_ctx *ns_ctx;           | True                      | 
+ 176 |  int i;                                  | True                      | 
+ 177 |                                          | True                      | 
+ 178 |  for (i = 0; i < NS_COUNT; i++) {        | True                      | 
+ 179 |   char nsf[sizeof("/proc/%u/ns/AAAA") +  | True                      | 
+ 180 |                                          | True                      | 
+ 181 |   ns = &ns_list[i];                      | True                      | 
+ 182 |   ns_ctx = &ns_ctx_list[i];              | True                      | 
+ 183 |   if (!ns_ctx->path)                     | True                      | 
+ 184 |    continue;                             | True                      | 
+ 185 |   sprintf(nsf, "/proc/%u/ns/%.4s", (unsi | True                      | 
+ 186 |   mount_or_die(nsf, ns_ctx->path, NULL,  | True                      | 
+ 187 |  }                                       | True                      | 
+ 188 | }                                        | True                      | 
+ 189 |                                          | True                      | 
+ 190 | int unshare_main(int argc, char **argv)  | True                      | 
+ 191 | int unshare_main(int argc UNUSED_PARAM,  | True                      | 
+ 192 | {                                        | True                      | 
+ 193 |  int i;                                  | True                      | 
+ 194 |  unsigned int opts;                      | True                      | 
+ 195 |  int unsflags;                           | True                      | 
+ 196 |  uintptr_t need_mount;                   | True                      | 
+ 197 |  const char *proc_mnt_target;            | True                      | 
+ 198 |  const char *prop_str;                   | True                      | 
+ 199 |  const char *setgrp_str;                 | True                      | 
+ 200 |  unsigned long prop_flags;               | True                      | 
+ 201 |  uid_t reuid = geteuid();                | True                      | 
+ 202 |  gid_t regid = getegid();                | True                      | 
+ 203 |  struct fd_pair fdp;                     | True                      | 
+ 204 |  pid_t child = child; /* for compiler */ | True                      | 
+ 205 |  struct namespace_ctx ns_ctx_list[NS_COU | True                      | 
+ 206 |                                          | True                      | 
+ 207 |  memset(ns_ctx_list, 0, sizeof(ns_ctx_li | True                      | 
+ 208 |  proc_mnt_target = "/proc";              | True                      | 
+ 209 |  prop_str = PRIVATE_STR;                 | True                      | 
+ 210 |  setgrp_str = NULL;                      | True                      | 
+ 211 |                                          | True                      | 
+ 212 |  opts = getopt32long(argv, "^" OPT_STR " | True                      | 
+ 213 |   "\xf0""m" /* long opts (via their "fak | True                      | 
+ 214 |   ":\xf1""u"                             | True                      | 
+ 215 |   ":\xf2""i"                             | True                      | 
+ 216 |   ":\xf3""n"                             | True                      | 
+ 217 |   ":\xf4""p"                             | True                      | 
+ 218 |   ":\xf5""U"                             | True                      | 
+ 219 |   ":rU"    /* --map-root-user or -r impl | True                      | 
+ 220 |   ":\xfd""m" /* --mount-proc implies -m  | True                      | 
+ 221 |   , unshare_longopts,                    | True                      | 
+ 222 |   &proc_mnt_target, &prop_str, &setgrp_s | True                      | 
+ 223 |   &ns_ctx_list[NS_MNT_POS].path,         | True                      | 
+ 224 |   &ns_ctx_list[NS_UTS_POS].path,         | True                      | 
+ 225 |   &ns_ctx_list[NS_IPC_POS].path,         | True                      | 
+ 226 |   &ns_ctx_list[NS_NET_POS].path,         | True                      | 
+ 227 |   &ns_ctx_list[NS_PID_POS].path,         | True                      | 
+ 228 |   &ns_ctx_list[NS_USR_POS].path          | True                      | 
+ 229 |  );                                      | True                      | 
+ 230 |  argv += optind;                         | True                      | 
+ 231 |  //bb_error_msg("opts:0x%x", opts);      | True                      | 
+ 232 |  //bb_error_msg("mount:%s", ns_ctx_list[ | True                      | 
+ 233 |  //bb_error_msg("proc_mnt_target:%s", pr | True                      | 
+ 234 |  //bb_error_msg("prop_str:%s", prop_str) | True                      | 
+ 235 |  //bb_error_msg("setgrp_str:%s", setgrp_ | True                      | 
+ 236 |  //exit(1);                              | True                      | 
+ 237 |                                          | True                      | 
+ 238 |  if (setgrp_str) {                       | True                      | 
+ 239 |   if (strcmp(setgrp_str, "allow") == 0)  | True                      | 
+ 240 |    if (opts & OPT_map_root) {            | True                      | 
+ 241 |     bb_simple_error_msg_and_die(         | True                      | 
+ 242 |      "--setgroups=allow and --map-root-u | True                      | 
+ 243 |      "are mutually exclusive"            | True                      | 
+ 244 |     );                                   | True                      | 
+ 245 |    }                                     | True                      | 
+ 246 |   } else {                               | True                      | 
+ 247 |    /* It's not "allow", must be "deny" * | True                      | 
+ 248 |    if (strcmp(setgrp_str, "deny") != 0)  | True                      | 
+ 249 |     bb_error_msg_and_die("unrecognized:  | True                      | 
+ 250 |      "setgroups", setgrp_str);           | True                      | 
+ 251 |   }                                      | True                      | 
+ 252 |  }                                       | True                      | 
+ 253 |                                          | True                      | 
+ 254 |  unsflags = 0;                           | True                      | 
+ 255 |  need_mount = 0;                         | True                      | 
+ 256 |  for (i = 0; i < NS_COUNT; i++) {        | True                      | 
+ 257 |   const struct namespace_descr *ns = &ns | True                      | 
+ 258 |   struct namespace_ctx *ns_ctx = &ns_ctx | True                      | 
+ 259 |                                          | True                      | 
+ 260 |   if (opts & (1 << i))                   | True                      | 
+ 261 |    unsflags |= ns->flag;                 | True                      | 
+ 262 |                                          | True                      | 
+ 263 |   need_mount |= (uintptr_t)(ns_ctx->path | True                      | 
+ 264 |  }                                       | True                      | 
+ 265 |  /* need_mount != 0 if at least one FILE | True                      | 
+ 266 |                                          | True                      | 
+ 267 |  prop_flags = MS_REC | MS_PRIVATE;       | True                      | 
+ 268 |  /* Silently ignore --propagation if --m | True                      | 
+ 269 |  if (opts & OPT_mount)                   | True                      | 
+ 270 |   prop_flags = parse_propagation(prop_st | True                      | 
+ 271 |                                          | True                      | 
+ 272 |  /*                                      | True                      | 
+ 273 |   * Special case: if we were requested t | True                      | 
+ 274 |   * AND to make any namespace persistent | True                      | 
+ 275 |   * to spawn a child process which will  | True                      | 
+ 276 |   * unshare(), then mount parent's names | True                      | 
+ 277 |   * previous namespace.                  | True                      | 
+ 278 |   */                                     | True                      | 
+ 279 |  fdp.wr = -1;                            | True                      | 
+ 280 |  if (need_mount && (opts & OPT_mount)) { | True                      | 
+ 281 |   /*                                     | True                      | 
+ 282 |    * Can't use getppid() in child, as we | True                      | 
+ 283 |    * pid namespace.                      | True                      | 
+ 284 |    */                                    | True                      | 
+ 285 |   pid_t ppid = getpid();                 | True                      | 
+ 286 |                                          | True                      | 
+ 287 |   xpiped_pair(fdp);                      | True                      | 
+ 288 |                                          | True                      | 
+ 289 |   child = xfork();                       | True                      | 
+ 290 |   if (child == 0) {                      | True                      | 
+ 291 |    /* Child */                           | True                      | 
+ 292 |    close(fdp.wr);                        | True                      | 
+ 293 |                                          | True                      | 
+ 294 |    /* Wait until parent calls unshare()  | True                      | 
+ 295 |    read(fdp.rd, ns_ctx_list, 1); /* ...u | True                      | 
+ 296 |    /*close(fdp.rd);*/                    | True                      | 
+ 297 |                                          | True                      | 
+ 298 |    /* Mount parent's unshared namespaces | True                      | 
+ 299 |    mount_namespaces(ppid, ns_ctx_list);  | True                      | 
+ 300 |    return EXIT_SUCCESS;                  | True                      | 
+ 301 |   }                                      | True                      | 
+ 302 |   /* Parent continues */                 | True                      | 
+ 303 |  }                                       | True                      | 
+ 304 |                                          | True                      | 
+ 305 |  if (unshare(unsflags) != 0)             | True                      | 
+ 306 |   bb_perror_msg_and_die("unshare(0x%x)", | True                      | 
+ 307 |                                          | True                      | 
+ 308 |  if (fdp.wr >= 0) {                      | True                      | 
+ 309 |   close(fdp.wr); /* Release child */     | True                      | 
+ 310 |   close(fdp.rd); /* should close fd, to  | True                      | 
+ 311 |  }                                       | True                      | 
+ 312 |                                          | True                      | 
+ 313 |  if (need_mount) {                       | True                      | 
+ 314 |   /* Wait for the child to finish mounti | True                      | 
+ 315 |   if (opts & OPT_mount) {                | True                      | 
+ 316 |    int exit_status = wait_for_exitstatus | True                      | 
+ 317 |    if (WIFEXITED(exit_status) &&         | True                      | 
+ 318 |        WEXITSTATUS(exit_status) != EXIT_ | True                      | 
+ 319 |     return WEXITSTATUS(exit_status);     | True                      | 
+ 320 |   } else {                               | True                      | 
+ 321 |    /*                                    | True                      | 
+ 322 |     * Regular way - we were requested to | True                      | 
+ 323 |     * namespaces: mount them after the c | True                      | 
+ 324 |     */                                   | True                      | 
+ 325 |    mount_namespaces(getpid(), ns_ctx_lis | True                      | 
+ 326 |   }                                      | True                      | 
+ 327 |  }                                       | True                      | 
+ 328 |                                          | True                      | 
+ 329 |  /*                                      | True                      | 
+ 330 |   * When we're unsharing the pid namespa | True                      | 
+ 331 |   * calls unshare() that is put into the | True                      | 
+ 332 |   * child. The user may want to use this | True                      | 
+ 333 |   * that'll become PID 1 in this new nam | True                      | 
+ 334 |   */                                     | True                      | 
+ 335 |  if (opts & OPT_fork) {                  | True                      | 
+ 336 |   pid_t pid = xvfork();                  | True                      | 
+ 337 |   if (pid > 0) {                         | True                      | 
+ 338 |    /* Parent */                          | True                      | 
+ 339 |    int exit_status = wait_for_exitstatus | True                      | 
+ 340 |    if (WIFSIGNALED(exit_status))         | True                      | 
+ 341 |     kill_myself_with_sig(WTERMSIG(exit_s | True                      | 
+ 342 |    return WEXITSTATUS(exit_status);      | True                      | 
+ 343 |   }                                      | True                      | 
+ 344 |   /* Child continues */                  | True                      | 
+ 345 |  }                                       | True                      | 
+ 346 |                                          | True                      | 
+ 347 |  if (opts & OPT_map_root) {              | True                      | 
+ 348 |   char uidmap_buf[sizeof("0 %u 1") + siz | True                      | 
+ 349 |                                          | True                      | 
+ 350 |   /*                                     | True                      | 
+ 351 |    * Since Linux 3.19 unprivileged writi | True                      | 
+ 352 |    * has been disabled unless /proc/self | True                      | 
+ 353 |    * first to permanently disable the ab | True                      | 
+ 354 |    * in that user namespace.             | True                      | 
+ 355 |    */                                    | True                      | 
+ 356 |   xopen_xwrite_close(PATH_PROC_SETGROUPS | True                      | 
+ 357 |   sprintf(uidmap_buf, "0 %u 1", (unsigne | True                      | 
+ 358 |   xopen_xwrite_close(PATH_PROC_UIDMAP, u | True                      | 
+ 359 |   sprintf(uidmap_buf, "0 %u 1", (unsigne | True                      | 
+ 360 |   xopen_xwrite_close(PATH_PROC_GIDMAP, u | True                      | 
+ 361 |  } else                                  | True                      | 
+ 362 |  if (setgrp_str) {                       | True                      | 
+ 363 |   /* Write "allow" or "deny" */          | True                      | 
+ 364 |   xopen_xwrite_close(PATH_PROC_SETGROUPS | True                      | 
+ 365 |  }                                       | True                      | 
+ 366 |                                          | True                      | 
+ 367 |  if (opts & OPT_mount) {                 | True                      | 
+ 368 |   mount_or_die("none", "/", NULL, prop_f | True                      | 
+ 369 |  }                                       | True                      | 
+ 370 |                                          | True                      | 
+ 371 |  if (opts & OPT_mount_proc) {            | True                      | 
+ 372 |   /*                                     | True                      | 
+ 373 |    * When creating a new pid namespace,  | True                      | 
+ 374 |    * subdirectories in /proc to remain c | True                      | 
+ 375 |    * process IDs. Without --mount-proc t | True                      | 
+ 376 |    * still reflect the old pid namespace | True                      | 
+ 377 |    * /proc private here and then do a fr | True                      | 
+ 378 |    */                                    | True                      | 
+ 379 |   mount_or_die("none", proc_mnt_target,  | True                      | 
+ 380 |   mount_or_die("proc", proc_mnt_target,  | True                      | 
+ 381 |  }                                       | True                      | 
+ 382 |                                          | True                      | 
+ 383 |  exec_prog_or_SHELL(argv);               | True                      | 
+ 384 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +113MB, 272ms             | 

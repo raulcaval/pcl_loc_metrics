@@ -1,0 +1,578 @@
+FILE: data/raw/busybox-1.38.0/networking/libiproute/iptunnel.c
+Resultado PCLocator:
+   # | line of code                             | Merge                       | 
+-----+------------------------------------------+-----------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                        | 
+   2 | /*                                       | True                        | 
+   3 |  * Licensed under GPLv2 or later, see fi | True                        | 
+   4 |  *                                       | True                        | 
+   5 |  * Authors: Alexey Kuznetsov, <kuznet@ms | True                        | 
+   6 |  *                                       | True                        | 
+   7 |  * Changes:                              | True                        | 
+   8 |  *                                       | True                        | 
+   9 |  * Rani Assaf <rani@magic.metawire.com>  | True                        | 
+  10 |  * Rani Assaf <rani@magic.metawire.com>  | True                        | 
+  11 |  * Phil Karn <karn@ka9q.ampr.org>        | True                        | 
+  12 |  */                                      | True                        | 
+  13 | #include <netinet/ip.h>                  | True                        | 
+  14 | #include <net/if.h>                      | True                        | 
+  15 | #include <net/if_arp.h>                  | True                        | 
+  16 | #include <asm/types.h>                   | True                        | 
+  17 |                                          | True                        | 
+  18 | #ifndef __constant_htons                 | True                        | 
+  19 | #define __constant_htons htons           | !(__constant_htons)         | 
+  20 | #endif                                   | True                        | 
+  21 |                                          | True                        | 
+  22 | // FYI: #define SIOCDEVPRIVATE 0x89F0    | True                        | 
+  23 |                                          | True                        | 
+  24 | /* From linux/if_tunnel.h. #including it | True                        | 
+  25 |  * (redefiniton errors due to name colli | True                        | 
+  26 | #define SIOCGETTUNNEL   (SIOCDEVPRIVATE  | True                        | 
+  27 | #define SIOCADDTUNNEL   (SIOCDEVPRIVATE  | True                        | 
+  28 | #define SIOCDELTUNNEL   (SIOCDEVPRIVATE  | True                        | 
+  29 | #define SIOCCHGTUNNEL   (SIOCDEVPRIVATE  | True                        | 
+  30 | //#define SIOCGETPRL      (SIOCDEVPRIVAT | True                        | 
+  31 | //#define SIOCADDPRL      (SIOCDEVPRIVAT | True                        | 
+  32 | //#define SIOCDELPRL      (SIOCDEVPRIVAT | True                        | 
+  33 | //#define SIOCCHGPRL      (SIOCDEVPRIVAT | True                        | 
+  34 | #define GRE_CSUM        __constant_htons | True                        | 
+  35 | //#define GRE_ROUTING     __constant_hto | True                        | 
+  36 | #define GRE_KEY         __constant_htons | True                        | 
+  37 | #define GRE_SEQ         __constant_htons | True                        | 
+  38 | //#define GRE_STRICT      __constant_hto | True                        | 
+  39 | //#define GRE_REC         __constant_hto | True                        | 
+  40 | //#define GRE_FLAGS       __constant_hto | True                        | 
+  41 | //#define GRE_VERSION     __constant_hto | True                        | 
+  42 | struct ip_tunnel_parm {                  | True                        | 
+  43 |  char            name[IFNAMSIZ];         | True                        | 
+  44 |  int             link;                   | True                        | 
+  45 |  uint16_t        i_flags;                | True                        | 
+  46 |  uint16_t        o_flags;                | True                        | 
+  47 |  uint32_t        i_key;                  | True                        | 
+  48 |  uint32_t        o_key;                  | True                        | 
+  49 |  struct iphdr    iph;                    | True                        | 
+  50 | };                                       | True                        | 
+  51 | /* SIT-mode i_flags */                   | True                        | 
+  52 | //#define SIT_ISATAP 0x0001              | True                        | 
+  53 | //struct ip_tunnel_prl {                 | True                        | 
+  54 | // uint32_t          addr;               | True                        | 
+  55 | // uint16_t          flags;              | True                        | 
+  56 | // uint16_t          __reserved;         | True                        | 
+  57 | // uint32_t          datalen;            | True                        | 
+  58 | // uint32_t          __reserved2;        | True                        | 
+  59 | // /* data follows */                    | True                        | 
+  60 | //};                                     | True                        | 
+  61 | ///* PRL flags */                        | True                        | 
+  62 | //#define PRL_DEFAULT 0x0001             | True                        | 
+  63 |                                          | True                        | 
+  64 | #include "ip_common.h"  /* #include "lib | True                        | 
+  65 | #include "rt_names.h"                    | True                        | 
+  66 | #include "utils.h"                       | True                        | 
+  67 |                                          | True                        | 
+  68 |                                          | True                        | 
+  69 | /* Dies on error */                      | True                        | 
+  70 | static int do_ioctl_get_ifindex(char *de | True                        | 
+  71 | {                                        | True                        | 
+  72 |  struct ifreq ifr;                       | True                        | 
+  73 |  int fd;                                 | True                        | 
+  74 |                                          | True                        | 
+  75 |  strncpy_IFNAMSIZ(ifr.ifr_name, dev);    | True                        | 
+  76 |  fd = xsocket(AF_INET, SOCK_DGRAM, 0);   | True                        | 
+  77 |  xioctl(fd, SIOCGIFINDEX, &ifr);         | True                        | 
+  78 |  close(fd);                              | True                        | 
+  79 |  return ifr.ifr_ifindex;                 | True                        | 
+  80 | }                                        | True                        | 
+  81 |                                          | True                        | 
+  82 | static int do_ioctl_get_iftype(char *dev | True                        | 
+  83 | {                                        | True                        | 
+  84 |  struct ifreq ifr;                       | True                        | 
+  85 |  int fd;                                 | True                        | 
+  86 |  int err;                                | True                        | 
+  87 |                                          | True                        | 
+  88 |  strncpy_IFNAMSIZ(ifr.ifr_name, dev);    | True                        | 
+  89 |  fd = xsocket(AF_INET, SOCK_DGRAM, 0);   | True                        | 
+  90 |  err = ioctl_or_warn(fd, SIOCGIFHWADDR,  | True                        | 
+  91 |  close(fd);                              | True                        | 
+  92 |  return err ? -1 : ifr.ifr_addr.sa_famil | True                        | 
+  93 | }                                        | True                        | 
+  94 |                                          | True                        | 
+  95 | static char *do_ioctl_get_ifname(int idx | True                        | 
+  96 | {                                        | True                        | 
+  97 |  struct ifreq ifr;                       | True                        | 
+  98 |  int fd;                                 | True                        | 
+  99 |  int err;                                | True                        | 
+ 100 |                                          | True                        | 
+ 101 |  ifr.ifr_ifindex = idx;                  | True                        | 
+ 102 |  fd = xsocket(AF_INET, SOCK_DGRAM, 0);   | True                        | 
+ 103 |  err = ioctl_or_warn(fd, SIOCGIFNAME, &i | True                        | 
+ 104 |  close(fd);                              | True                        | 
+ 105 |  return err ? NULL : xstrndup(ifr.ifr_na | True                        | 
+ 106 | }                                        | True                        | 
+ 107 |                                          | True                        | 
+ 108 | static int do_get_ioctl(const char *base | True                        | 
+ 109 | {                                        | True                        | 
+ 110 |  struct ifreq ifr;                       | True                        | 
+ 111 |  int fd;                                 | True                        | 
+ 112 |  int err;                                | True                        | 
+ 113 |                                          | True                        | 
+ 114 |  strncpy_IFNAMSIZ(ifr.ifr_name, basedev) | True                        | 
+ 115 |  ifr.ifr_ifru.ifru_data = (void*)p;      | True                        | 
+ 116 |  fd = xsocket(AF_INET, SOCK_DGRAM, 0);   | True                        | 
+ 117 |  err = ioctl_or_warn(fd, SIOCGETTUNNEL,  | True                        | 
+ 118 |  close(fd);                              | True                        | 
+ 119 |  return err;                             | True                        | 
+ 120 | }                                        | True                        | 
+ 121 |                                          | True                        | 
+ 122 | /* Dies on error, otherwise returns 0 */ | True                        | 
+ 123 | static int do_add_ioctl(int cmd, const c | True                        | 
+ 124 | {                                        | True                        | 
+ 125 |  struct ifreq ifr;                       | True                        | 
+ 126 |  int fd;                                 | True                        | 
+ 127 |                                          | True                        | 
+ 128 |  if (cmd == SIOCCHGTUNNEL && p->name[0]) | True                        | 
+ 129 |   strncpy_IFNAMSIZ(ifr.ifr_name, p->name | True                        | 
+ 130 |  } else {                                | True                        | 
+ 131 |   strncpy_IFNAMSIZ(ifr.ifr_name, basedev | True                        | 
+ 132 |  }                                       | True                        | 
+ 133 |  ifr.ifr_ifru.ifru_data = (void*)p;      | True                        | 
+ 134 |  fd = xsocket(AF_INET, SOCK_DGRAM, 0);   | True                        | 
+ 135 | #if ENABLE_IOCTL_HEX2STR_ERROR           | True                        | 
+ 136 |  /* #define magic will turn ioctl# into  | ENABLE_IOCTL_HEX2STR_ERROR  | 
+ 137 |  if (cmd == SIOCCHGTUNNEL)               | ENABLE_IOCTL_HEX2STR_ERROR  | 
+ 138 |   xioctl(fd, SIOCCHGTUNNEL, &ifr);       | ENABLE_IOCTL_HEX2STR_ERROR  | 
+ 139 |  else                                    | ENABLE_IOCTL_HEX2STR_ERROR  | 
+ 140 |   xioctl(fd, SIOCADDTUNNEL, &ifr);       | ENABLE_IOCTL_HEX2STR_ERROR  | 
+ 141 | #else                                    | True                        | 
+ 142 |  xioctl(fd, cmd, &ifr);                  | !ENABLE_IOCTL_HEX2STR_ERROR | 
+ 143 | #endif                                   | True                        | 
+ 144 |  close(fd);                              | True                        | 
+ 145 |  return 0;                               | True                        | 
+ 146 | }                                        | True                        | 
+ 147 |                                          | True                        | 
+ 148 | /* Dies on error, otherwise returns 0 */ | True                        | 
+ 149 | static int do_del_ioctl(const char *base | True                        | 
+ 150 | {                                        | True                        | 
+ 151 |  struct ifreq ifr;                       | True                        | 
+ 152 |  int fd;                                 | True                        | 
+ 153 |                                          | True                        | 
+ 154 |  if (p->name[0]) {                       | True                        | 
+ 155 |   strncpy_IFNAMSIZ(ifr.ifr_name, p->name | True                        | 
+ 156 |  } else {                                | True                        | 
+ 157 |   strncpy_IFNAMSIZ(ifr.ifr_name, basedev | True                        | 
+ 158 |  }                                       | True                        | 
+ 159 |  ifr.ifr_ifru.ifru_data = (void*)p;      | True                        | 
+ 160 |  fd = xsocket(AF_INET, SOCK_DGRAM, 0);   | True                        | 
+ 161 |  xioctl(fd, SIOCDELTUNNEL, &ifr);        | True                        | 
+ 162 |  close(fd);                              | True                        | 
+ 163 |  return 0;                               | True                        | 
+ 164 | }                                        | True                        | 
+ 165 |                                          | True                        | 
+ 166 | /* Dies on error */                      | True                        | 
+ 167 | static void parse_args(char **argv, int  | True                        | 
+ 168 | {                                        | True                        | 
+ 169 |  static const char keywords[] ALIGN1 =   | True                        | 
+ 170 |   "mode\0""ipip\0""ip/ip\0""gre\0""gre/i | True                        | 
+ 171 |   "key\0""ikey\0""okey\0""seq\0""iseq\0" | True                        | 
+ 172 |   "csum\0""icsum\0""ocsum\0""nopmtudisc\ | True                        | 
+ 173 |   "remote\0""any\0""local\0""dev\0"      | True                        | 
+ 174 |   "ttl\0""inherit\0""tos\0""dsfield\0"   | True                        | 
+ 175 |   "name\0";                              | True                        | 
+ 176 |  enum {                                  | True                        | 
+ 177 |   ARG_mode, ARG_ipip, ARG_ip_ip, ARG_gre | True                        | 
+ 178 |   ARG_key, ARG_ikey, ARG_okey, ARG_seq,  | True                        | 
+ 179 |   ARG_csum, ARG_icsum, ARG_ocsum, ARG_no | True                        | 
+ 180 |   ARG_remote, ARG_any, ARG_local, ARG_de | True                        | 
+ 181 |   ARG_ttl, ARG_inherit, ARG_tos, ARG_dsf | True                        | 
+ 182 |   ARG_name                               | True                        | 
+ 183 |  };                                      | True                        | 
+ 184 |  int count = 0;                          | True                        | 
+ 185 |  char medium[IFNAMSIZ];                  | True                        | 
+ 186 |  int key;                                | True                        | 
+ 187 |                                          | True                        | 
+ 188 |  memset(p, 0, sizeof(*p));               | True                        | 
+ 189 |  medium[0] = '\0';                       | True                        | 
+ 190 |                                          | True                        | 
+ 191 |  p->iph.version = 4;                     | True                        | 
+ 192 |  p->iph.ihl = 5;                         | True                        | 
+ 193 | #ifndef IP_DF                            | True                        | 
+ 194 | #define IP_DF 0x4000  /* Flag: "Don't Fr | !(IP_DF)                    | 
+ 195 | #endif                                   | True                        | 
+ 196 |  p->iph.frag_off = htons(IP_DF);         | True                        | 
+ 197 |                                          | True                        | 
+ 198 |  while (*argv) {                         | True                        | 
+ 199 |   key = index_in_strings(keywords, *argv | True                        | 
+ 200 |   if (key == ARG_mode) {                 | True                        | 
+ 201 |    NEXT_ARG();                           | True                        | 
+ 202 |    key = index_in_strings(keywords, *arg | True                        | 
+ 203 |    if (key == ARG_ipip ||                | True                        | 
+ 204 |        key == ARG_ip_ip                  | True                        | 
+ 205 |    ) {                                   | True                        | 
+ 206 |     if (p->iph.protocol && p->iph.protoc | True                        | 
+ 207 |      bb_error_msg_and_die("%s tunnel mod | True                        | 
+ 208 |     }                                    | True                        | 
+ 209 |     p->iph.protocol = IPPROTO_IPIP;      | True                        | 
+ 210 |    } else if (key == ARG_gre ||          | True                        | 
+ 211 |        key == ARG_gre_ip                 | True                        | 
+ 212 |    ) {                                   | True                        | 
+ 213 |     if (p->iph.protocol && p->iph.protoc | True                        | 
+ 214 |      bb_error_msg_and_die("%s tunnel mod | True                        | 
+ 215 |     }                                    | True                        | 
+ 216 |     p->iph.protocol = IPPROTO_GRE;       | True                        | 
+ 217 |    } else if (key == ARG_sit ||          | True                        | 
+ 218 |        key == ARG_ip6_ip                 | True                        | 
+ 219 |    ) {                                   | True                        | 
+ 220 |     if (p->iph.protocol && p->iph.protoc | True                        | 
+ 221 |      bb_error_msg_and_die("%s tunnel mod | True                        | 
+ 222 |     }                                    | True                        | 
+ 223 |     p->iph.protocol = IPPROTO_IPV6;      | True                        | 
+ 224 |    } else {                              | True                        | 
+ 225 |     bb_error_msg_and_die("%s tunnel mode | True                        | 
+ 226 |    }                                     | True                        | 
+ 227 |   } else if (key == ARG_key) {           | True                        | 
+ 228 |    unsigned uval;                        | True                        | 
+ 229 |    NEXT_ARG();                           | True                        | 
+ 230 |    p->i_flags |= GRE_KEY;                | True                        | 
+ 231 |    p->o_flags |= GRE_KEY;                | True                        | 
+ 232 |    if (strchr(*argv, '.'))               | True                        | 
+ 233 |     p->i_key = p->o_key = get_addr32(*ar | True                        | 
+ 234 |    else {                                | True                        | 
+ 235 |     uval = get_unsigned(*argv, "key");   | True                        | 
+ 236 |     p->i_key = p->o_key = htonl(uval);   | True                        | 
+ 237 |    }                                     | True                        | 
+ 238 |   } else if (key == ARG_ikey) {          | True                        | 
+ 239 |    unsigned uval;                        | True                        | 
+ 240 |    NEXT_ARG();                           | True                        | 
+ 241 |    p->i_flags |= GRE_KEY;                | True                        | 
+ 242 |    if (strchr(*argv, '.'))               | True                        | 
+ 243 |     p->o_key = get_addr32(*argv);        | True                        | 
+ 244 |    else {                                | True                        | 
+ 245 |     uval = get_unsigned(*argv, "ikey");  | True                        | 
+ 246 |     p->i_key = htonl(uval);              | True                        | 
+ 247 |    }                                     | True                        | 
+ 248 |   } else if (key == ARG_okey) {          | True                        | 
+ 249 |    unsigned uval;                        | True                        | 
+ 250 |    NEXT_ARG();                           | True                        | 
+ 251 |    p->o_flags |= GRE_KEY;                | True                        | 
+ 252 |    if (strchr(*argv, '.'))               | True                        | 
+ 253 |     p->o_key = get_addr32(*argv);        | True                        | 
+ 254 |    else {                                | True                        | 
+ 255 |     uval = get_unsigned(*argv, "okey");  | True                        | 
+ 256 |     p->o_key = htonl(uval);              | True                        | 
+ 257 |    }                                     | True                        | 
+ 258 |   } else if (key == ARG_seq) {           | True                        | 
+ 259 |    p->i_flags |= GRE_SEQ;                | True                        | 
+ 260 |    p->o_flags |= GRE_SEQ;                | True                        | 
+ 261 |   } else if (key == ARG_iseq) {          | True                        | 
+ 262 |    p->i_flags |= GRE_SEQ;                | True                        | 
+ 263 |   } else if (key == ARG_oseq) {          | True                        | 
+ 264 |    p->o_flags |= GRE_SEQ;                | True                        | 
+ 265 |   } else if (key == ARG_csum) {          | True                        | 
+ 266 |    p->i_flags |= GRE_CSUM;               | True                        | 
+ 267 |    p->o_flags |= GRE_CSUM;               | True                        | 
+ 268 |   } else if (key == ARG_icsum) {         | True                        | 
+ 269 |    p->i_flags |= GRE_CSUM;               | True                        | 
+ 270 |   } else if (key == ARG_ocsum) {         | True                        | 
+ 271 |    p->o_flags |= GRE_CSUM;               | True                        | 
+ 272 |   } else if (key == ARG_nopmtudisc) {    | True                        | 
+ 273 |    p->iph.frag_off = 0;                  | True                        | 
+ 274 |   } else if (key == ARG_pmtudisc) {      | True                        | 
+ 275 |    p->iph.frag_off = htons(IP_DF);       | True                        | 
+ 276 |   } else if (key == ARG_remote) {        | True                        | 
+ 277 |    NEXT_ARG();                           | True                        | 
+ 278 |    key = index_in_strings(keywords, *arg | True                        | 
+ 279 |    if (key != ARG_any)                   | True                        | 
+ 280 |     p->iph.daddr = get_addr32(*argv);    | True                        | 
+ 281 |   } else if (key == ARG_local) {         | True                        | 
+ 282 |    NEXT_ARG();                           | True                        | 
+ 283 |    key = index_in_strings(keywords, *arg | True                        | 
+ 284 |    if (key != ARG_any)                   | True                        | 
+ 285 |     p->iph.saddr = get_addr32(*argv);    | True                        | 
+ 286 |   } else if (key == ARG_dev) {           | True                        | 
+ 287 |    NEXT_ARG();                           | True                        | 
+ 288 |    strncpy_IFNAMSIZ(medium, *argv);      | True                        | 
+ 289 |   } else if (key == ARG_ttl) {           | True                        | 
+ 290 |    unsigned uval;                        | True                        | 
+ 291 |    NEXT_ARG();                           | True                        | 
+ 292 |    key = index_in_strings(keywords, *arg | True                        | 
+ 293 |    if (key != ARG_inherit) {             | True                        | 
+ 294 |     uval = get_unsigned(*argv, "TTL");   | True                        | 
+ 295 |     if (uval > 255)                      | True                        | 
+ 296 |      invarg_1_to_2(*argv, "TTL");        | True                        | 
+ 297 |     p->iph.ttl = uval;                   | True                        | 
+ 298 |    }                                     | True                        | 
+ 299 |   } else if (key == ARG_tos ||           | True                        | 
+ 300 |       key == ARG_dsfield                 | True                        | 
+ 301 |   ) {                                    | True                        | 
+ 302 |    uint32_t uval;                        | True                        | 
+ 303 |    NEXT_ARG();                           | True                        | 
+ 304 |    key = index_in_strings(keywords, *arg | True                        | 
+ 305 |    if (key != ARG_inherit) {             | True                        | 
+ 306 |     if (rtnl_dsfield_a2n(&uval, *argv))  | True                        | 
+ 307 |      invarg_1_to_2(*argv, "TOS");        | True                        | 
+ 308 |     p->iph.tos = uval;                   | True                        | 
+ 309 |    } else                                | True                        | 
+ 310 |     p->iph.tos = 1;                      | True                        | 
+ 311 |   } else {                               | True                        | 
+ 312 |    if (key == ARG_name) {                | True                        | 
+ 313 |     NEXT_ARG();                          | True                        | 
+ 314 |    }                                     | True                        | 
+ 315 |    if (p->name[0])                       | True                        | 
+ 316 |     duparg2("name", *argv);              | True                        | 
+ 317 |    strncpy_IFNAMSIZ(p->name, *argv);     | True                        | 
+ 318 |    if (cmd == SIOCCHGTUNNEL && count ==  | True                        | 
+ 319 |     struct ip_tunnel_parm old_p;         | True                        | 
+ 320 |     memset(&old_p, 0, sizeof(old_p));    | True                        | 
+ 321 |     if (do_get_ioctl(*argv, &old_p))     | True                        | 
+ 322 |      exit_FAILURE();                     | True                        | 
+ 323 |     *p = old_p;                          | True                        | 
+ 324 |    }                                     | True                        | 
+ 325 |   }                                      | True                        | 
+ 326 |   count++;                               | True                        | 
+ 327 |   argv++;                                | True                        | 
+ 328 |  }                                       | True                        | 
+ 329 |                                          | True                        | 
+ 330 |  if (p->iph.protocol == 0) {             | True                        | 
+ 331 |   if (memcmp(p->name, "gre", 3) == 0)    | True                        | 
+ 332 |    p->iph.protocol = IPPROTO_GRE;        | True                        | 
+ 333 |   else if (memcmp(p->name, "ipip", 4) == | True                        | 
+ 334 |    p->iph.protocol = IPPROTO_IPIP;       | True                        | 
+ 335 |   else if (memcmp(p->name, "sit", 3) ==  | True                        | 
+ 336 |    p->iph.protocol = IPPROTO_IPV6;       | True                        | 
+ 337 |  }                                       | True                        | 
+ 338 |                                          | True                        | 
+ 339 |  if (p->iph.protocol == IPPROTO_IPIP ||  | True                        | 
+ 340 |   if ((p->i_flags & GRE_KEY) || (p->o_fl | True                        | 
+ 341 |    bb_simple_error_msg_and_die("keys are | True                        | 
+ 342 |   }                                      | True                        | 
+ 343 |  }                                       | True                        | 
+ 344 |                                          | True                        | 
+ 345 |  if (medium[0]) {                        | True                        | 
+ 346 |   p->link = do_ioctl_get_ifindex(medium) | True                        | 
+ 347 |  }                                       | True                        | 
+ 348 |                                          | True                        | 
+ 349 |  if (p->i_key == 0 && IN_MULTICAST(ntohl | True                        | 
+ 350 |   p->i_key = p->iph.daddr;               | True                        | 
+ 351 |   p->i_flags |= GRE_KEY;                 | True                        | 
+ 352 |  }                                       | True                        | 
+ 353 |  if (p->o_key == 0 && IN_MULTICAST(ntohl | True                        | 
+ 354 |   p->o_key = p->iph.daddr;               | True                        | 
+ 355 |   p->o_flags |= GRE_KEY;                 | True                        | 
+ 356 |  }                                       | True                        | 
+ 357 |  if (IN_MULTICAST(ntohl(p->iph.daddr)) & | True                        | 
+ 358 |   bb_simple_error_msg_and_die("broadcast | True                        | 
+ 359 |  }                                       | True                        | 
+ 360 | }                                        | True                        | 
+ 361 |                                          | True                        | 
+ 362 | /* Return value becomes exitcode. It's o | True                        | 
+ 363 | static int do_add(int cmd, char **argv)  | True                        | 
+ 364 | {                                        | True                        | 
+ 365 |  struct ip_tunnel_parm p;                | True                        | 
+ 366 |                                          | True                        | 
+ 367 |  parse_args(argv, cmd, &p);              | True                        | 
+ 368 |                                          | True                        | 
+ 369 |  if (p.iph.ttl && p.iph.frag_off == 0) { | True                        | 
+ 370 |   bb_simple_error_msg_and_die("ttl != 0  | True                        | 
+ 371 |  }                                       | True                        | 
+ 372 |                                          | True                        | 
+ 373 |  switch (p.iph.protocol) {               | True                        | 
+ 374 |  case IPPROTO_IPIP:                      | True                        | 
+ 375 |   return do_add_ioctl(cmd, "tunl0", &p); | True                        | 
+ 376 |  case IPPROTO_GRE:                       | True                        | 
+ 377 |   return do_add_ioctl(cmd, "gre0", &p);  | True                        | 
+ 378 |  case IPPROTO_IPV6:                      | True                        | 
+ 379 |   return do_add_ioctl(cmd, "sit0", &p);  | True                        | 
+ 380 |  default:                                | True                        | 
+ 381 |   bb_simple_error_msg_and_die("can't det | True                        | 
+ 382 |  }                                       | True                        | 
+ 383 | }                                        | True                        | 
+ 384 |                                          | True                        | 
+ 385 | /* Return value becomes exitcode. It's o | True                        | 
+ 386 | static int do_del(char **argv)           | True                        | 
+ 387 | {                                        | True                        | 
+ 388 |  struct ip_tunnel_parm p;                | True                        | 
+ 389 |                                          | True                        | 
+ 390 |  parse_args(argv, SIOCDELTUNNEL, &p);    | True                        | 
+ 391 |                                          | True                        | 
+ 392 |  switch (p.iph.protocol) {               | True                        | 
+ 393 |  case IPPROTO_IPIP:                      | True                        | 
+ 394 |   return do_del_ioctl("tunl0", &p);      | True                        | 
+ 395 |  case IPPROTO_GRE:                       | True                        | 
+ 396 |   return do_del_ioctl("gre0", &p);       | True                        | 
+ 397 |  case IPPROTO_IPV6:                      | True                        | 
+ 398 |   return do_del_ioctl("sit0", &p);       | True                        | 
+ 399 |  default:                                | True                        | 
+ 400 |   return do_del_ioctl(p.name, &p);       | True                        | 
+ 401 |  }                                       | True                        | 
+ 402 | }                                        | True                        | 
+ 403 |                                          | True                        | 
+ 404 | static void print_tunnel(struct ip_tunne | True                        | 
+ 405 | {                                        | True                        | 
+ 406 |  char s3[INET_ADDRSTRLEN];               | True                        | 
+ 407 |  char s4[INET_ADDRSTRLEN];               | True                        | 
+ 408 |                                          | True                        | 
+ 409 |  printf("%s: %s/ip  remote %s  local %s  | True                        | 
+ 410 |   p->name,                               | True                        | 
+ 411 |   p->iph.protocol == IPPROTO_IPIP ? "ip" | True                        | 
+ 412 |    p->iph.protocol == IPPROTO_GRE ? "gre | True                        | 
+ 413 |    p->iph.protocol == IPPROTO_IPV6 ? "ip | True                        | 
+ 414 |    "unknown",                            | True                        | 
+ 415 |   p->iph.daddr ? format_host(AF_INET, 4, | True                        | 
+ 416 |   p->iph.saddr ? format_host(AF_INET, 4, | True                        | 
+ 417 |  );                                      | True                        | 
+ 418 |  if (p->link) {                          | True                        | 
+ 419 |   char *n = do_ioctl_get_ifname(p->link) | True                        | 
+ 420 |   if (n) {                               | True                        | 
+ 421 |    printf(" dev %s ", n);                | True                        | 
+ 422 |    free(n);                              | True                        | 
+ 423 |   }                                      | True                        | 
+ 424 |  }                                       | True                        | 
+ 425 |  if (p->iph.ttl)                         | True                        | 
+ 426 |   printf(" ttl %d ", p->iph.ttl);        | True                        | 
+ 427 |  else                                    | True                        | 
+ 428 |   printf(" ttl inherit ");               | True                        | 
+ 429 |  if (p->iph.tos) {                       | True                        | 
+ 430 |   printf(" tos");                        | True                        | 
+ 431 |   if (p->iph.tos & 1)                    | True                        | 
+ 432 |    printf(" inherit");                   | True                        | 
+ 433 |   if (p->iph.tos & ~1)                   | True                        | 
+ 434 |    printf("%c%s ", p->iph.tos & 1 ? '/'  | True                        | 
+ 435 |     rtnl_dsfield_n2a(p->iph.tos & ~1));  | True                        | 
+ 436 |  }                                       | True                        | 
+ 437 |  if (!(p->iph.frag_off & htons(IP_DF)))  | True                        | 
+ 438 |   printf(" nopmtudisc");                 | True                        | 
+ 439 |                                          | True                        | 
+ 440 |  inet_ntop(AF_INET, &p->i_key, s3, sizeo | True                        | 
+ 441 |  inet_ntop(AF_INET, &p->o_key, s4, sizeo | True                        | 
+ 442 |  if ((p->i_flags & GRE_KEY) && (p->o_fla | True                        | 
+ 443 |   printf(" key %s", s3);                 | True                        | 
+ 444 |  else {                                  | True                        | 
+ 445 |   if (p->i_flags & GRE_KEY)              | True                        | 
+ 446 |    printf(" ikey %s ", s3);              | True                        | 
+ 447 |   if (p->o_flags & GRE_KEY)              | True                        | 
+ 448 |    printf(" okey %s ", s4);              | True                        | 
+ 449 |  }                                       | True                        | 
+ 450 |                                          | True                        | 
+ 451 |  if (p->i_flags & GRE_SEQ)               | True                        | 
+ 452 |   printf("%c  Drop packets out of sequen | True                        | 
+ 453 |  if (p->i_flags & GRE_CSUM)              | True                        | 
+ 454 |   printf("%c  Checksum in received packe | True                        | 
+ 455 |  if (p->o_flags & GRE_SEQ)               | True                        | 
+ 456 |   printf("%c  Sequence packets on output | True                        | 
+ 457 |  if (p->o_flags & GRE_CSUM)              | True                        | 
+ 458 |   printf("%c  Checksum output packets.", | True                        | 
+ 459 | }                                        | True                        | 
+ 460 |                                          | True                        | 
+ 461 | static void do_tunnels_list(struct ip_tu | True                        | 
+ 462 | {                                        | True                        | 
+ 463 |  char name[IFNAMSIZ];                    | True                        | 
+ 464 |  unsigned long rx_bytes, rx_packets, rx_ | True                        | 
+ 465 |   rx_fifo, rx_frame,                     | True                        | 
+ 466 |   tx_bytes, tx_packets, tx_errs, tx_drop | True                        | 
+ 467 |   tx_fifo, tx_colls, tx_carrier, rx_mult | True                        | 
+ 468 |  int type;                               | True                        | 
+ 469 |  struct ip_tunnel_parm p1;               | True                        | 
+ 470 |  char buf[512];                          | True                        | 
+ 471 |  FILE *fp = fopen_or_warn("/proc/net/dev | True                        | 
+ 472 |                                          | True                        | 
+ 473 |  if (fp == NULL) {                       | True                        | 
+ 474 |   return;                                | True                        | 
+ 475 |  }                                       | True                        | 
+ 476 |  /* skip headers */                      | True                        | 
+ 477 |  fgets(buf, sizeof(buf), fp);            | True                        | 
+ 478 |  fgets(buf, sizeof(buf), fp);            | True                        | 
+ 479 |                                          | True                        | 
+ 480 |  while (fgets(buf, sizeof(buf), fp) != N | True                        | 
+ 481 |   char *ptr;                             | True                        | 
+ 482 |                                          | True                        | 
+ 483 |   /*buf[sizeof(buf) - 1] = 0; - fgets is | True                        | 
+ 484 |   ptr = strchr(buf, ':');                | True                        | 
+ 485 |   if (ptr == NULL ||                     | True                        | 
+ 486 |       (*ptr++ = 0, sscanf(buf, "%s", nam | True                        | 
+ 487 |   ) {                                    | True                        | 
+ 488 |    bb_simple_error_msg("wrong format of  | True                        | 
+ 489 |    return;                               | True                        | 
+ 490 |   }                                      | True                        | 
+ 491 |   if (sscanf(ptr, "%lu%lu%lu%lu%lu%lu%lu | True                        | 
+ 492 |       &rx_bytes, &rx_packets, &rx_errs,  | True                        | 
+ 493 |       &rx_fifo, &rx_frame, &rx_multi,    | True                        | 
+ 494 |       &tx_bytes, &tx_packets, &tx_errs,  | True                        | 
+ 495 |       &tx_fifo, &tx_colls, &tx_carrier)  | True                        | 
+ 496 |    continue;                             | True                        | 
+ 497 |   if (p->name[0] && strcmp(p->name, name | True                        | 
+ 498 |    continue;                             | True                        | 
+ 499 |   type = do_ioctl_get_iftype(name);      | True                        | 
+ 500 |   if (type == -1) {                      | True                        | 
+ 501 |    bb_error_msg("can't get type of [%s]" | True                        | 
+ 502 |    continue;                             | True                        | 
+ 503 |   }                                      | True                        | 
+ 504 |   if (type != ARPHRD_TUNNEL && type != A | True                        | 
+ 505 |    continue;                             | True                        | 
+ 506 |   memset(&p1, 0, sizeof(p1));            | True                        | 
+ 507 |   if (do_get_ioctl(name, &p1))           | True                        | 
+ 508 |    continue;                             | True                        | 
+ 509 |   if ((p->link && p1.link != p->link) || | True                        | 
+ 510 |       (p->name[0] && strcmp(p1.name, p-> | True                        | 
+ 511 |       (p->iph.daddr && p1.iph.daddr != p | True                        | 
+ 512 |       (p->iph.saddr && p1.iph.saddr != p | True                        | 
+ 513 |       (p->i_key && p1.i_key != p->i_key) | True                        | 
+ 514 |   ) {                                    | True                        | 
+ 515 |    continue;                             | True                        | 
+ 516 |   }                                      | True                        | 
+ 517 |   print_tunnel(&p1);                     | True                        | 
+ 518 |   bb_putchar('\n');                      | True                        | 
+ 519 |  }                                       | True                        | 
+ 520 | }                                        | True                        | 
+ 521 |                                          | True                        | 
+ 522 | /* Return value becomes exitcode. It's o | True                        | 
+ 523 | static int do_show(char **argv)          | True                        | 
+ 524 | {                                        | True                        | 
+ 525 |  int err;                                | True                        | 
+ 526 |  struct ip_tunnel_parm p;                | True                        | 
+ 527 |                                          | True                        | 
+ 528 |  parse_args(argv, SIOCGETTUNNEL, &p);    | True                        | 
+ 529 |                                          | True                        | 
+ 530 |  switch (p.iph.protocol) {               | True                        | 
+ 531 |  case IPPROTO_IPIP:                      | True                        | 
+ 532 |   err = do_get_ioctl(p.name[0] ? p.name  | True                        | 
+ 533 |   break;                                 | True                        | 
+ 534 |  case IPPROTO_GRE:                       | True                        | 
+ 535 |   err = do_get_ioctl(p.name[0] ? p.name  | True                        | 
+ 536 |   break;                                 | True                        | 
+ 537 |  case IPPROTO_IPV6:                      | True                        | 
+ 538 |   err = do_get_ioctl(p.name[0] ? p.name  | True                        | 
+ 539 |   break;                                 | True                        | 
+ 540 |  default:                                | True                        | 
+ 541 |   do_tunnels_list(&p);                   | True                        | 
+ 542 |   return 0;                              | True                        | 
+ 543 |  }                                       | True                        | 
+ 544 |  if (err)                                | True                        | 
+ 545 |   return -1;                             | True                        | 
+ 546 |                                          | True                        | 
+ 547 |  print_tunnel(&p);                       | True                        | 
+ 548 |  bb_putchar('\n');                       | True                        | 
+ 549 |  return 0;                               | True                        | 
+ 550 | }                                        | True                        | 
+ 551 |                                          | True                        | 
+ 552 | /* Return value becomes exitcode. It's o | True                        | 
+ 553 | int FAST_FUNC do_iptunnel(char **argv)   | True                        | 
+ 554 | {                                        | True                        | 
+ 555 |  static const char keywords[] ALIGN1 =   | True                        | 
+ 556 |   "add\0""change\0""delete\0""show\0""li | True                        | 
+ 557 |  enum { ARG_add = 0, ARG_change, ARG_del | True                        | 
+ 558 |                                          | True                        | 
+ 559 |  if (*argv) {                            | True                        | 
+ 560 |   int key = index_in_substrings(keywords | True                        | 
+ 561 |   if (key < 0)                           | True                        | 
+ 562 |    invarg_1_to_2(*argv, applet_name);    | True                        | 
+ 563 |   argv++;                                | True                        | 
+ 564 |   if (key == ARG_add)                    | True                        | 
+ 565 |    return do_add(SIOCADDTUNNEL, argv);   | True                        | 
+ 566 |   if (key == ARG_change)                 | True                        | 
+ 567 |    return do_add(SIOCCHGTUNNEL, argv);   | True                        | 
+ 568 |   if (key == ARG_del)                    | True                        | 
+ 569 |    return do_del(argv);                  | True                        | 
+ 570 |  }                                       | True                        | 
+ 571 |  return do_show(argv);                   | True                        | 
+ 572 | }                                        | True                        | 
+-----+------------------------------------------+-----------------------------+
+     |                                          | +145MB, 472ms               | 

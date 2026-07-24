@@ -1,0 +1,928 @@
+FILE: data/raw/busybox-1.38.0/networking/nc_bloaty.c
+Resultado PCLocator:
+   # | line of code                             | Merge                         | 
+-----+------------------------------------------+-------------------------------+
+   1 | /* Based on netcat 1.10 RELEASE 960320 w | True                          | 
+   2 |  * Released into public domain by the au | True                          | 
+   3 |  *                                       | True                          | 
+   4 |  * Copyright (C) 2007 Denys Vlasenko.    | True                          | 
+   5 |  *                                       | True                          | 
+   6 |  * Licensed under GPLv2, see file LICENS | True                          | 
+   7 |  */                                      | True                          | 
+   8 |                                          | True                          | 
+   9 | /* Author's comments from nc 1.10:       | True                          | 
+  10 |  * =====================                 | True                          | 
+  11 |  * Netcat is entirely my own creation, a | True                          | 
+  12 |  * examples.  It is freely given away to | True                          | 
+  13 |  * it will be useful, with no restrictio | True                          | 
+  14 |  * No GPLs, Berkeley copyrights or any o | True                          | 
+  15 |  * responsibility for how anyone uses it | True                          | 
+  16 |  * you're feeling generous, mail me a ch | True                          | 
+  17 |  * with Microsoft Network, get a life.   | True                          | 
+  18 |  * questions, and patches to hobbit@avia | True                          | 
+  19 |  * ...                                   | True                          | 
+  20 |  * Netcat and the associated package is  | True                          | 
+  21 |  * available in full source form with no | True                          | 
+  22 |  * credit where due.                     | True                          | 
+  23 |  * ...                                   | True                          | 
+  24 |  * A damn useful little "backend" utilit | True                          | 
+  25 |  * as *Hobbit*'s first real stab at some | True                          | 
+  26 |  * should have and indeed may have exist | True                          | 
+  27 |  * standard Unix utility.  IMHO, "nc" co | True                          | 
+  28 |  * cp, rm, mv, dd, ls, and all those oth | True                          | 
+  29 |  * =====================                 | True                          | 
+  30 |  *                                       | True                          | 
+  31 |  * Much of author's comments are still r | True                          | 
+  32 |  *                                       | True                          | 
+  33 |  * Functionality removed (rationale):    | True                          | 
+  34 |  * - multiple-port ranges, randomized po | True                          | 
+  35 |  * - telnet support (use telnet)         | True                          | 
+  36 |  * - source routing                      | True                          | 
+  37 |  * - multiple DNS checks                 | True                          | 
+  38 |  * Functionalty which is different from  | True                          | 
+  39 |  * - PROG in '-e PROG' can have ARGS (an | True                          | 
+  40 |  *   Because of this -e option must be l | True                          | 
+  41 | //TODO: remove -e incompatibility?       | True                          | 
+  42 |  * - we don't redirect stderr to the net | True                          | 
+  43 |  *   (PROG can do it itself if needed, b | True                          | 
+  44 |  * - numeric addresses are printed in () | True                          | 
+  45 |  *   port numbers are inside (): (1.2.3. | True                          | 
+  46 |  * - network read errors are reported on | True                          | 
+  47 |  *   (nc 1.10 treats them as EOF)        | True                          | 
+  48 |  * - TCP connects from wrong ip/ports (i | True                          | 
+  49 |  *   on the command line, but accept() s | True                          | 
+  50 |  *   are closed, but we don't exit - we  | True                          | 
+  51 |  * Since bbox 1.22:                      | True                          | 
+  52 |  * - nc exits when _both_ stdin and netw | True                          | 
+  53 |  *   This makes these two commands:      | True                          | 
+  54 |  *    echo "Yes" | nc 127.0.0.1 1234     | True                          | 
+  55 |  *    echo "no" | nc -lp 1234            | True                          | 
+  56 |  *   exchange their data _and exit_ inst | True                          | 
+  57 |  */                                      | True                          | 
+  58 |                                          | True                          | 
+  59 | /* done in nc.c: #include "libbb.h" */   | True                          | 
+  60 |                                          | True                          | 
+  61 | //usage:#if ENABLE_NC_110_COMPAT         | True                          | 
+  62 | //usage:                                 | True                          | 
+  63 | //usage:#define nc_trivial_usage         | True                          | 
+  64 | //usage:       "[OPTIONS] HOST PORT  - c | True                          | 
+  65 | //usage: IF_NC_SERVER("\n"               | True                          | 
+  66 | //usage:       "nc [OPTIONS] -l -p PORT  | True                          | 
+  67 | //usage: )                               | True                          | 
+  68 | //usage:#define nc_full_usage "\n\n"     | True                          | 
+  69 | //usage:       " -e PROG Run PROG after  | True                          | 
+  70 | //usage: IF_NC_SERVER(                   | True                          | 
+  71 | //usage:     "\n -l Listen mode, for inb | True                          | 
+  72 | //usage:     "\n -lk With -e, provides p | True                          | 
+  73 | /* -ll does the same as -lk, but its our | True                          | 
+  74 |  * presumably more widely known. Therefo | True                          | 
+  75 |  * I would like to drop -ll support, but | True                          | 
+  76 |  * and Rob uses it.                      | True                          | 
+  77 |  */                                      | True                          | 
+  78 | //usage: )                               | True                          | 
+  79 | //usage:     "\n -p PORT Local port"     | True                          | 
+  80 | //usage:     "\n -s ADDR Local address"  | True                          | 
+  81 | //usage:     "\n -w SEC Timeout for conn | True                          | 
+  82 | //usage: IF_NC_EXTRA(                    | True                          | 
+  83 | //usage:     "\n -i SEC Delay interval f | True                          | 
+  84 | //usage: )                               | True                          | 
+  85 | //usage:     "\n -n Don't do DNS resolut | True                          | 
+  86 | //usage:     "\n -u UDP mode"            | True                          | 
+  87 | //usage:     "\n -b Allow broadcasts"    | True                          | 
+  88 | //usage:     "\n -v Verbose"             | True                          | 
+  89 | //usage: IF_NC_EXTRA(                    | True                          | 
+  90 | //usage:     "\n -o FILE Hex dump traffi | True                          | 
+  91 | //usage:     "\n -z Zero-I/O mode (scann | True                          | 
+  92 | //usage: )                               | True                          | 
+  93 | //usage:#endif                           | True                          | 
+  94 |                                          | True                          | 
+  95 | /*   "\n -r  Randomize local and remote  | True                          | 
+  96 | /*   "\n -g gateway Source-routing hop p | True                          | 
+  97 | /*   "\n -G num  Source-routing pointer: | True                          | 
+  98 | /*   "\nport numbers can be individual o | True                          | 
+  99 |                                          | True                          | 
+ 100 | /* -e PROG can take ARGS too: "nc ... -e | True                          | 
+ 101 |  * in help text: nc 1.10 does not allow  | True                          | 
+ 102 |  * users to use this incompatibility */  | True                          | 
+ 103 |                                          | True                          | 
+ 104 | enum {                                   | True                          | 
+ 105 |  SLEAZE_PORT = 31337,               /* f | True                          | 
+ 106 |  BIGSIZ = 8192,                     /* b | True                          | 
+ 107 |                                          | True                          | 
+ 108 |  netfd = 3,                              | True                          | 
+ 109 |  ofd = 4,                                | True                          | 
+ 110 | };                                       | True                          | 
+ 111 |                                          | True                          | 
+ 112 | struct globals {                         | True                          | 
+ 113 |  /* global cmd flags: */                 | True                          | 
+ 114 |  unsigned o_verbose;                     | True                          | 
+ 115 |  unsigned o_wait;                        | True                          | 
+ 116 | #if ENABLE_NC_EXTRA                      | True                          | 
+ 117 |  unsigned o_interval;                    | ENABLE_NC_EXTRA               | 
+ 118 | #endif                                   | True                          | 
+ 119 |                                          | True                          | 
+ 120 |  /*int netfd;*/                          | True                          | 
+ 121 |  /*int ofd;*/                     /* hex | True                          | 
+ 122 | #if ENABLE_LFS                           | True                          | 
+ 123 | #define SENT_N_RECV_M "sent %llu, rcvd % | ENABLE_LFS                    | 
+ 124 |  unsigned long long wrote_out;           | ENABLE_LFS                    | 
+ 125 |  unsigned long long wrote_net;           | ENABLE_LFS                    | 
+ 126 | #else                                    | True                          | 
+ 127 | #define SENT_N_RECV_M "sent %u, rcvd %u\ | !ENABLE_LFS                   | 
+ 128 |  unsigned wrote_out;          /* total s | !ENABLE_LFS                   | 
+ 129 |  unsigned wrote_net;          /* total n | !ENABLE_LFS                   | 
+ 130 | #endif                                   | True                          | 
+ 131 |  char *proggie0saved;                    | True                          | 
+ 132 |  /* ouraddr is never NULL and goes throu | True                          | 
+ 133 |   1 - local address before bind (IP/port | True                          | 
+ 134 |   2 - local address after bind (port is  | True                          | 
+ 135 |   3 - local address after connect??/recv | True                          | 
+ 136 |  struct len_and_sockaddr *ouraddr;       | True                          | 
+ 137 |  /* themaddr is NULL if no peer hostname | True                          | 
+ 138 |  struct len_and_sockaddr *themaddr;      | True                          | 
+ 139 |  /* remend is set after connect/recv/acc | True                          | 
+ 140 |  struct len_and_sockaddr remend;         | True                          | 
+ 141 |                                          | True                          | 
+ 142 |  jmp_buf jbuf;                /* timer c | True                          | 
+ 143 |                                          | True                          | 
+ 144 |  char bigbuf_in[BIGSIZ];      /* data bu | True                          | 
+ 145 |  char bigbuf_net[BIGSIZ];                | True                          | 
+ 146 | };                                       | True                          | 
+ 147 |                                          | True                          | 
+ 148 | #define G (*ptr_to_globals)              | True                          | 
+ 149 | #define wrote_out  (G.wrote_out )        | True                          | 
+ 150 | #define wrote_net  (G.wrote_net )        | True                          | 
+ 151 | #define ouraddr    (G.ouraddr   )        | True                          | 
+ 152 | #define themaddr   (G.themaddr  )        | True                          | 
+ 153 | #define remend     (G.remend    )        | True                          | 
+ 154 | #define jbuf       (G.jbuf      )        | True                          | 
+ 155 | #define bigbuf_in  (G.bigbuf_in )        | True                          | 
+ 156 | #define bigbuf_net (G.bigbuf_net)        | True                          | 
+ 157 | #define o_verbose  (G.o_verbose )        | True                          | 
+ 158 | #define o_wait     (G.o_wait    )        | True                          | 
+ 159 | #if ENABLE_NC_EXTRA                      | True                          | 
+ 160 | #define o_interval (G.o_interval)        | ENABLE_NC_EXTRA               | 
+ 161 | #else                                    | True                          | 
+ 162 | #define o_interval 0                     | !ENABLE_NC_EXTRA              | 
+ 163 | #endif                                   | True                          | 
+ 164 | #define INIT_G() do { \                  | True                          | 
+ 165 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                          | 
+ 166 | } while (0)                              | True                          | 
+ 167 |                                          | True                          | 
+ 168 |                                          | True                          | 
+ 169 | /* Must match getopt32 call! */          | True                          | 
+ 170 | enum {                                   | True                          | 
+ 171 |  OPT_n = (1 << 0),                       | True                          | 
+ 172 |  OPT_p = (1 << 1),                       | True                          | 
+ 173 |  OPT_s = (1 << 2),                       | True                          | 
+ 174 |  OPT_u = (1 << 3),                       | True                          | 
+ 175 |  OPT_b = (1 << 4),                       | True                          | 
+ 176 |  OPT_v = (1 << 5),                       | True                          | 
+ 177 |  OPT_w = (1 << 6),                       | True                          | 
+ 178 |  OPT_l = (1 << 7) * ENABLE_NC_SERVER,    | True                          | 
+ 179 |  OPT_k = (1 << 8) * ENABLE_NC_SERVER,    | True                          | 
+ 180 |  OPT_i = (1 << (7+2*ENABLE_NC_SERVER)) * | True                          | 
+ 181 |  OPT_o = (1 << (8+2*ENABLE_NC_SERVER)) * | True                          | 
+ 182 |  OPT_z = (1 << (9+2*ENABLE_NC_SERVER)) * | True                          | 
+ 183 | };                                       | True                          | 
+ 184 |                                          | True                          | 
+ 185 | #define o_nflag   (option_mask32 & OPT_n | True                          | 
+ 186 | #define o_udpmode (option_mask32 & OPT_u | True                          | 
+ 187 | #define o_bcmode  (option_mask32 & OPT_b | True                          | 
+ 188 | #if ENABLE_NC_EXTRA                      | True                          | 
+ 189 | #define o_ofile   (option_mask32 & OPT_o | ENABLE_NC_EXTRA               | 
+ 190 | #define o_zero    (option_mask32 & OPT_z | ENABLE_NC_EXTRA               | 
+ 191 | #else                                    | True                          | 
+ 192 | #define o_ofile   0                      | !ENABLE_NC_EXTRA              | 
+ 193 | #define o_zero    0                      | !ENABLE_NC_EXTRA              | 
+ 194 | #endif                                   | True                          | 
+ 195 |                                          | True                          | 
+ 196 | /* Debug: squirt whatever message and sl | True                          | 
+ 197 | /* Beware: writes to stdOUT... */        | True                          | 
+ 198 | #if 0                                    | True                          | 
+ 199 | #define Debug(...) do { printf(__VA_ARGS | 0                             | 
+ 200 | #else                                    | True                          | 
+ 201 | #define Debug(...) do { } while (0)      | !0                            | 
+ 202 | #endif                                   | True                          | 
+ 203 |                                          | True                          | 
+ 204 | #define holler_error(msg)  do { if (o_ve | True                          | 
+ 205 | #define holler_perror(msg) do { if (o_ve | True                          | 
+ 206 |                                          | True                          | 
+ 207 | /* catch: no-brainer interrupt handler * | True                          | 
+ 208 | static void catch(int sig)               | True                          | 
+ 209 | {                                        | True                          | 
+ 210 |  if (o_verbose > 1)                /* no | True                          | 
+ 211 |   fprintf(stderr, SENT_N_RECV_M, wrote_n | True                          | 
+ 212 |  fprintf(stderr, "punt!\n");             | True                          | 
+ 213 |  kill_myself_with_sig(sig);              | True                          | 
+ 214 | }                                        | True                          | 
+ 215 |                                          | True                          | 
+ 216 | /* unarm  */                             | True                          | 
+ 217 | static void unarm(void)                  | True                          | 
+ 218 | {                                        | True                          | 
+ 219 |  signal(SIGALRM, SIG_IGN);               | True                          | 
+ 220 |  alarm(0);                               | True                          | 
+ 221 | }                                        | True                          | 
+ 222 |                                          | True                          | 
+ 223 | /* timeout and other signal handling cru | True                          | 
+ 224 | static void tmtravel(int sig UNUSED_PARA | True                          | 
+ 225 | {                                        | True                          | 
+ 226 |  unarm();                                | True                          | 
+ 227 |  longjmp(jbuf, 1);                       | True                          | 
+ 228 | }                                        | True                          | 
+ 229 |                                          | True                          | 
+ 230 | /* arm: set the timer.  */               | True                          | 
+ 231 | static void arm(unsigned secs)           | True                          | 
+ 232 | {                                        | True                          | 
+ 233 |  signal(SIGALRM, tmtravel);              | True                          | 
+ 234 |  alarm(secs);                            | True                          | 
+ 235 | }                                        | True                          | 
+ 236 |                                          | True                          | 
+ 237 | /* findline:                             | True                          | 
+ 238 |  find the next newline in a buffer; retu | True                          | 
+ 239 |  or the entire buffer size, so the calle | True                          | 
+ 240 |  Not distinguishing \n vs \r\n for the n | True                          | 
+ 241 | static unsigned findline(char *buf, unsi | True                          | 
+ 242 | {                                        | True                          | 
+ 243 |  char * p;                               | True                          | 
+ 244 |  int x;                                  | True                          | 
+ 245 |  if (!buf)                        /* var | True                          | 
+ 246 |   return 0;                              | True                          | 
+ 247 |  if (siz > BIGSIZ)                       | True                          | 
+ 248 |   return 0;                              | True                          | 
+ 249 |  x = siz;                                | True                          | 
+ 250 |  for (p = buf; x > 0; x--) {             | True                          | 
+ 251 |   if (*p == '\n') {                      | True                          | 
+ 252 |    x = (int) (p - buf);                  | True                          | 
+ 253 |    x++;                        /* 'sokay | True                          | 
+ 254 | Debug("findline returning %d", x);       | True                          | 
+ 255 |    return x;                             | True                          | 
+ 256 |   }                                      | True                          | 
+ 257 |   p++;                                   | True                          | 
+ 258 |  } /* for */                             | True                          | 
+ 259 | Debug("findline returning whole thing: % | True                          | 
+ 260 |  return siz;                             | True                          | 
+ 261 | } /* findline */                         | True                          | 
+ 262 |                                          | True                          | 
+ 263 | /* doexec:                               | True                          | 
+ 264 |  fiddle all the file descriptors around, | True                          | 
+ 265 |  of like a one-off "poor man's inetd".   | True                          | 
+ 266 |  that would be security-critical, which  | True                          | 
+ 267 |  Use at your own hairy risk; if you leav | True                          | 
+ 268 |  listening ports you deserve to lose!! * | True                          | 
+ 269 | static int doexec(char **proggie) NORETU | True                          | 
+ 270 | static int doexec(char **proggie)        | True                          | 
+ 271 | {                                        | True                          | 
+ 272 |  if (G.proggie0saved)                    | True                          | 
+ 273 |   proggie[0] = G.proggie0saved;          | True                          | 
+ 274 |  xmove_fd(netfd, 0);                     | True                          | 
+ 275 |  dup2(0, 1);                             | True                          | 
+ 276 |  /* dup2(0, 2); - do we *really* want th | True                          | 
+ 277 |   * exec'ed prog can do it yourself, if  | True                          | 
+ 278 |  BB_EXECVP_or_die(proggie);              | True                          | 
+ 279 | }                                        | True                          | 
+ 280 |                                          | True                          | 
+ 281 | /* connect_w_timeout:                    | True                          | 
+ 282 |  return an fd for one of                 | True                          | 
+ 283 |  an open outbound TCP connection, a UDP  | True                          | 
+ 284 |  an unconnected TCP or UDP socket to lis | True                          | 
+ 285 |  Examines various global o_blah flags to | True                          | 
+ 286 |  lad can be NULL, then socket is not bou | True                          | 
+ 287 | static int connect_w_timeout(int fd)     | True                          | 
+ 288 | {                                        | True                          | 
+ 289 |  int rr;                                 | True                          | 
+ 290 |                                          | True                          | 
+ 291 |  /* wrap connect inside a timer, and hit | True                          | 
+ 292 |  arm(o_wait);                            | True                          | 
+ 293 |  if (setjmp(jbuf) == 0) {                | True                          | 
+ 294 |   rr = connect(fd, &themaddr->u.sa, them | True                          | 
+ 295 |   unarm();                               | True                          | 
+ 296 |  } else { /* setjmp: connect failed... * | True                          | 
+ 297 |   rr = -1;                               | True                          | 
+ 298 |   errno = ETIMEDOUT; /* fake it */       | True                          | 
+ 299 |  }                                       | True                          | 
+ 300 |  return rr;                              | True                          | 
+ 301 | }                                        | True                          | 
+ 302 |                                          | True                          | 
+ 303 | /* dolisten:                             | True                          | 
+ 304 |  listens for                             | True                          | 
+ 305 |  incoming and returns an open connection | True                          | 
+ 306 |  given host/port args, any connections f | True                          | 
+ 307 |  in conjunction with local-address bindi | True                          | 
+ 308 | static void dolisten(int is_persistent,  | True                          | 
+ 309 | {                                        | True                          | 
+ 310 |  int rr;                                 | True                          | 
+ 311 |                                          | True                          | 
+ 312 |  if (!o_udpmode)                         | True                          | 
+ 313 |   xlisten(netfd, 1); /* TCP: gotta liste | True                          | 
+ 314 |                                          | True                          | 
+ 315 |  /* Various things that follow temporari | True                          | 
+ 316 |   a copy of any recvfrom()ed packet, but | True                          | 
+ 317 |                                          | True                          | 
+ 318 |  /* I can't believe I have to do all thi | True                          | 
+ 319 |   and port number.  It should just get f | True                          | 
+ 320 |   All this is only useful if we didn't s | True                          | 
+ 321 |   said -p we *know* what port we're list | True                          | 
+ 322 |   with it all unless we wanted to see it | True                          | 
+ 323 |   random unknown port is probably not ve | True                          | 
+ 324 |  if (o_verbose) {                        | True                          | 
+ 325 |   char *addr;                            | True                          | 
+ 326 |   getsockname(netfd, &ouraddr->u.sa, &ou | True                          | 
+ 327 |   //if (rr < 0)                          | True                          | 
+ 328 |   // bb_perror_msg_and_die("getsockname  | True                          | 
+ 329 |   addr = xmalloc_sockaddr2dotted(&ouradd | True                          | 
+ 330 |   fprintf(stderr, "listening on %s ...\n | True                          | 
+ 331 |   free(addr);                            | True                          | 
+ 332 |  }                                       | True                          | 
+ 333 |                                          | True                          | 
+ 334 |  if (o_udpmode) {                        | True                          | 
+ 335 |   /* UDP is a speeeeecial case -- we hav | True                          | 
+ 336 |    party's particulars all at once, list | True                          | 
+ 337 |    At least in the BSD universe, however | True                          | 
+ 338 |    us something came in, and we can set  | True                          | 
+ 339 |    actually does work after all.  Yow.   | True                          | 
+ 340 |                                          | True                          | 
+ 341 |   /* I'm not completely clear on how thi | True                          | 
+ 342 |    just magically work in a connect()ed  | True                          | 
+ 343 |    into systems this deal doesn't work o | True                          | 
+ 344 |    issue a connect() on our just-tickled | True                          | 
+ 345 |    Again, why the fuck doesn't it just g | True                          | 
+ 346 |    This hack is anything but optimal.  B | True                          | 
+ 347 |    to also be able to send data back, yo | True                          | 
+ 348 |    also has the side effect that now any | True                          | 
+ 349 |    different port on the other end won't | True                          | 
+ 350 |    I guess that's what they meant by "co | True                          | 
+ 351 |    Let's try to remember what the "U" is | True                          | 
+ 352 |                                          | True                          | 
+ 353 |   /* If peer address is specified, conne | True                          | 
+ 354 |   remend.len = LSA_SIZEOF_SA;            | True                          | 
+ 355 |   if (themaddr) {                        | True                          | 
+ 356 |    remend = *themaddr;                   | True                          | 
+ 357 |    xconnect(netfd, &themaddr->u.sa, them | True                          | 
+ 358 |   }                                      | True                          | 
+ 359 |   /* peek first packet and remember peer | True                          | 
+ 360 |   arm(o_wait);                /* might a | True                          | 
+ 361 |   if (setjmp(jbuf) == 0) {       /* do t | True                          | 
+ 362 |    /* (*ouraddr) is prefilled with "defa | True                          | 
+ 363 |    /* and here we block... */            | True                          | 
+ 364 |    rr = recv_from_to(netfd, NULL, 0, MSG | True                          | 
+ 365 |     &remend.u.sa, &ouraddr->u.sa, ouradd | True                          | 
+ 366 |    if (rr < 0)                           | True                          | 
+ 367 |     bb_simple_perror_msg_and_die("recvfr | True                          | 
+ 368 |    unarm();                              | True                          | 
+ 369 |   } else                                 | True                          | 
+ 370 |    bb_simple_error_msg_and_die("timeout" | True                          | 
+ 371 | /* Now we learned *to which IP* peer has | True                          | 
+ 372 | our socket on it, so that our outbound p | True                          | 
+ 373 | Unfortunately, bind() on already bound s | True                          | 
+ 374 |  xbind(netfd, &ouraddr->u.sa, ouraddr->l | True                          | 
+ 375 | Need to read the packet, save data, clos | True                          | 
+ 376 | create new one, and bind() it. TODO */   | True                          | 
+ 377 |   if (!themaddr)                         | True                          | 
+ 378 |    xconnect(netfd, &remend.u.sa, ouraddr | True                          | 
+ 379 |  } else {                                | True                          | 
+ 380 |   /* TCP */                              | True                          | 
+ 381 |  another:                                | True                          | 
+ 382 |   arm(o_wait); /* wrap this in a timer,  | True                          | 
+ 383 |   if (setjmp(jbuf) == 0) {               | True                          | 
+ 384 |  again:                                  | True                          | 
+ 385 |    remend.len = LSA_SIZEOF_SA;           | True                          | 
+ 386 |    rr = accept(netfd, &remend.u.sa, &rem | True                          | 
+ 387 |    if (rr < 0)                           | True                          | 
+ 388 |     bb_simple_perror_msg_and_die("accept | True                          | 
+ 389 |    if (themaddr) {                       | True                          | 
+ 390 |     int sv_port, port, r;                | True                          | 
+ 391 |                                          | True                          | 
+ 392 |     sv_port = get_nport(&remend.u.sa); / | True                          | 
+ 393 |     port = get_nport(&themaddr->u.sa);   | True                          | 
+ 394 |     if (port == 0) {                     | True                          | 
+ 395 |      /* "nc -nl -p LPORT RHOST" (w/o RPO | True                          | 
+ 396 |       * we should accept any remote port | True                          | 
+ 397 |      set_nport(&remend.u.sa, 0); /* blot | True                          | 
+ 398 |     }                                    | True                          | 
+ 399 |     r = memcmp(&remend.u.sa, &themaddr-> | True                          | 
+ 400 |     set_nport(&remend.u.sa, sv_port); /* | True                          | 
+ 401 |     if (r != 0) {                        | True                          | 
+ 402 |      /* nc 1.10 bails out instead, and i | True                          | 
+ 403 |       * is not suppressed by o_verbose * | True                          | 
+ 404 |      if (o_verbose) {                    | True                          | 
+ 405 |       char *remaddr = xmalloc_sockaddr2d | True                          | 
+ 406 |       bb_error_msg("connect from wrong i | True                          | 
+ 407 |       free(remaddr);                     | True                          | 
+ 408 |      }                                   | True                          | 
+ 409 |      close(rr);                          | True                          | 
+ 410 |      goto again;                         | True                          | 
+ 411 |     }                                    | True                          | 
+ 412 |    }                                     | True                          | 
+ 413 |    unarm();                              | True                          | 
+ 414 |   } else                                 | True                          | 
+ 415 |    bb_simple_error_msg_and_die("timeout" | True                          | 
+ 416 |                                          | True                          | 
+ 417 |   if (is_persistent && proggie) {        | True                          | 
+ 418 |    /* -l -k -e PROG */                   | True                          | 
+ 419 |    signal(SIGCHLD, SIG_IGN); /* no zombi | True                          | 
+ 420 |    if (xvfork() != 0) {                  | True                          | 
+ 421 |     /* parent: go back and accept more c | True                          | 
+ 422 |     close(rr);                           | True                          | 
+ 423 |     goto another;                        | True                          | 
+ 424 |    }                                     | True                          | 
+ 425 |    /* child */                           | True                          | 
+ 426 |    signal(SIGCHLD, SIG_DFL);             | True                          | 
+ 427 |   }                                      | True                          | 
+ 428 |                                          | True                          | 
+ 429 |   xmove_fd(rr, netfd); /* dump the old s | True                          | 
+ 430 |   /* find out what address the connectio | True                          | 
+ 431 |    doing a listen-on-any on a multihomed | True                          | 
+ 432 |    offer different services via differen | True                          | 
+ 433 |    "virtual web site" hack. */           | True                          | 
+ 434 |   getsockname(netfd, &ouraddr->u.sa, &ou | True                          | 
+ 435 |   //if (rr < 0)                          | True                          | 
+ 436 |   // bb_perror_msg_and_die("getsockname  | True                          | 
+ 437 |  }                                       | True                          | 
+ 438 |                                          | True                          | 
+ 439 |  if (o_verbose) {                        | True                          | 
+ 440 |   char *lcladdr, *remaddr, *remhostname; | True                          | 
+ 441 |                                          | True                          | 
+ 442 | #if ENABLE_NC_EXTRA && defined(IP_OPTION | True                          | 
+ 443 |  /* If we can, look for any IP options.  | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 444 |   such things, and is a good exercise in | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 445 |   the connect message, to ensure that th | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 446 |   thing to emerge after all the interven | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 447 |   any machines I've tested, but feel fre | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 448 |   char optbuf[40];                       | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 449 |   socklen_t x = sizeof(optbuf);          | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 450 |                                          | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 451 |   rr = getsockopt(netfd, IPPROTO_IP, IP_ | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 452 |   if (rr >= 0 && x) {    /* we've got op | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 453 |    *bin2hex(bigbuf_net, optbuf, x) = '\0 | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 454 |    fprintf(stderr, "IP options: %s\n", b | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 455 |   }                                      | ENABLE_NC_EXTRA&&(IP_OPTIONS) | 
+ 456 | #endif                                   | True                          | 
+ 457 |                                          | True                          | 
+ 458 |  /* now check out who it is.  We don't c | True                          | 
+ 459 |   but any ADDR and PORT we specified had | True                          | 
+ 460 |   Converting from addr to inet_ntoa and  | True                          | 
+ 461 |   gethostpoop wants a string and there's | True                          | 
+ 462 |   so I don't feel bad.                   | True                          | 
+ 463 |   The *real* question is why BFD sockets | True                          | 
+ 464 |   connections *from* specific hosts/port | True                          | 
+ 465 |   accept the connection and then reject  | True                          | 
+ 466 |   In other words, we need a TCP MSG_PEEK | True                          | 
+ 467 |  /* bbox: removed most of it */          | True                          | 
+ 468 |   lcladdr = xmalloc_sockaddr2dotted(&our | True                          | 
+ 469 |   remaddr = xmalloc_sockaddr2dotted(&rem | True                          | 
+ 470 |   remhostname = o_nflag ? remaddr : xmal | True                          | 
+ 471 |   fprintf(stderr, "connect to %s from %s | True                          | 
+ 472 |     lcladdr, remhostname, remaddr);      | True                          | 
+ 473 |   free(lcladdr);                         | True                          | 
+ 474 |   free(remaddr);                         | True                          | 
+ 475 |   if (!o_nflag)                          | True                          | 
+ 476 |    free(remhostname);                    | True                          | 
+ 477 |  }                                       | True                          | 
+ 478 |                                          | True                          | 
+ 479 |  if (proggie)                            | True                          | 
+ 480 |   doexec(proggie);                       | True                          | 
+ 481 | }                                        | True                          | 
+ 482 |                                          | True                          | 
+ 483 | /* udptest:                              | True                          | 
+ 484 |  fire a couple of packets at a UDP targe | True                          | 
+ 485 |  there.  On BSD kernels, ICMP host/port- | True                          | 
+ 486 |  our socket as ECONNREFUSED write errors | True                          | 
+ 487 |  to collect and analyze raw ICMP ourselv | True                          | 
+ 488 |  backend.  Guess where one could swipe t | True                          | 
+ 489 |                                          | True                          | 
+ 490 |  Use the time delay between writes if gi | True                          | 
+ 491 |  trick for getting the RTT.  [I got that | True                          | 
+ 492 |  Return either the original fd, or clean | True                          | 
+ 493 | #if ENABLE_NC_EXTRA                      | True                          | 
+ 494 | static int udptest(void)                 | ENABLE_NC_EXTRA               | 
+ 495 | {                                        | ENABLE_NC_EXTRA               | 
+ 496 |  int rr;                                 | ENABLE_NC_EXTRA               | 
+ 497 |                                          | ENABLE_NC_EXTRA               | 
+ 498 |  rr = write(netfd, bigbuf_in, 1);        | ENABLE_NC_EXTRA               | 
+ 499 |  if (rr != 1)                            | ENABLE_NC_EXTRA               | 
+ 500 |   bb_simple_perror_msg("udptest first wr | ENABLE_NC_EXTRA               | 
+ 501 |                                          | ENABLE_NC_EXTRA               | 
+ 502 |  if (o_wait)                             | ENABLE_NC_EXTRA               | 
+ 503 |   sleep(o_wait); // can be interrupted!  | ENABLE_NC_EXTRA               | 
+ 504 |  else {                                  | ENABLE_NC_EXTRA               | 
+ 505 |  /* use the tcp-ping trick: try connecti | ENABLE_NC_EXTRA               | 
+ 506 |   causes us to block for the time that S | ENABLE_NC_EXTRA               | 
+ 507 |   Not completely reliable, but it *does* | ENABLE_NC_EXTRA               | 
+ 508 |  /* Set a temporary connect timeout, so  | ENABLE_NC_EXTRA               | 
+ 509 |   us to hang forever, and hit it */      | ENABLE_NC_EXTRA               | 
+ 510 |   o_wait = 5;                     /* eno | ENABLE_NC_EXTRA               | 
+ 511 |   rr = xsocket(ouraddr->u.sa.sa_family,  | ENABLE_NC_EXTRA               | 
+ 512 |   set_nport(&themaddr->u.sa, htons(SLEAZ | ENABLE_NC_EXTRA               | 
+ 513 |   connect_w_timeout(rr);                 | ENABLE_NC_EXTRA               | 
+ 514 |   /* don't need to restore themaddr's po | ENABLE_NC_EXTRA               | 
+ 515 |   close(rr);                             | ENABLE_NC_EXTRA               | 
+ 516 |   o_wait = 0; /* restore */              | ENABLE_NC_EXTRA               | 
+ 517 |  }                                       | ENABLE_NC_EXTRA               | 
+ 518 |                                          | ENABLE_NC_EXTRA               | 
+ 519 |  rr = write(netfd, bigbuf_in, 1);        | ENABLE_NC_EXTRA               | 
+ 520 |  return (rr != 1); /* if rr == 1, return | ENABLE_NC_EXTRA               | 
+ 521 | }                                        | ENABLE_NC_EXTRA               | 
+ 522 | #else                                    | True                          | 
+ 523 | int udptest(void);                       | !ENABLE_NC_EXTRA              | 
+ 524 | #endif                                   | True                          | 
+ 525 |                                          | True                          | 
+ 526 | /* oprint:                               | True                          | 
+ 527 |  Hexdump bytes shoveled either way to a  | True                          | 
+ 528 |  D offset       -  - - - --- 16 bytes -- | True                          | 
+ 529 |  where "which" sets the direction indica | True                          | 
+ 530 |  0 -- sent to network, or ">"            | True                          | 
+ 531 |  1 -- rcvd and printed to stdout, or "<" | True                          | 
+ 532 |  and "buf" and "n" are data-block and le | True                          | 
+ 533 |  a partial line, so be it; we *want* tha | True                          | 
+ 534 |  what when.  Adapted from dgaudet's orig | True                          | 
+ 535 |  *fast*, since we don't want to be too d | True                          | 
+ 536 | #if ENABLE_NC_EXTRA                      | True                          | 
+ 537 | static void oprint(int direction, unsign | ENABLE_NC_EXTRA               | 
+ 538 | {                                        | ENABLE_NC_EXTRA               | 
+ 539 |  unsigned obc;           /* current "glo | ENABLE_NC_EXTRA               | 
+ 540 |  unsigned x;                             | ENABLE_NC_EXTRA               | 
+ 541 |  unsigned char *op;      /* out hexdump  | ENABLE_NC_EXTRA               | 
+ 542 |  unsigned char *ap;      /* out asc-dump | ENABLE_NC_EXTRA               | 
+ 543 |  unsigned char stage[100];               | ENABLE_NC_EXTRA               | 
+ 544 |                                          | ENABLE_NC_EXTRA               | 
+ 545 |  if (bc == 0)                            | ENABLE_NC_EXTRA               | 
+ 546 |   return;                                | ENABLE_NC_EXTRA               | 
+ 547 |                                          | ENABLE_NC_EXTRA               | 
+ 548 |  obc = wrote_net; /* use the globals! */ | ENABLE_NC_EXTRA               | 
+ 549 |  if (direction == '<')                   | ENABLE_NC_EXTRA               | 
+ 550 |   obc = wrote_out;                       | ENABLE_NC_EXTRA               | 
+ 551 |  stage[0] = direction;                   | ENABLE_NC_EXTRA               | 
+ 552 |  stage[59] = '#'; /* preload separator * | ENABLE_NC_EXTRA               | 
+ 553 |  stage[60] = ' ';                        | ENABLE_NC_EXTRA               | 
+ 554 |                                          | ENABLE_NC_EXTRA               | 
+ 555 |  do {    /* for chunk-o-data ... */      | ENABLE_NC_EXTRA               | 
+ 556 |   x = 16;                                | ENABLE_NC_EXTRA               | 
+ 557 |   if (bc < 16) {                         | ENABLE_NC_EXTRA               | 
+ 558 |    /* memset(&stage[bc*3 + 11], ' ', 16* | ENABLE_NC_EXTRA               | 
+ 559 |    memset(&stage[11], ' ', 16*3);        | ENABLE_NC_EXTRA               | 
+ 560 |    x = bc;                               | ENABLE_NC_EXTRA               | 
+ 561 |   }                                      | ENABLE_NC_EXTRA               | 
+ 562 |   sprintf((char *)&stage[1], " %8.8x ",  | ENABLE_NC_EXTRA               | 
+ 563 |   bc -= x;          /* fix current count | ENABLE_NC_EXTRA               | 
+ 564 |   obc += x;         /* fix current offse | ENABLE_NC_EXTRA               | 
+ 565 |   op = &stage[11];  /* where hex starts  | ENABLE_NC_EXTRA               | 
+ 566 |   ap = &stage[61];  /* where ascii start | ENABLE_NC_EXTRA               | 
+ 567 |                                          | ENABLE_NC_EXTRA               | 
+ 568 |   do {  /* for line of dump, however lon | ENABLE_NC_EXTRA               | 
+ 569 |    *op++ = 0x20 | bb_hexdigits_upcase[*p | ENABLE_NC_EXTRA               | 
+ 570 |    *op++ = 0x20 | bb_hexdigits_upcase[*p | ENABLE_NC_EXTRA               | 
+ 571 |    *op++ = ' ';                          | ENABLE_NC_EXTRA               | 
+ 572 |    if ((*p > 31) && (*p < 127))          | ENABLE_NC_EXTRA               | 
+ 573 |     *ap = *p;   /* printing */           | ENABLE_NC_EXTRA               | 
+ 574 |    else                                  | ENABLE_NC_EXTRA               | 
+ 575 |     *ap = '.';  /* nonprinting, loose de | ENABLE_NC_EXTRA               | 
+ 576 |    ap++;                                 | ENABLE_NC_EXTRA               | 
+ 577 |    p++;                                  | ENABLE_NC_EXTRA               | 
+ 578 |   } while (--x);                         | ENABLE_NC_EXTRA               | 
+ 579 |   *ap++ = '\n';  /* finish the line */   | ENABLE_NC_EXTRA               | 
+ 580 |   xwrite(ofd, stage, ap - stage);        | ENABLE_NC_EXTRA               | 
+ 581 |  } while (bc);                           | ENABLE_NC_EXTRA               | 
+ 582 | }                                        | ENABLE_NC_EXTRA               | 
+ 583 | #else                                    | True                          | 
+ 584 | void oprint(int direction, unsigned char | !ENABLE_NC_EXTRA              | 
+ 585 | #endif                                   | True                          | 
+ 586 |                                          | True                          | 
+ 587 | /* readwrite:                            | True                          | 
+ 588 |  handle stdin/stdout/network I/O.  Bwaha | True                          | 
+ 589 |  In this instance, return what might bec | True                          | 
+ 590 | static int readwrite(void)               | True                          | 
+ 591 | {                                        | True                          | 
+ 592 |  char *zp = zp; /* gcc */  /* stdin buf  | True                          | 
+ 593 |  char *np = np;            /* net-in buf | True                          | 
+ 594 |  unsigned rzleft;                        | True                          | 
+ 595 |  unsigned rnleft;                        | True                          | 
+ 596 |  unsigned netretry;              /* net- | True                          | 
+ 597 |  unsigned fds_open;                      | True                          | 
+ 598 |                                          | True                          | 
+ 599 |  struct pollfd pfds[2];                  | True                          | 
+ 600 |  pfds[0].fd = STDIN_FILENO;              | True                          | 
+ 601 |  pfds[0].events = POLLIN;                | True                          | 
+ 602 |  pfds[1].fd = netfd;                     | True                          | 
+ 603 |  pfds[1].events = POLLIN;                | True                          | 
+ 604 |                                          | True                          | 
+ 605 |  fds_open = 2;                           | True                          | 
+ 606 |  netretry = 2;                           | True                          | 
+ 607 |  rzleft = rnleft = 0;                    | True                          | 
+ 608 |  if (o_interval)                         | True                          | 
+ 609 |   sleep(o_interval);                /* p | True                          | 
+ 610 |                                          | True                          | 
+ 611 |  /* and now the big ol' shoveling loop . | True                          | 
+ 612 |  /* nc 1.10 has "while (FD_ISSET(netfd)" | True                          | 
+ 613 |  while (fds_open) {                      | True                          | 
+ 614 |   int rr;                                | True                          | 
+ 615 |   int poll_tmout_ms;                     | True                          | 
+ 616 |   unsigned wretry = 8200;                | True                          | 
+ 617 |                                          | True                          | 
+ 618 |   poll_tmout_ms = -1;                    | True                          | 
+ 619 |   if (o_wait) {                          | True                          | 
+ 620 |    poll_tmout_ms = INT_MAX;              | True                          | 
+ 621 |    if (o_wait < INT_MAX / 1000)          | True                          | 
+ 622 |     poll_tmout_ms = o_wait * 1000;       | True                          | 
+ 623 |   }                                      | True                          | 
+ 624 |   rr = poll(pfds, 2, poll_tmout_ms);     | True                          | 
+ 625 |   if (rr < 0 && errno != EINTR) {        | True                          | 
+ 626 |    holler_perror("poll");                | True                          | 
+ 627 |    close(netfd);                         | True                          | 
+ 628 |    return 1;                             | True                          | 
+ 629 |   }                                      | True                          | 
+ 630 |  /* if we have a timeout AND stdin is cl | True                          | 
+ 631 |   from the net during that time, assume  | True                          | 
+ 632 |   if (rr == 0) {                         | True                          | 
+ 633 |    if (!pfds[0].revents) {               | True                          | 
+ 634 |     netretry--;                        / | True                          | 
+ 635 |     if (!netretry) {                     | True                          | 
+ 636 |      if (o_verbose > 1)         /* norma | True                          | 
+ 637 |       fprintf(stderr, "net timeout\n");  | True                          | 
+ 638 |      /*close(netfd); - redundant, exit w | True                          | 
+ 639 |      return 0;                  /* not a | True                          | 
+ 640 |     }                                    | True                          | 
+ 641 |    }                                     | True                          | 
+ 642 |   } /* timeout */                        | True                          | 
+ 643 |                                          | True                          | 
+ 644 |  /* Ding!!  Something arrived, go check  | True                          | 
+ 645 |   if (pfds[1].revents) {                 | True                          | 
+ 646 |    rr = read(netfd, bigbuf_net, BIGSIZ); | True                          | 
+ 647 |    if (rr <= 0) {                        | True                          | 
+ 648 |     if (rr < 0 && o_verbose > 1) {       | True                          | 
+ 649 |      /* nc 1.10 doesn't do this */       | True                          | 
+ 650 |      bb_simple_perror_msg("net read");   | True                          | 
+ 651 |     }                                    | True                          | 
+ 652 |     pfds[1].fd = -1;                   / | True                          | 
+ 653 |     fds_open--;                          | True                          | 
+ 654 |     rzleft = 0;                        / | True                          | 
+ 655 |    } else {                              | True                          | 
+ 656 |     rnleft = rr;                         | True                          | 
+ 657 |     np = bigbuf_net;                     | True                          | 
+ 658 |    }                                     | True                          | 
+ 659 | Debug("got %d from the net, errno %d", r | True                          | 
+ 660 |   } /* net:ding */                       | True                          | 
+ 661 |                                          | True                          | 
+ 662 |  /* if we're in "slowly" mode there's pr | True                          | 
+ 663 |   buffer, so don't read unless we really | True                          | 
+ 664 |   if (rzleft)                            | True                          | 
+ 665 |    goto shovel;                          | True                          | 
+ 666 |                                          | True                          | 
+ 667 |  /* okay, suck more stdin */             | True                          | 
+ 668 |   if (pfds[0].revents) {                 | True                          | 
+ 669 |    rr = read(STDIN_FILENO, bigbuf_in, BI | True                          | 
+ 670 |  /* Considered making reads here smaller | True                          | 
+ 671 |   mobygrams are kinda fun and exercise t | True                          | 
+ 672 |    if (rr <= 0) {                        | True                          | 
+ 673 |     pfds[0].fd = -1;              /* dis | True                          | 
+ 674 |     /*close(STDIN_FILENO); - not really  | True                          | 
+ 675 |     /* Let peer know we have no more dat | True                          | 
+ 676 |     /* nc 1.10 doesn't do this: */       | True                          | 
+ 677 |     shutdown(netfd, SHUT_WR);            | True                          | 
+ 678 |     fds_open--;                          | True                          | 
+ 679 |    } else {                              | True                          | 
+ 680 |     rzleft = rr;                         | True                          | 
+ 681 |     zp = bigbuf_in;                      | True                          | 
+ 682 |    }                                     | True                          | 
+ 683 |   } /* stdin:ding */                     | True                          | 
+ 684 |  shovel:                                 | True                          | 
+ 685 |  /* now that we've dingdonged all our th | True                          | 
+ 686 |   Geez, why does this look an awful lot  | True                          | 
+ 687 |   not sure if the order of this matters, | True                          | 
+ 688 |                                          | True                          | 
+ 689 |   if (rnleft) {                          | True                          | 
+ 690 |    rr = write(STDOUT_FILENO, np, rnleft) | True                          | 
+ 691 |    if (rr > 0) {                         | True                          | 
+ 692 |     if (o_ofile) /* log the stdout */    | True                          | 
+ 693 |      oprint('<', (unsigned char *)np, rr | True                          | 
+ 694 |     np += rr;                            | True                          | 
+ 695 |     rnleft -= rr;                        | True                          | 
+ 696 |     wrote_out += rr; /* global count */  | True                          | 
+ 697 |    }                                     | True                          | 
+ 698 | Debug("wrote %d to stdout, errno %d", rr | True                          | 
+ 699 |   } /* rnleft */                         | True                          | 
+ 700 |   if (rzleft) {                          | True                          | 
+ 701 |    if (o_interval)                       | True                          | 
+ 702 |     rr = findline(zp, rzleft);           | True                          | 
+ 703 |    else                                  | True                          | 
+ 704 |     rr = rzleft;                         | True                          | 
+ 705 |    rr = write(netfd, zp, rr);        /*  | True                          | 
+ 706 |    if (rr > 0) {                         | True                          | 
+ 707 |     if (o_ofile) /* log what got sent */ | True                          | 
+ 708 |      oprint('>', (unsigned char *)zp, rr | True                          | 
+ 709 |     zp += rr;                            | True                          | 
+ 710 |     rzleft -= rr;                        | True                          | 
+ 711 |     wrote_net += rr; /* global count */  | True                          | 
+ 712 |    }                                     | True                          | 
+ 713 | Debug("wrote %d to net, errno %d", rr, e | True                          | 
+ 714 |   } /* rzleft */                         | True                          | 
+ 715 |   if (o_interval) {                      | True                          | 
+ 716 |    sleep(o_interval);                    | True                          | 
+ 717 |    continue;                        /* . | True                          | 
+ 718 |   }                                      | True                          | 
+ 719 |   if (rzleft || rnleft) {                | True                          | 
+ 720 |    wretry--;                        /* n | True                          | 
+ 721 |  /* net write retries sometimes happen o | True                          | 
+ 722 |    if (!wretry) {                   /* i | True                          | 
+ 723 |     holler_error("too many output retrie | True                          | 
+ 724 |     return 1;                            | True                          | 
+ 725 |    }                                     | True                          | 
+ 726 |    goto shovel;                          | True                          | 
+ 727 |   }                                      | True                          | 
+ 728 |  } /* while (fds_open) */                | True                          | 
+ 729 |                                          | True                          | 
+ 730 |  /* XXX: maybe want a more graceful shut | True                          | 
+ 731 |   linger times??  I suspect that I don't | True                          | 
+ 732 |   blocking reads and writes and my own m | True                          | 
+ 733 |   the net again after a timeout.  I have | True                          | 
+ 734 |   not like my test network is particular | True                          | 
+ 735 |  close(netfd);                           | True                          | 
+ 736 |  return 0;                               | True                          | 
+ 737 | } /* readwrite */                        | True                          | 
+ 738 |                                          | True                          | 
+ 739 | /* main: now we pull it all together...  | True                          | 
+ 740 | int nc_main(int argc, char **argv) MAIN_ | True                          | 
+ 741 | int nc_main(int argc UNUSED_PARAM, char  | True                          | 
+ 742 | {                                        | True                          | 
+ 743 |  char *str_p, *str_s;                    | True                          | 
+ 744 |  IF_NC_EXTRA(char *str_i, *str_o;)       | True                          | 
+ 745 |  char *themdotted = themdotted; /* for c | True                          | 
+ 746 |  char **proggie;                         | True                          | 
+ 747 |  int x;                                  | True                          | 
+ 748 |  unsigned cnt_l = 0;                     | True                          | 
+ 749 |  unsigned o_lport = 0;                   | True                          | 
+ 750 |                                          | True                          | 
+ 751 |  INIT_G();                               | True                          | 
+ 752 |                                          | True                          | 
+ 753 |  /* catch a signal or two for cleanup */ | True                          | 
+ 754 |  bb_signals(0                            | True                          | 
+ 755 |   + (1 << SIGINT)                        | True                          | 
+ 756 |   + (1 << SIGQUIT)                       | True                          | 
+ 757 |   + (1 << SIGTERM)                       | True                          | 
+ 758 |   , catch);                              | True                          | 
+ 759 |  /* and suppress others... */            | True                          | 
+ 760 |  bb_signals(0                            | True                          | 
+ 761 | #ifdef SIGURG                            | True                          | 
+ 762 |   + (1 << SIGURG)                        | (SIGURG)                      | 
+ 763 | #endif                                   | True                          | 
+ 764 |   + (1 << SIGPIPE) /* important! */      | True                          | 
+ 765 |   , SIG_IGN);                            | True                          | 
+ 766 |                                          | True                          | 
+ 767 |  proggie = argv;                         | True                          | 
+ 768 |  while (*++proggie) {                    | True                          | 
+ 769 |   if (strcmp(*proggie, "-e") == 0) {     | True                          | 
+ 770 |    *proggie = NULL;                      | True                          | 
+ 771 |    proggie++;                            | True                          | 
+ 772 |    goto e_found;                         | True                          | 
+ 773 |   }                                      | True                          | 
+ 774 |   /* -<other_opts>e PROG [ARGS] ? */     | True                          | 
+ 775 |   /* (aboriginal linux uses this form) * | True                          | 
+ 776 |   if (proggie[0][0] == '-') {            | True                          | 
+ 777 |    char *optpos = *proggie + 1;          | True                          | 
+ 778 |    /* Skip all valid opts w/o params */  | True                          | 
+ 779 |    optpos = optpos + strspn(optpos, "nuv | True                          | 
+ 780 |    if (*optpos == 'e' && !optpos[1]) {   | True                          | 
+ 781 |     *optpos = '\0';                      | True                          | 
+ 782 |     proggie++;                           | True                          | 
+ 783 |     G.proggie0saved = *proggie;          | True                          | 
+ 784 |     *proggie = NULL; /* terminate argv f | True                          | 
+ 785 |     goto e_found;                        | True                          | 
+ 786 |    }                                     | True                          | 
+ 787 |   }                                      | True                          | 
+ 788 |  }                                       | True                          | 
+ 789 |  proggie = NULL;                         | True                          | 
+ 790 |  e_found:                                | True                          | 
+ 791 |                                          | True                          | 
+ 792 |  // -g -G -t -r deleted, unimplemented - | True                          | 
+ 793 |  getopt32(argv, "^"                      | True                          | 
+ 794 |   "np:s:ubvw:+"/* -w N */ IF_NC_SERVER(" | True                          | 
+ 795 |   IF_NC_EXTRA("i:o:z")                   | True                          | 
+ 796 |    "\0"                                  | True                          | 
+ 797 |    "?2:vv"IF_NC_SERVER(":ll"), /* max 2  | True                          | 
+ 798 |   &str_p, &str_s, &o_wait                | True                          | 
+ 799 |   IF_NC_EXTRA(, &str_i, &str_o)          | True                          | 
+ 800 |    , &o_verbose IF_NC_SERVER(, &cnt_l)   | True                          | 
+ 801 |  );                                      | True                          | 
+ 802 |  argv += optind;                         | True                          | 
+ 803 | #if ENABLE_NC_EXTRA                      | True                          | 
+ 804 |  if (option_mask32 & OPT_i) /* line-inte | ENABLE_NC_EXTRA               | 
+ 805 |   o_interval = xatou_range(str_i, 1, 0xf | ENABLE_NC_EXTRA               | 
+ 806 | #endif                                   | True                          | 
+ 807 | #if ENABLE_NC_SERVER                     | True                          | 
+ 808 |  //if (option_mask32 & OPT_l) /* listen  | ENABLE_NC_SERVER              | 
+ 809 |  if (option_mask32 & OPT_k) /* persisten | ENABLE_NC_SERVER              | 
+ 810 |   cnt_l = 2;                             | ENABLE_NC_SERVER              | 
+ 811 | #endif                                   | True                          | 
+ 812 |  //if (option_mask32 & OPT_n) /* numeric | True                          | 
+ 813 |  //if (option_mask32 & OPT_o) /* hexdump | True                          | 
+ 814 |  if (option_mask32 & OPT_p) { /* local s | True                          | 
+ 815 |   o_lport = bb_lookup_port(str_p, o_udpm | True                          | 
+ 816 |  }                                       | True                          | 
+ 817 |  //if (option_mask32 & OPT_r) /* randomi | True                          | 
+ 818 |  //if (option_mask32 & OPT_u) /* use UDP | True                          | 
+ 819 |  //if (option_mask32 & OPT_v) /* verbose | True                          | 
+ 820 |  //if (option_mask32 & OPT_w) /* wait ti | True                          | 
+ 821 |  //if (option_mask32 & OPT_z) /* little  | True                          | 
+ 822 |                                          | True                          | 
+ 823 |  /* We manage our fd's so that they are  | True                          | 
+ 824 |  /*bb_sanitize_stdio(); - not needed */  | True                          | 
+ 825 |                                          | True                          | 
+ 826 |  if (argv[0]) {                          | True                          | 
+ 827 |   themaddr = xhost2sockaddr(argv[0],     | True                          | 
+ 828 |    bb_lookup_port(argv[1], o_udpmode ? " | True                          | 
+ 829 |   );                                     | True                          | 
+ 830 |  }                                       | True                          | 
+ 831 |                                          | True                          | 
+ 832 |  /* create & bind network socket */      | True                          | 
+ 833 |  x = (o_udpmode ? SOCK_DGRAM : SOCK_STRE | True                          | 
+ 834 |  if (option_mask32 & OPT_s) { /* local a | True                          | 
+ 835 |   /* if o_lport is still 0, then we will | True                          | 
+ 836 |   ouraddr = xhost2sockaddr(str_s, o_lpor | True                          | 
+ 837 | #ifdef BLOAT                             | True                          | 
+ 838 |   /* prevent spurious "UDP listen needs  | (BLOAT)                       | 
+ 839 |   o_lport = get_nport(ouraddr);          | (BLOAT)                       | 
+ 840 |   o_lport = ntohs(o_lport);              | (BLOAT)                       | 
+ 841 | #endif                                   | True                          | 
+ 842 |   x = xsocket(ouraddr->u.sa.sa_family, x | True                          | 
+ 843 |  } else {                                | True                          | 
+ 844 |   /* We try IPv6, then IPv4, unless addr | True                          | 
+ 845 |    * implicitly set by way of remote add | True                          | 
+ 846 |   x = xsocket_type(&ouraddr,             | True                          | 
+ 847 |     (themaddr ? themaddr->u.sa.sa_family | True                          | 
+ 848 |     x);                                  | True                          | 
+ 849 |   if (o_lport)                           | True                          | 
+ 850 |    set_nport(&ouraddr->u.sa, htons(o_lpo | True                          | 
+ 851 |  }                                       | True                          | 
+ 852 |  xmove_fd(x, netfd);                     | True                          | 
+ 853 |  setsockopt_reuseaddr(netfd);            | True                          | 
+ 854 |  if (o_udpmode) {                        | True                          | 
+ 855 |   if (o_bcmode)                          | True                          | 
+ 856 |    setsockopt_broadcast(netfd);          | True                          | 
+ 857 |   socket_want_pktinfo(netfd);            | True                          | 
+ 858 |  }                                       | True                          | 
+ 859 |  if (!ENABLE_FEATURE_UNIX_LOCAL          | True                          | 
+ 860 |   || cnt_l != 0 /* listen */             | True                          | 
+ 861 |   || ouraddr->u.sa.sa_family != AF_UNIX  | True                          | 
+ 862 |  ) {                                     | True                          | 
+ 863 |   xbind(netfd, &ouraddr->u.sa, ouraddr-> | True                          | 
+ 864 |  }                                       | True                          | 
+ 865 | #if 0                                    | True                          | 
+ 866 |  setsockopt_SOL_SOCKET_int(netfd, SO_RCV | 0                             | 
+ 867 |  setsockopt_SOL_SOCKET_int(netfd, SO_SND | 0                             | 
+ 868 | #endif                                   | True                          | 
+ 869 |                                          | True                          | 
+ 870 | #ifdef BLOAT                             | True                          | 
+ 871 |  if (OPT_l && (option_mask32 & (OPT_u|OP | (BLOAT)                       | 
+ 872 |   /* apparently UDP can listen ON "port  | (BLOAT)                       | 
+ 873 |    but that's not useful */              | (BLOAT)                       | 
+ 874 |   if (!o_lport)                          | (BLOAT)                       | 
+ 875 |    bb_simple_error_msg_and_die("UDP list | (BLOAT)                       | 
+ 876 |  }                                       | (BLOAT)                       | 
+ 877 | #endif                                   | True                          | 
+ 878 |                                          | True                          | 
+ 879 |  if (proggie) {                          | True                          | 
+ 880 |   close(STDIN_FILENO); /* won't need std | True                          | 
+ 881 |   option_mask32 &= ~OPT_o; /* -o with -e | True                          | 
+ 882 |  }                                       | True                          | 
+ 883 | #if ENABLE_NC_EXTRA                      | True                          | 
+ 884 |  if (o_ofile)                            | ENABLE_NC_EXTRA               | 
+ 885 |   xmove_fd(xopen(str_o, O_WRONLY|O_CREAT | ENABLE_NC_EXTRA               | 
+ 886 | #endif                                   | True                          | 
+ 887 |                                          | True                          | 
+ 888 |  if (cnt_l != 0) {                       | True                          | 
+ 889 |   dolisten((cnt_l - 1), proggie);        | True                          | 
+ 890 |   /* dolisten does its own connect repor | True                          | 
+ 891 |   x = readwrite(); /* it even works with | True                          | 
+ 892 |  } else {                                | True                          | 
+ 893 |   /* Outbound connects.  Now we're more  | True                          | 
+ 894 |   if (!themaddr)                         | True                          | 
+ 895 |    bb_show_usage();                      | True                          | 
+ 896 |                                          | True                          | 
+ 897 |   remend = *themaddr;                    | True                          | 
+ 898 |   if (o_verbose)                         | True                          | 
+ 899 |    themdotted = xmalloc_sockaddr2dotted( | True                          | 
+ 900 |                                          | True                          | 
+ 901 |   x = connect_w_timeout(netfd);          | True                          | 
+ 902 |   if (o_zero && x == 0 && o_udpmode)     | True                          | 
+ 903 |    x = udptest();                        | True                          | 
+ 904 |   if (x == 0) {                        / | True                          | 
+ 905 |    if (o_verbose)                        | True                          | 
+ 906 |     fprintf(stderr, "%s (%s) open\n", ar | True                          | 
+ 907 |    if (proggie)                        / | True                          | 
+ 908 |     doexec(proggie);                     | True                          | 
+ 909 |    if (!o_zero)                          | True                          | 
+ 910 |     x = readwrite();                     | True                          | 
+ 911 |   } else { /* connect or udptest wasn't  | True                          | 
+ 912 |    x = 1;                                | True                          | 
+ 913 |    /* if we're scanning at a "one -v" ve | True                          | 
+ 914 |     Give it another -v if you want to se | True                          | 
+ 915 |    if (o_verbose > 1 || (o_verbose && er | True                          | 
+ 916 |     bb_perror_msg("%s (%s)", argv[0], th | True                          | 
+ 917 |   }                                      | True                          | 
+ 918 |  }                                       | True                          | 
+ 919 |  if (o_verbose > 1)                /* no | True                          | 
+ 920 |   fprintf(stderr, SENT_N_RECV_M, wrote_n | True                          | 
+ 921 |  return x;                               | True                          | 
+ 922 | }                                        | True                          | 
+-----+------------------------------------------+-------------------------------+
+     |                                          | +140MB, 369ms                 | 

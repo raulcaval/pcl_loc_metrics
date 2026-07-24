@@ -1,0 +1,578 @@
+FILE: data/raw/busybox-1.38.0/libpwdgrp/pwd_grp.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                         | 
+-----+------------------------------------------+-----------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                          | 
+   2 | /*                                       | True                                          | 
+   3 |  * Copyright (C) 2014 Tito Ragusa <farma | True                                          | 
+   4 |  *                                       | True                                          | 
+   5 |  * Licensed under GPLv2 or later, see fi | True                                          | 
+   6 |  */                                      | True                                          | 
+   7 | /* This program is distributed in the ho | True                                          | 
+   8 |  * but WITHOUT ANY WARRANTY!!            | True                                          | 
+   9 |  *                                       | True                                          | 
+  10 |  * Rewrite of some parts. Main differenc | True                                          | 
+  11 |  *                                       | True                                          | 
+  12 |  * 1) the buffer for getpwuid, getgrgid, | True                                          | 
+  13 |  *    allocated.                         | True                                          | 
+  14 |  *    If ENABLE_FEATURE_CLEAN_UP is set  | True                                          | 
+  15 |  *    exit using the atexit function to  | True                                          | 
+  16 |  * 2) the passwd/group files:            | True                                          | 
+  17 |  *      a) must contain the expected num | True                                          | 
+  18 |  *         delimiters ":") or we will co | True                                          | 
+  19 |  *      b) leading and trailing whitespa | True                                          | 
+  20 |  *      c) some fields are not allowed t | True                                          | 
+  21 |  *         and in this case NULL is retu | True                                          | 
+  22 |  *         This behaviour could be easil | True                                          | 
+  23 |  *         SP_DEF strings (uppercase mak | True                                          | 
+  24 |  *      d) the string representing uid/g | True                                          | 
+  25 |  *         functions, or errno is set to | True                                          | 
+  26 |  *      e) leading and trailing whitespa | True                                          | 
+  27 |  * 3) the internal function for getgroup | True                                          | 
+  28 |  * 4) at the moment only the functions r | True                                          | 
+  29 |  *    implemented, if you need a particu | True                                          | 
+  30 |  *    easy to write it by using the inte | True                                          | 
+  31 |  */                                      | True                                          | 
+  32 | #include "libbb.h"                       | True                                          | 
+  33 |                                          | True                                          | 
+  34 | struct const_passdb {                    | True                                          | 
+  35 |  const char *filename;                   | True                                          | 
+  36 |  char def[7 + 2*ENABLE_USE_BB_SHADOW];   | True                                          | 
+  37 |  uint8_t off[7 + 2*ENABLE_USE_BB_SHADOW] | True                                          | 
+  38 |  uint8_t numfields;                      | True                                          | 
+  39 |  uint8_t size_of;                        | True                                          | 
+  40 | };                                       | True                                          | 
+  41 | struct passdb {                          | True                                          | 
+  42 |  const char *filename;                   | True                                          | 
+  43 |  char def[7 + 2*ENABLE_USE_BB_SHADOW];   | True                                          | 
+  44 |  uint8_t off[7 + 2*ENABLE_USE_BB_SHADOW] | True                                          | 
+  45 |  uint8_t numfields;                      | True                                          | 
+  46 |  uint8_t size_of;                        | True                                          | 
+  47 |  FILE *fp;                               | True                                          | 
+  48 |  char *malloced;                         | True                                          | 
+  49 | };                                       | True                                          | 
+  50 | /* Note: for shadow db, def[] will not c | True                                          | 
+  51 |  * but convert_to_struct() logic detects | True                                          | 
+  52 |  * not by "is it NUL?" condition; and of | True                                          | 
+  53 |  * for every db anyway, so there _is_ in | True                                          | 
+  54 |  */                                      | True                                          | 
+  55 |                                          | True                                          | 
+  56 | /* S = string not empty, s = string mayb | True                                          | 
+  57 |  * I = uid,gid, l = long maybe empty, m  | True                                          | 
+  58 |  * r = reserved                          | True                                          | 
+  59 |  */                                      | True                                          | 
+  60 | #define PW_DEF "SsIIsss"                 | True                                          | 
+  61 | #define GR_DEF "SsIm"                    | True                                          | 
+  62 | #define SP_DEF "Ssllllllr"               | True                                          | 
+  63 |                                          | True                                          | 
+  64 | static const struct const_passdb const_p | True                                          | 
+  65 |  _PATH_PASSWD, PW_DEF,                   | True                                          | 
+  66 |  {                                       | True                                          | 
+  67 |   offsetof(struct passwd, pw_name),      | True                                          | 
+  68 |   offsetof(struct passwd, pw_passwd),    | True                                          | 
+  69 |   offsetof(struct passwd, pw_uid),       | True                                          | 
+  70 |   offsetof(struct passwd, pw_gid),       | True                                          | 
+  71 |   offsetof(struct passwd, pw_gecos),     | True                                          | 
+  72 |   offsetof(struct passwd, pw_dir),       | True                                          | 
+  73 |   offsetof(struct passwd, pw_shell)      | True                                          | 
+  74 |  },                                      | True                                          | 
+  75 |  sizeof(PW_DEF)-1, sizeof(struct passwd) | True                                          | 
+  76 | };                                       | True                                          | 
+  77 | static const struct const_passdb const_g | True                                          | 
+  78 |  _PATH_GROUP, GR_DEF,                    | True                                          | 
+  79 |  {                                       | True                                          | 
+  80 |   offsetof(struct group, gr_name),       | True                                          | 
+  81 |   offsetof(struct group, gr_passwd),     | True                                          | 
+  82 |   offsetof(struct group, gr_gid),        | True                                          | 
+  83 |   offsetof(struct group, gr_mem)         | True                                          | 
+  84 |  },                                      | True                                          | 
+  85 |  sizeof(GR_DEF)-1, sizeof(struct group)  | True                                          | 
+  86 | };                                       | True                                          | 
+  87 | #if ENABLE_USE_BB_SHADOW                 | True                                          | 
+  88 | static const struct const_passdb const_s | ENABLE_USE_BB_SHADOW                          | 
+  89 |  _PATH_SHADOW, SP_DEF,                   | ENABLE_USE_BB_SHADOW                          | 
+  90 |  {                                       | ENABLE_USE_BB_SHADOW                          | 
+  91 |   offsetof(struct spwd, sp_namp),        | ENABLE_USE_BB_SHADOW                          | 
+  92 |   offsetof(struct spwd, sp_pwdp),        | ENABLE_USE_BB_SHADOW                          | 
+  93 |   offsetof(struct spwd, sp_lstchg),      | ENABLE_USE_BB_SHADOW                          | 
+  94 |   offsetof(struct spwd, sp_min),         | ENABLE_USE_BB_SHADOW                          | 
+  95 |   offsetof(struct spwd, sp_max),         | ENABLE_USE_BB_SHADOW                          | 
+  96 |   offsetof(struct spwd, sp_warn),        | ENABLE_USE_BB_SHADOW                          | 
+  97 |   offsetof(struct spwd, sp_inact),       | ENABLE_USE_BB_SHADOW                          | 
+  98 |   offsetof(struct spwd, sp_expire),      | ENABLE_USE_BB_SHADOW                          | 
+  99 |   offsetof(struct spwd, sp_flag)         | ENABLE_USE_BB_SHADOW                          | 
+ 100 |  },                                      | ENABLE_USE_BB_SHADOW                          | 
+ 101 |  sizeof(SP_DEF)-1, sizeof(struct spwd)   | ENABLE_USE_BB_SHADOW                          | 
+ 102 | };                                       | ENABLE_USE_BB_SHADOW                          | 
+ 103 | #endif                                   | True                                          | 
+ 104 |                                          | True                                          | 
+ 105 | /* We avoid having big global data. */   | True                                          | 
+ 106 | struct statics {                         | True                                          | 
+ 107 |  /* We use same buffer (db[0].malloced)  | True                                          | 
+ 108 |   * Manpage says:                        | True                                          | 
+ 109 |   * "The return value may point to a sta | True                                          | 
+ 110 |   * by subsequent calls to getpwent(), g | True                                          | 
+ 111 |   */                                     | True                                          | 
+ 112 |  struct passdb db[2 + ENABLE_USE_BB_SHAD | True                                          | 
+ 113 |  char *tokenize_end;                     | True                                          | 
+ 114 |  unsigned string_size;                   | True                                          | 
+ 115 | };                                       | True                                          | 
+ 116 |                                          | True                                          | 
+ 117 | static struct statics *ptr_to_statics;   | True                                          | 
+ 118 | #define S     (*ptr_to_statics)          | True                                          | 
+ 119 | #define has_S (ptr_to_statics)           | True                                          | 
+ 120 |                                          | True                                          | 
+ 121 | #if ENABLE_FEATURE_CLEAN_UP              | True                                          | 
+ 122 | static void free_static(void)            | ENABLE_FEATURE_CLEAN_UP                       | 
+ 123 | {                                        | ENABLE_FEATURE_CLEAN_UP                       | 
+ 124 |  free(S.db[0].malloced);                 | ENABLE_FEATURE_CLEAN_UP                       | 
+ 125 |  free(S.db[1].malloced);                 | ENABLE_FEATURE_CLEAN_UP                       | 
+ 126 | # if ENABLE_USE_BB_SHADOW                | ENABLE_FEATURE_CLEAN_UP                       | 
+ 127 |  free(S.db[2].malloced);                 | ENABLE_USE_BB_SHADOW&&ENABLE_FEATURE_CLEAN_UP | 
+ 128 | # endif                                  | ENABLE_FEATURE_CLEAN_UP                       | 
+ 129 |  free(ptr_to_statics);                   | ENABLE_FEATURE_CLEAN_UP                       | 
+ 130 | }                                        | ENABLE_FEATURE_CLEAN_UP                       | 
+ 131 | #endif                                   | True                                          | 
+ 132 |                                          | True                                          | 
+ 133 | static struct statics *get_S(void)       | True                                          | 
+ 134 | {                                        | True                                          | 
+ 135 |  if (!ptr_to_statics) {                  | True                                          | 
+ 136 |   ptr_to_statics = xzalloc(sizeof(S));   | True                                          | 
+ 137 |   memcpy(&S.db[0], &const_pw_db, sizeof( | True                                          | 
+ 138 |   memcpy(&S.db[1], &const_gr_db, sizeof( | True                                          | 
+ 139 | #if ENABLE_USE_BB_SHADOW                 | True                                          | 
+ 140 |   memcpy(&S.db[2], &const_sp_db, sizeof( | ENABLE_USE_BB_SHADOW                          | 
+ 141 | #endif                                   | True                                          | 
+ 142 | #if ENABLE_FEATURE_CLEAN_UP              | True                                          | 
+ 143 |   atexit(free_static);                   | ENABLE_FEATURE_CLEAN_UP                       | 
+ 144 | #endif                                   | True                                          | 
+ 145 |  }                                       | True                                          | 
+ 146 |  return ptr_to_statics;                  | True                                          | 
+ 147 | }                                        | True                                          | 
+ 148 |                                          | True                                          | 
+ 149 | /* Internal functions */                 | True                                          | 
+ 150 |                                          | True                                          | 
+ 151 | /* Divide the passwd/group/shadow record | True                                          | 
+ 152 |  * by substituting the given delimiter   | True                                          | 
+ 153 |  * e.g. ':' or ',' with '\0'.            | True                                          | 
+ 154 |  * Returns the number of fields found.   | True                                          | 
+ 155 |  * Strips leading and trailing whitespac | True                                          | 
+ 156 |  */                                      | True                                          | 
+ 157 | static int tokenize(char *buffer, int ch | True                                          | 
+ 158 | {                                        | True                                          | 
+ 159 |  char *p = buffer;                       | True                                          | 
+ 160 |  char *s = p;                            | True                                          | 
+ 161 |  int num_fields = 0;                     | True                                          | 
+ 162 |                                          | True                                          | 
+ 163 |  for (;;) {                              | True                                          | 
+ 164 |   if (isblank(*s)) {                     | True                                          | 
+ 165 |    overlapping_strcpy(s, skip_whitespace | True                                          | 
+ 166 |   }                                      | True                                          | 
+ 167 |   if (*p == ch || *p == '\0') {          | True                                          | 
+ 168 |    char *end = p;                        | True                                          | 
+ 169 |    while (p != s && isblank(p[-1]))      | True                                          | 
+ 170 |     p--;                                 | True                                          | 
+ 171 |    if (p != end)                         | True                                          | 
+ 172 |     overlapping_strcpy(p, end);          | True                                          | 
+ 173 |    num_fields++;                         | True                                          | 
+ 174 |    if (*end == '\0') {                   | True                                          | 
+ 175 |     S.tokenize_end = p + 1;              | True                                          | 
+ 176 |     return num_fields;                   | True                                          | 
+ 177 |    }                                     | True                                          | 
+ 178 |    *p = '\0';                            | True                                          | 
+ 179 |    s = p + 1;                            | True                                          | 
+ 180 |   }                                      | True                                          | 
+ 181 |   p++;                                   | True                                          | 
+ 182 |  }                                       | True                                          | 
+ 183 | }                                        | True                                          | 
+ 184 |                                          | True                                          | 
+ 185 | /* Returns !NULL on success and matching | True                                          | 
+ 186 |  * We require the expected number of fie | True                                          | 
+ 187 |  */                                      | True                                          | 
+ 188 | static char *parse_common(FILE *fp, stru | True                                          | 
+ 189 |   const char *key, int field_pos)        | True                                          | 
+ 190 | {                                        | True                                          | 
+ 191 |  char *buf;                              | True                                          | 
+ 192 |                                          | True                                          | 
+ 193 |  while ((buf = xmalloc_fgetline(fp)) !=  | True                                          | 
+ 194 |   int n;                                 | True                                          | 
+ 195 |   char *field;                           | True                                          | 
+ 196 |                                          | True                                          | 
+ 197 |   /* Skip empty lines, comment lines */  | True                                          | 
+ 198 |   if (buf[0] == '\0' || buf[0] == '#')   | True                                          | 
+ 199 |    goto free_and_next;                   | True                                          | 
+ 200 |   if (tokenize(buf, ':') != db->numfield | True                                          | 
+ 201 |    /* number of fields is wrong */       | True                                          | 
+ 202 |    bb_error_msg("%s: bad record", db->fi | True                                          | 
+ 203 |    goto free_and_next;                   | True                                          | 
+ 204 |   }                                      | True                                          | 
+ 205 |                                          | True                                          | 
+ 206 |   if (field_pos == -1) {                 | True                                          | 
+ 207 |    /* no key specified: sequential read, | True                                          | 
+ 208 |    break;                                | True                                          | 
+ 209 |   }                                      | True                                          | 
+ 210 |   /* Can't use nth_string() here, it doe | True                                          | 
+ 211 |    * ("\0\0" terminates the list), and a | True                                          | 
+ 212 |    * "user::UID:GID..." would be mishand | True                                          | 
+ 213 |   n = field_pos;                         | True                                          | 
+ 214 |   field = buf;                           | True                                          | 
+ 215 |   while (n) {                            | True                                          | 
+ 216 |    n--;                                  | True                                          | 
+ 217 |    field += strlen(field) + 1;           | True                                          | 
+ 218 |   }                                      | True                                          | 
+ 219 |   if (strcmp(key, field) == 0) {         | True                                          | 
+ 220 |    /* record found */                    | True                                          | 
+ 221 |    break;                                | True                                          | 
+ 222 |   }                                      | True                                          | 
+ 223 |  free_and_next:                          | True                                          | 
+ 224 |   free(buf);                             | True                                          | 
+ 225 |  }                                       | True                                          | 
+ 226 |                                          | True                                          | 
+ 227 |  S.string_size = S.tokenize_end - buf;   | True                                          | 
+ 228 | /*                                       | True                                          | 
+ 229 |  * Ugly hack: group db requires addition | True                                          | 
+ 230 |  * for members[] array. If there is only | True                                          | 
+ 231 |  * for 3 pointers: alignment padding, gr | True                                          | 
+ 232 |  * +1 for every additional group.        | True                                          | 
+ 233 |  */                                      | True                                          | 
+ 234 |  if (buf && db->numfields == sizeof(GR_D | True                                          | 
+ 235 |   int cnt = 3;                           | True                                          | 
+ 236 |   char *p = buf;                         | True                                          | 
+ 237 |   while (p < S.tokenize_end)             | True                                          | 
+ 238 |    if (*p++ == ',')                      | True                                          | 
+ 239 |     cnt++;                               | True                                          | 
+ 240 |   S.string_size += cnt * sizeof(char*);  | True                                          | 
+ 241 | //bb_error_msg("+%d words = %u key:%s bu | True                                          | 
+ 242 |   buf = xrealloc(buf, S.string_size);    | True                                          | 
+ 243 |  }                                       | True                                          | 
+ 244 |                                          | True                                          | 
+ 245 |  return buf;                             | True                                          | 
+ 246 | }                                        | True                                          | 
+ 247 |                                          | True                                          | 
+ 248 | static char *parse_file(struct passdb *d | True                                          | 
+ 249 |   const char *key, int field_pos)        | True                                          | 
+ 250 | {                                        | True                                          | 
+ 251 |  char *buf = NULL;                       | True                                          | 
+ 252 |  FILE *fp = fopen_for_read(db->filename) | True                                          | 
+ 253 |                                          | True                                          | 
+ 254 |  if (fp) {                               | True                                          | 
+ 255 |   buf = parse_common(fp, db, key, field_ | True                                          | 
+ 256 |   fclose(fp);                            | True                                          | 
+ 257 |  }                                       | True                                          | 
+ 258 |  return buf;                             | True                                          | 
+ 259 | }                                        | True                                          | 
+ 260 |                                          | True                                          | 
+ 261 | /* Convert passwd/group/shadow file reco | True                                          | 
+ 262 | static void *convert_to_struct(struct pa | True                                          | 
+ 263 |   char *buffer, void *result)            | True                                          | 
+ 264 | {                                        | True                                          | 
+ 265 |  const char *def = db->def;              | True                                          | 
+ 266 |  const uint8_t *off = db->off;           | True                                          | 
+ 267 |                                          | True                                          | 
+ 268 |  /* For consistency, zero out all fields | True                                          | 
+ 269 |  memset(result, 0, db->size_of);         | True                                          | 
+ 270 |                                          | True                                          | 
+ 271 |  for (;;) {                              | True                                          | 
+ 272 |   void *member = (char*)result + (*off++ | True                                          | 
+ 273 |                                          | True                                          | 
+ 274 |   if ((*def | 0x20) == 's') { /* s or S  | True                                          | 
+ 275 |    *(char **)member = (char*)buffer;     | True                                          | 
+ 276 |    if (!buffer[0] && (*def == 'S')) {    | True                                          | 
+ 277 |     errno = EINVAL;                      | True                                          | 
+ 278 |    }                                     | True                                          | 
+ 279 |   }                                      | True                                          | 
+ 280 |   if (*def == 'I') {                     | True                                          | 
+ 281 |    *(int *)member = bb_strtou(buffer, NU | True                                          | 
+ 282 |   }                                      | True                                          | 
+ 283 | #if ENABLE_USE_BB_SHADOW                 | True                                          | 
+ 284 |   if (*def == 'l') {                     | ENABLE_USE_BB_SHADOW                          | 
+ 285 |    long n = -1;                          | ENABLE_USE_BB_SHADOW                          | 
+ 286 |    if (buffer[0])                        | ENABLE_USE_BB_SHADOW                          | 
+ 287 |     n = bb_strtol(buffer, NULL, 10);     | ENABLE_USE_BB_SHADOW                          | 
+ 288 |    *(long *)member = n;                  | ENABLE_USE_BB_SHADOW                          | 
+ 289 |   }                                      | ENABLE_USE_BB_SHADOW                          | 
+ 290 | #endif                                   | True                                          | 
+ 291 |   if (*def == 'm') {                     | True                                          | 
+ 292 |    char **members;                       | True                                          | 
+ 293 |    int i = tokenize(buffer, ',');        | True                                          | 
+ 294 |                                          | True                                          | 
+ 295 |    /* Store members[] after buffer's end | True                                          | 
+ 296 |     * This is safe ONLY because there is | True                                          | 
+ 297 |     * in parse_common() which allocates  | True                                          | 
+ 298 |     * at the end of malloced buffer!     | True                                          | 
+ 299 |     */                                   | True                                          | 
+ 300 |    members = (char **)                   | True                                          | 
+ 301 |     ( ((intptr_t)S.tokenize_end + sizeof | True                                          | 
+ 302 |     & -(intptr_t)sizeof(members[0])      | True                                          | 
+ 303 |     );                                   | True                                          | 
+ 304 |    ((struct group *)result)->gr_mem = me | True                                          | 
+ 305 |    while (--i >= 0) {                    | True                                          | 
+ 306 |     if (buffer[0]) {                     | True                                          | 
+ 307 |      *members++ = buffer;                | True                                          | 
+ 308 |      // bb_error_msg("member[]='%s'", bu | True                                          | 
+ 309 |     }                                    | True                                          | 
+ 310 |     buffer += strlen(buffer) + 1;        | True                                          | 
+ 311 |    }                                     | True                                          | 
+ 312 |    *members = NULL;                      | True                                          | 
+ 313 |   }                                      | True                                          | 
+ 314 |   /* def "r" does nothing */             | True                                          | 
+ 315 |                                          | True                                          | 
+ 316 |   def++;                                 | True                                          | 
+ 317 |   if ((unsigned char)*def <= (unsigned c | True                                          | 
+ 318 |    break;                                | True                                          | 
+ 319 |   buffer += strlen(buffer) + 1;          | True                                          | 
+ 320 |  }                                       | True                                          | 
+ 321 |                                          | True                                          | 
+ 322 |  if (errno)                              | True                                          | 
+ 323 |   result = NULL;                         | True                                          | 
+ 324 |  return result;                          | True                                          | 
+ 325 | }                                        | True                                          | 
+ 326 |                                          | True                                          | 
+ 327 | static int massage_data_for_r_func(struc | True                                          | 
+ 328 |   char *buffer, size_t buflen,           | True                                          | 
+ 329 |   void **result,                         | True                                          | 
+ 330 |   char *buf)                             | True                                          | 
+ 331 | {                                        | True                                          | 
+ 332 |  void *result_buf = *result;             | True                                          | 
+ 333 |  *result = NULL;                         | True                                          | 
+ 334 |  if (buf) {                              | True                                          | 
+ 335 |   if (S.string_size > buflen) {          | True                                          | 
+ 336 |    errno = ERANGE;                       | True                                          | 
+ 337 |   } else {                               | True                                          | 
+ 338 |    memcpy(buffer, buf, S.string_size);   | True                                          | 
+ 339 |    *result = convert_to_struct(db, buffe | True                                          | 
+ 340 |   }                                      | True                                          | 
+ 341 |   free(buf);                             | True                                          | 
+ 342 |  }                                       | True                                          | 
+ 343 |  /* "The reentrant functions return zero | True                                          | 
+ 344 |   * In case of error, an error number is | True                                          | 
+ 345 |   * NB: not finding the record is also a | True                                          | 
+ 346 |   */                                     | True                                          | 
+ 347 |  return errno;                           | True                                          | 
+ 348 | }                                        | True                                          | 
+ 349 |                                          | True                                          | 
+ 350 | static void* massage_data_for_non_r_func | True                                          | 
+ 351 | {                                        | True                                          | 
+ 352 |  if (!buf)                               | True                                          | 
+ 353 |   return NULL;                           | True                                          | 
+ 354 |                                          | True                                          | 
+ 355 |  free(db->malloced);                     | True                                          | 
+ 356 |  /* We enlarge buf and move string data  | True                                          | 
+ 357 |   * for struct passwd/group/spwd at the  | True                                          | 
+ 358 |   * entire result of getXXnam is in a si | True                                          | 
+ 359 |   * This enables easy creation of xmallo | True                                          | 
+ 360 |   */                                     | True                                          | 
+ 361 |  db->malloced = buf = xrealloc(buf, db-> | True                                          | 
+ 362 |  memmove(buf + db->size_of, buf, S.strin | True                                          | 
+ 363 |  return convert_to_struct(db, buf + db-> | True                                          | 
+ 364 | }                                        | True                                          | 
+ 365 |                                          | True                                          | 
+ 366 | /****** getXXnam/id_r */                 | True                                          | 
+ 367 |                                          | True                                          | 
+ 368 | static int FAST_FUNC getXXnam_r(const ch | True                                          | 
+ 369 |   char *buffer, size_t buflen,           | True                                          | 
+ 370 |   void *result)                          | True                                          | 
+ 371 | {                                        | True                                          | 
+ 372 |  char *buf;                              | True                                          | 
+ 373 |  struct passdb *db = &get_S()->db[db_and | True                                          | 
+ 374 |                                          | True                                          | 
+ 375 |  buf = parse_file(db, name, 0 /*db_and_f | True                                          | 
+ 376 |  /* "db_and_field_pos & 3" is commented  | True                                          | 
+ 377 |   * getXXXid_r() functions which would u | True                                          | 
+ 378 |                                          | True                                          | 
+ 379 |  return massage_data_for_r_func(db, buff | True                                          | 
+ 380 | }                                        | True                                          | 
+ 381 |                                          | True                                          | 
+ 382 | int FAST_FUNC getpwnam_r(const char *nam | True                                          | 
+ 383 |   char *buffer, size_t buflen,           | True                                          | 
+ 384 |   struct passwd **result)                | True                                          | 
+ 385 | {                                        | True                                          | 
+ 386 |  /* Why the "store buffer address in res | True                                          | 
+ 387 |   * This way, getXXnam_r has the same AB | True                                          | 
+ 388 |   * hopefully compiler can optimize tail | True                                          | 
+ 389 |   */                                     | True                                          | 
+ 390 |  *result = struct_buf;                   | True                                          | 
+ 391 |  return getXXnam_r(name, (0 << 2) + 0, b | True                                          | 
+ 392 | }                                        | True                                          | 
+ 393 | #if ENABLE_USE_BB_SHADOW                 | True                                          | 
+ 394 | int FAST_FUNC getspnam_r(const char *nam | ENABLE_USE_BB_SHADOW                          | 
+ 395 |   struct spwd **result)                  | ENABLE_USE_BB_SHADOW                          | 
+ 396 | {                                        | ENABLE_USE_BB_SHADOW                          | 
+ 397 |  *result = struct_buf;                   | ENABLE_USE_BB_SHADOW                          | 
+ 398 |  return getXXnam_r(name, (2 << 2) + 0, b | ENABLE_USE_BB_SHADOW                          | 
+ 399 | }                                        | ENABLE_USE_BB_SHADOW                          | 
+ 400 | #endif                                   | True                                          | 
+ 401 |                                          | True                                          | 
+ 402 | #ifdef UNUSED                            | True                                          | 
+ 403 | /****** getXXent_r */                    | (UNUSED)                                      | 
+ 404 |                                          | (UNUSED)                                      | 
+ 405 | static int FAST_FUNC getXXent_r(uintptr_ | (UNUSED)                                      | 
+ 406 |   void *result)                          | (UNUSED)                                      | 
+ 407 | {                                        | (UNUSED)                                      | 
+ 408 |  char *buf;                              | (UNUSED)                                      | 
+ 409 |  struct passdb *db = &get_S()->db[db_idx | (UNUSED)                                      | 
+ 410 |                                          | (UNUSED)                                      | 
+ 411 |  if (!db->fp) {                          | (UNUSED)                                      | 
+ 412 |   db->fp = fopen_for_read(db->filename); | (UNUSED)                                      | 
+ 413 |   if (!db->fp) {                         | (UNUSED)                                      | 
+ 414 |    return errno;                         | (UNUSED)                                      | 
+ 415 |   }                                      | (UNUSED)                                      | 
+ 416 |   close_on_exec_on(fileno(db->fp));      | (UNUSED)                                      | 
+ 417 |  }                                       | (UNUSED)                                      | 
+ 418 |                                          | (UNUSED)                                      | 
+ 419 |  buf = parse_common(db->fp, db, /*no sea | (UNUSED)                                      | 
+ 420 |  if (!buf && !errno)                     | (UNUSED)                                      | 
+ 421 |   errno = ENOENT;                        | (UNUSED)                                      | 
+ 422 |  return massage_data_for_r_func(db, buff | (UNUSED)                                      | 
+ 423 | }                                        | (UNUSED)                                      | 
+ 424 |                                          | (UNUSED)                                      | 
+ 425 | int FAST_FUNC getpwent_r(struct passwd * | (UNUSED)                                      | 
+ 426 |   struct passwd **result)                | (UNUSED)                                      | 
+ 427 | {                                        | (UNUSED)                                      | 
+ 428 |  *result = struct_buf;                   | (UNUSED)                                      | 
+ 429 |  return getXXent_r(0, buffer, buflen, re | (UNUSED)                                      | 
+ 430 | }                                        | (UNUSED)                                      | 
+ 431 | #endif                                   | True                                          | 
+ 432 |                                          | True                                          | 
+ 433 | /****** getXXent */                      | True                                          | 
+ 434 |                                          | True                                          | 
+ 435 | static void* FAST_FUNC getXXent(uintptr_ | True                                          | 
+ 436 | {                                        | True                                          | 
+ 437 |  char *buf;                              | True                                          | 
+ 438 |  struct passdb *db = &get_S()->db[db_idx | True                                          | 
+ 439 |                                          | True                                          | 
+ 440 |  if (!db->fp) {                          | True                                          | 
+ 441 |   db->fp = fopen_for_read(db->filename); | True                                          | 
+ 442 |   if (!db->fp) {                         | True                                          | 
+ 443 |    return NULL;                          | True                                          | 
+ 444 |   }                                      | True                                          | 
+ 445 |   close_on_exec_on(fileno(db->fp));      | True                                          | 
+ 446 |  }                                       | True                                          | 
+ 447 |                                          | True                                          | 
+ 448 |  buf = parse_common(db->fp, db, /*no sea | True                                          | 
+ 449 |  return massage_data_for_non_r_func(db,  | True                                          | 
+ 450 | }                                        | True                                          | 
+ 451 |                                          | True                                          | 
+ 452 | struct passwd* FAST_FUNC getpwent(void)  | True                                          | 
+ 453 | {                                        | True                                          | 
+ 454 |  return getXXent(0);                     | True                                          | 
+ 455 | }                                        | True                                          | 
+ 456 |                                          | True                                          | 
+ 457 | /****** getXXnam/id */                   | True                                          | 
+ 458 |                                          | True                                          | 
+ 459 | static void* FAST_FUNC getXXnam(const ch | True                                          | 
+ 460 | {                                        | True                                          | 
+ 461 |  char *buf;                              | True                                          | 
+ 462 |  struct passdb *db = &get_S()->db[db_and | True                                          | 
+ 463 |                                          | True                                          | 
+ 464 |  buf = parse_file(db, name, db_and_field | True                                          | 
+ 465 |  return massage_data_for_non_r_func(db,  | True                                          | 
+ 466 | }                                        | True                                          | 
+ 467 |                                          | True                                          | 
+ 468 | struct passwd* FAST_FUNC getpwnam(const  | True                                          | 
+ 469 | {                                        | True                                          | 
+ 470 |  return getXXnam(name, (0 << 2) + 0);    | True                                          | 
+ 471 | }                                        | True                                          | 
+ 472 | struct group* FAST_FUNC getgrnam(const c | True                                          | 
+ 473 | {                                        | True                                          | 
+ 474 |  return getXXnam(name, (1 << 2) + 0);    | True                                          | 
+ 475 | }                                        | True                                          | 
+ 476 | struct passwd* FAST_FUNC getpwuid(uid_t  | True                                          | 
+ 477 | {                                        | True                                          | 
+ 478 |  return getXXnam(utoa(id), (0 << 2) + 2) | True                                          | 
+ 479 | }                                        | True                                          | 
+ 480 | struct group* FAST_FUNC getgrgid(gid_t i | True                                          | 
+ 481 | {                                        | True                                          | 
+ 482 |  return getXXnam(utoa(id), (1 << 2) + 2) | True                                          | 
+ 483 | }                                        | True                                          | 
+ 484 |                                          | True                                          | 
+ 485 | /****** end/setXXend */                  | True                                          | 
+ 486 |                                          | True                                          | 
+ 487 | void FAST_FUNC endpwent(void)            | True                                          | 
+ 488 | {                                        | True                                          | 
+ 489 |  if (has_S && S.db[0].fp) {              | True                                          | 
+ 490 |   fclose(S.db[0].fp);                    | True                                          | 
+ 491 |   S.db[0].fp = NULL;                     | True                                          | 
+ 492 |  }                                       | True                                          | 
+ 493 | }                                        | True                                          | 
+ 494 | void FAST_FUNC setpwent(void)            | True                                          | 
+ 495 | {                                        | True                                          | 
+ 496 |  if (has_S && S.db[0].fp) {              | True                                          | 
+ 497 |   rewind(S.db[0].fp);                    | True                                          | 
+ 498 |  }                                       | True                                          | 
+ 499 | }                                        | True                                          | 
+ 500 | void FAST_FUNC endgrent(void)            | True                                          | 
+ 501 | {                                        | True                                          | 
+ 502 |  if (has_S && S.db[1].fp) {              | True                                          | 
+ 503 |   fclose(S.db[1].fp);                    | True                                          | 
+ 504 |   S.db[1].fp = NULL;                     | True                                          | 
+ 505 |  }                                       | True                                          | 
+ 506 | }                                        | True                                          | 
+ 507 |                                          | True                                          | 
+ 508 | /****** initgroups and getgrouplist */   | True                                          | 
+ 509 |                                          | True                                          | 
+ 510 | static gid_t* FAST_FUNC getgrouplist_int | True                                          | 
+ 511 |   const char *user, gid_t gid)           | True                                          | 
+ 512 | {                                        | True                                          | 
+ 513 |  FILE *fp;                               | True                                          | 
+ 514 |  gid_t *group_list;                      | True                                          | 
+ 515 |  int ngroups;                            | True                                          | 
+ 516 |                                          | True                                          | 
+ 517 |  /* We alloc space for 8 gids at a time. | True                                          | 
+ 518 |  group_list = xzalloc(8 * sizeof(group_l | True                                          | 
+ 519 |  group_list[0] = gid;                    | True                                          | 
+ 520 |  ngroups = 1;                            | True                                          | 
+ 521 |                                          | True                                          | 
+ 522 |  fp = fopen_for_read(_PATH_GROUP);       | True                                          | 
+ 523 |  if (fp) {                               | True                                          | 
+ 524 |   struct passdb *db = &get_S()->db[1];   | True                                          | 
+ 525 |   char *buf;                             | True                                          | 
+ 526 |   while ((buf = parse_common(fp, db, NUL | True                                          | 
+ 527 |    char **m;                             | True                                          | 
+ 528 |    struct group group;                   | True                                          | 
+ 529 |    if (!convert_to_struct(db, buf, &grou | True                                          | 
+ 530 |     goto next;                           | True                                          | 
+ 531 |    if (group.gr_gid == gid)              | True                                          | 
+ 532 |     goto next;                           | True                                          | 
+ 533 |    for (m = group.gr_mem; *m; m++) {     | True                                          | 
+ 534 |     if (strcmp(*m, user) != 0)           | True                                          | 
+ 535 |      continue;                           | True                                          | 
+ 536 |     group_list = xrealloc_vector(group_l | True                                          | 
+ 537 |     group_list[ngroups++] = group.gr_gid | True                                          | 
+ 538 |     goto next;                           | True                                          | 
+ 539 |    }                                     | True                                          | 
+ 540 |  next:                                   | True                                          | 
+ 541 |    free(buf);                            | True                                          | 
+ 542 |   }                                      | True                                          | 
+ 543 |   fclose(fp);                            | True                                          | 
+ 544 |  }                                       | True                                          | 
+ 545 |  *ngroups_ptr = ngroups;                 | True                                          | 
+ 546 |  return group_list;                      | True                                          | 
+ 547 | }                                        | True                                          | 
+ 548 |                                          | True                                          | 
+ 549 | int FAST_FUNC initgroups(const char *use | True                                          | 
+ 550 | {                                        | True                                          | 
+ 551 |  int ngroups;                            | True                                          | 
+ 552 |  gid_t *group_list = getgrouplist_intern | True                                          | 
+ 553 |                                          | True                                          | 
+ 554 |  ngroups = setgroups(ngroups, group_list | True                                          | 
+ 555 |  free(group_list);                       | True                                          | 
+ 556 |  return ngroups;                         | True                                          | 
+ 557 | }                                        | True                                          | 
+ 558 |                                          | True                                          | 
+ 559 | int FAST_FUNC getgrouplist(const char *u | True                                          | 
+ 560 | {                                        | True                                          | 
+ 561 |  int ngroups_old = *ngroups;             | True                                          | 
+ 562 |  gid_t *group_list = getgrouplist_intern | True                                          | 
+ 563 |                                          | True                                          | 
+ 564 |  if (*ngroups <= ngroups_old) {          | True                                          | 
+ 565 |   ngroups_old = *ngroups;                | True                                          | 
+ 566 |   memcpy(groups, group_list, ngroups_old | True                                          | 
+ 567 |  } else {                                | True                                          | 
+ 568 |   ngroups_old = -1;                      | True                                          | 
+ 569 |  }                                       | True                                          | 
+ 570 |  free(group_list);                       | True                                          | 
+ 571 |  return ngroups_old;                     | True                                          | 
+ 572 | }                                        | True                                          | 
+-----+------------------------------------------+-----------------------------------------------+
+     |                                          | +120MB, 268ms                                 | 

@@ -1,0 +1,455 @@
+FILE: data/raw/busybox-1.38.0/libbb/copy_file.c
+Resultado PCLocator:
+   # | line of code                             | Merge                             | 
+-----+------------------------------------------+-----------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                              | 
+   2 | /*                                       | True                              | 
+   3 |  * Mini copy_file implementation for bus | True                              | 
+   4 |  *                                       | True                              | 
+   5 |  * Copyright (C) 2001 by Matt Kraai <kra | True                              | 
+   6 |  * SELinux support by Yuichi Nakamura <y | True                              | 
+   7 |  *                                       | True                              | 
+   8 |  * Licensed under GPLv2 or later, see fi | True                              | 
+   9 |  */                                      | True                              | 
+  10 | #include "libbb.h"                       | True                              | 
+  11 |                                          | True                              | 
+  12 | // FEATURE_NON_POSIX_CP:                 | True                              | 
+  13 | //                                       | True                              | 
+  14 | // POSIX: if exists and -i, ask (w/o -i  | True                              | 
+  15 | // Then open w/o EXCL (yes, not unlink!) | True                              | 
+  16 | // If open still fails and -f, try unlin | True                              | 
+  17 | // Result: a mess:                       | True                              | 
+  18 | // If dest is a (sym)link, we overwrite  | True                              | 
+  19 | // (or fail, if it points to dir/nonexis | True                              | 
+  20 | // This is strange, but POSIX-correct.   | True                              | 
+  21 | // coreutils cp has --remove-destination | True                              | 
+  22 |                                          | True                              | 
+  23 | /* Called if open of destination, link c | True                              | 
+  24 |  * errno must be set to relevant value ( | True                              | 
+  25 |  * to give reasonable error message */   | True                              | 
+  26 | static int ask_and_unlink(const char *de | True                              | 
+  27 | {                                        | True                              | 
+  28 |  int e = errno;                          | True                              | 
+  29 |                                          | True                              | 
+  30 | #if !ENABLE_FEATURE_NON_POSIX_CP         | True                              | 
+  31 |  if (!(flags & (FILEUTILS_FORCE|FILEUTIL | !ENABLE_FEATURE_NON_POSIX_CP      | 
+  32 |   /* Either it exists, or the *path* doe | !ENABLE_FEATURE_NON_POSIX_CP      | 
+  33 |   bb_perror_msg("can't create '%s'", des | !ENABLE_FEATURE_NON_POSIX_CP      | 
+  34 |   return -1;                             | !ENABLE_FEATURE_NON_POSIX_CP      | 
+  35 |  }                                       | !ENABLE_FEATURE_NON_POSIX_CP      | 
+  36 | #endif                                   | True                              | 
+  37 |  // else: act as if -f is always in effe | True                              | 
+  38 |  // We don't want "can't create" msg, we | True                              | 
+  39 |  // (silently unless -i). Why? POSIX cp  | True                              | 
+  40 |  // O_TRUNC open of existing file, and u | True                              | 
+  41 |  // With above block unconditionally ena | True                              | 
+  42 |  // will complain a lot more than POSIX  | True                              | 
+  43 |                                          | True                              | 
+  44 |  /* TODO: maybe we should do it only if  | True                              | 
+  45 |  if (flags & FILEUTILS_INTERACTIVE) {    | True                              | 
+  46 |   // We would not do POSIX insanity. -i  | True                              | 
+  47 |   // then _unlinks_ the offender. Presto | True                              | 
+  48 |   // (No "opening without O_EXCL", no "u | True                              | 
+  49 |   // Or else we will end up having 3 ope | True                              | 
+  50 |   fprintf(stderr, "%s: overwrite '%s'? " | True                              | 
+  51 |   if (!bb_ask_y_confirmation())          | True                              | 
+  52 |    return 0; /* not allowed to overwrite | True                              | 
+  53 |  }                                       | True                              | 
+  54 |  if (unlink(dest) < 0) {                 | True                              | 
+  55 | #if ENABLE_FEATURE_VERBOSE_CP_MESSAGE    | True                              | 
+  56 |   if (e == errno && e == ENOENT) {       | ENABLE_FEATURE_VERBOSE_CP_MESSAGE | 
+  57 |    /* e == ENOTDIR is similar: path has  | ENABLE_FEATURE_VERBOSE_CP_MESSAGE | 
+  58 |     * but in this case we don't even rea | ENABLE_FEATURE_VERBOSE_CP_MESSAGE | 
+  59 |    bb_error_msg("can't create '%s': Path | ENABLE_FEATURE_VERBOSE_CP_MESSAGE | 
+  60 |    return -1; /* error */                | ENABLE_FEATURE_VERBOSE_CP_MESSAGE | 
+  61 |   }                                      | ENABLE_FEATURE_VERBOSE_CP_MESSAGE | 
+  62 | #endif                                   | True                              | 
+  63 |   errno = e; /* do not use errno from un | True                              | 
+  64 |   bb_perror_msg("can't create '%s'", des | True                              | 
+  65 |   return -1; /* error */                 | True                              | 
+  66 |  }                                       | True                              | 
+  67 | #if ENABLE_FEATURE_CP_LONG_OPTIONS       | True                              | 
+  68 |  if (flags & FILEUTILS_RMDEST)           | ENABLE_FEATURE_CP_LONG_OPTIONS    | 
+  69 |   if (flags & FILEUTILS_VERBOSE)         | ENABLE_FEATURE_CP_LONG_OPTIONS    | 
+  70 |    printf("removed '%s'\n", dest);       | ENABLE_FEATURE_CP_LONG_OPTIONS    | 
+  71 | #endif                                   | True                              | 
+  72 |  return 1; /* ok (to try again) */       | True                              | 
+  73 | }                                        | True                              | 
+  74 |                                          | True                              | 
+  75 | /* Return:                               | True                              | 
+  76 |  * -1 error, copy not made               | True                              | 
+  77 |  *  0 copy is made or user answered "no" | True                              | 
+  78 |  *    (failures to preserve mode/owner/t | True                              | 
+  79 |  */                                      | True                              | 
+  80 | int FAST_FUNC copy_file(const char *sour | True                              | 
+  81 | {                                        | True                              | 
+  82 |  /* This is a recursive function, try to | True                              | 
+  83 |  /* NB: each struct stat is ~100 bytes * | True                              | 
+  84 |  struct stat source_stat;                | True                              | 
+  85 |  struct stat dest_stat;                  | True                              | 
+  86 |  smallint retval = 0;                    | True                              | 
+  87 |  smallint dest_exists = 0;               | True                              | 
+  88 |  smallint ovr;                           | True                              | 
+  89 |                                          | True                              | 
+  90 | /* Inverse of cp -d ("cp without -d") */ | True                              | 
+  91 | #define FLAGS_DEREF (flags & (FILEUTILS_ | True                              | 
+  92 |                                          | True                              | 
+  93 |  if ((FLAGS_DEREF ? stat : lstat)(source | True                              | 
+  94 |   /* This may be a dangling symlink.     | True                              | 
+  95 |    * Making [sym]links to dangling symli | True                              | 
+  96 |   if (flags & (FILEUTILS_MAKE_SOFTLINK|F | True                              | 
+  97 |    goto make_links;                      | True                              | 
+  98 |   bb_perror_msg("can't stat '%s'", sourc | True                              | 
+  99 |   return -1;                             | True                              | 
+ 100 |  }                                       | True                              | 
+ 101 |                                          | True                              | 
+ 102 |  if (lstat(dest, &dest_stat) < 0) {      | True                              | 
+ 103 |   if (errno != ENOENT) {                 | True                              | 
+ 104 |    bb_perror_msg("can't stat '%s'", dest | True                              | 
+ 105 |    return -1;                            | True                              | 
+ 106 |   }                                      | True                              | 
+ 107 |  } else {                                | True                              | 
+ 108 |   if (source_stat.st_dev == dest_stat.st | True                              | 
+ 109 |    && source_stat.st_ino == dest_stat.st | True                              | 
+ 110 |   ) {                                    | True                              | 
+ 111 |    bb_error_msg("'%s' and '%s' are the s | True                              | 
+ 112 |    return -1;                            | True                              | 
+ 113 |   }                                      | True                              | 
+ 114 |   if (flags & FILEUTILS_NO_OVERWRITE) /* | True                              | 
+ 115 |    return 0;                             | True                              | 
+ 116 |   dest_exists = 1;                       | True                              | 
+ 117 |  }                                       | True                              | 
+ 118 |                                          | True                              | 
+ 119 | #if ENABLE_SELINUX                       | True                              | 
+ 120 |  if ((flags & FILEUTILS_PRESERVE_SECURIT | ENABLE_SELINUX                    | 
+ 121 |   security_context_t con;                | ENABLE_SELINUX                    | 
+ 122 |   if (lgetfilecon(source, &con) >= 0) {  | ENABLE_SELINUX                    | 
+ 123 |    if (setfscreatecon(con) < 0) {        | ENABLE_SELINUX                    | 
+ 124 |     bb_perror_msg("can't set setfscreate | ENABLE_SELINUX                    | 
+ 125 |     freecon(con);                        | ENABLE_SELINUX                    | 
+ 126 |     return -1;                           | ENABLE_SELINUX                    | 
+ 127 |    }                                     | ENABLE_SELINUX                    | 
+ 128 |   } else if (errno == ENOTSUP || errno = | ENABLE_SELINUX                    | 
+ 129 |    setfscreatecon_or_die(NULL);          | ENABLE_SELINUX                    | 
+ 130 |   } else {                               | ENABLE_SELINUX                    | 
+ 131 |    bb_perror_msg("can't lgetfilecon %s", | ENABLE_SELINUX                    | 
+ 132 |    return -1;                            | ENABLE_SELINUX                    | 
+ 133 |   }                                      | ENABLE_SELINUX                    | 
+ 134 |  }                                       | ENABLE_SELINUX                    | 
+ 135 | #endif                                   | True                              | 
+ 136 |                                          | True                              | 
+ 137 |  if (S_ISDIR(source_stat.st_mode)) {     | True                              | 
+ 138 |   DIR *dp;                               | True                              | 
+ 139 |   const char *tp;                        | True                              | 
+ 140 |   struct dirent *d;                      | True                              | 
+ 141 |   mode_t saved_umask = 0;                | True                              | 
+ 142 |                                          | True                              | 
+ 143 |   if (!(flags & FILEUTILS_RECUR)) {      | True                              | 
+ 144 |    bb_error_msg("omitting directory '%s' | True                              | 
+ 145 |    return -1;                            | True                              | 
+ 146 |   }                                      | True                              | 
+ 147 |                                          | True                              | 
+ 148 |   /* Did we ever create source ourself b | True                              | 
+ 149 |   tp = is_in_ino_dev_hashtable(&source_s | True                              | 
+ 150 |   if (tp) {                              | True                              | 
+ 151 |    /* We did! it's a recursion! man the  | True                              | 
+ 152 |    bb_error_msg("recursion detected, omi | True                              | 
+ 153 |      source);                            | True                              | 
+ 154 |    return -1;                            | True                              | 
+ 155 |   }                                      | True                              | 
+ 156 |                                          | True                              | 
+ 157 |   if (dest_exists) {                     | True                              | 
+ 158 |    if (!S_ISDIR(dest_stat.st_mode)) {    | True                              | 
+ 159 |     bb_error_msg("target '%s' is not a d | True                              | 
+ 160 |     return -1;                           | True                              | 
+ 161 |    }                                     | True                              | 
+ 162 |    /* race here: user can substitute a s | True                              | 
+ 163 |     * this check and actual creation of  | True                              | 
+ 164 |   } else {                               | True                              | 
+ 165 |    /* Create DEST */                     | True                              | 
+ 166 |    mode_t mode;                          | True                              | 
+ 167 |    saved_umask = umask(0);               | True                              | 
+ 168 |                                          | True                              | 
+ 169 |    mode = source_stat.st_mode;           | True                              | 
+ 170 |    if (!(flags & FILEUTILS_PRESERVE_STAT | True                              | 
+ 171 |     mode = source_stat.st_mode & ~saved_ | True                              | 
+ 172 |    /* Allow owner to access new dir (at  | True                              | 
+ 173 |    mode |= S_IRWXU;                      | True                              | 
+ 174 |    if (mkdir(dest, mode) < 0) {          | True                              | 
+ 175 |     umask(saved_umask);                  | True                              | 
+ 176 |     bb_perror_msg("can't create director | True                              | 
+ 177 |     return -1;                           | True                              | 
+ 178 |    }                                     | True                              | 
+ 179 |    umask(saved_umask);                   | True                              | 
+ 180 |    /* need stat info for add_to_ino_dev_ | True                              | 
+ 181 |    if (lstat(dest, &dest_stat) < 0) {    | True                              | 
+ 182 |     bb_perror_msg("can't stat '%s'", des | True                              | 
+ 183 |     return -1;                           | True                              | 
+ 184 |    }                                     | True                              | 
+ 185 |   }                                      | True                              | 
+ 186 |   /* remember (dev,inode) of each create | True                              | 
+ 187 |    * NULL: name is not remembered */     | True                              | 
+ 188 |   add_to_ino_dev_hashtable(&dest_stat, N | True                              | 
+ 189 |                                          | True                              | 
+ 190 |   /* Recursively copy files in SOURCE */ | True                              | 
+ 191 |   dp = opendir(source);                  | True                              | 
+ 192 |   if (dp == NULL) {                      | True                              | 
+ 193 |    retval = -1;                          | True                              | 
+ 194 |    goto preserve_mode_ugid_time;         | True                              | 
+ 195 |   }                                      | True                              | 
+ 196 |                                          | True                              | 
+ 197 |   while ((d = readdir(dp)) != NULL) {    | True                              | 
+ 198 |    char *new_source, *new_dest;          | True                              | 
+ 199 |                                          | True                              | 
+ 200 |    new_source = concat_subpath_file(sour | True                              | 
+ 201 |    if (new_source == NULL)               | True                              | 
+ 202 |     continue;                            | True                              | 
+ 203 |    new_dest = concat_path_file(dest, d-> | True                              | 
+ 204 |    if (copy_file(new_source, new_dest, f | True                              | 
+ 205 |     retval = -1;                         | True                              | 
+ 206 |    free(new_source);                     | True                              | 
+ 207 |    free(new_dest);                       | True                              | 
+ 208 |   }                                      | True                              | 
+ 209 |   closedir(dp);                          | True                              | 
+ 210 |                                          | True                              | 
+ 211 |   if (!dest_exists                       | True                              | 
+ 212 |    && chmod(dest, source_stat.st_mode &  | True                              | 
+ 213 |   ) {                                    | True                              | 
+ 214 |    bb_perror_msg("can't preserve %s of ' | True                              | 
+ 215 |    /* retval = -1; - WRONG! copy *WAS* m | True                              | 
+ 216 |   }                                      | True                              | 
+ 217 |   goto preserve_mode_ugid_time;          | True                              | 
+ 218 |  }                                       | True                              | 
+ 219 |                                          | True                              | 
+ 220 |  if (dest_exists) {                      | True                              | 
+ 221 |   if (flags & FILEUTILS_UPDATE) {        | True                              | 
+ 222 |    if (source_stat.st_mtime <= dest_stat | True                              | 
+ 223 |     return 0; /* source file must be new | True                              | 
+ 224 |    }                                     | True                              | 
+ 225 |   }                                      | True                              | 
+ 226 | #if ENABLE_FEATURE_CP_LONG_OPTIONS       | True                              | 
+ 227 |   if (flags & FILEUTILS_RMDEST) {        | ENABLE_FEATURE_CP_LONG_OPTIONS    | 
+ 228 |    ovr = ask_and_unlink(dest, flags);    | ENABLE_FEATURE_CP_LONG_OPTIONS    | 
+ 229 |    if (ovr <= 0)                         | ENABLE_FEATURE_CP_LONG_OPTIONS    | 
+ 230 |     return ovr;                          | ENABLE_FEATURE_CP_LONG_OPTIONS    | 
+ 231 |    dest_exists = 0;                      | ENABLE_FEATURE_CP_LONG_OPTIONS    | 
+ 232 |   }                                      | ENABLE_FEATURE_CP_LONG_OPTIONS    | 
+ 233 | #endif                                   | True                              | 
+ 234 |  }                                       | True                              | 
+ 235 |                                          | True                              | 
+ 236 |  if (flags & (FILEUTILS_MAKE_SOFTLINK|FI | True                              | 
+ 237 |   int (*lf)(const char *oldpath, const c | True                              | 
+ 238 |  make_links:                             | True                              | 
+ 239 |   /* Hmm... maybe                        | True                              | 
+ 240 |    * if (DEREF && MAKE_SOFTLINK) source  | True                              | 
+ 241 |    * (but realpath returns NULL on dangl | True                              | 
+ 242 |   lf = (flags & FILEUTILS_MAKE_SOFTLINK) | True                              | 
+ 243 |   if (lf(source, dest) < 0) {            | True                              | 
+ 244 |    ovr = ask_and_unlink(dest, flags);    | True                              | 
+ 245 |    if (ovr <= 0)                         | True                              | 
+ 246 |     return ovr;                          | True                              | 
+ 247 |    if (lf(source, dest) < 0) {           | True                              | 
+ 248 |     bb_perror_msg("can't create link '%s | True                              | 
+ 249 |     return -1;                           | True                              | 
+ 250 |    }                                     | True                              | 
+ 251 |   }                                      | True                              | 
+ 252 |   /* _Not_ jumping to preserve_mode_ugid | True                              | 
+ 253 |    * (sym)links don't have those */      | True                              | 
+ 254 |   return 0;                              | True                              | 
+ 255 |  }                                       | True                              | 
+ 256 |                                          | True                              | 
+ 257 |  if (/* "cp thing1 thing2" without -R: j | True                              | 
+ 258 |      !(flags & FILEUTILS_RECUR)          | True                              | 
+ 259 |      /* "cp [-opts] regular_file thing2" | True                              | 
+ 260 |   || S_ISREG(source_stat.st_mode)        | True                              | 
+ 261 |   /* DEREF uses stat, which never return | True                              | 
+ 262 |    * So the below is never true: */      | True                              | 
+ 263 |   /* || (FLAGS_DEREF && S_ISLNK(source_s | True                              | 
+ 264 |  ) {                                     | True                              | 
+ 265 |   int src_fd;                            | True                              | 
+ 266 |   int dst_fd;                            | True                              | 
+ 267 |   mode_t new_mode;                       | True                              | 
+ 268 |                                          | True                              | 
+ 269 |   if (!FLAGS_DEREF && S_ISLNK(source_sta | True                              | 
+ 270 |    /* "cp -d symlink dst": create a link | True                              | 
+ 271 |    goto dont_cat;                        | True                              | 
+ 272 |   }                                      | True                              | 
+ 273 |                                          | True                              | 
+ 274 |   if (ENABLE_FEATURE_PRESERVE_HARDLINKS  | True                              | 
+ 275 |    const char *link_target;              | True                              | 
+ 276 |    link_target = is_in_ino_dev_hashtable | True                              | 
+ 277 |    if (link_target) {                    | True                              | 
+ 278 |     if (link(link_target, dest) < 0) {   | True                              | 
+ 279 |      ovr = ask_and_unlink(dest, flags);  | True                              | 
+ 280 |      if (ovr <= 0)                       | True                              | 
+ 281 |       return ovr;                        | True                              | 
+ 282 |      if (link(link_target, dest) < 0) {  | True                              | 
+ 283 |       bb_perror_msg("can't create link ' | True                              | 
+ 284 |       return -1;                         | True                              | 
+ 285 |      }                                   | True                              | 
+ 286 |     }                                    | True                              | 
+ 287 |     return 0;                            | True                              | 
+ 288 |    }                                     | True                              | 
+ 289 |    add_to_ino_dev_hashtable(&source_stat | True                              | 
+ 290 |   }                                      | True                              | 
+ 291 |                                          | True                              | 
+ 292 |   src_fd = open_or_warn(source, O_RDONLY | True                              | 
+ 293 |   if (src_fd < 0)                        | True                              | 
+ 294 |    return -1;                            | True                              | 
+ 295 |                                          | True                              | 
+ 296 |   /* Do not try to open with weird mode  | True                              | 
+ 297 |   new_mode = source_stat.st_mode;        | True                              | 
+ 298 |   if (!S_ISREG(source_stat.st_mode))     | True                              | 
+ 299 |    new_mode = 0666;                      | True                              | 
+ 300 |                                          | True                              | 
+ 301 |   if (ENABLE_FEATURE_NON_POSIX_CP || (fl | True                              | 
+ 302 |    /*                                    | True                              | 
+ 303 |     * O_CREAT|O_EXCL: require that file  | True                              | 
+ 304 |     */                                   | True                              | 
+ 305 |    dst_fd = open(dest, O_WRONLY|O_CREAT| | True                              | 
+ 306 |   } else { /* POSIX, and not "cp -i" */  | True                              | 
+ 307 |    /*                                    | True                              | 
+ 308 |     * O_CREAT|O_TRUNC: create, or trunca | True                              | 
+ 309 |     */                                   | True                              | 
+ 310 |    dst_fd = open(dest, O_WRONLY|O_CREAT| | True                              | 
+ 311 |   }                                      | True                              | 
+ 312 |   if (dst_fd == -1) {                    | True                              | 
+ 313 |    ovr = ask_and_unlink(dest, flags);    | True                              | 
+ 314 |    if (ovr <= 0) {                       | True                              | 
+ 315 |     close(src_fd);                       | True                              | 
+ 316 |     return ovr;                          | True                              | 
+ 317 |    }                                     | True                              | 
+ 318 |    /* It shouldn't exist. If it exists,  | True                              | 
+ 319 |    dst_fd = open3_or_warn(dest, O_WRONLY | True                              | 
+ 320 |    if (dst_fd < 0) {                     | True                              | 
+ 321 |     close(src_fd);                       | True                              | 
+ 322 |     return -1;                           | True                              | 
+ 323 |    }                                     | True                              | 
+ 324 |   }                                      | True                              | 
+ 325 |                                          | True                              | 
+ 326 | #if ENABLE_SELINUX                       | True                              | 
+ 327 |   if ((flags & (FILEUTILS_PRESERVE_SECUR | ENABLE_SELINUX                    | 
+ 328 |    && is_selinux_enabled() > 0           | ENABLE_SELINUX                    | 
+ 329 |   ) {                                    | ENABLE_SELINUX                    | 
+ 330 |    security_context_t con;               | ENABLE_SELINUX                    | 
+ 331 |    if (getfscreatecon(&con) == -1) {     | ENABLE_SELINUX                    | 
+ 332 |     bb_simple_perror_msg("getfscreatecon | ENABLE_SELINUX                    | 
+ 333 |     return -1;                           | ENABLE_SELINUX                    | 
+ 334 |    }                                     | ENABLE_SELINUX                    | 
+ 335 |    if (con) {                            | ENABLE_SELINUX                    | 
+ 336 |     if (setfilecon(dest, con) == -1) {   | ENABLE_SELINUX                    | 
+ 337 |      bb_perror_msg("setfilecon:%s,%s", d | ENABLE_SELINUX                    | 
+ 338 |      freecon(con);                       | ENABLE_SELINUX                    | 
+ 339 |      return -1;                          | ENABLE_SELINUX                    | 
+ 340 |     }                                    | ENABLE_SELINUX                    | 
+ 341 |     freecon(con);                        | ENABLE_SELINUX                    | 
+ 342 |    }                                     | ENABLE_SELINUX                    | 
+ 343 |   }                                      | ENABLE_SELINUX                    | 
+ 344 | #endif                                   | True                              | 
+ 345 | #if ENABLE_FEATURE_CP_REFLINK            | True                              | 
+ 346 | # undef BTRFS_IOCTL_MAGIC                | ENABLE_FEATURE_CP_REFLINK         | 
+ 347 | # define BTRFS_IOCTL_MAGIC 0x94          | ENABLE_FEATURE_CP_REFLINK         | 
+ 348 | # undef BTRFS_IOC_CLONE                  | ENABLE_FEATURE_CP_REFLINK         | 
+ 349 | # define BTRFS_IOC_CLONE _IOW (BTRFS_IOC | ENABLE_FEATURE_CP_REFLINK         | 
+ 350 |   if (flags & FILEUTILS_REFLINK) {       | ENABLE_FEATURE_CP_REFLINK         | 
+ 351 |    retval = ioctl(dst_fd, BTRFS_IOC_CLON | ENABLE_FEATURE_CP_REFLINK         | 
+ 352 |    if (retval == 0)                      | ENABLE_FEATURE_CP_REFLINK         | 
+ 353 |     goto do_close;                       | ENABLE_FEATURE_CP_REFLINK         | 
+ 354 |    /* reflink did not work */            | ENABLE_FEATURE_CP_REFLINK         | 
+ 355 |    if (flags & FILEUTILS_REFLINK_ALWAYS) | ENABLE_FEATURE_CP_REFLINK         | 
+ 356 |     bb_perror_msg("failed to clone '%s'  | ENABLE_FEATURE_CP_REFLINK         | 
+ 357 |     goto do_close;                       | ENABLE_FEATURE_CP_REFLINK         | 
+ 358 |    }                                     | ENABLE_FEATURE_CP_REFLINK         | 
+ 359 |    /* fall through to standard copy */   | ENABLE_FEATURE_CP_REFLINK         | 
+ 360 |    retval = 0;                           | ENABLE_FEATURE_CP_REFLINK         | 
+ 361 |   }                                      | ENABLE_FEATURE_CP_REFLINK         | 
+ 362 | #endif                                   | True                              | 
+ 363 |   if (bb_copyfd_eof(src_fd, dst_fd) == - | True                              | 
+ 364 |    retval = -1;                          | True                              | 
+ 365 |  IF_FEATURE_CP_REFLINK(do_close:)        | True                              | 
+ 366 |   /* Careful with writing... */          | True                              | 
+ 367 |   if (close(dst_fd) < 0) {               | True                              | 
+ 368 |    bb_perror_msg("error writing to '%s'" | True                              | 
+ 369 |    retval = -1;                          | True                              | 
+ 370 |   }                                      | True                              | 
+ 371 |   /* ...but read size is already checked | True                              | 
+ 372 |   close(src_fd);                         | True                              | 
+ 373 |   /* "cp /dev/something new_file" should | True                              | 
+ 374 |    * copy mode of /dev/something */      | True                              | 
+ 375 |   if (!S_ISREG(source_stat.st_mode))     | True                              | 
+ 376 |    return retval;                        | True                              | 
+ 377 |   goto preserve_mode_ugid_time;          | True                              | 
+ 378 |  }                                       | True                              | 
+ 379 |  dont_cat:                               | True                              | 
+ 380 |                                          | True                              | 
+ 381 |  /* Source is a symlink or a special fil | True                              | 
+ 382 |  /* We are lazy here, a bit lax with rac | True                              | 
+ 383 |  if (dest_exists) {                      | True                              | 
+ 384 |   errno = EEXIST;                        | True                              | 
+ 385 |   ovr = ask_and_unlink(dest, flags);     | True                              | 
+ 386 |   if (ovr <= 0)                          | True                              | 
+ 387 |    return ovr;                           | True                              | 
+ 388 |  }                                       | True                              | 
+ 389 |  if (S_ISLNK(source_stat.st_mode)) {     | True                              | 
+ 390 |   char *lpath = xmalloc_readlink_or_warn | True                              | 
+ 391 |   if (lpath) {                           | True                              | 
+ 392 |    int r = symlink(lpath, dest);         | True                              | 
+ 393 |    if (r < 0) {                          | True                              | 
+ 394 |     /* shared message */                 | True                              | 
+ 395 |     bb_perror_msg("can't create %slink ' | True                              | 
+ 396 |      "sym", dest, lpath                  | True                              | 
+ 397 |     );                                   | True                              | 
+ 398 |     free(lpath);                         | True                              | 
+ 399 |     return -1;                           | True                              | 
+ 400 |    }                                     | True                              | 
+ 401 |    free(lpath);                          | True                              | 
+ 402 |    if (flags & FILEUTILS_PRESERVE_STATUS | True                              | 
+ 403 |     if (lchown(dest, source_stat.st_uid, | True                              | 
+ 404 |      bb_perror_msg("can't preserve %s of | True                              | 
+ 405 |   }                                      | True                              | 
+ 406 |   /* _Not_ jumping to preserve_mode_ugid | True                              | 
+ 407 |    * symlinks don't have those */        | True                              | 
+ 408 |   goto verb_and_exit;                    | True                              | 
+ 409 |  }                                       | True                              | 
+ 410 |  if (S_ISBLK(source_stat.st_mode) || S_I | True                              | 
+ 411 |   || S_ISSOCK(source_stat.st_mode) || S_ | True                              | 
+ 412 |  ) {                                     | True                              | 
+ 413 |   if (mknod(dest, source_stat.st_mode, s | True                              | 
+ 414 |    bb_perror_msg("can't create '%s'", de | True                              | 
+ 415 |    return -1;                            | True                              | 
+ 416 |   }                                      | True                              | 
+ 417 |  } else {                                | True                              | 
+ 418 |   bb_error_msg("unrecognized file '%s' w | True                              | 
+ 419 |   return -1;                             | True                              | 
+ 420 |  }                                       | True                              | 
+ 421 |                                          | True                              | 
+ 422 |  preserve_mode_ugid_time:                | True                              | 
+ 423 |                                          | True                              | 
+ 424 |  if (flags & FILEUTILS_PRESERVE_STATUS   | True                              | 
+ 425 |  /* Cannot happen: */                    | True                              | 
+ 426 |  /* && !(flags & (FILEUTILS_MAKE_SOFTLIN | True                              | 
+ 427 |  ) {                                     | True                              | 
+ 428 |   struct timeval times[2];               | True                              | 
+ 429 |                                          | True                              | 
+ 430 |   times[1].tv_sec = times[0].tv_sec = so | True                              | 
+ 431 |   times[1].tv_usec = times[0].tv_usec =  | True                              | 
+ 432 |   /* BTW, utimes sets usec-precision tim | True                              | 
+ 433 |   if (utimes(dest, times) < 0)           | True                              | 
+ 434 |    bb_perror_msg("can't preserve %s of ' | True                              | 
+ 435 |   if (chown(dest, source_stat.st_uid, so | True                              | 
+ 436 |    source_stat.st_mode &= ~(S_ISUID | S_ | True                              | 
+ 437 |    bb_perror_msg("can't preserve %s of ' | True                              | 
+ 438 |   }                                      | True                              | 
+ 439 |   if (chmod(dest, source_stat.st_mode) < | True                              | 
+ 440 |    bb_perror_msg("can't preserve %s of ' | True                              | 
+ 441 |  }                                       | True                              | 
+ 442 |                                          | True                              | 
+ 443 |  verb_and_exit:                          | True                              | 
+ 444 |  if (flags & FILEUTILS_VERBOSE) {        | True                              | 
+ 445 |   printf("'%s' -> '%s'\n", source, dest) | True                              | 
+ 446 |  }                                       | True                              | 
+ 447 |                                          | True                              | 
+ 448 |  return retval;                          | True                              | 
+ 449 | }                                        | True                              | 
+-----+------------------------------------------+-----------------------------------+
+     |                                          | +113MB, 243ms                     | 

@@ -1,0 +1,703 @@
+FILE: data/raw/busybox-1.38.0/util-linux/mkfs_ext2.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * mkfs_ext2: utility to create EXT2 fil | True                      | 
+   4 |  * inspired by genext2fs                 | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Busybox'ed (2009) by Vladimir Dronnik | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   9 |  */                                      | True                      | 
+  10 | //config:config MKE2FS                   | True                      | 
+  11 | //config: bool "mke2fs (10 kb)"          | True                      | 
+  12 | //config: default y                      | True                      | 
+  13 | //config: help                           | True                      | 
+  14 | //config: Utility to create EXT2 filesys | True                      | 
+  15 | //config:                                | True                      | 
+  16 | //config:config MKFS_EXT2                | True                      | 
+  17 | //config: bool "mkfs.ext2 (10 kb)"       | True                      | 
+  18 | //config: default y                      | True                      | 
+  19 | //config: help                           | True                      | 
+  20 | //config: Alias to "mke2fs".             | True                      | 
+  21 |                                          | True                      | 
+  22 | //                    APPLET_ODDNAME:nam | True                      | 
+  23 | //applet:IF_MKE2FS(   APPLET_ODDNAME(mke | True                      | 
+  24 | //applet:IF_MKFS_EXT2(APPLET_ODDNAME(mkf | True                      | 
+  25 | ////////:IF_MKFS_EXT3(APPLET_ODDNAME(mkf | True                      | 
+  26 |                                          | True                      | 
+  27 | //kbuild:lib-$(CONFIG_MKE2FS) += mkfs_ex | True                      | 
+  28 | //kbuild:lib-$(CONFIG_MKFS_EXT2) += mkfs | True                      | 
+  29 |                                          | True                      | 
+  30 | //usage:#define mkfs_ext2_trivial_usage  | True                      | 
+  31 | //usage:       "[-Fn] "                  | True                      | 
+  32 | /* //usage:    "[-c|-l filename] " */    | True                      | 
+  33 | //usage:       "[-b BLK_SIZE] "          | True                      | 
+  34 | /* //usage:    "[-f fragment-size] [-g b | True                      | 
+  35 | //usage:       "[-i INODE_RATIO] [-I INO | True                      | 
+  36 | /* //usage:    "[-j] [-J journal-options | True                      | 
+  37 | //usage:       "[-m RESERVED_PERCENT] "  | True                      | 
+  38 | /* //usage:    "[-o creator-os] [-O feat | True                      | 
+  39 | /* //usage:    "[r fs-revision-level] [- | True                      | 
+  40 | //usage:       "[-L LABEL] "             | True                      | 
+  41 | /* //usage:    "[-M last-mounted-directo | True                      | 
+  42 | //usage:       "BLOCKDEV [KBYTES]"       | True                      | 
+  43 | //usage:#define mkfs_ext2_full_usage "\n | True                      | 
+  44 | //usage:       " -b BLK_SIZE Block size, | True                      | 
+  45 | /* //usage:  "\n -c  Check device for ba | True                      | 
+  46 | /* //usage:  "\n -E opts  Set extended o | True                      | 
+  47 | /* //usage:  "\n -f size  Fragment size  | True                      | 
+  48 | //usage:     "\n -F  Force"              | True                      | 
+  49 | /* //usage:  "\n -g N  Number of blocks  | True                      | 
+  50 | //usage:     "\n -i RATIO Max number of  | True                      | 
+  51 | //usage:     "\n -I BYTES Inode size (mi | True                      | 
+  52 | /* //usage:  "\n -j  Create a journal (e | True                      | 
+  53 | /* //usage:  "\n -J opts  Set journal op | True                      | 
+  54 | /* //usage:  "\n -l file  Read bad block | True                      | 
+  55 | //usage:     "\n -L LBL  Volume label"   | True                      | 
+  56 | //usage:     "\n -m PERCENT Percent of b | True                      | 
+  57 | /* //usage:  "\n -M dir  Set last mounte | True                      | 
+  58 | //usage:     "\n -n  Dry run"            | True                      | 
+  59 | /* //usage:  "\n -N N  Number of inodes  | True                      | 
+  60 | /* //usage:  "\n -o os  Set the 'creator | True                      | 
+  61 | /* //usage:  "\n -O features Dir_index/f | True                      | 
+  62 | /* //usage:  "\n -q  Quiet" */           | True                      | 
+  63 | /* //usage:  "\n -r rev  Set filesystem  | True                      | 
+  64 | /* //usage:  "\n -S  Write superblock an | True                      | 
+  65 | /* //usage:  "\n -T fs-type Set usage ty | True                      | 
+  66 | /* //usage:  "\n -v  Verbose" */         | True                      | 
+  67 |                                          | True                      | 
+  68 | #include "libbb.h"                       | True                      | 
+  69 | #include <linux/fs.h>                    | True                      | 
+  70 | #include "bb_e2fs_defs.h"                | True                      | 
+  71 |                                          | True                      | 
+  72 | #define ENABLE_FEATURE_MKFS_EXT2_RESERVE | True                      | 
+  73 | #define ENABLE_FEATURE_MKFS_EXT2_DIR_IND | True                      | 
+  74 |                                          | True                      | 
+  75 | #define EXT2_HASH_HALF_MD4       1       | True                      | 
+  76 | #define EXT2_FLAGS_SIGNED_HASH   0x0001  | True                      | 
+  77 | #define EXT2_FLAGS_UNSIGNED_HASH 0x0002  | True                      | 
+  78 |                                          | True                      | 
+  79 | // All fields are little-endian          | True                      | 
+  80 | struct ext2_dir {                        | True                      | 
+  81 |  uint32_t inode1;                        | True                      | 
+  82 |  uint16_t rec_len1;                      | True                      | 
+  83 |  uint8_t  name_len1;                     | True                      | 
+  84 |  uint8_t  file_type1;                    | True                      | 
+  85 |  char     name1[4];                      | True                      | 
+  86 |  uint32_t inode2;                        | True                      | 
+  87 |  uint16_t rec_len2;                      | True                      | 
+  88 |  uint8_t  name_len2;                     | True                      | 
+  89 |  uint8_t  file_type2;                    | True                      | 
+  90 |  char     name2[4];                      | True                      | 
+  91 |  uint32_t inode3;                        | True                      | 
+  92 |  uint16_t rec_len3;                      | True                      | 
+  93 |  uint8_t  name_len3;                     | True                      | 
+  94 |  uint8_t  file_type3;                    | True                      | 
+  95 |  char     name3[12];                     | True                      | 
+  96 | };                                       | True                      | 
+  97 |                                          | True                      | 
+  98 | static unsigned int_log2(unsigned arg)   | True                      | 
+  99 | {                                        | True                      | 
+ 100 |  unsigned r = 0;                         | True                      | 
+ 101 |  while ((arg >>= 1) != 0)                | True                      | 
+ 102 |   r++;                                   | True                      | 
+ 103 |  return r;                               | True                      | 
+ 104 | }                                        | True                      | 
+ 105 |                                          | True                      | 
+ 106 | // taken from mkfs_minix.c. libbb candid | True                      | 
+ 107 | // "uint32_t size", since we never use i | True                      | 
+ 108 | static uint32_t div_roundup(uint32_t siz | True                      | 
+ 109 | {                                        | True                      | 
+ 110 |  // Overflow-resistant                   | True                      | 
+ 111 |  uint32_t res = size / n;                | True                      | 
+ 112 |  if (res * n != size)                    | True                      | 
+ 113 |   res++;                                 | True                      | 
+ 114 |  return res;                             | True                      | 
+ 115 | }                                        | True                      | 
+ 116 |                                          | True                      | 
+ 117 | static void allocate(uint8_t *bitmap, ui | True                      | 
+ 118 | {                                        | True                      | 
+ 119 |  uint32_t i;                             | True                      | 
+ 120 |                                          | True                      | 
+ 121 | //bb_error_msg("ALLOC: [%u][%u][%u]: [%u | True                      | 
+ 122 |  memset(bitmap, 0, blocksize);           | True                      | 
+ 123 |  i = start / 8;                          | True                      | 
+ 124 |  memset(bitmap, 0xFF, i);                | True                      | 
+ 125 |  bitmap[i] = (1 << (start & 7)) - 1; //0 | True                      | 
+ 126 |  i = end / 8;                            | True                      | 
+ 127 |  bitmap[blocksize - i - 1] |= 0x7F00 >>  | True                      | 
+ 128 |  memset(bitmap + blocksize - i, 0xFF, i) | True                      | 
+ 129 | }                                        | True                      | 
+ 130 |                                          | True                      | 
+ 131 | static uint32_t has_super(uint32_t x)    | True                      | 
+ 132 | {                                        | True                      | 
+ 133 |  // 0, 1 and powers of 3, 5, 7 up to 2^3 | True                      | 
+ 134 |  static const uint32_t supers[] ALIGN4 = | True                      | 
+ 135 |   0, 1, 3, 5, 7, 9, 25, 27, 49, 81, 125, | True                      | 
+ 136 |   2187, 2401, 3125, 6561, 15625, 16807,  | True                      | 
+ 137 |   117649, 177147, 390625, 531441, 823543 | True                      | 
+ 138 |   4782969, 5764801, 9765625, 14348907, 4 | True                      | 
+ 139 |   48828125, 129140163, 244140625, 282475 | True                      | 
+ 140 |   1162261467, 1220703125, 1977326743, 34 | True                      | 
+ 141 |  };                                      | True                      | 
+ 142 |  const uint32_t *sp = supers + ARRAY_SIZ | True                      | 
+ 143 |  while (1) {                             | True                      | 
+ 144 |   sp--;                                  | True                      | 
+ 145 |   if (x == *sp)                          | True                      | 
+ 146 |    return 1;                             | True                      | 
+ 147 |   if (x > *sp)                           | True                      | 
+ 148 |    return 0;                             | True                      | 
+ 149 |  }                                       | True                      | 
+ 150 | }                                        | True                      | 
+ 151 |                                          | True                      | 
+ 152 | #define fd 3 /* predefined output descri | True                      | 
+ 153 |                                          | True                      | 
+ 154 | static void PUT(uint64_t off, void *buf, | True                      | 
+ 155 | {                                        | True                      | 
+ 156 |  //bb_error_msg("PUT[%llu]:[%u]", off, s | True                      | 
+ 157 |  xlseek(fd, off, SEEK_SET);              | True                      | 
+ 158 |  xwrite(fd, buf, size);                  | True                      | 
+ 159 | }                                        | True                      | 
+ 160 |                                          | True                      | 
+ 161 | // 128 and 256-byte inodes:              | True                      | 
+ 162 | // 128-byte inode is described by struct | True                      | 
+ 163 | // 256-byte one just has these fields ap | True                      | 
+ 164 | //      __u16   i_extra_isize;           | True                      | 
+ 165 | //      __u16   i_pad1;                  | True                      | 
+ 166 | //      __u32   i_ctime_extra;  /* extra | True                      | 
+ 167 | //      __u32   i_mtime_extra;  /* extra | True                      | 
+ 168 | //      __u32   i_atime_extra;  /* extra | True                      | 
+ 169 | //      __u32   i_crtime;       /* File  | True                      | 
+ 170 | //      __u32   i_crtime_extra; /* extra | True                      | 
+ 171 | //      __u32   i_version_hi;   /* high  | True                      | 
+ 172 | // the rest is padding.                  | True                      | 
+ 173 | //                                       | True                      | 
+ 174 | // linux/ext2_fs.h has "#define i_size_h | True                      | 
+ 175 | // 128-byte inode is capable of describi | True                      | 
+ 176 | // only for directories, which never nee | True                      | 
+ 177 | //                                       | True                      | 
+ 178 | // Standard mke2fs creates a filesystem  | True                      | 
+ 179 | // bigger than 0.5GB.                    | True                      | 
+ 180 |                                          | True                      | 
+ 181 | // Standard mke2fs 1.41.9:               | True                      | 
+ 182 | // Usage: mke2fs [-c|-l filename] [-b bl | True                      | 
+ 183 | // [-i bytes-per-inode] [-I inode-size]  | True                      | 
+ 184 | // [-G meta group size] [-N number-of-in | True                      | 
+ 185 | // [-m reserved-blocks-percentage] [-o c | True                      | 
+ 186 | // [-g blocks-per-group] [-L volume-labe | True                      | 
+ 187 | // [-O feature[,...]] [-r fs-revision] [ | True                      | 
+ 188 | // [-T fs-type] [-U UUID] [-jnqvFSV] dev | True                      | 
+ 189 | //                                       | True                      | 
+ 190 | // Options not commented below are taken | True                      | 
+ 191 | enum {                                   | True                      | 
+ 192 |  OPT_c = 1 << 0,                         | True                      | 
+ 193 |  OPT_l = 1 << 1,                         | True                      | 
+ 194 |  OPT_b = 1 << 2,  // block size, in byte | True                      | 
+ 195 |  OPT_f = 1 << 3,                         | True                      | 
+ 196 |  OPT_i = 1 << 4,  // bytes per inode     | True                      | 
+ 197 |  OPT_I = 1 << 5,  // custom inode size,  | True                      | 
+ 198 |  OPT_J = 1 << 6,                         | True                      | 
+ 199 |  OPT_G = 1 << 7,                         | True                      | 
+ 200 |  OPT_N = 1 << 8,                         | True                      | 
+ 201 |  OPT_m = 1 << 9,  // percentage of block | True                      | 
+ 202 |  OPT_o = 1 << 10,                        | True                      | 
+ 203 |  OPT_g = 1 << 11,                        | True                      | 
+ 204 |  OPT_L = 1 << 12, // label               | True                      | 
+ 205 |  OPT_M = 1 << 13,                        | True                      | 
+ 206 |  OPT_O = 1 << 14,                        | True                      | 
+ 207 |  OPT_r = 1 << 15,                        | True                      | 
+ 208 |  OPT_E = 1 << 16,                        | True                      | 
+ 209 |  OPT_T = 1 << 17,                        | True                      | 
+ 210 |  OPT_U = 1 << 18,                        | True                      | 
+ 211 |  OPT_j = 1 << 19,                        | True                      | 
+ 212 |  OPT_n = 1 << 20, // dry run: do not wri | True                      | 
+ 213 |  OPT_q = 1 << 21,                        | True                      | 
+ 214 |  OPT_v = 1 << 22,                        | True                      | 
+ 215 |  OPT_F = 1 << 23,                        | True                      | 
+ 216 |  OPT_S = 1 << 24,                        | True                      | 
+ 217 |  //OPT_V = 1 << 25, // -V version. bbox  | True                      | 
+ 218 | };                                       | True                      | 
+ 219 |                                          | True                      | 
+ 220 | int mkfs_ext2_main(int argc, char **argv | True                      | 
+ 221 | int mkfs_ext2_main(int argc UNUSED_PARAM | True                      | 
+ 222 | {                                        | True                      | 
+ 223 |  unsigned i, pos, n;                     | True                      | 
+ 224 |  unsigned bs, bpi;                       | True                      | 
+ 225 |  unsigned blocksize, blocksize_log2;     | True                      | 
+ 226 |  unsigned inodesize, user_inodesize;     | True                      | 
+ 227 |  unsigned reserved_percent = 5;          | True                      | 
+ 228 |  unsigned long long kilobytes;           | True                      | 
+ 229 |  uint32_t nblocks, nblocks_full;         | True                      | 
+ 230 |  uint32_t nreserved;                     | True                      | 
+ 231 |  uint32_t ngroups;                       | True                      | 
+ 232 |  uint32_t bytes_per_inode;               | True                      | 
+ 233 |  uint32_t first_block;                   | True                      | 
+ 234 |  uint32_t inodes_per_group;              | True                      | 
+ 235 |  uint32_t group_desc_blocks;             | True                      | 
+ 236 |  uint32_t inode_table_blocks;            | True                      | 
+ 237 |  uint32_t lost_and_found_blocks;         | True                      | 
+ 238 |  time_t timestamp;                       | True                      | 
+ 239 |  const char *label = "";                 | True                      | 
+ 240 |  struct stat st;                         | True                      | 
+ 241 |  struct ext2_super_block *sb; // superbl | True                      | 
+ 242 |  struct ext2_group_desc *gd; // group de | True                      | 
+ 243 |  struct ext2_inode *inode;               | True                      | 
+ 244 |  struct ext2_dir *dir;                   | True                      | 
+ 245 |  uint8_t *buf;                           | True                      | 
+ 246 |                                          | True                      | 
+ 247 |  // using global "option_mask32" instead | True                      | 
+ 248 |  // we are register starved here         | True                      | 
+ 249 |  /*opts =*/ getopt32(argv, "cl:b:+f:i:+I | True                      | 
+ 250 |   /*lbfi:*/ NULL, &bs, NULL, &bpi,       | True                      | 
+ 251 |   /*IJGN:*/ &user_inodesize, NULL, NULL, | True                      | 
+ 252 |   /*mogL:*/ &reserved_percent, NULL, NUL | True                      | 
+ 253 |   /*MOrE:*/ NULL, NULL, NULL, NULL,      | True                      | 
+ 254 |   /*TU:*/ NULL, NULL);                   | True                      | 
+ 255 |  argv += optind; // argv[0] -- device    | True                      | 
+ 256 |                                          | True                      | 
+ 257 |  // open the device, check the device is | True                      | 
+ 258 |  xmove_fd(xopen(argv[0], O_WRONLY), fd); | True                      | 
+ 259 |  xfstat(fd, &st, argv[0]);               | True                      | 
+ 260 |  if (!S_ISBLK(st.st_mode) && !(option_ma | True                      | 
+ 261 |   bb_error_msg_and_die("%s: not a block  | True                      | 
+ 262 |                                          | True                      | 
+ 263 |  // check if it is mounted               | True                      | 
+ 264 |  // N.B. what if we format a file? find_ | True                      | 
+ 265 |  // it is loop block device which is mou | True                      | 
+ 266 |  if (find_mount_point(argv[0], 0))       | True                      | 
+ 267 |   bb_simple_error_msg_and_die("can't for | True                      | 
+ 268 |                                          | True                      | 
+ 269 |  // get size in kbytes                   | True                      | 
+ 270 |  kilobytes = get_volume_size_in_bytes(fd | True                      | 
+ 271 |                                          | True                      | 
+ 272 |  bytes_per_inode = 16384;                | True                      | 
+ 273 |  if (kilobytes < 512*1024)               | True                      | 
+ 274 |   bytes_per_inode = 4096;                | True                      | 
+ 275 |  if (kilobytes < 3*1024)                 | True                      | 
+ 276 |   bytes_per_inode = 8192;                | True                      | 
+ 277 |  if (option_mask32 & OPT_i)              | True                      | 
+ 278 |   bytes_per_inode = bpi;                 | True                      | 
+ 279 |                                          | True                      | 
+ 280 |  // Determine block size and inode size  | True                      | 
+ 281 |  // block size is a multiple of 1024     | True                      | 
+ 282 |  // inode size is a multiple of 128      | True                      | 
+ 283 |  blocksize = 1024;                       | True                      | 
+ 284 |  inodesize = sizeof(struct ext2_inode);  | True                      | 
+ 285 |  if (kilobytes >= 512*1024) { // mke2fs  | True                      | 
+ 286 |   blocksize = 4096;                      | True                      | 
+ 287 |   inodesize = 256;                       | True                      | 
+ 288 |  }                                       | True                      | 
+ 289 |  if (EXT2_MAX_BLOCK_SIZE > 4096) {       | True                      | 
+ 290 |   // kilobytes >> 22 == size in 4gigabyt | True                      | 
+ 291 |   // if size >= 16k gigs, blocksize must | True                      | 
+ 292 |   // Try "mke2fs -F image $((16 * 1024*1 | True                      | 
+ 293 |   while ((kilobytes >> 22) >= blocksize) | True                      | 
+ 294 |    blocksize *= 2;                       | True                      | 
+ 295 |  }                                       | True                      | 
+ 296 |  if (option_mask32 & OPT_b)              | True                      | 
+ 297 |   blocksize = bs;                        | True                      | 
+ 298 |  if (blocksize < EXT2_MIN_BLOCK_SIZE     | True                      | 
+ 299 |   || blocksize > EXT2_MAX_BLOCK_SIZE     | True                      | 
+ 300 |   || (blocksize & (blocksize - 1)) // no | True                      | 
+ 301 |  ) {                                     | True                      | 
+ 302 |   bb_error_msg_and_die("blocksize %u is  | True                      | 
+ 303 |  }                                       | True                      | 
+ 304 |  // Do we have custom inode size?        | True                      | 
+ 305 |  if (option_mask32 & OPT_I) {            | True                      | 
+ 306 |   if (user_inodesize < sizeof(*inode)    | True                      | 
+ 307 |    || user_inodesize > blocksize         | True                      | 
+ 308 |    || (user_inodesize & (user_inodesize  | True                      | 
+ 309 |   ) {                                    | True                      | 
+ 310 |    bb_error_msg("-%c is bad", 'I');      | True                      | 
+ 311 |   } else {                               | True                      | 
+ 312 |    inodesize = user_inodesize;           | True                      | 
+ 313 |   }                                      | True                      | 
+ 314 |  }                                       | True                      | 
+ 315 |                                          | True                      | 
+ 316 |  if ((int32_t)bytes_per_inode < blocksiz | True                      | 
+ 317 |   bb_error_msg_and_die("-%c is bad", 'i' | True                      | 
+ 318 |  // number of bits in one block, i.e. 8* | True                      | 
+ 319 | #define blocks_per_group (8 * blocksize) | True                      | 
+ 320 |  first_block = (EXT2_MIN_BLOCK_SIZE == b | True                      | 
+ 321 |  blocksize_log2 = int_log2(blocksize);   | True                      | 
+ 322 |                                          | True                      | 
+ 323 |  // Determine number of blocks           | True                      | 
+ 324 |  kilobytes >>= (blocksize_log2 - EXT2_MI | True                      | 
+ 325 |  nblocks = kilobytes;                    | True                      | 
+ 326 |  if (nblocks != kilobytes)               | True                      | 
+ 327 |   bb_simple_error_msg_and_die("block cou | True                      | 
+ 328 | #define kilobytes kilobytes_unused_after | True                      | 
+ 329 |  // Experimentally, standard mke2fs won' | True                      | 
+ 330 |  if (nblocks < 60)                       | True                      | 
+ 331 |   bb_simple_error_msg_and_die("need >= 6 | True                      | 
+ 332 |                                          | True                      | 
+ 333 |  // How many reserved blocks?            | True                      | 
+ 334 |  if (reserved_percent > 50)              | True                      | 
+ 335 |   bb_error_msg_and_die("-%c is bad", 'm' | True                      | 
+ 336 |  nreserved = (uint64_t)nblocks * reserve | True                      | 
+ 337 |                                          | True                      | 
+ 338 |  // N.B. killing e2fsprogs feature! Unus | True                      | 
+ 339 |  nblocks_full = nblocks;                 | True                      | 
+ 340 |                                          | True                      | 
+ 341 |  // If last block group is too small, nb | True                      | 
+ 342 |  // to discard it, and control returns h | True                      | 
+ 343 |  // parameters.                          | True                      | 
+ 344 |  // Note: blocksize and bytes_per_inode  | True                      | 
+ 345 |  retry:                                  | True                      | 
+ 346 |  // N.B. a block group can have no more  | True                      | 
+ 347 |  ngroups = div_roundup(nblocks - first_b | True                      | 
+ 348 |                                          | True                      | 
+ 349 |  group_desc_blocks = div_roundup(ngroups | True                      | 
+ 350 |  // TODO: reserved blocks must be marked | True                      | 
+ 351 |  // or resulting filesystem is corrupt   | True                      | 
+ 352 |  if (ENABLE_FEATURE_MKFS_EXT2_RESERVED_G | True                      | 
+ 353 |   /*                                     | True                      | 
+ 354 |    * From e2fsprogs: Calculate the numbe | True                      | 
+ 355 |    * filesystem growth.                  | True                      | 
+ 356 |    * The absolute maximum number of GDT  | True                      | 
+ 357 |    * the number of block pointers that c | True                      | 
+ 358 |    * We set it at 1024x the current file | True                      | 
+ 359 |    * the upper block count limit (2^32), | True                      | 
+ 360 |    */                                    | True                      | 
+ 361 |   uint32_t reserved_group_desc_blocks =  | True                      | 
+ 362 |   if (nblocks < reserved_group_desc_bloc | True                      | 
+ 363 |    reserved_group_desc_blocks = nblocks  | True                      | 
+ 364 |   reserved_group_desc_blocks = div_round | True                      | 
+ 365 |   reserved_group_desc_blocks = div_round | True                      | 
+ 366 |   if (reserved_group_desc_blocks > block | True                      | 
+ 367 |    reserved_group_desc_blocks = blocksiz | True                      | 
+ 368 |   //TODO: STORE_LE(sb->s_reserved_gdt_bl | True                      | 
+ 369 |   group_desc_blocks += reserved_group_de | True                      | 
+ 370 |  }                                       | True                      | 
+ 371 |                                          | True                      | 
+ 372 |  {                                       | True                      | 
+ 373 |   // N.B. e2fsprogs does as follows!     | True                      | 
+ 374 |   uint32_t overhead, remainder;          | True                      | 
+ 375 |   // ninodes is the max number of inodes | True                      | 
+ 376 |   uint32_t ninodes = ((uint64_t) nblocks | True                      | 
+ 377 |   if (ninodes < EXT2_GOOD_OLD_FIRST_INO+ | True                      | 
+ 378 |    ninodes = EXT2_GOOD_OLD_FIRST_INO+1;  | True                      | 
+ 379 |   inodes_per_group = div_roundup(ninodes | True                      | 
+ 380 |   // minimum number because the first EX | True                      | 
+ 381 |   if (inodes_per_group < 16)             | True                      | 
+ 382 |    inodes_per_group = 16;                | True                      | 
+ 383 |   // a block group can't have more inode | True                      | 
+ 384 |   if (inodes_per_group > blocks_per_grou | True                      | 
+ 385 |    inodes_per_group = blocks_per_group;  | True                      | 
+ 386 |   // adjust inodes per group so they com | True                      | 
+ 387 |   inodes_per_group = (div_roundup(inodes | True                      | 
+ 388 |   // make sure the number of inodes per  | True                      | 
+ 389 |   inodes_per_group &= ~7;                | True                      | 
+ 390 |   inode_table_blocks = div_roundup(inode | True                      | 
+ 391 |                                          | True                      | 
+ 392 |   // to be useful, lost+found should occ | True                      | 
+ 393 |   // and at most EXT2_NDIR_BLOCKS. So re | True                      | 
+ 394 |   /* Or e2fsprogs comment verbatim (what | True                      | 
+ 395 |    * Ensure that lost+found is at least  | True                      | 
+ 396 |    * test large empty blocks for big-blo | True                      | 
+ 397 |   lost_and_found_blocks = MIN(EXT2_NDIR_ | True                      | 
+ 398 |                                          | True                      | 
+ 399 |   // the last group needs more attention | True                      | 
+ 400 |   overhead = (has_super(ngroups - 1) ? ( | True                      | 
+ 401 |   remainder = (nblocks - first_block) %  | True                      | 
+ 402 |   ////can't happen, nblocks >= 60 guaran | True                      | 
+ 403 |   ////if ((1 == ngroups)                 | True                      | 
+ 404 |   //// && remainder                      | True                      | 
+ 405 |   //// && (remainder < overhead + 1/* "/ | True                      | 
+ 406 |   ////) {                                | True                      | 
+ 407 |   //// bb_error_msg_and_die("way small d | True                      | 
+ 408 |   ////}                                  | True                      | 
+ 409 |                                          | True                      | 
+ 410 |   // Standard mke2fs uses 50. Looks like | True                      | 
+ 411 |   // of "remainder" or "overhead" - we d | True                      | 
+ 412 |   // when we transition from one group t | True                      | 
+ 413 |   // (a bit after 8M image size), but it | True                      | 
+ 414 |   // transition (at 16M).                | True                      | 
+ 415 |   if (remainder && (remainder < overhead | True                      | 
+ 416 | //bb_error_msg("CHOP[%u]", remainder);   | True                      | 
+ 417 |    nblocks -= remainder;                 | True                      | 
+ 418 |    goto retry;                           | True                      | 
+ 419 |   }                                      | True                      | 
+ 420 |  }                                       | True                      | 
+ 421 |                                          | True                      | 
+ 422 |  if (nblocks_full - nblocks)             | True                      | 
+ 423 |   printf("warning: %u blocks unused\n\n" | True                      | 
+ 424 |  printf(                                 | True                      | 
+ 425 |   "Filesystem label=%s\n"                | True                      | 
+ 426 |   "OS type: Linux\n"                     | True                      | 
+ 427 |   "Block size=%u (log=%u)\n"             | True                      | 
+ 428 |   "Fragment size=%u (log=%u)\n"          | True                      | 
+ 429 |   "%u inodes, %u blocks\n"               | True                      | 
+ 430 |   "%u blocks (%u%%) reserved for the sup | True                      | 
+ 431 |   "First data block=%u\n"                | True                      | 
+ 432 |   "Maximum filesystem blocks=%u\n"       | True                      | 
+ 433 |   "%u block groups\n"                    | True                      | 
+ 434 |   "%u blocks per group, %u fragments per | True                      | 
+ 435 |   "%u inodes per group"                  | True                      | 
+ 436 |   , label                                | True                      | 
+ 437 |   , blocksize, blocksize_log2 - EXT2_MIN | True                      | 
+ 438 |   , blocksize, blocksize_log2 - EXT2_MIN | True                      | 
+ 439 |   , inodes_per_group * ngroups, nblocks  | True                      | 
+ 440 |   , nreserved, reserved_percent          | True                      | 
+ 441 |   , first_block                          | True                      | 
+ 442 |   , group_desc_blocks * (blocksize / (un | True                      | 
+ 443 |   , ngroups                              | True                      | 
+ 444 |   , blocks_per_group, blocks_per_group   | True                      | 
+ 445 |   , inodes_per_group                     | True                      | 
+ 446 |  );                                      | True                      | 
+ 447 |  {                                       | True                      | 
+ 448 |   const char *fmt = "\nSuperblock backup | True                      | 
+ 449 |    "\t%u";                               | True                      | 
+ 450 |   pos = first_block;                     | True                      | 
+ 451 |   for (i = 1; i < ngroups; i++) {        | True                      | 
+ 452 |    pos += blocks_per_group;              | True                      | 
+ 453 |    if (has_super(i)) {                   | True                      | 
+ 454 |     printf(fmt, (unsigned)pos);          | True                      | 
+ 455 |     fmt = ", %u";                        | True                      | 
+ 456 |    }                                     | True                      | 
+ 457 |   }                                      | True                      | 
+ 458 |  }                                       | True                      | 
+ 459 |  bb_putchar('\n');                       | True                      | 
+ 460 |                                          | True                      | 
+ 461 |  if (option_mask32 & OPT_n) {            | True                      | 
+ 462 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                      | 
+ 463 |    close(fd);                            | True                      | 
+ 464 |   return EXIT_SUCCESS;                   | True                      | 
+ 465 |  }                                       | True                      | 
+ 466 |                                          | True                      | 
+ 467 |  // TODO: 3/5 refuse if mounted          | True                      | 
+ 468 |  // TODO: 4/5 compat options             | True                      | 
+ 469 |  // TODO: 1/5 sanity checks              | True                      | 
+ 470 |  // TODO: 0/5 more verbose error message | True                      | 
+ 471 |  // TODO: 4/5 bigendianness: recheck, wa | True                      | 
+ 472 |  // TODO: 2/5 reserved GDT: how to mark  | True                      | 
+ 473 |  // TODO: 3/5 dir_index?                 | True                      | 
+ 474 |                                          | True                      | 
+ 475 |  // fill the superblock                  | True                      | 
+ 476 |  sb = xzalloc(1024);                     | True                      | 
+ 477 |  STORE_LE(sb->s_rev_level, EXT2_DYNAMIC_ | True                      | 
+ 478 |  STORE_LE(sb->s_magic, EXT2_SUPER_MAGIC) | True                      | 
+ 479 |  STORE_LE(sb->s_inode_size, inodesize);  | True                      | 
+ 480 |  // set "Required extra isize" and "Desi | True                      | 
+ 481 |  if (inodesize != sizeof(*inode)) {      | True                      | 
+ 482 |   STORE_LE(sb->s_min_extra_isize, 0x001c | True                      | 
+ 483 |   STORE_LE(sb->s_want_extra_isize, 0x001 | True                      | 
+ 484 |  }                                       | True                      | 
+ 485 |  STORE_LE(sb->s_first_ino, EXT2_GOOD_OLD | True                      | 
+ 486 |  STORE_LE(sb->s_log_block_size, blocksiz | True                      | 
+ 487 |  STORE_LE(sb->s_log_frag_size, blocksize | True                      | 
+ 488 |  // first 1024 bytes of the device are f | True                      | 
+ 489 |  // the first block is 1, otherwise 0    | True                      | 
+ 490 |  STORE_LE(sb->s_first_data_block, first_ | True                      | 
+ 491 |  // block and inode bitmaps occupy no mo | True                      | 
+ 492 |  STORE_LE(sb->s_blocks_per_group, blocks | True                      | 
+ 493 |  STORE_LE(sb->s_frags_per_group, blocks_ | True                      | 
+ 494 |  // blocks                               | True                      | 
+ 495 |  STORE_LE(sb->s_blocks_count, nblocks);  | True                      | 
+ 496 |  // reserve blocks for superuser         | True                      | 
+ 497 |  STORE_LE(sb->s_r_blocks_count, nreserve | True                      | 
+ 498 |  // ninodes                              | True                      | 
+ 499 |  STORE_LE(sb->s_inodes_per_group, inodes | True                      | 
+ 500 |  STORE_LE(sb->s_inodes_count, inodes_per | True                      | 
+ 501 |  STORE_LE(sb->s_free_inodes_count, inode | True                      | 
+ 502 |  // timestamps                           | True                      | 
+ 503 |  timestamp = time(NULL);                 | True                      | 
+ 504 |  STORE_LE(sb->s_mkfs_time, timestamp);   | True                      | 
+ 505 |  STORE_LE(sb->s_wtime, timestamp);       | True                      | 
+ 506 |  STORE_LE(sb->s_lastcheck, timestamp);   | True                      | 
+ 507 |  // misc. Values are chosen to match mke | True                      | 
+ 508 |  STORE_LE(sb->s_state, 1); // TODO: what | True                      | 
+ 509 |  STORE_LE(sb->s_creator_os, EXT2_OS_LINU | True                      | 
+ 510 |  STORE_LE(sb->s_checkinterval, 24*60*60  | True                      | 
+ 511 |  STORE_LE(sb->s_errors, EXT2_ERRORS_DEFA | True                      | 
+ 512 |  // mke2fs 1.41.9 also sets EXT3_FEATURE | True                      | 
+ 513 |  // and if >= 0.5GB, EXT3_FEATURE_RO_COM | True                      | 
+ 514 |  // we use values which match "mke2fs -O | True                      | 
+ 515 |  // in this case 1.41.9 never sets EXT3_ | True                      | 
+ 516 |  STORE_LE(sb->s_feature_compat, EXT2_FEA | True                      | 
+ 517 |   | (EXT2_FEATURE_COMPAT_RESIZE_INO * EN | True                      | 
+ 518 |   | (EXT2_FEATURE_COMPAT_DIR_INDEX * ENA | True                      | 
+ 519 |  );                                      | True                      | 
+ 520 |  STORE_LE(sb->s_feature_incompat, EXT2_F | True                      | 
+ 521 |  STORE_LE(sb->s_feature_ro_compat, EXT2_ | True                      | 
+ 522 |  STORE_LE(sb->s_flags, EXT2_FLAGS_UNSIGN | True                      | 
+ 523 |  generate_uuid(sb->s_uuid);              | True                      | 
+ 524 |  if (ENABLE_FEATURE_MKFS_EXT2_DIR_INDEX) | True                      | 
+ 525 |   STORE_LE(sb->s_def_hash_version, EXT2_ | True                      | 
+ 526 |   generate_uuid((uint8_t *)sb->s_hash_se | True                      | 
+ 527 |  }                                       | True                      | 
+ 528 |  /*                                      | True                      | 
+ 529 |   * From e2fsprogs: add "jitter" to the  | True                      | 
+ 530 |   * don't check all the filesystems at t | True                      | 
+ 531 |   * kludgy hack of using the UUID to der | True                      | 
+ 532 |   */                                     | True                      | 
+ 533 |  STORE_LE(sb->s_max_mnt_count,           | True                      | 
+ 534 |   EXT2_DFL_MAX_MNT_COUNT                 | True                      | 
+ 535 |   + (sb->s_uuid[ARRAY_SIZE(sb->s_uuid)-1 | True                      | 
+ 536 |                                          | True                      | 
+ 537 |  // write the label                      | True                      | 
+ 538 |  safe_strncpy((char *)sb->s_volume_name, | True                      | 
+ 539 |                                          | True                      | 
+ 540 |  // calculate filesystem skeleton struct | True                      | 
+ 541 |  gd = xzalloc(group_desc_blocks * blocks | True                      | 
+ 542 |  buf = xmalloc(blocksize);               | True                      | 
+ 543 |  sb->s_free_blocks_count = 0;            | True                      | 
+ 544 |  for (i = 0, pos = first_block, n = nblo | True                      | 
+ 545 |   i < ngroups;                           | True                      | 
+ 546 |   i++, pos += blocks_per_group, n -= blo | True                      | 
+ 547 |  ) {                                     | True                      | 
+ 548 |   uint32_t overhead = pos + (has_super(i | True                      | 
+ 549 |   uint32_t free_blocks;                  | True                      | 
+ 550 |   // fill group descriptors              | True                      | 
+ 551 |   STORE_LE(gd[i].bg_block_bitmap, overhe | True                      | 
+ 552 |   STORE_LE(gd[i].bg_inode_bitmap, overhe | True                      | 
+ 553 |   STORE_LE(gd[i].bg_inode_table, overhea | True                      | 
+ 554 |   overhead = overhead - pos + 1/*bbmp*/  | True                      | 
+ 555 |   gd[i].bg_free_inodes_count = inodes_pe | True                      | 
+ 556 |   //STORE_LE(gd[i].bg_used_dirs_count, 0 | True                      | 
+ 557 |   // N.B. both "/" and "/lost+found" are | True                      | 
+ 558 |   // "/" occupies 1 block, "/lost+found" | True                      | 
+ 559 |   if (0 == i) {                          | True                      | 
+ 560 |    // ... thus increased overhead for th | True                      | 
+ 561 |    overhead += 1 + lost_and_found_blocks | True                      | 
+ 562 |    // ... and 2 used directories         | True                      | 
+ 563 |    STORE_LE(gd[i].bg_used_dirs_count, 2) | True                      | 
+ 564 |    // well known reserved inodes belong  | True                      | 
+ 565 |    gd[i].bg_free_inodes_count -= EXT2_GO | True                      | 
+ 566 |   }                                      | True                      | 
+ 567 |                                          | True                      | 
+ 568 |   // cache free block count of the group | True                      | 
+ 569 |   free_blocks = (n < blocks_per_group ?  | True                      | 
+ 570 |                                          | True                      | 
+ 571 |   // mark preallocated blocks as allocat | True                      | 
+ 572 | //bb_error_msg("ALLOC: [%u][%u][%u]", bl | True                      | 
+ 573 |   allocate(buf, blocksize,               | True                      | 
+ 574 |    // reserve "overhead" blocks          | True                      | 
+ 575 |    overhead,                             | True                      | 
+ 576 |    // mark unused trailing blocks        | True                      | 
+ 577 |    blocks_per_group - (free_blocks + ove | True                      | 
+ 578 |   );                                     | True                      | 
+ 579 |   // dump block bitmap                   | True                      | 
+ 580 |   PUT((uint64_t)(FETCH_LE32(gd[i].bg_blo | True                      | 
+ 581 |   STORE_LE(gd[i].bg_free_blocks_count, f | True                      | 
+ 582 |                                          | True                      | 
+ 583 |   // mark preallocated inodes as allocat | True                      | 
+ 584 |   allocate(buf, blocksize,               | True                      | 
+ 585 |    // mark reserved inodes               | True                      | 
+ 586 |    inodes_per_group - gd[i].bg_free_inod | True                      | 
+ 587 |    // mark unused trailing inodes        | True                      | 
+ 588 |    blocks_per_group - inodes_per_group   | True                      | 
+ 589 |   );                                     | True                      | 
+ 590 |   // dump inode bitmap                   | True                      | 
+ 591 |   //PUT((uint64_t)(FETCH_LE32(gd[i].bg_b | True                      | 
+ 592 |   //but it's right after block bitmap, s | True                      | 
+ 593 |   xwrite(fd, buf, blocksize);            | True                      | 
+ 594 |   STORE_LE(gd[i].bg_free_inodes_count, g | True                      | 
+ 595 |                                          | True                      | 
+ 596 |   // count overall free blocks           | True                      | 
+ 597 |   sb->s_free_blocks_count += free_blocks | True                      | 
+ 598 |  }                                       | True                      | 
+ 599 |  STORE_LE(sb->s_free_blocks_count, sb->s | True                      | 
+ 600 |                                          | True                      | 
+ 601 |  // dump filesystem skeleton structures  | True                      | 
+ 602 | // printf("Writing superblocks and files | True                      | 
+ 603 |  for (i = 0, pos = first_block; i < ngro | True                      | 
+ 604 |   // dump superblock and group descripto | True                      | 
+ 605 |   if (has_super(i)) {                    | True                      | 
+ 606 |    // N.B. 1024 byte blocks are special  | True                      | 
+ 607 |    PUT(((uint64_t)pos * blocksize) + ((0 | True                      | 
+ 608 |      sb, 1024);                          | True                      | 
+ 609 |    PUT(((uint64_t)pos * blocksize) + blo | True                      | 
+ 610 |      gd, group_desc_blocks * blocksize); | True                      | 
+ 611 |   }                                      | True                      | 
+ 612 |  }                                       | True                      | 
+ 613 |                                          | True                      | 
+ 614 |  // zero boot sectors                    | True                      | 
+ 615 |  memset(buf, 0, blocksize);              | True                      | 
+ 616 |  // Disabled: standard mke2fs doesn't do | True                      | 
+ 617 |  // on SPARC this destroys Sun disklabel | True                      | 
+ 618 |  // Users who need/want zeroing can easi | True                      | 
+ 619 |  //PUT(0, buf, 1024); // N.B. 1024 <= bl | True                      | 
+ 620 |                                          | True                      | 
+ 621 |  // zero inode tables                    | True                      | 
+ 622 |  for (i = 0; i < ngroups; ++i)           | True                      | 
+ 623 |   for (n = 0; n < inode_table_blocks; ++ | True                      | 
+ 624 |    PUT((uint64_t)(FETCH_LE32(gd[i].bg_in | True                      | 
+ 625 |     buf, blocksize);                     | True                      | 
+ 626 |                                          | True                      | 
+ 627 |  // prepare directory inode              | True                      | 
+ 628 |  inode = (struct ext2_inode *)buf;       | True                      | 
+ 629 |  STORE_LE(inode->i_mode, S_IFDIR | S_IRW | True                      | 
+ 630 |  STORE_LE(inode->i_mtime, timestamp);    | True                      | 
+ 631 |  STORE_LE(inode->i_atime, timestamp);    | True                      | 
+ 632 |  STORE_LE(inode->i_ctime, timestamp);    | True                      | 
+ 633 |  STORE_LE(inode->i_size, blocksize);     | True                      | 
+ 634 |  // inode->i_blocks stores the number of | True                      | 
+ 635 |  // (512, because it goes directly to st | True                      | 
+ 636 |  STORE_LE(inode->i_blocks, blocksize / 5 | True                      | 
+ 637 |                                          | True                      | 
+ 638 |  // dump root dir inode                  | True                      | 
+ 639 |  STORE_LE(inode->i_links_count, 3); // " | True                      | 
+ 640 |  STORE_LE(inode->i_block[0], FETCH_LE32( | True                      | 
+ 641 |  PUT(((uint64_t)FETCH_LE32(gd[0].bg_inod | True                      | 
+ 642 |     buf, inodesize);                     | True                      | 
+ 643 |                                          | True                      | 
+ 644 |  // dump lost+found dir inode            | True                      | 
+ 645 |  STORE_LE(inode->i_links_count, 2); // b | True                      | 
+ 646 |  STORE_LE(inode->i_size, lost_and_found_ | True                      | 
+ 647 |  STORE_LE(inode->i_blocks, (lost_and_fou | True                      | 
+ 648 |  n = FETCH_LE32(inode->i_block[0]) + 1;  | True                      | 
+ 649 |  for (i = 0; i < lost_and_found_blocks;  | True                      | 
+ 650 |   STORE_LE(inode->i_block[i], i + n); // | True                      | 
+ 651 | //bb_error_msg("LAST BLOCK USED[%u]", i  | True                      | 
+ 652 |  PUT(((uint64_t)FETCH_LE32(gd[0].bg_inod | True                      | 
+ 653 |     buf, inodesize);                     | True                      | 
+ 654 |                                          | True                      | 
+ 655 |  // dump directories                     | True                      | 
+ 656 |  memset(buf, 0, blocksize);              | True                      | 
+ 657 |  dir = (struct ext2_dir *)buf;           | True                      | 
+ 658 |                                          | True                      | 
+ 659 |  // dump 2nd+ blocks of "/lost+found"    | True                      | 
+ 660 |  STORE_LE(dir->rec_len1, blocksize); //  | True                      | 
+ 661 |  for (i = 1; i < lost_and_found_blocks;  | True                      | 
+ 662 |   PUT((uint64_t)(FETCH_LE32(gd[0].bg_ino | True                      | 
+ 663 |     buf, blocksize);                     | True                      | 
+ 664 |                                          | True                      | 
+ 665 |  // dump 1st block of "/lost+found"      | True                      | 
+ 666 |  STORE_LE(dir->inode1, EXT2_GOOD_OLD_FIR | True                      | 
+ 667 |  STORE_LE(dir->rec_len1, 12);            | True                      | 
+ 668 |  STORE_LE(dir->name_len1, 1);            | True                      | 
+ 669 |  STORE_LE(dir->file_type1, EXT2_FT_DIR); | True                      | 
+ 670 |  dir->name1[0] = '.';                    | True                      | 
+ 671 |  STORE_LE(dir->inode2, EXT2_ROOT_INO);   | True                      | 
+ 672 |  STORE_LE(dir->rec_len2, blocksize - 12) | True                      | 
+ 673 |  STORE_LE(dir->name_len2, 2);            | True                      | 
+ 674 |  STORE_LE(dir->file_type2, EXT2_FT_DIR); | True                      | 
+ 675 |  dir->name2[0] = '.'; dir->name2[1] = '. | True                      | 
+ 676 |  PUT((uint64_t)(FETCH_LE32(gd[0].bg_inod | True                      | 
+ 677 |                                          | True                      | 
+ 678 |  // dump root dir block                  | True                      | 
+ 679 |  STORE_LE(dir->inode1, EXT2_ROOT_INO);   | True                      | 
+ 680 |  STORE_LE(dir->rec_len2, 12);            | True                      | 
+ 681 |  STORE_LE(dir->inode3, EXT2_GOOD_OLD_FIR | True                      | 
+ 682 |  STORE_LE(dir->rec_len3, blocksize - 12  | True                      | 
+ 683 |  STORE_LE(dir->name_len3, 10);           | True                      | 
+ 684 |  STORE_LE(dir->file_type3, EXT2_FT_DIR); | True                      | 
+ 685 |  strcpy(dir->name3, "lost+found");       | True                      | 
+ 686 |  PUT((uint64_t)(FETCH_LE32(gd[0].bg_inod | True                      | 
+ 687 |                                          | True                      | 
+ 688 |  // cleanup                              | True                      | 
+ 689 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 690 |   free(buf);                             | True                      | 
+ 691 |   free(gd);                              | True                      | 
+ 692 |   free(sb);                              | True                      | 
+ 693 |  }                                       | True                      | 
+ 694 |                                          | True                      | 
+ 695 |  xclose(fd);                             | True                      | 
+ 696 |  return EXIT_SUCCESS;                    | True                      | 
+ 697 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +124MB, 277ms             | 

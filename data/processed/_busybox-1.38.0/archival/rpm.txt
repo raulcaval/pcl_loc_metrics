@@ -1,0 +1,572 @@
+FILE: data/raw/busybox-1.38.0/archival/rpm.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Mini rpm applet for busybox           | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2001,2002 by Laurence A | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config RPM                      | True                      | 
+  10 | //config: bool "rpm (32 kb)"             | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Mini RPM applet - queries and  | True                      | 
+  14 |                                          | True                      | 
+  15 | //applet:IF_RPM(APPLET(rpm, BB_DIR_BIN,  | True                      | 
+  16 |                                          | True                      | 
+  17 | //kbuild:lib-$(CONFIG_RPM) += rpm.o      | True                      | 
+  18 |                                          | True                      | 
+  19 | #include "libbb.h"                       | True                      | 
+  20 | #include "common_bufsiz.h"               | True                      | 
+  21 | #include "bb_archive.h"                  | True                      | 
+  22 | #include "rpm.h"                         | True                      | 
+  23 |                                          | True                      | 
+  24 | #define RPM_CHAR_TYPE           1        | True                      | 
+  25 | #define RPM_INT8_TYPE           2        | True                      | 
+  26 | #define RPM_INT16_TYPE          3        | True                      | 
+  27 | #define RPM_INT32_TYPE          4        | True                      | 
+  28 | /* #define RPM_INT64_TYPE       5   ---- | True                      | 
+  29 | #define RPM_STRING_TYPE         6        | True                      | 
+  30 | #define RPM_BIN_TYPE            7        | True                      | 
+  31 | #define RPM_STRING_ARRAY_TYPE   8        | True                      | 
+  32 | #define RPM_I18NSTRING_TYPE     9        | True                      | 
+  33 |                                          | True                      | 
+  34 | #define TAG_NAME                1000     | True                      | 
+  35 | #define TAG_VERSION             1001     | True                      | 
+  36 | #define TAG_RELEASE             1002     | True                      | 
+  37 | #define TAG_SUMMARY             1004     | True                      | 
+  38 | #define TAG_DESCRIPTION         1005     | True                      | 
+  39 | #define TAG_BUILDTIME           1006     | True                      | 
+  40 | #define TAG_BUILDHOST           1007     | True                      | 
+  41 | #define TAG_SIZE                1009     | True                      | 
+  42 | #define TAG_VENDOR              1011     | True                      | 
+  43 | #define TAG_LICENSE             1014     | True                      | 
+  44 | #define TAG_PACKAGER            1015     | True                      | 
+  45 | #define TAG_GROUP               1016     | True                      | 
+  46 | #define TAG_URL                 1020     | True                      | 
+  47 | #define TAG_PREIN               1023     | True                      | 
+  48 | #define TAG_POSTIN              1024     | True                      | 
+  49 | #define TAG_FILEFLAGS           1037     | True                      | 
+  50 | #define TAG_FILEUSERNAME        1039     | True                      | 
+  51 | #define TAG_FILEGROUPNAME       1040     | True                      | 
+  52 | #define TAG_SOURCERPM           1044     | True                      | 
+  53 | #define TAG_PREINPROG           1085     | True                      | 
+  54 | #define TAG_POSTINPROG          1086     | True                      | 
+  55 | #define TAG_PREFIXS             1098     | True                      | 
+  56 | #define TAG_DIRINDEXES          1116     | True                      | 
+  57 | #define TAG_BASENAMES           1117     | True                      | 
+  58 | #define TAG_DIRNAMES            1118     | True                      | 
+  59 | #define TAG_PAYLOADCOMPRESSOR   1125     | True                      | 
+  60 |                                          | True                      | 
+  61 |                                          | True                      | 
+  62 | #define RPMFILE_CONFIG          (1 << 0) | True                      | 
+  63 | #define RPMFILE_DOC             (1 << 1) | True                      | 
+  64 |                                          | True                      | 
+  65 | enum rpm_functions_e {                   | True                      | 
+  66 |  rpm_query = 1,                          | True                      | 
+  67 |  rpm_install = 2,                        | True                      | 
+  68 |  rpm_query_info = 4,                     | True                      | 
+  69 |  rpm_query_package = 8,                  | True                      | 
+  70 |  rpm_query_list = 16,                    | True                      | 
+  71 |  rpm_query_list_doc = 32,                | True                      | 
+  72 |  rpm_query_list_config = 64              | True                      | 
+  73 | };                                       | True                      | 
+  74 |                                          | True                      | 
+  75 | typedef struct {                         | True                      | 
+  76 |  uint32_t tag; /* 4 byte tag */          | True                      | 
+  77 |  uint32_t type; /* 4 byte type */        | True                      | 
+  78 |  uint32_t offset; /* 4 byte offset */    | True                      | 
+  79 |  uint32_t count; /* 4 byte count */      | True                      | 
+  80 | } rpm_index;                             | True                      | 
+  81 |                                          | True                      | 
+  82 | struct globals {                         | True                      | 
+  83 |  void *map;                              | True                      | 
+  84 |  rpm_index *mytags;                      | True                      | 
+  85 |  int tagcount;                           | True                      | 
+  86 |  unsigned mapsize;                       | True                      | 
+  87 |  IF_VARIABLE_ARCH_PAGESIZE(unsigned page | True                      | 
+  88 | #define G_pagesize cached_pagesize(G.pag | True                      | 
+  89 | } FIX_ALIASING;                          | True                      | 
+  90 | #define G (*(struct globals*)bb_common_b | True                      | 
+  91 | #define INIT_G() do { setup_common_bufsi | True                      | 
+  92 |                                          | True                      | 
+  93 | static int rpm_gettags(const char *filen | True                      | 
+  94 | {                                        | True                      | 
+  95 |  rpm_index *tags;                        | True                      | 
+  96 |  int fd;                                 | True                      | 
+  97 |  unsigned pass, idx;                     | True                      | 
+  98 |  unsigned storepos;                      | True                      | 
+  99 |                                          | True                      | 
+ 100 |  if (!filename) { /* rpm2cpio w/o filena | True                      | 
+ 101 |   filename = bb_msg_standard_output;     | True                      | 
+ 102 |   fd = 0;                                | True                      | 
+ 103 |  } else {                                | True                      | 
+ 104 |   fd = xopen(filename, O_RDONLY);        | True                      | 
+ 105 |  }                                       | True                      | 
+ 106 |                                          | True                      | 
+ 107 |  storepos = xlseek(fd, 96, SEEK_CUR); /* | True                      | 
+ 108 |  G.tagcount = 0;                         | True                      | 
+ 109 |  tags = NULL;                            | True                      | 
+ 110 |  idx = 0;                                | True                      | 
+ 111 |  /* 1st pass is the signature headers, 2 | True                      | 
+ 112 |  for (pass = 0; pass < 2; pass++) {      | True                      | 
+ 113 |   struct rpm_header header;              | True                      | 
+ 114 |   unsigned cnt;                          | True                      | 
+ 115 |                                          | True                      | 
+ 116 |   xread(fd, &header, sizeof(header));    | True                      | 
+ 117 |   if (header.magic_and_ver != htonl(RPM_ | True                      | 
+ 118 |    bb_error_msg_and_die("invalid RPM hea | True                      | 
+ 119 |   header.size = ntohl(header.size);      | True                      | 
+ 120 |   cnt = ntohl(header.entries);           | True                      | 
+ 121 |   storepos += sizeof(header) + cnt * 16; | True                      | 
+ 122 |                                          | True                      | 
+ 123 |   G.tagcount += cnt;                     | True                      | 
+ 124 |   tags = xrealloc(tags, sizeof(tags[0])  | True                      | 
+ 125 |   xread(fd, &tags[idx], sizeof(tags[0])  | True                      | 
+ 126 |   while (cnt--) {                        | True                      | 
+ 127 |    rpm_index *tag = &tags[idx];          | True                      | 
+ 128 |    tag->tag = ntohl(tag->tag);           | True                      | 
+ 129 |    tag->type = ntohl(tag->type);         | True                      | 
+ 130 |    tag->count = ntohl(tag->count);       | True                      | 
+ 131 |    tag->offset = storepos + ntohl(tag->o | True                      | 
+ 132 |    if (pass == 0)                        | True                      | 
+ 133 |     tag->tag -= 743;                     | True                      | 
+ 134 |    idx++;                                | True                      | 
+ 135 |   }                                      | True                      | 
+ 136 |   /* Skip padding to 8 byte boundary aft | True                      | 
+ 137 |   if (pass == 0)                         | True                      | 
+ 138 |    while (header.size & 7)               | True                      | 
+ 139 |     header.size++;                       | True                      | 
+ 140 |   /* Seek past store */                  | True                      | 
+ 141 |   storepos = xlseek(fd, header.size, SEE | True                      | 
+ 142 |  }                                       | True                      | 
+ 143 |  G.mytags = tags;                        | True                      | 
+ 144 |                                          | True                      | 
+ 145 |  /* Map the store */                     | True                      | 
+ 146 |  storepos = (storepos + G_pagesize) & -( | True                      | 
+ 147 |  /* remember size for munmap */          | True                      | 
+ 148 |  G.mapsize = storepos;                   | True                      | 
+ 149 |  /* some NOMMU systems prefer MAP_PRIVAT | True                      | 
+ 150 |  G.map = mmap_read(fd, storepos);        | True                      | 
+ 151 |  if (G.map == MAP_FAILED)                | True                      | 
+ 152 |   bb_perror_msg_and_die("mmap '%s'", fil | True                      | 
+ 153 |                                          | True                      | 
+ 154 |  return fd;                              | True                      | 
+ 155 | }                                        | True                      | 
+ 156 |                                          | True                      | 
+ 157 | static int bsearch_rpmtag(const void *ke | True                      | 
+ 158 | {                                        | True                      | 
+ 159 |  int *tag = (int *)key;                  | True                      | 
+ 160 |  rpm_index *tmp = (rpm_index *) item;    | True                      | 
+ 161 |  return (*tag - tmp->tag);               | True                      | 
+ 162 | }                                        | True                      | 
+ 163 |                                          | True                      | 
+ 164 | static char *rpm_getstr(int tag, int ite | True                      | 
+ 165 | {                                        | True                      | 
+ 166 |  rpm_index *found;                       | True                      | 
+ 167 |  found = bsearch(&tag, G.mytags, G.tagco | True                      | 
+ 168 |  if (!found || itemindex >= found->count | True                      | 
+ 169 |   return NULL;                           | True                      | 
+ 170 |  if (found->type == RPM_STRING_TYPE      | True                      | 
+ 171 |   || found->type == RPM_I18NSTRING_TYPE  | True                      | 
+ 172 |   || found->type == RPM_STRING_ARRAY_TYP | True                      | 
+ 173 |  ) {                                     | True                      | 
+ 174 |   int n;                                 | True                      | 
+ 175 |   char *tmpstr = (char *) G.map + found- | True                      | 
+ 176 |   for (n = 0; n < itemindex; n++)        | True                      | 
+ 177 |    tmpstr = tmpstr + strlen(tmpstr) + 1; | True                      | 
+ 178 |   return tmpstr;                         | True                      | 
+ 179 |  }                                       | True                      | 
+ 180 |  return NULL;                            | True                      | 
+ 181 | }                                        | True                      | 
+ 182 | static char *rpm_getstr0(int tag)        | True                      | 
+ 183 | {                                        | True                      | 
+ 184 |  return rpm_getstr(tag, 0);              | True                      | 
+ 185 | }                                        | True                      | 
+ 186 |                                          | True                      | 
+ 187 | #if ENABLE_RPM                           | True                      | 
+ 188 |                                          | ENABLE_RPM                | 
+ 189 | static int rpm_getint(int tag, int itemi | ENABLE_RPM                | 
+ 190 | {                                        | ENABLE_RPM                | 
+ 191 |  rpm_index *found;                       | ENABLE_RPM                | 
+ 192 |  char *tmpint;                           | ENABLE_RPM                | 
+ 193 |                                          | ENABLE_RPM                | 
+ 194 |  /* gcc throws warnings here when sizeof | ENABLE_RPM                | 
+ 195 |   * it's ok to ignore it because tag won | ENABLE_RPM                | 
+ 196 |  found = bsearch(&tag, G.mytags, G.tagco | ENABLE_RPM                | 
+ 197 |  if (!found || itemindex >= found->count | ENABLE_RPM                | 
+ 198 |   return -1;                             | ENABLE_RPM                | 
+ 199 |                                          | ENABLE_RPM                | 
+ 200 |  tmpint = (char *) G.map + found->offset | ENABLE_RPM                | 
+ 201 |  if (found->type == RPM_INT32_TYPE) {    | ENABLE_RPM                | 
+ 202 |   tmpint += itemindex*4;                 | ENABLE_RPM                | 
+ 203 |   return ntohl(*(int32_t*)tmpint);       | ENABLE_RPM                | 
+ 204 |  }                                       | ENABLE_RPM                | 
+ 205 |  if (found->type == RPM_INT16_TYPE) {    | ENABLE_RPM                | 
+ 206 |   tmpint += itemindex*2;                 | ENABLE_RPM                | 
+ 207 |   return ntohs(*(int16_t*)tmpint);       | ENABLE_RPM                | 
+ 208 |  }                                       | ENABLE_RPM                | 
+ 209 |  if (found->type == RPM_INT8_TYPE) {     | ENABLE_RPM                | 
+ 210 |   tmpint += itemindex;                   | ENABLE_RPM                | 
+ 211 |   return *(int8_t*)tmpint;               | ENABLE_RPM                | 
+ 212 |  }                                       | ENABLE_RPM                | 
+ 213 |  return -1;                              | ENABLE_RPM                | 
+ 214 | }                                        | ENABLE_RPM                | 
+ 215 |                                          | ENABLE_RPM                | 
+ 216 | static int rpm_getcount(int tag)         | ENABLE_RPM                | 
+ 217 | {                                        | ENABLE_RPM                | 
+ 218 |  rpm_index *found;                       | ENABLE_RPM                | 
+ 219 |  found = bsearch(&tag, G.mytags, G.tagco | ENABLE_RPM                | 
+ 220 |  if (!found)                             | ENABLE_RPM                | 
+ 221 |   return 0;                              | ENABLE_RPM                | 
+ 222 |  return found->count;                    | ENABLE_RPM                | 
+ 223 | }                                        | ENABLE_RPM                | 
+ 224 |                                          | ENABLE_RPM                | 
+ 225 | static void fileaction_dobackup(char *fi | ENABLE_RPM                | 
+ 226 | {                                        | ENABLE_RPM                | 
+ 227 |  struct stat oldfile;                    | ENABLE_RPM                | 
+ 228 |  int stat_res;                           | ENABLE_RPM                | 
+ 229 |  char *newname;                          | ENABLE_RPM                | 
+ 230 |  if (rpm_getint(TAG_FILEFLAGS, fileref)  | ENABLE_RPM                | 
+ 231 |   /* Only need to backup config files */ | ENABLE_RPM                | 
+ 232 |   stat_res = lstat(filename, &oldfile);  | ENABLE_RPM                | 
+ 233 |   if (stat_res == 0 && S_ISREG(oldfile.s | ENABLE_RPM                | 
+ 234 |    /* File already exists  - really shou | ENABLE_RPM                | 
+ 235 |    newname = xasprintf("%s.rpmorig", fil | ENABLE_RPM                | 
+ 236 |    copy_file(filename, newname, FILEUTIL | ENABLE_RPM                | 
+ 237 |    remove_file(filename, FILEUTILS_RECUR | ENABLE_RPM                | 
+ 238 |    free(newname);                        | ENABLE_RPM                | 
+ 239 |   }                                      | ENABLE_RPM                | 
+ 240 |  }                                       | ENABLE_RPM                | 
+ 241 | }                                        | ENABLE_RPM                | 
+ 242 |                                          | ENABLE_RPM                | 
+ 243 | static void fileaction_setowngrp(char *f | ENABLE_RPM                | 
+ 244 | {                                        | ENABLE_RPM                | 
+ 245 |  /* real rpm warns: "user foo does not e | ENABLE_RPM                | 
+ 246 |  struct passwd *pw = getpwnam(rpm_getstr | ENABLE_RPM                | 
+ 247 |  int uid = pw ? pw->pw_uid : getuid(); / | ENABLE_RPM                | 
+ 248 |  struct group *gr = getgrnam(rpm_getstr( | ENABLE_RPM                | 
+ 249 |  int gid = gr ? gr->gr_gid : getgid();   | ENABLE_RPM                | 
+ 250 |  chown(filename, uid, gid);              | ENABLE_RPM                | 
+ 251 | }                                        | ENABLE_RPM                | 
+ 252 |                                          | ENABLE_RPM                | 
+ 253 | static void loop_through_files(int filet | ENABLE_RPM                | 
+ 254 | {                                        | ENABLE_RPM                | 
+ 255 |  int count = 0;                          | ENABLE_RPM                | 
+ 256 |  while (rpm_getstr(filetag, count)) {    | ENABLE_RPM                | 
+ 257 |   char* filename = xasprintf("%s%s",     | ENABLE_RPM                | 
+ 258 |    rpm_getstr(TAG_DIRNAMES, rpm_getint(T | ENABLE_RPM                | 
+ 259 |    rpm_getstr(TAG_BASENAMES, count));    | ENABLE_RPM                | 
+ 260 |   fileaction(filename, count++);         | ENABLE_RPM                | 
+ 261 |   free(filename);                        | ENABLE_RPM                | 
+ 262 |  }                                       | ENABLE_RPM                | 
+ 263 | }                                        | ENABLE_RPM                | 
+ 264 |                                          | ENABLE_RPM                | 
+ 265 | #if 0 //DEBUG                            | ENABLE_RPM                | 
+ 266 | static void print_all_tags(void)         | ENABLE_RPM&&0             | 
+ 267 | {                                        | ENABLE_RPM&&0             | 
+ 268 |  unsigned i = 0;                         | ENABLE_RPM&&0             | 
+ 269 |  while (i < G.tagcount) {                | ENABLE_RPM&&0             | 
+ 270 |   rpm_index *tag = &G.mytags[i];         | ENABLE_RPM&&0             | 
+ 271 |   if (tag->type == RPM_STRING_TYPE       | ENABLE_RPM&&0             | 
+ 272 |    || tag->type == RPM_I18NSTRING_TYPE   | ENABLE_RPM&&0             | 
+ 273 |    || tag->type == RPM_STRING_ARRAY_TYPE | ENABLE_RPM&&0             | 
+ 274 |   ) {                                    | ENABLE_RPM&&0             | 
+ 275 |    unsigned n;                           | ENABLE_RPM&&0             | 
+ 276 |    char *str = (char *) G.map + tag->off | ENABLE_RPM&&0             | 
+ 277 |                                          | ENABLE_RPM&&0             | 
+ 278 |    printf("tag[%u] %08x type %08x offset | ENABLE_RPM&&0             | 
+ 279 |     i, tag->tag, tag->type, tag->offset, | ENABLE_RPM&&0             | 
+ 280 |    );                                    | ENABLE_RPM&&0             | 
+ 281 |    for (n = 1; n < tag->count; n++) {    | ENABLE_RPM&&0             | 
+ 282 |     str += strlen(str) + 1;              | ENABLE_RPM&&0             | 
+ 283 |     printf("\t'%s'\n", str);             | ENABLE_RPM&&0             | 
+ 284 |    }                                     | ENABLE_RPM&&0             | 
+ 285 |   }                                      | ENABLE_RPM&&0             | 
+ 286 |   i++;                                   | ENABLE_RPM&&0             | 
+ 287 |  }                                       | ENABLE_RPM&&0             | 
+ 288 | }                                        | ENABLE_RPM&&0             | 
+ 289 | #else                                    | ENABLE_RPM                | 
+ 290 | #define print_all_tags() ((void)0)       | ENABLE_RPM&&!0            | 
+ 291 | #endif                                   | ENABLE_RPM                | 
+ 292 |                                          | ENABLE_RPM                | 
+ 293 | static void extract_cpio(int fd, const c | ENABLE_RPM                | 
+ 294 | {                                        | ENABLE_RPM                | 
+ 295 |  archive_handle_t *archive_handle;       | ENABLE_RPM                | 
+ 296 |                                          | ENABLE_RPM                | 
+ 297 |  if (source_rpm != NULL) {               | ENABLE_RPM                | 
+ 298 |   /* Binary rpm (it was built from some  | ENABLE_RPM                | 
+ 299 |   xchdir("/");                           | ENABLE_RPM                | 
+ 300 |  } /* else: SRPM, install to current dir | ENABLE_RPM                | 
+ 301 |                                          | ENABLE_RPM                | 
+ 302 |  /* Initialize */                        | ENABLE_RPM                | 
+ 303 |  archive_handle = init_handle();         | ENABLE_RPM                | 
+ 304 |  archive_handle->seek = seek_by_read;    | ENABLE_RPM                | 
+ 305 |  archive_handle->action_data = data_extr | ENABLE_RPM                | 
+ 306 | #if 0 /* For testing (rpm -i only lists  | ENABLE_RPM                | 
+ 307 |  archive_handle->action_header = header_ | ENABLE_RPM&&0             | 
+ 308 |  archive_handle->action_data = data_skip | ENABLE_RPM&&0             | 
+ 309 | #endif                                   | ENABLE_RPM                | 
+ 310 |  archive_handle->ah_flags = ARCHIVE_REST | ENABLE_RPM                | 
+ 311 |   /* compat: overwrite existing files.   | ENABLE_RPM                | 
+ 312 |    * try "rpm -i foo.src.rpm" few times  | ENABLE_RPM                | 
+ 313 |    * standard rpm will not complain.     | ENABLE_RPM                | 
+ 314 |    */                                    | ENABLE_RPM                | 
+ 315 |   | ARCHIVE_REPLACE_VIA_RENAME;          | ENABLE_RPM                | 
+ 316 |  archive_handle->src_fd = fd;            | ENABLE_RPM                | 
+ 317 |  /*archive_handle->offset = 0; - init_ha | ENABLE_RPM                | 
+ 318 |                                          | ENABLE_RPM                | 
+ 319 |  setup_unzip_on_fd(archive_handle->src_f | ENABLE_RPM                | 
+ 320 |  while (get_header_cpio(archive_handle)  | ENABLE_RPM                | 
+ 321 |   continue;                              | ENABLE_RPM                | 
+ 322 | }                                        | ENABLE_RPM                | 
+ 323 |                                          | ENABLE_RPM                | 
+ 324 | //usage:#define rpm_trivial_usage        | ENABLE_RPM                | 
+ 325 | //usage:       "-i PACKAGE.rpm; rpm -qp[ | ENABLE_RPM                | 
+ 326 | //usage:#define rpm_full_usage "\n\n"    | ENABLE_RPM                | 
+ 327 | //usage:       "Manipulate RPM packages\ | ENABLE_RPM                | 
+ 328 | //usage:     "\nCommands:"               | ENABLE_RPM                | 
+ 329 | //usage:     "\n -i Install package"     | ENABLE_RPM                | 
+ 330 | //usage:     "\n -qp Query package"      | ENABLE_RPM                | 
+ 331 | //usage:     "\n -qpi Show information"  | ENABLE_RPM                | 
+ 332 | //usage:     "\n -qpl List contents"     | ENABLE_RPM                | 
+ 333 | //usage:     "\n -qpd List documents"    | ENABLE_RPM                | 
+ 334 | //usage:     "\n -qpc List config files" | ENABLE_RPM                | 
+ 335 |                                          | ENABLE_RPM                | 
+ 336 | /* RPM version 4.13.0.1:                 | ENABLE_RPM                | 
+ 337 |  * Unlike -q, -i seems to imply -p: -i,  | ENABLE_RPM                | 
+ 338 |  * OTOH, with -q order is important: "-p | ENABLE_RPM                | 
+ 339 |  * (IOW: shows only package name, not pa | ENABLE_RPM                | 
+ 340 |  * "-iq ARG" works as -q: treats ARG as  | ENABLE_RPM                | 
+ 341 |  *                                       | ENABLE_RPM                | 
+ 342 |  * "man rpm" on -l option and options im | ENABLE_RPM                | 
+ 343 |  * -l, --list  List files in package.    | ENABLE_RPM                | 
+ 344 |  * -c, --configfiles List only configura | ENABLE_RPM                | 
+ 345 |  * -d, --docfiles List only documentatio | ENABLE_RPM                | 
+ 346 |  * -L, --licensefiles List only license  | ENABLE_RPM                | 
+ 347 |  * --dump Dump file information as follo | ENABLE_RPM                | 
+ 348 |  *  path size mtime digest mode owner gr | ENABLE_RPM                | 
+ 349 |  * -s, --state Display the states of fil | ENABLE_RPM                | 
+ 350 |  *  The state of each file is one of nor | ENABLE_RPM                | 
+ 351 |  *                                       | ENABLE_RPM                | 
+ 352 |  * Looks like we can switch to getopt32  | ENABLE_RPM                | 
+ 353 |  * do place -q first if they intend to u | ENABLE_RPM                | 
+ 354 |  */                                      | ENABLE_RPM                | 
+ 355 | int rpm_main(int argc, char **argv) MAIN | ENABLE_RPM                | 
+ 356 | int rpm_main(int argc, char **argv)      | ENABLE_RPM                | 
+ 357 | {                                        | ENABLE_RPM                | 
+ 358 |  int opt, func = 0;                      | ENABLE_RPM                | 
+ 359 |                                          | ENABLE_RPM                | 
+ 360 |  INIT_G();                               | ENABLE_RPM                | 
+ 361 |  INIT_PAGESIZE(G.pagesize);              | ENABLE_RPM                | 
+ 362 |                                          | ENABLE_RPM                | 
+ 363 |  while ((opt = getopt(argc, argv, "iqpld | ENABLE_RPM                | 
+ 364 |   switch (opt) {                         | ENABLE_RPM                | 
+ 365 |   case 'i': /* First arg: Install mode,  | ENABLE_RPM                | 
+ 366 |    if (!func) func = rpm_install;        | ENABLE_RPM                | 
+ 367 |    else func |= rpm_query_info;          | ENABLE_RPM                | 
+ 368 |    break;                                | ENABLE_RPM                | 
+ 369 |   case 'q': /* First arg: Query mode */  | ENABLE_RPM                | 
+ 370 |    if (func) bb_show_usage();            | ENABLE_RPM                | 
+ 371 |    func = rpm_query;                     | ENABLE_RPM                | 
+ 372 |    break;                                | ENABLE_RPM                | 
+ 373 |   case 'p': /* Query a package (IOW: .rp | ENABLE_RPM                | 
+ 374 |    func |= rpm_query_package;            | ENABLE_RPM                | 
+ 375 |    break;                                | ENABLE_RPM                | 
+ 376 |   case 'l': /* List files in a package * | ENABLE_RPM                | 
+ 377 |    func |= rpm_query_list;               | ENABLE_RPM                | 
+ 378 |    break;                                | ENABLE_RPM                | 
+ 379 |   case 'd': /* List doc files in a packa | ENABLE_RPM                | 
+ 380 |    func |= rpm_query_list;               | ENABLE_RPM                | 
+ 381 |    func |= rpm_query_list_doc;           | ENABLE_RPM                | 
+ 382 |    break;                                | ENABLE_RPM                | 
+ 383 |   case 'c': /* List config files in a pa | ENABLE_RPM                | 
+ 384 |    func |= rpm_query_list;               | ENABLE_RPM                | 
+ 385 |    func |= rpm_query_list_config;        | ENABLE_RPM                | 
+ 386 |    break;                                | ENABLE_RPM                | 
+ 387 |   default:                               | ENABLE_RPM                | 
+ 388 |    bb_show_usage();                      | ENABLE_RPM                | 
+ 389 |   }                                      | ENABLE_RPM                | 
+ 390 |  }                                       | ENABLE_RPM                | 
+ 391 |  argv += optind;                         | ENABLE_RPM                | 
+ 392 |  //argc -= optind;                       | ENABLE_RPM                | 
+ 393 |  if (!argv[0]) {                         | ENABLE_RPM                | 
+ 394 |   bb_show_usage();                       | ENABLE_RPM                | 
+ 395 |  }                                       | ENABLE_RPM                | 
+ 396 |                                          | ENABLE_RPM                | 
+ 397 |  for (;;) {                              | ENABLE_RPM                | 
+ 398 |   int rpm_fd;                            | ENABLE_RPM                | 
+ 399 |   const char *source_rpm;                | ENABLE_RPM                | 
+ 400 |                                          | ENABLE_RPM                | 
+ 401 |   rpm_fd = rpm_gettags(*argv);           | ENABLE_RPM                | 
+ 402 |   print_all_tags();                      | ENABLE_RPM                | 
+ 403 |                                          | ENABLE_RPM                | 
+ 404 |   source_rpm = rpm_getstr0(TAG_SOURCERPM | ENABLE_RPM                | 
+ 405 |                                          | ENABLE_RPM                | 
+ 406 |   if (func & rpm_install) {              | ENABLE_RPM                | 
+ 407 |    /* -i (and not -qi) */                | ENABLE_RPM                | 
+ 408 |                                          | ENABLE_RPM                | 
+ 409 |    /* Backup any config files */         | ENABLE_RPM                | 
+ 410 |    loop_through_files(TAG_BASENAMES, fil | ENABLE_RPM                | 
+ 411 |    /* Extact the archive */              | ENABLE_RPM                | 
+ 412 |    extract_cpio(rpm_fd, source_rpm);     | ENABLE_RPM                | 
+ 413 |    /* Set the correct file uid/gid's */  | ENABLE_RPM                | 
+ 414 |    loop_through_files(TAG_BASENAMES, fil | ENABLE_RPM                | 
+ 415 |   }                                      | ENABLE_RPM                | 
+ 416 |   else                                   | ENABLE_RPM                | 
+ 417 |   if ((func & (rpm_query|rpm_query_packa | ENABLE_RPM                | 
+ 418 |    /* -qp */                             | ENABLE_RPM                | 
+ 419 |                                          | ENABLE_RPM                | 
+ 420 |    if (!(func & (rpm_query_info|rpm_quer | ENABLE_RPM                | 
+ 421 |     /* If just a straight query, just gi | ENABLE_RPM                | 
+ 422 |     printf("%s-%s-%s\n", rpm_getstr0(TAG | ENABLE_RPM                | 
+ 423 |    }                                     | ENABLE_RPM                | 
+ 424 |    if (func & rpm_query_info) {          | ENABLE_RPM                | 
+ 425 |     /* Do the nice printout */           | ENABLE_RPM                | 
+ 426 |     time_t bdate_time;                   | ENABLE_RPM                | 
+ 427 |     struct tm *bdate_ptm;                | ENABLE_RPM                | 
+ 428 |     char bdatestring[50];                | ENABLE_RPM                | 
+ 429 |     const char *p;                       | ENABLE_RPM                | 
+ 430 |                                          | ENABLE_RPM                | 
+ 431 |     printf("%-12s: %s\n", "Name"         | ENABLE_RPM                | 
+ 432 |     /* TODO compat: add "Epoch" here */  | ENABLE_RPM                | 
+ 433 |     printf("%-12s: %s\n", "Version"      | ENABLE_RPM                | 
+ 434 |     printf("%-12s: %s\n", "Release"      | ENABLE_RPM                | 
+ 435 |     /* add "Architecture" */             | ENABLE_RPM                | 
+ 436 |     /* printf("%-12s: %s\n", "Install Da | ENABLE_RPM                | 
+ 437 |     printf("%-12s: %s\n", "Group"        | ENABLE_RPM                | 
+ 438 |     printf("%-12s: %d\n", "Size"         | ENABLE_RPM                | 
+ 439 |     printf("%-12s: %s\n", "License"      | ENABLE_RPM                | 
+ 440 |     /* add "Signature" */                | ENABLE_RPM                | 
+ 441 |     printf("%-12s: %s\n", "Source RPM"   | ENABLE_RPM                | 
+ 442 |     bdate_time = rpm_getint(TAG_BUILDTIM | ENABLE_RPM                | 
+ 443 |     bdate_ptm = localtime(&bdate_time);  | ENABLE_RPM                | 
+ 444 |     strftime(bdatestring, 50, "%a %d %b  | ENABLE_RPM                | 
+ 445 |     printf("%-12s: %s\n", "Build Date"   | ENABLE_RPM                | 
+ 446 |     printf("%-12s: %s\n", "Build Host"   | ENABLE_RPM                | 
+ 447 |     p = rpm_getstr0(TAG_PREFIXS);        | ENABLE_RPM                | 
+ 448 |     printf("%-12s: %s\n", "Relocations"  | ENABLE_RPM                | 
+ 449 |     /* add "Packager" */                 | ENABLE_RPM                | 
+ 450 |     p = rpm_getstr0(TAG_VENDOR);         | ENABLE_RPM                | 
+ 451 |     if (p) /* rpm 4.13.0.1 does not show | ENABLE_RPM                | 
+ 452 |     printf("%-12s: %s\n", "Vendor"       | ENABLE_RPM                | 
+ 453 |     p = rpm_getstr0(TAG_URL);            | ENABLE_RPM                | 
+ 454 |     if (p) /* rpm 4.13.0.1 does not show | ENABLE_RPM                | 
+ 455 |     printf("%-12s: %s\n", "URL"          | ENABLE_RPM                | 
+ 456 |     printf("%-12s: %s\n", "Summary"      | ENABLE_RPM                | 
+ 457 |     printf("Description :\n%s\n", rpm_ge | ENABLE_RPM                | 
+ 458 |    }                                     | ENABLE_RPM                | 
+ 459 |    if (func & rpm_query_list) {          | ENABLE_RPM                | 
+ 460 |     int count, it, flags;                | ENABLE_RPM                | 
+ 461 |     count = rpm_getcount(TAG_BASENAMES); | ENABLE_RPM                | 
+ 462 |     for (it = 0; it < count; it++) {     | ENABLE_RPM                | 
+ 463 |      flags = rpm_getint(TAG_FILEFLAGS, i | ENABLE_RPM                | 
+ 464 |      switch (func & (rpm_query_list_doc| | ENABLE_RPM                | 
+ 465 |      case rpm_query_list_doc:            | ENABLE_RPM                | 
+ 466 |       if (!(flags & RPMFILE_DOC)) contin | ENABLE_RPM                | 
+ 467 |       break;                             | ENABLE_RPM                | 
+ 468 |      case rpm_query_list_config:         | ENABLE_RPM                | 
+ 469 |       if (!(flags & RPMFILE_CONFIG)) con | ENABLE_RPM                | 
+ 470 |       break;                             | ENABLE_RPM                | 
+ 471 |      case rpm_query_list_doc|rpm_query_l | ENABLE_RPM                | 
+ 472 |       if (!(flags & (RPMFILE_CONFIG|RPMF | ENABLE_RPM                | 
+ 473 |       break;                             | ENABLE_RPM                | 
+ 474 |      }                                   | ENABLE_RPM                | 
+ 475 |      printf("%s%s\n",                    | ENABLE_RPM                | 
+ 476 |       rpm_getstr(TAG_DIRNAMES, rpm_getin | ENABLE_RPM                | 
+ 477 |       rpm_getstr(TAG_BASENAMES, it));    | ENABLE_RPM                | 
+ 478 |     }                                    | ENABLE_RPM                | 
+ 479 |    }                                     | ENABLE_RPM                | 
+ 480 |   } else {                               | ENABLE_RPM                | 
+ 481 |    /* Unsupported (help text shows what  | ENABLE_RPM                | 
+ 482 |    bb_show_usage();                      | ENABLE_RPM                | 
+ 483 |   }                                      | ENABLE_RPM                | 
+ 484 |   if (!*++argv)                          | ENABLE_RPM                | 
+ 485 |    break;                                | ENABLE_RPM                | 
+ 486 |   munmap(G.map, G.mapsize);              | ENABLE_RPM                | 
+ 487 |   free(G.mytags);                        | ENABLE_RPM                | 
+ 488 |   close(rpm_fd);                         | ENABLE_RPM                | 
+ 489 |  }                                       | ENABLE_RPM                | 
+ 490 |                                          | ENABLE_RPM                | 
+ 491 |  return 0;                               | ENABLE_RPM                | 
+ 492 | }                                        | ENABLE_RPM                | 
+ 493 |                                          | ENABLE_RPM                | 
+ 494 | #endif /* RPM */                         | True                      | 
+ 495 |                                          | True                      | 
+ 496 | /*                                       | True                      | 
+ 497 |  * Mini rpm2cpio implementation for busy | True                      | 
+ 498 |  *                                       | True                      | 
+ 499 |  * Copyright (C) 2001 by Laurence Anders | True                      | 
+ 500 |  *                                       | True                      | 
+ 501 |  * Licensed under GPLv2 or later, see fi | True                      | 
+ 502 |  */                                      | True                      | 
+ 503 | //config:config RPM2CPIO                 | True                      | 
+ 504 | //config: bool "rpm2cpio (21 kb)"        | True                      | 
+ 505 | //config: default y                      | True                      | 
+ 506 | //config: help                           | True                      | 
+ 507 | //config: Converts a RPM file into a CPI | True                      | 
+ 508 |                                          | True                      | 
+ 509 | //applet:IF_RPM2CPIO(APPLET(rpm2cpio, BB | True                      | 
+ 510 |                                          | True                      | 
+ 511 | //kbuild:lib-$(CONFIG_RPM2CPIO) += rpm.o | True                      | 
+ 512 |                                          | True                      | 
+ 513 | //usage:#define rpm2cpio_trivial_usage   | True                      | 
+ 514 | //usage:       "PACKAGE.rpm"             | True                      | 
+ 515 | //usage:#define rpm2cpio_full_usage "\n\ | True                      | 
+ 516 | //usage:       "Output a cpio archive of | True                      | 
+ 517 |                                          | True                      | 
+ 518 | #if ENABLE_RPM2CPIO                      | True                      | 
+ 519 |                                          | ENABLE_RPM2CPIO           | 
+ 520 | /* No getopt required */                 | ENABLE_RPM2CPIO           | 
+ 521 | int rpm2cpio_main(int argc, char **argv) | ENABLE_RPM2CPIO           | 
+ 522 | int rpm2cpio_main(int argc UNUSED_PARAM, | ENABLE_RPM2CPIO           | 
+ 523 | {                                        | ENABLE_RPM2CPIO           | 
+ 524 |  const char *str;                        | ENABLE_RPM2CPIO           | 
+ 525 |  int rpm_fd;                             | ENABLE_RPM2CPIO           | 
+ 526 |                                          | ENABLE_RPM2CPIO           | 
+ 527 |  INIT_G();                               | ENABLE_RPM2CPIO           | 
+ 528 |  INIT_PAGESIZE(G.pagesize);              | ENABLE_RPM2CPIO           | 
+ 529 |                                          | ENABLE_RPM2CPIO           | 
+ 530 |  rpm_fd = rpm_gettags(argv[1]);          | ENABLE_RPM2CPIO           | 
+ 531 |                                          | ENABLE_RPM2CPIO           | 
+ 532 |  //if (SEAMLESS_COMPRESSION) - we do thi | ENABLE_RPM2CPIO           | 
+ 533 |  // /* We need to know whether child (gz | ENABLE_RPM2CPIO           | 
+ 534 |  // signal(SIGCHLD, check_errors_in_chil | ENABLE_RPM2CPIO           | 
+ 535 |                                          | ENABLE_RPM2CPIO           | 
+ 536 |  str = NULL;                             | ENABLE_RPM2CPIO           | 
+ 537 |  if (ENABLE_FEATURE_SEAMLESS_LZMA        | ENABLE_RPM2CPIO           | 
+ 538 |   && (str = rpm_getstr0(TAG_PAYLOADCOMPR | ENABLE_RPM2CPIO           | 
+ 539 |   && strcmp(str, "lzma") == 0            | ENABLE_RPM2CPIO           | 
+ 540 |  ) {                                     | ENABLE_RPM2CPIO           | 
+ 541 |   // lzma compression can't be detected  | ENABLE_RPM2CPIO           | 
+ 542 |   // set up decompressor without detecti | ENABLE_RPM2CPIO           | 
+ 543 |   setup_lzma_on_fd(rpm_fd);              | ENABLE_RPM2CPIO           | 
+ 544 |  } else {                                | ENABLE_RPM2CPIO           | 
+ 545 |   int signature_bytes = setup_unzip_on_f | ENABLE_RPM2CPIO           | 
+ 546 |   if (signature_bytes != 0) {            | ENABLE_RPM2CPIO           | 
+ 547 |    xlseek(rpm_fd, - signature_bytes, SEE | ENABLE_RPM2CPIO           | 
+ 548 |    bb_error_msg("warning, unknown compre | ENABLE_RPM2CPIO           | 
+ 549 |   }                                      | ENABLE_RPM2CPIO           | 
+ 550 |  }                                       | ENABLE_RPM2CPIO           | 
+ 551 |                                          | ENABLE_RPM2CPIO           | 
+ 552 |  if (bb_copyfd_eof(rpm_fd, STDOUT_FILENO | ENABLE_RPM2CPIO           | 
+ 553 |   bb_simple_error_msg_and_die("error unp | ENABLE_RPM2CPIO           | 
+ 554 |                                          | ENABLE_RPM2CPIO           | 
+ 555 |  if (ENABLE_FEATURE_CLEAN_UP) {          | ENABLE_RPM2CPIO           | 
+ 556 |   close(rpm_fd);                         | ENABLE_RPM2CPIO           | 
+ 557 |  }                                       | ENABLE_RPM2CPIO           | 
+ 558 |                                          | ENABLE_RPM2CPIO           | 
+ 559 |  if (SEAMLESS_COMPRESSION) {             | ENABLE_RPM2CPIO           | 
+ 560 |   check_errors_in_children(0);           | ENABLE_RPM2CPIO           | 
+ 561 |   return bb_got_signal;                  | ENABLE_RPM2CPIO           | 
+ 562 |  }                                       | ENABLE_RPM2CPIO           | 
+ 563 |  return EXIT_SUCCESS;                    | ENABLE_RPM2CPIO           | 
+ 564 | }                                        | ENABLE_RPM2CPIO           | 
+ 565 |                                          | ENABLE_RPM2CPIO           | 
+ 566 | #endif /* RPM2CPIO */                    | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +116MB, 270ms             | 

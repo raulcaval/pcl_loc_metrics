@@ -1,0 +1,1119 @@
+FILE: data/raw/busybox-1.38.0/e2fsprogs/fsck.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * fsck --- A generic, parallelizing fro | True                      | 
+   4 |  * It will automatically try to run fsck | True                      | 
+   5 |  * devices are on separate spindles.  It | True                      | 
+   6 |  * the generic front end for fsck by Dav | True                      | 
+   7 |  * but it has been completely rewritten  | True                      | 
+   8 |  * parallel execution.                   | True                      | 
+   9 |  *                                       | True                      | 
+  10 |  * Written by Theodore Ts'o, <tytso@mit. | True                      | 
+  11 |  *                                       | True                      | 
+  12 |  * Miquel van Smoorenburg (miquels@drink | True                      | 
+  13 |  *   o Changed -t fstype to behave like  | True                      | 
+  14 |  *     systems) or -M (like mount) is sp | True                      | 
+  15 |  *   o fsck looks if it can find the fsc | True                      | 
+  16 |  *     if it should ignore the fs type.  | True                      | 
+  17 |  *     can be added without changing thi | True                      | 
+  18 |  *   o -R flag skip root file system.    | True                      | 
+  19 |  *                                       | True                      | 
+  20 |  * Copyright (C) 1993, 1994, 1995, 1996, | True                      | 
+  21 |  *      2001, 2002, 2003, 2004, 2005 by  | True                      | 
+  22 |  *                                       | True                      | 
+  23 |  * Licensed under GPLv2, see file LICENS | True                      | 
+  24 |  */                                      | True                      | 
+  25 |                                          | True                      | 
+  26 | /* All filesystem specific hooks have be | True                      | 
+  27 |  * If filesystem cannot be determined, w | True                      | 
+  28 |  * "fsck.auto". Currently this also happ | True                      | 
+  29 |  * UUID=xxx or LABEL=xxx as an object to | True                      | 
+  30 |  * Detection code for that is also proba | True                      | 
+  31 |  *                                       | True                      | 
+  32 |  * In other words, this is _really_ is j | True                      | 
+  33 |  * spawns actual fsck.something for each | True                      | 
+  34 |  * It doesn't guess filesystem types fro | True                      | 
+  35 |  */                                      | True                      | 
+  36 | //config:config FSCK                     | True                      | 
+  37 | //config: bool "fsck (7.6 kb)"           | True                      | 
+  38 | //config: default y                      | True                      | 
+  39 | //config: help                           | True                      | 
+  40 | //config: fsck is used to check and opti | True                      | 
+  41 | //config: In actuality, fsck is simply a | True                      | 
+  42 | //config: checkers (fsck.fstype) availab | True                      | 
+  43 |                                          | True                      | 
+  44 | //applet:IF_FSCK(APPLET(fsck, BB_DIR_SBI | True                      | 
+  45 |                                          | True                      | 
+  46 | //kbuild:lib-$(CONFIG_FSCK) += fsck.o    | True                      | 
+  47 |                                          | True                      | 
+  48 | //usage:#define fsck_trivial_usage       | True                      | 
+  49 | //usage:       "[-ANPRTV] [-t FSTYPE] [F | True                      | 
+  50 | //usage:#define fsck_full_usage "\n\n"   | True                      | 
+  51 | //usage:       "Check and repair filesys | True                      | 
+  52 | //usage:     "\n -A Walk /etc/fstab and  | True                      | 
+  53 | //usage:     "\n -N Don't execute, just  | True                      | 
+  54 | //usage:     "\n -P With -A, check files | True                      | 
+  55 | //usage:     "\n -R With -A, skip the ro | True                      | 
+  56 | //usage:     "\n -T Don't show title on  | True                      | 
+  57 | //usage:     "\n -V Verbose"             | True                      | 
+  58 | //DO_PROGRESS_INDICATOR is off:          | True                      | 
+  59 | ////usage:     "\n -C FD Write status in | True                      | 
+  60 | //usage:     "\n -t TYPE List of filesys | True                      | 
+  61 |                                          | True                      | 
+  62 | #include "libbb.h"                       | True                      | 
+  63 | #include "common_bufsiz.h"               | True                      | 
+  64 |                                          | True                      | 
+  65 | /* "progress indicator" code is somewhat | True                      | 
+  66 |  * We should be filesystem agnostic. IOW | True                      | 
+  67 |  * API for fsck.something, NOT ad-hoc ha | True                      | 
+  68 | #define DO_PROGRESS_INDICATOR 0          | True                      | 
+  69 |                                          | True                      | 
+  70 | /* fsck 1.41.4 (27-Jan-2009) manpage say | True                      | 
+  71 |  * 0   - No errors                       | True                      | 
+  72 |  * 1   - File system errors corrected    | True                      | 
+  73 |  * 2   - System should be rebooted       | True                      | 
+  74 |  * 4   - File system errors left uncorre | True                      | 
+  75 |  * 8   - Operational error               | True                      | 
+  76 |  * 16  - Usage or syntax error           | True                      | 
+  77 |  * 32  - Fsck canceled by user request   | True                      | 
+  78 |  * 128 - Shared library error            | True                      | 
+  79 |  */                                      | True                      | 
+  80 | #define EXIT_OK          0               | True                      | 
+  81 | #define EXIT_NONDESTRUCT 1               | True                      | 
+  82 | #define EXIT_DESTRUCT    2               | True                      | 
+  83 | #define EXIT_UNCORRECTED 4               | True                      | 
+  84 | #define EXIT_ERROR       8               | True                      | 
+  85 | #define EXIT_USAGE       16              | True                      | 
+  86 | #define FSCK_CANCELED    32     /* Abort | True                      | 
+  87 |                                          | True                      | 
+  88 | /*                                       | True                      | 
+  89 |  * Internal structure for mount table en | True                      | 
+  90 |  */                                      | True                      | 
+  91 | struct fs_info {                         | True                      | 
+  92 |  struct fs_info *next;                   | True                      | 
+  93 |  char *device;                           | True                      | 
+  94 |  char *mountpt;                          | True                      | 
+  95 |  char *type;                             | True                      | 
+  96 |  char *opts;                             | True                      | 
+  97 |  int passno;                             | True                      | 
+  98 |  int flags;                              | True                      | 
+  99 | };                                       | True                      | 
+ 100 |                                          | True                      | 
+ 101 | #define FLAG_DONE 1                      | True                      | 
+ 102 | #define FLAG_PROGRESS 2                  | True                      | 
+ 103 | /*                                       | True                      | 
+ 104 |  * Structure to allow exit codes to be s | True                      | 
+ 105 |  */                                      | True                      | 
+ 106 | struct fsck_instance {                   | True                      | 
+ 107 |  struct fsck_instance *next;             | True                      | 
+ 108 |  int pid;                                | True                      | 
+ 109 |  int flags;                              | True                      | 
+ 110 | #if DO_PROGRESS_INDICATOR                | True                      | 
+ 111 |  time_t start_time;                      | DO_PROGRESS_INDICATOR     | 
+ 112 | #endif                                   | True                      | 
+ 113 |  char *prog;                             | True                      | 
+ 114 |  char *device;                           | True                      | 
+ 115 |  char *base_device; /* /dev/hda for /dev | True                      | 
+ 116 | };                                       | True                      | 
+ 117 |                                          | True                      | 
+ 118 | static const char ignored_types[] ALIGN1 | True                      | 
+ 119 |  "ignore\0"                              | True                      | 
+ 120 |  "iso9660\0"                             | True                      | 
+ 121 |  "nfs\0"                                 | True                      | 
+ 122 |  "proc\0"                                | True                      | 
+ 123 |  "sw\0"                                  | True                      | 
+ 124 |  "swap\0"                                | True                      | 
+ 125 |  "tmpfs\0"                               | True                      | 
+ 126 |  "devpts\0";                             | True                      | 
+ 127 |                                          | True                      | 
+ 128 | #if 0                                    | True                      | 
+ 129 | static const char really_wanted[] ALIGN1 | 0                         | 
+ 130 |  "minix\0"                               | 0                         | 
+ 131 |  "ext2\0"                                | 0                         | 
+ 132 |  "ext3\0"                                | 0                         | 
+ 133 |  "jfs\0"                                 | 0                         | 
+ 134 |  "reiserfs\0"                            | 0                         | 
+ 135 |  "xiafs\0"                               | 0                         | 
+ 136 |  "xfs\0";                                | 0                         | 
+ 137 | #endif                                   | True                      | 
+ 138 |                                          | True                      | 
+ 139 | #define BASE_MD "/dev/md"                | True                      | 
+ 140 |                                          | True                      | 
+ 141 | struct globals {                         | True                      | 
+ 142 |  char **args;                            | True                      | 
+ 143 |  int num_args;                           | True                      | 
+ 144 |  int verbose;                            | True                      | 
+ 145 |                                          | True                      | 
+ 146 | #define FS_TYPE_FLAG_NORMAL 0            | True                      | 
+ 147 | #define FS_TYPE_FLAG_OPT    1            | True                      | 
+ 148 | #define FS_TYPE_FLAG_NEGOPT 2            | True                      | 
+ 149 |  char **fs_type_list;                    | True                      | 
+ 150 |  uint8_t *fs_type_flag;                  | True                      | 
+ 151 |  smallint fs_type_negated;               | True                      | 
+ 152 |                                          | True                      | 
+ 153 |  smallint noexecute;                     | True                      | 
+ 154 |  smallint serialize;                     | True                      | 
+ 155 |  smallint skip_root;                     | True                      | 
+ 156 |  /* smallint like_mount; */              | True                      | 
+ 157 |  smallint parallel_root;                 | True                      | 
+ 158 |  smallint force_all_parallel;            | True                      | 
+ 159 |  smallint kill_sent;                     | True                      | 
+ 160 |                                          | True                      | 
+ 161 | #if DO_PROGRESS_INDICATOR                | True                      | 
+ 162 |  smallint progress;                      | DO_PROGRESS_INDICATOR     | 
+ 163 |  int progress_fd;                        | DO_PROGRESS_INDICATOR     | 
+ 164 | #endif                                   | True                      | 
+ 165 |                                          | True                      | 
+ 166 |  int num_running;                        | True                      | 
+ 167 |  int max_running;                        | True                      | 
+ 168 |  char *fstype;                           | True                      | 
+ 169 |  struct fs_info *filesys_info;           | True                      | 
+ 170 |  struct fs_info *filesys_last;           | True                      | 
+ 171 |  struct fsck_instance *instance_list;    | True                      | 
+ 172 | } FIX_ALIASING;                          | True                      | 
+ 173 | #define G (*(struct globals*)bb_common_b | True                      | 
+ 174 | #define INIT_G() do { \                  | True                      | 
+ 175 |  setup_common_bufsiz(); \                | True                      | 
+ 176 |  BUILD_BUG_ON(sizeof(G) > COMMON_BUFSIZE | True                      | 
+ 177 | } while (0)                              | True                      | 
+ 178 |                                          | True                      | 
+ 179 | /*                                       | True                      | 
+ 180 |  * Return the "base device" given a part | True                      | 
+ 181 |  * assure that we only fsck one partitio | True                      | 
+ 182 |  * one time.  Otherwise, the disk heads  | True                      | 
+ 183 |  * place.  If the base device cannot be  | True                      | 
+ 184 |  *                                       | True                      | 
+ 185 |  * The base_device() function returns an | True                      | 
+ 186 |  * be freed.                             | True                      | 
+ 187 |  */                                      | True                      | 
+ 188 | #if ENABLE_FEATURE_DEVFS                 | True                      | 
+ 189 | /*                                       | ENABLE_FEATURE_DEVFS      | 
+ 190 |  * Required for the uber-silly devfs /de | ENABLE_FEATURE_DEVFS      | 
+ 191 |  * pathames.                             | ENABLE_FEATURE_DEVFS      | 
+ 192 |  */                                      | ENABLE_FEATURE_DEVFS      | 
+ 193 | static const char *const devfs_hier[] AL | ENABLE_FEATURE_DEVFS      | 
+ 194 |  "host", "bus", "target", "lun", NULL    | ENABLE_FEATURE_DEVFS      | 
+ 195 | };                                       | ENABLE_FEATURE_DEVFS      | 
+ 196 | #endif                                   | True                      | 
+ 197 |                                          | True                      | 
+ 198 | static char *base_device(const char *dev | True                      | 
+ 199 | {                                        | True                      | 
+ 200 |  char *str, *cp;                         | True                      | 
+ 201 | #if ENABLE_FEATURE_DEVFS                 | True                      | 
+ 202 |  const char *const *hier;                | ENABLE_FEATURE_DEVFS      | 
+ 203 |  const char *disk;                       | ENABLE_FEATURE_DEVFS      | 
+ 204 |  int len;                                | ENABLE_FEATURE_DEVFS      | 
+ 205 | #endif                                   | True                      | 
+ 206 |  str = xstrdup(device);                  | True                      | 
+ 207 |                                          | True                      | 
+ 208 |  /* Skip over "/dev/"; if it's not prese | True                      | 
+ 209 |  cp = skip_dev_pfx(str);                 | True                      | 
+ 210 |  if (cp == str)                          | True                      | 
+ 211 |   goto errout;                           | True                      | 
+ 212 |                                          | True                      | 
+ 213 |  /*                                      | True                      | 
+ 214 |   * For md devices, we treat them all as | True                      | 
+ 215 |   * on one disk, since we don't know how | True                      | 
+ 216 |   */                                     | True                      | 
+ 217 |  if (cp[0] == 'm' && cp[1] == 'd') {     | True                      | 
+ 218 |   cp[2] = 0;                             | True                      | 
+ 219 |   return str;                            | True                      | 
+ 220 |  }                                       | True                      | 
+ 221 |                                          | True                      | 
+ 222 |  /* Handle DAC 960 devices */            | True                      | 
+ 223 |  if (is_prefixed_with(cp, "rd/")) {      | True                      | 
+ 224 |   cp += 3;                               | True                      | 
+ 225 |   if (cp[0] != 'c' || !isdigit(cp[1])    | True                      | 
+ 226 |    || cp[2] != 'd' || !isdigit(cp[3]))   | True                      | 
+ 227 |    goto errout;                          | True                      | 
+ 228 |   cp[4] = 0;                             | True                      | 
+ 229 |   return str;                            | True                      | 
+ 230 |  }                                       | True                      | 
+ 231 |                                          | True                      | 
+ 232 |  /* Now let's handle /dev/hd* and /dev/s | True                      | 
+ 233 |  if ((cp[0] == 'h' || cp[0] == 's') && c | True                      | 
+ 234 |   cp += 2;                               | True                      | 
+ 235 |   /* If there's a single number after /d | True                      | 
+ 236 |   if (isdigit(*cp))                      | True                      | 
+ 237 |    cp++;                                 | True                      | 
+ 238 |   /* What follows must be an alpha char, | True                      | 
+ 239 |   if (!isalpha(*cp))                     | True                      | 
+ 240 |    goto errout;                          | True                      | 
+ 241 |   cp[1] = 0;                             | True                      | 
+ 242 |   return str;                            | True                      | 
+ 243 |  }                                       | True                      | 
+ 244 |                                          | True                      | 
+ 245 | #if ENABLE_FEATURE_DEVFS                 | True                      | 
+ 246 |  /* Now let's handle devfs (ugh) names * | ENABLE_FEATURE_DEVFS      | 
+ 247 |  len = 0;                                | ENABLE_FEATURE_DEVFS      | 
+ 248 |  if (is_prefixed_with(cp, "ide/"))       | ENABLE_FEATURE_DEVFS      | 
+ 249 |   len = 4;                               | ENABLE_FEATURE_DEVFS      | 
+ 250 |  if (is_prefixed_with(cp, "scsi/"))      | ENABLE_FEATURE_DEVFS      | 
+ 251 |   len = 5;                               | ENABLE_FEATURE_DEVFS      | 
+ 252 |  if (len) {                              | ENABLE_FEATURE_DEVFS      | 
+ 253 |   cp += len;                             | ENABLE_FEATURE_DEVFS      | 
+ 254 |   /*                                     | ENABLE_FEATURE_DEVFS      | 
+ 255 |    * Now we proceed down the expected de | ENABLE_FEATURE_DEVFS      | 
+ 256 |    * i.e., .../host1/bus2/target3/lun4/. | ENABLE_FEATURE_DEVFS      | 
+ 257 |    * If we don't find the expected token | ENABLE_FEATURE_DEVFS      | 
+ 258 |    * some number of digits at each level | ENABLE_FEATURE_DEVFS      | 
+ 259 |    */                                    | ENABLE_FEATURE_DEVFS      | 
+ 260 |   for (hier = devfs_hier; *hier; hier++) | ENABLE_FEATURE_DEVFS      | 
+ 261 |    cp = is_prefixed_with(cp, *hier);     | ENABLE_FEATURE_DEVFS      | 
+ 262 |    if (!cp)                              | ENABLE_FEATURE_DEVFS      | 
+ 263 |     goto errout;                         | ENABLE_FEATURE_DEVFS      | 
+ 264 |    while (*cp != '/' && *cp != '\0') {   | ENABLE_FEATURE_DEVFS      | 
+ 265 |     if (!isdigit(*cp))                   | ENABLE_FEATURE_DEVFS      | 
+ 266 |      goto errout;                        | ENABLE_FEATURE_DEVFS      | 
+ 267 |     cp++;                                | ENABLE_FEATURE_DEVFS      | 
+ 268 |    }                                     | ENABLE_FEATURE_DEVFS      | 
+ 269 | //FIXME: what if *cp = '\0' now? cp++ mo | ENABLE_FEATURE_DEVFS      | 
+ 270 |    cp++;                                 | ENABLE_FEATURE_DEVFS      | 
+ 271 |   }                                      | ENABLE_FEATURE_DEVFS      | 
+ 272 |   cp[-1] = '\0';                         | ENABLE_FEATURE_DEVFS      | 
+ 273 |   return str;                            | ENABLE_FEATURE_DEVFS      | 
+ 274 |  }                                       | ENABLE_FEATURE_DEVFS      | 
+ 275 |                                          | ENABLE_FEATURE_DEVFS      | 
+ 276 |  /* Now handle devfs /dev/disc or /dev/d | ENABLE_FEATURE_DEVFS      | 
+ 277 |  disk = NULL;                            | ENABLE_FEATURE_DEVFS      | 
+ 278 |  if (is_prefixed_with(cp, "discs/"))     | ENABLE_FEATURE_DEVFS      | 
+ 279 |   disk = "disc";                         | ENABLE_FEATURE_DEVFS      | 
+ 280 |  else if (is_prefixed_with(cp, "disks/") | ENABLE_FEATURE_DEVFS      | 
+ 281 |   disk = "disk";                         | ENABLE_FEATURE_DEVFS      | 
+ 282 |  if (disk) {                             | ENABLE_FEATURE_DEVFS      | 
+ 283 |   cp += 6;                               | ENABLE_FEATURE_DEVFS      | 
+ 284 |   cp = is_prefixed_with(cp, disk);       | ENABLE_FEATURE_DEVFS      | 
+ 285 |   if (!cp)                               | ENABLE_FEATURE_DEVFS      | 
+ 286 |    goto errout;                          | ENABLE_FEATURE_DEVFS      | 
+ 287 |   while (*cp != '/' && *cp != '\0') {    | ENABLE_FEATURE_DEVFS      | 
+ 288 |    if (!isdigit(*cp))                    | ENABLE_FEATURE_DEVFS      | 
+ 289 |     goto errout;                         | ENABLE_FEATURE_DEVFS      | 
+ 290 |    cp++;                                 | ENABLE_FEATURE_DEVFS      | 
+ 291 |   }                                      | ENABLE_FEATURE_DEVFS      | 
+ 292 |   *cp = '\0';                            | ENABLE_FEATURE_DEVFS      | 
+ 293 |   return str;                            | ENABLE_FEATURE_DEVFS      | 
+ 294 |  }                                       | ENABLE_FEATURE_DEVFS      | 
+ 295 | #endif                                   | True                      | 
+ 296 |  errout:                                 | True                      | 
+ 297 |  free(str);                              | True                      | 
+ 298 |  return NULL;                            | True                      | 
+ 299 | }                                        | True                      | 
+ 300 |                                          | True                      | 
+ 301 | static void free_instance(struct fsck_in | True                      | 
+ 302 | {                                        | True                      | 
+ 303 |  free(p->prog);                          | True                      | 
+ 304 |  free(p->device);                        | True                      | 
+ 305 |  free(p->base_device);                   | True                      | 
+ 306 |  free(p);                                | True                      | 
+ 307 | }                                        | True                      | 
+ 308 |                                          | True                      | 
+ 309 | static struct fs_info *create_fs_device( | True                      | 
+ 310 |      const char *type, const char *opts, | True                      | 
+ 311 |      int passno)                         | True                      | 
+ 312 | {                                        | True                      | 
+ 313 |  struct fs_info *fs;                     | True                      | 
+ 314 |                                          | True                      | 
+ 315 |  fs = xzalloc(sizeof(*fs));              | True                      | 
+ 316 |  fs->device = xstrdup(device);           | True                      | 
+ 317 |  fs->mountpt = xstrdup(mntpnt);          | True                      | 
+ 318 |  if (strchr(type, ','))                  | True                      | 
+ 319 |   type = (char *)"auto";                 | True                      | 
+ 320 |  fs->type = xstrdup(type);               | True                      | 
+ 321 |  fs->opts = xstrdup(opts ? opts : "");   | True                      | 
+ 322 |  fs->passno = passno < 0 ? 1 : passno;   | True                      | 
+ 323 |  /*fs->flags = 0; */                     | True                      | 
+ 324 |  /*fs->next = NULL; */                   | True                      | 
+ 325 |                                          | True                      | 
+ 326 |  if (!G.filesys_info)                    | True                      | 
+ 327 |   G.filesys_info = fs;                   | True                      | 
+ 328 |  else                                    | True                      | 
+ 329 |   G.filesys_last->next = fs;             | True                      | 
+ 330 |  G.filesys_last = fs;                    | True                      | 
+ 331 |                                          | True                      | 
+ 332 |  return fs;                              | True                      | 
+ 333 | }                                        | True                      | 
+ 334 |                                          | True                      | 
+ 335 | /* Load the filesystem database from /et | True                      | 
+ 336 | static void load_fs_info(const char *fil | True                      | 
+ 337 | {                                        | True                      | 
+ 338 |  FILE *fstab;                            | True                      | 
+ 339 |  struct mntent mte;                      | True                      | 
+ 340 |  char buf[1024];                         | True                      | 
+ 341 |                                          | True                      | 
+ 342 |  fstab = setmntent(filename, "r");       | True                      | 
+ 343 |  if (!fstab) {                           | True                      | 
+ 344 |   bb_perror_msg("can't read '%s'", filen | True                      | 
+ 345 |   return;                                | True                      | 
+ 346 |  }                                       | True                      | 
+ 347 |                                          | True                      | 
+ 348 |  // Loop through entries                 | True                      | 
+ 349 |  while (getmntent_r(fstab, &mte, buf, si | True                      | 
+ 350 |   //bb_error_msg("CREATE[%s][%s][%s][%s] | True                      | 
+ 351 |   // mte.mnt_type, mte.mnt_opts,         | True                      | 
+ 352 |   // mte.mnt_passno);                    | True                      | 
+ 353 |   create_fs_device(mte.mnt_fsname, mte.m | True                      | 
+ 354 |    mte.mnt_type, mte.mnt_opts,           | True                      | 
+ 355 |    mte.mnt_passno);                      | True                      | 
+ 356 |  }                                       | True                      | 
+ 357 |  endmntent(fstab);                       | True                      | 
+ 358 | }                                        | True                      | 
+ 359 |                                          | True                      | 
+ 360 | /* Lookup filesys in /etc/fstab and retu | True                      | 
+ 361 | static struct fs_info *lookup(char *file | True                      | 
+ 362 | {                                        | True                      | 
+ 363 |  struct fs_info *fs;                     | True                      | 
+ 364 |                                          | True                      | 
+ 365 |  for (fs = G.filesys_info; fs; fs = fs-> | True                      | 
+ 366 |   if (strcmp(filesys, fs->device) == 0   | True                      | 
+ 367 |    || (fs->mountpt && strcmp(filesys, fs | True                      | 
+ 368 |   )                                      | True                      | 
+ 369 |    break;                                | True                      | 
+ 370 |  }                                       | True                      | 
+ 371 |                                          | True                      | 
+ 372 |  return fs;                              | True                      | 
+ 373 | }                                        | True                      | 
+ 374 |                                          | True                      | 
+ 375 | #if DO_PROGRESS_INDICATOR                | True                      | 
+ 376 | static int progress_active(void)         | DO_PROGRESS_INDICATOR     | 
+ 377 | {                                        | DO_PROGRESS_INDICATOR     | 
+ 378 |  struct fsck_instance *inst;             | DO_PROGRESS_INDICATOR     | 
+ 379 |                                          | DO_PROGRESS_INDICATOR     | 
+ 380 |  for (inst = G.instance_list; inst; inst | DO_PROGRESS_INDICATOR     | 
+ 381 |   if (inst->flags & FLAG_DONE)           | DO_PROGRESS_INDICATOR     | 
+ 382 |    continue;                             | DO_PROGRESS_INDICATOR     | 
+ 383 |   if (inst->flags & FLAG_PROGRESS)       | DO_PROGRESS_INDICATOR     | 
+ 384 |    return 1;                             | DO_PROGRESS_INDICATOR     | 
+ 385 |  }                                       | DO_PROGRESS_INDICATOR     | 
+ 386 |  return 0;                               | DO_PROGRESS_INDICATOR     | 
+ 387 | }                                        | DO_PROGRESS_INDICATOR     | 
+ 388 | #endif                                   | True                      | 
+ 389 |                                          | True                      | 
+ 390 |                                          | True                      | 
+ 391 | /*                                       | True                      | 
+ 392 |  * Send a signal to all outstanding fsck | True                      | 
+ 393 |  */                                      | True                      | 
+ 394 | static void kill_all_if_got_signal(void) | True                      | 
+ 395 | {                                        | True                      | 
+ 396 |  struct fsck_instance *inst;             | True                      | 
+ 397 |                                          | True                      | 
+ 398 |  if (!bb_got_signal || G.kill_sent)      | True                      | 
+ 399 |   return;                                | True                      | 
+ 400 |                                          | True                      | 
+ 401 |  for (inst = G.instance_list; inst; inst | True                      | 
+ 402 |   if (inst->flags & FLAG_DONE)           | True                      | 
+ 403 |    continue;                             | True                      | 
+ 404 |   kill(inst->pid, SIGTERM);              | True                      | 
+ 405 |  }                                       | True                      | 
+ 406 |  G.kill_sent = 1;                        | True                      | 
+ 407 | }                                        | True                      | 
+ 408 |                                          | True                      | 
+ 409 | /*                                       | True                      | 
+ 410 |  * Wait for one child process to exit; w | True                      | 
+ 411 |  * the list of executing child processes | True                      | 
+ 412 |  * If there is no exited child, return - | True                      | 
+ 413 |  */                                      | True                      | 
+ 414 | static int wait_one(int flags)           | True                      | 
+ 415 | {                                        | True                      | 
+ 416 |  int status;                             | True                      | 
+ 417 |  int exitcode;                           | True                      | 
+ 418 |  struct fsck_instance *inst, *prev;      | True                      | 
+ 419 |  pid_t pid;                              | True                      | 
+ 420 |                                          | True                      | 
+ 421 |  if (!G.instance_list)                   | True                      | 
+ 422 |   return -1;                             | True                      | 
+ 423 |  /* if (G.noexecute) { already returned  | True                      | 
+ 424 |                                          | True                      | 
+ 425 |  while (1) {                             | True                      | 
+ 426 |   pid = safe_waitpid(-1, &status, flags) | True                      | 
+ 427 |   kill_all_if_got_signal();              | True                      | 
+ 428 |   if (pid == 0) /* flags == WNOHANG and  | True                      | 
+ 429 |    return -1;                            | True                      | 
+ 430 |   if (pid < 0) {                         | True                      | 
+ 431 |    if (errno == ECHILD) { /* paranoia */ | True                      | 
+ 432 |     bb_simple_error_msg("wait: no more c | True                      | 
+ 433 |     return -1;                           | True                      | 
+ 434 |    }                                     | True                      | 
+ 435 |    bb_simple_perror_msg("wait");         | True                      | 
+ 436 |    continue;                             | True                      | 
+ 437 |   }                                      | True                      | 
+ 438 |   prev = NULL;                           | True                      | 
+ 439 |   inst = G.instance_list;                | True                      | 
+ 440 |   do {                                   | True                      | 
+ 441 |    if (inst->pid == pid)                 | True                      | 
+ 442 |     goto child_died;                     | True                      | 
+ 443 |    prev = inst;                          | True                      | 
+ 444 |    inst = inst->next;                    | True                      | 
+ 445 |   } while (inst);                        | True                      | 
+ 446 |  }                                       | True                      | 
+ 447 |  child_died:                             | True                      | 
+ 448 |                                          | True                      | 
+ 449 |  exitcode = WEXITSTATUS(status);         | True                      | 
+ 450 |  if (WIFSIGNALED(status)) {              | True                      | 
+ 451 |   unsigned sig;                          | True                      | 
+ 452 |   sig = WTERMSIG(status);                | True                      | 
+ 453 |   exitcode = EXIT_UNCORRECTED;           | True                      | 
+ 454 |   if (sig != SIGINT) {                   | True                      | 
+ 455 |    printf("Warning: %s %s terminated "   | True                      | 
+ 456 |     "by signal %u\n",                    | True                      | 
+ 457 |     inst->prog, inst->device, sig);      | True                      | 
+ 458 |    exitcode = EXIT_ERROR;                | True                      | 
+ 459 |   }                                      | True                      | 
+ 460 |  }                                       | True                      | 
+ 461 |                                          | True                      | 
+ 462 | #if DO_PROGRESS_INDICATOR                | True                      | 
+ 463 |  if (progress && (inst->flags & FLAG_PRO | DO_PROGRESS_INDICATOR     | 
+ 464 |   struct fsck_instance *inst2;           | DO_PROGRESS_INDICATOR     | 
+ 465 |   for (inst2 = G.instance_list; inst2; i | DO_PROGRESS_INDICATOR     | 
+ 466 |    if (inst2->flags & FLAG_DONE)         | DO_PROGRESS_INDICATOR     | 
+ 467 |     continue;                            | DO_PROGRESS_INDICATOR     | 
+ 468 |    if (strcmp(inst2->type, "ext2") != 0  | DO_PROGRESS_INDICATOR     | 
+ 469 |     && strcmp(inst2->type, "ext3") != 0  | DO_PROGRESS_INDICATOR     | 
+ 470 |    ) {                                   | DO_PROGRESS_INDICATOR     | 
+ 471 |     continue;                            | DO_PROGRESS_INDICATOR     | 
+ 472 |    }                                     | DO_PROGRESS_INDICATOR     | 
+ 473 |    /* ext[23], we will send USR1         | DO_PROGRESS_INDICATOR     | 
+ 474 |     * (request to start displaying progr | DO_PROGRESS_INDICATOR     | 
+ 475 |     *                                    | DO_PROGRESS_INDICATOR     | 
+ 476 |     * If we've just started the fsck, wa | DO_PROGRESS_INDICATOR     | 
+ 477 |     * bit before sending the kill, to gi | DO_PROGRESS_INDICATOR     | 
+ 478 |     * time to set up the signal handler  | DO_PROGRESS_INDICATOR     | 
+ 479 |     */                                   | DO_PROGRESS_INDICATOR     | 
+ 480 |    if (inst2->start_time >= time(NULL) - | DO_PROGRESS_INDICATOR     | 
+ 481 |     sleep1();                            | DO_PROGRESS_INDICATOR     | 
+ 482 |    kill(inst2->pid, SIGUSR1);            | DO_PROGRESS_INDICATOR     | 
+ 483 |    inst2->flags |= FLAG_PROGRESS;        | DO_PROGRESS_INDICATOR     | 
+ 484 |    break;                                | DO_PROGRESS_INDICATOR     | 
+ 485 |   }                                      | DO_PROGRESS_INDICATOR     | 
+ 486 |  }                                       | DO_PROGRESS_INDICATOR     | 
+ 487 | #endif                                   | True                      | 
+ 488 |                                          | True                      | 
+ 489 |  if (prev)                               | True                      | 
+ 490 |   prev->next = inst->next;               | True                      | 
+ 491 |  else                                    | True                      | 
+ 492 |   G.instance_list = inst->next;          | True                      | 
+ 493 |  if (G.verbose > 1)                      | True                      | 
+ 494 |   printf("Finished with %s (exit status  | True                      | 
+ 495 |    inst->device, exitcode);              | True                      | 
+ 496 |  G.num_running--;                        | True                      | 
+ 497 |  free_instance(inst);                    | True                      | 
+ 498 |                                          | True                      | 
+ 499 |  return exitcode;                        | True                      | 
+ 500 | }                                        | True                      | 
+ 501 |                                          | True                      | 
+ 502 | /*                                       | True                      | 
+ 503 |  * Wait until all executing child proces | True                      | 
+ 504 |  * logical OR of all of their exit code  | True                      | 
+ 505 |  */                                      | True                      | 
+ 506 | #define FLAG_WAIT_ALL           0        | True                      | 
+ 507 | #define FLAG_WAIT_ATLEAST_ONE   WNOHANG  | True                      | 
+ 508 | static int wait_many(int flags)          | True                      | 
+ 509 | {                                        | True                      | 
+ 510 |  int exit_status;                        | True                      | 
+ 511 |  int global_status = 0;                  | True                      | 
+ 512 |  int wait_flags = 0;                     | True                      | 
+ 513 |                                          | True                      | 
+ 514 |  while ((exit_status = wait_one(wait_fla | True                      | 
+ 515 |   global_status |= exit_status;          | True                      | 
+ 516 |   wait_flags |= flags;                   | True                      | 
+ 517 |  }                                       | True                      | 
+ 518 |  return global_status;                   | True                      | 
+ 519 | }                                        | True                      | 
+ 520 |                                          | True                      | 
+ 521 | /*                                       | True                      | 
+ 522 |  * Execute a particular fsck program, an | True                      | 
+ 523 |  * child processes we are waiting for.   | True                      | 
+ 524 |  */                                      | True                      | 
+ 525 | static void execute(const char *type, co | True                      | 
+ 526 |   const char *mntpt /*, int interactive  | True                      | 
+ 527 | {                                        | True                      | 
+ 528 |  int i;                                  | True                      | 
+ 529 |  struct fsck_instance *inst;             | True                      | 
+ 530 |  pid_t pid;                              | True                      | 
+ 531 |                                          | True                      | 
+ 532 |  G.args[0] = xasprintf("fsck.%s", type); | True                      | 
+ 533 |                                          | True                      | 
+ 534 | #if DO_PROGRESS_INDICATOR                | True                      | 
+ 535 |  if (progress && !progress_active()) {   | DO_PROGRESS_INDICATOR     | 
+ 536 |   if (strcmp(type, "ext2") == 0          | DO_PROGRESS_INDICATOR     | 
+ 537 |    || strcmp(type, "ext3") == 0          | DO_PROGRESS_INDICATOR     | 
+ 538 |   ) {                                    | DO_PROGRESS_INDICATOR     | 
+ 539 |    G.args[XXX] = xasprintf("-C%d", progr | DO_PROGRESS_INDICATOR     | 
+ 540 |    inst->flags |= FLAG_PROGRESS;         | DO_PROGRESS_INDICATOR     | 
+ 541 |   }                                      | DO_PROGRESS_INDICATOR     | 
+ 542 |  }                                       | DO_PROGRESS_INDICATOR     | 
+ 543 | #endif                                   | True                      | 
+ 544 |                                          | True                      | 
+ 545 |  G.args[G.num_args - 2] = (char*)device; | True                      | 
+ 546 |  /* G.args[G.num_args - 1] = NULL; - alr | True                      | 
+ 547 |                                          | True                      | 
+ 548 |  if (G.verbose || G.noexecute) {         | True                      | 
+ 549 |   printf("[%s (%d) -- %s]", G.args[0], G | True                      | 
+ 550 |      mntpt ? mntpt : device);            | True                      | 
+ 551 |   for (i = 0; G.args[i]; i++)            | True                      | 
+ 552 |    printf(" %s", G.args[i]);             | True                      | 
+ 553 |   bb_putchar('\n');                      | True                      | 
+ 554 |  }                                       | True                      | 
+ 555 |                                          | True                      | 
+ 556 |  /* Fork and execute the correct program | True                      | 
+ 557 |  pid = -1;                               | True                      | 
+ 558 |  if (!G.noexecute) {                     | True                      | 
+ 559 |   pid = spawn(G.args);                   | True                      | 
+ 560 |   if (pid < 0)                           | True                      | 
+ 561 |    bb_simple_perror_msg(G.args[0]);      | True                      | 
+ 562 |  }                                       | True                      | 
+ 563 |                                          | True                      | 
+ 564 | #if DO_PROGRESS_INDICATOR                | True                      | 
+ 565 |  free(G.args[XXX]);                      | DO_PROGRESS_INDICATOR     | 
+ 566 | #endif                                   | True                      | 
+ 567 |                                          | True                      | 
+ 568 |  /* No child, so don't record an instanc | True                      | 
+ 569 |  if (pid <= 0) {                         | True                      | 
+ 570 |   free(G.args[0]);                       | True                      | 
+ 571 |   return;                                | True                      | 
+ 572 |  }                                       | True                      | 
+ 573 |                                          | True                      | 
+ 574 |  inst = xzalloc(sizeof(*inst));          | True                      | 
+ 575 |  inst->pid = pid;                        | True                      | 
+ 576 |  inst->prog = G.args[0];                 | True                      | 
+ 577 |  inst->device = xstrdup(device);         | True                      | 
+ 578 |  inst->base_device = base_device(device) | True                      | 
+ 579 | #if DO_PROGRESS_INDICATOR                | True                      | 
+ 580 |  inst->start_time = time(NULL);          | DO_PROGRESS_INDICATOR     | 
+ 581 | #endif                                   | True                      | 
+ 582 |                                          | True                      | 
+ 583 |  /* Add to the list of running fsck's.   | True                      | 
+ 584 |   * (was adding to the end, but adding t | True                      | 
+ 585 |  inst->next = G.instance_list;           | True                      | 
+ 586 |  G.instance_list = inst;                 | True                      | 
+ 587 | }                                        | True                      | 
+ 588 |                                          | True                      | 
+ 589 | /*                                       | True                      | 
+ 590 |  * Run the fsck program on a particular  | True                      | 
+ 591 |  *                                       | True                      | 
+ 592 |  * If the type is specified using -t, an | True                      | 
+ 593 |  * (as in "noext2") and only one filesys | True                      | 
+ 594 |  * use that type regardless of what is s | True                      | 
+ 595 |  *                                       | True                      | 
+ 596 |  * If the type isn't specified by the us | True                      | 
+ 597 |  * specified in /etc/fstab, or "auto".   | True                      | 
+ 598 |  */                                      | True                      | 
+ 599 | static void fsck_device(struct fs_info * | True                      | 
+ 600 | {                                        | True                      | 
+ 601 |  const char *type;                       | True                      | 
+ 602 |                                          | True                      | 
+ 603 |  if (strcmp(fs->type, "auto") != 0) {    | True                      | 
+ 604 |   type = fs->type;                       | True                      | 
+ 605 |   if (G.verbose > 2)                     | True                      | 
+ 606 |    printf("using filesystem type '%s' %s | True                      | 
+ 607 |      type, "from fstab");                | True                      | 
+ 608 |  } else if (G.fstype                     | True                      | 
+ 609 |   && (G.fstype[0] != 'n' || G.fstype[1]  | True                      | 
+ 610 |   && !is_prefixed_with(G.fstype, "opts=" | True                      | 
+ 611 |   && !is_prefixed_with(G.fstype, "loop") | True                      | 
+ 612 |   && !strchr(G.fstype, ',')              | True                      | 
+ 613 |  ) {                                     | True                      | 
+ 614 |   type = G.fstype;                       | True                      | 
+ 615 |   if (G.verbose > 2)                     | True                      | 
+ 616 |    printf("using filesystem type '%s' %s | True                      | 
+ 617 |      type, "from -t");                   | True                      | 
+ 618 |  } else {                                | True                      | 
+ 619 |   type = "auto";                         | True                      | 
+ 620 |   if (G.verbose > 2)                     | True                      | 
+ 621 |    printf("using filesystem type '%s' %s | True                      | 
+ 622 |      type, "(default)");                 | True                      | 
+ 623 |  }                                       | True                      | 
+ 624 |                                          | True                      | 
+ 625 |  G.num_running++;                        | True                      | 
+ 626 |  execute(type, fs->device, fs->mountpt / | True                      | 
+ 627 | }                                        | True                      | 
+ 628 |                                          | True                      | 
+ 629 | /*                                       | True                      | 
+ 630 |  * Returns TRUE if a partition on the sa | True                      | 
+ 631 |  * checked.                              | True                      | 
+ 632 |  */                                      | True                      | 
+ 633 | static int device_already_active(char *d | True                      | 
+ 634 | {                                        | True                      | 
+ 635 |  struct fsck_instance *inst;             | True                      | 
+ 636 |  char *base;                             | True                      | 
+ 637 |                                          | True                      | 
+ 638 |  if (G.force_all_parallel)               | True                      | 
+ 639 |   return 0;                              | True                      | 
+ 640 |                                          | True                      | 
+ 641 | #ifdef BASE_MD                           | True                      | 
+ 642 |  /* Don't check a soft raid disk with an | True                      | 
+ 643 |  if (G.instance_list                     | True                      | 
+ 644 |   && (is_prefixed_with(G.instance_list-> | True                      | 
+ 645 |       || is_prefixed_with(device, BASE_M | True                      | 
+ 646 |  ) {                                     | True                      | 
+ 647 |   return 1;                              | True                      | 
+ 648 |  }                                       | True                      | 
+ 649 | #endif                                   | True                      | 
+ 650 |                                          | True                      | 
+ 651 |  base = base_device(device);             | True                      | 
+ 652 |  /*                                      | True                      | 
+ 653 |   * If we don't know the base device, as | True                      | 
+ 654 |   * already active if there are any fsck | True                      | 
+ 655 |   */                                     | True                      | 
+ 656 |  if (!base)                              | True                      | 
+ 657 |   return (G.instance_list != NULL);      | True                      | 
+ 658 |                                          | True                      | 
+ 659 |  for (inst = G.instance_list; inst; inst | True                      | 
+ 660 |   if (!inst->base_device || strcmp(base, | True                      | 
+ 661 |    free(base);                           | True                      | 
+ 662 |    return 1;                             | True                      | 
+ 663 |   }                                      | True                      | 
+ 664 |  }                                       | True                      | 
+ 665 |                                          | True                      | 
+ 666 |  free(base);                             | True                      | 
+ 667 |  return 0;                               | True                      | 
+ 668 | }                                        | True                      | 
+ 669 |                                          | True                      | 
+ 670 | /*                                       | True                      | 
+ 671 |  * This function returns true if a parti | True                      | 
+ 672 |  * comma-delimited options list          | True                      | 
+ 673 |  */                                      | True                      | 
+ 674 | static int opt_in_list(char *opt, char * | True                      | 
+ 675 | {                                        | True                      | 
+ 676 |  char *s;                                | True                      | 
+ 677 |  int len;                                | True                      | 
+ 678 |                                          | True                      | 
+ 679 |  if (!optlist)                           | True                      | 
+ 680 |   return 0;                              | True                      | 
+ 681 |                                          | True                      | 
+ 682 |  len = strlen(opt);                      | True                      | 
+ 683 |  s = optlist - 1;                        | True                      | 
+ 684 |  while (1) {                             | True                      | 
+ 685 |   s = strstr(s + 1, opt);                | True                      | 
+ 686 |   if (!s)                                | True                      | 
+ 687 |    return 0;                             | True                      | 
+ 688 |   /* neither "opt.." nor "xxx,opt.."? */ | True                      | 
+ 689 |   if (s != optlist && s[-1] != ',')      | True                      | 
+ 690 |    continue;                             | True                      | 
+ 691 |   /* neither "..opt" nor "..opt,xxx"? */ | True                      | 
+ 692 |   if (s[len] != '\0' && s[len] != ',')   | True                      | 
+ 693 |    continue;                             | True                      | 
+ 694 |   return 1;                              | True                      | 
+ 695 |  }                                       | True                      | 
+ 696 | }                                        | True                      | 
+ 697 |                                          | True                      | 
+ 698 | /* See if the filesystem matches the cri | True                      | 
+ 699 | static int fs_match(struct fs_info *fs)  | True                      | 
+ 700 | {                                        | True                      | 
+ 701 |  int n, ret, checked_type;               | True                      | 
+ 702 |  char *cp;                               | True                      | 
+ 703 |                                          | True                      | 
+ 704 |  if (!G.fs_type_list)                    | True                      | 
+ 705 |   return 1;                              | True                      | 
+ 706 |                                          | True                      | 
+ 707 |  ret = 0;                                | True                      | 
+ 708 |  checked_type = 0;                       | True                      | 
+ 709 |  n = 0;                                  | True                      | 
+ 710 |  while (1) {                             | True                      | 
+ 711 |   cp = G.fs_type_list[n];                | True                      | 
+ 712 |   if (!cp)                               | True                      | 
+ 713 |    break;                                | True                      | 
+ 714 |   switch (G.fs_type_flag[n]) {           | True                      | 
+ 715 |   case FS_TYPE_FLAG_NORMAL:              | True                      | 
+ 716 |    checked_type++;                       | True                      | 
+ 717 |    if (strcmp(cp, fs->type) == 0)        | True                      | 
+ 718 |     ret = 1;                             | True                      | 
+ 719 |    break;                                | True                      | 
+ 720 |   case FS_TYPE_FLAG_NEGOPT:              | True                      | 
+ 721 |    if (opt_in_list(cp, fs->opts))        | True                      | 
+ 722 |     return 0;                            | True                      | 
+ 723 |    break;                                | True                      | 
+ 724 |   case FS_TYPE_FLAG_OPT:                 | True                      | 
+ 725 |    if (!opt_in_list(cp, fs->opts))       | True                      | 
+ 726 |     return 0;                            | True                      | 
+ 727 |    break;                                | True                      | 
+ 728 |   }                                      | True                      | 
+ 729 |   n++;                                   | True                      | 
+ 730 |  }                                       | True                      | 
+ 731 |  if (checked_type == 0)                  | True                      | 
+ 732 |   return 1;                              | True                      | 
+ 733 |                                          | True                      | 
+ 734 |  return (G.fs_type_negated ? !ret : ret) | True                      | 
+ 735 | }                                        | True                      | 
+ 736 |                                          | True                      | 
+ 737 | /* Check if we should ignore this filesy | True                      | 
+ 738 | static int ignore(struct fs_info *fs)    | True                      | 
+ 739 | {                                        | True                      | 
+ 740 |  /*                                      | True                      | 
+ 741 |   * If the pass number is 0, ignore it.  | True                      | 
+ 742 |   */                                     | True                      | 
+ 743 |  if (fs->passno == 0)                    | True                      | 
+ 744 |   return 1;                              | True                      | 
+ 745 |                                          | True                      | 
+ 746 |  /*                                      | True                      | 
+ 747 |   * If a specific fstype is specified, a | True                      | 
+ 748 |   * ignore it.                           | True                      | 
+ 749 |   */                                     | True                      | 
+ 750 |  if (!fs_match(fs))                      | True                      | 
+ 751 |   return 1;                              | True                      | 
+ 752 |                                          | True                      | 
+ 753 |  /* Are we ignoring this type? */        | True                      | 
+ 754 |  if (index_in_strings(ignored_types, fs- | True                      | 
+ 755 |   return 1;                              | True                      | 
+ 756 |                                          | True                      | 
+ 757 |  /* We can and want to check this file s | True                      | 
+ 758 |  return 0;                               | True                      | 
+ 759 | }                                        | True                      | 
+ 760 |                                          | True                      | 
+ 761 | /* Check all file systems, using the /et | True                      | 
+ 762 | static int check_all(void)               | True                      | 
+ 763 | {                                        | True                      | 
+ 764 |  struct fs_info *fs;                     | True                      | 
+ 765 |  int status = EXIT_OK;                   | True                      | 
+ 766 |  smallint not_done_yet;                  | True                      | 
+ 767 |  smallint pass_done;                     | True                      | 
+ 768 |  int passno;                             | True                      | 
+ 769 |                                          | True                      | 
+ 770 |  if (G.verbose)                          | True                      | 
+ 771 |   puts("Checking all filesystems");      | True                      | 
+ 772 |                                          | True                      | 
+ 773 |  /*                                      | True                      | 
+ 774 |   * Do an initial scan over the filesyst | True                      | 
+ 775 |   * which should be ignored as done, and | True                      | 
+ 776 |   * filesystem types (done as a side-eff | True                      | 
+ 777 |   */                                     | True                      | 
+ 778 |  for (fs = G.filesys_info; fs; fs = fs-> | True                      | 
+ 779 |   if (ignore(fs))                        | True                      | 
+ 780 |    fs->flags |= FLAG_DONE;               | True                      | 
+ 781 |                                          | True                      | 
+ 782 |  /*                                      | True                      | 
+ 783 |   * Find and check the root filesystem.  | True                      | 
+ 784 |   */                                     | True                      | 
+ 785 |  if (!G.parallel_root) {                 | True                      | 
+ 786 |   for (fs = G.filesys_info; fs; fs = fs- | True                      | 
+ 787 |    if (LONE_CHAR(fs->mountpt, '/')) {    | True                      | 
+ 788 |     if (!G.skip_root && !ignore(fs)) {   | True                      | 
+ 789 |      fsck_device(fs /*, 1*/);            | True                      | 
+ 790 |      status |= wait_many(FLAG_WAIT_ALL); | True                      | 
+ 791 |      if (status > EXIT_NONDESTRUCT)      | True                      | 
+ 792 |       return status;                     | True                      | 
+ 793 |     }                                    | True                      | 
+ 794 |     fs->flags |= FLAG_DONE;              | True                      | 
+ 795 |     break;                               | True                      | 
+ 796 |    }                                     | True                      | 
+ 797 |   }                                      | True                      | 
+ 798 |  }                                       | True                      | 
+ 799 |  /*                                      | True                      | 
+ 800 |   * This is for the bone-headed user who | True                      | 
+ 801 |   * filesystem listed twice.             | True                      | 
+ 802 |   * "Skip root" will skip _all_ root ent | True                      | 
+ 803 |   */                                     | True                      | 
+ 804 |  if (G.skip_root)                        | True                      | 
+ 805 |   for (fs = G.filesys_info; fs; fs = fs- | True                      | 
+ 806 |    if (LONE_CHAR(fs->mountpt, '/'))      | True                      | 
+ 807 |     fs->flags |= FLAG_DONE;              | True                      | 
+ 808 |                                          | True                      | 
+ 809 |  not_done_yet = 1;                       | True                      | 
+ 810 |  passno = 1;                             | True                      | 
+ 811 |  while (not_done_yet) {                  | True                      | 
+ 812 |   not_done_yet = 0;                      | True                      | 
+ 813 |   pass_done = 1;                         | True                      | 
+ 814 |                                          | True                      | 
+ 815 |   for (fs = G.filesys_info; fs; fs = fs- | True                      | 
+ 816 |    if (bb_got_signal)                    | True                      | 
+ 817 |     break;                               | True                      | 
+ 818 |    if (fs->flags & FLAG_DONE)            | True                      | 
+ 819 |     continue;                            | True                      | 
+ 820 |    /*                                    | True                      | 
+ 821 |     * If the filesystem's pass number is | True                      | 
+ 822 |     * than the current pass number, then | True                      | 
+ 823 |     * do it yet.                         | True                      | 
+ 824 |     */                                   | True                      | 
+ 825 |    if (fs->passno > passno) {            | True                      | 
+ 826 |     not_done_yet = 1;                    | True                      | 
+ 827 |     continue;                            | True                      | 
+ 828 |    }                                     | True                      | 
+ 829 |    /*                                    | True                      | 
+ 830 |     * If a filesystem on a particular de | True                      | 
+ 831 |     * already been spawned, then we need | True                      | 
+ 832 |     * this to another pass.              | True                      | 
+ 833 |     */                                   | True                      | 
+ 834 |    if (device_already_active(fs->device) | True                      | 
+ 835 |     pass_done = 0;                       | True                      | 
+ 836 |     continue;                            | True                      | 
+ 837 |    }                                     | True                      | 
+ 838 |    /*                                    | True                      | 
+ 839 |     * Spawn off the fsck process         | True                      | 
+ 840 |     */                                   | True                      | 
+ 841 |    fsck_device(fs /*, G.serialize*/);    | True                      | 
+ 842 |    fs->flags |= FLAG_DONE;               | True                      | 
+ 843 |                                          | True                      | 
+ 844 |    /*                                    | True                      | 
+ 845 |     * Only do one filesystem at a time,  | True                      | 
+ 846 |     * have a limit on the number of fsck | True                      | 
+ 847 |     * at one time, apply that limit.     | True                      | 
+ 848 |     */                                   | True                      | 
+ 849 |    if (G.serialize                       | True                      | 
+ 850 |     || (G.num_running >= G.max_running)  | True                      | 
+ 851 |    ) {                                   | True                      | 
+ 852 |     pass_done = 0;                       | True                      | 
+ 853 |     break;                               | True                      | 
+ 854 |    }                                     | True                      | 
+ 855 |   }                                      | True                      | 
+ 856 |   if (bb_got_signal)                     | True                      | 
+ 857 |    break;                                | True                      | 
+ 858 |   if (G.verbose > 1)                     | True                      | 
+ 859 |    printf("--waiting-- (pass %d)\n", pas | True                      | 
+ 860 |   status |= wait_many(pass_done ? FLAG_W | True                      | 
+ 861 |     FLAG_WAIT_ATLEAST_ONE);              | True                      | 
+ 862 |   if (pass_done) {                       | True                      | 
+ 863 |    if (G.verbose > 1)                    | True                      | 
+ 864 |     puts("------------------------------ | True                      | 
+ 865 |    passno++;                             | True                      | 
+ 866 |   } else                                 | True                      | 
+ 867 |    not_done_yet = 1;                     | True                      | 
+ 868 |  }                                       | True                      | 
+ 869 |  kill_all_if_got_signal();               | True                      | 
+ 870 |  status |= wait_many(FLAG_WAIT_ATLEAST_O | True                      | 
+ 871 |  return status;                          | True                      | 
+ 872 | }                                        | True                      | 
+ 873 |                                          | True                      | 
+ 874 | /*                                       | True                      | 
+ 875 |  * Deal with the fsck -t argument.       | True                      | 
+ 876 |  * Huh, for mount "-t novfat,nfs" means  | True                      | 
+ 877 |  * Why here we require "-t novfat,nonfs" | True                      | 
+ 878 |  */                                      | True                      | 
+ 879 | static void compile_fs_type(char *fs_typ | True                      | 
+ 880 | {                                        | True                      | 
+ 881 |  char *s;                                | True                      | 
+ 882 |  int num = 2;                            | True                      | 
+ 883 |  smallint negate;                        | True                      | 
+ 884 |                                          | True                      | 
+ 885 |  s = fs_type;                            | True                      | 
+ 886 |  while ((s = strchr(s, ','))) {          | True                      | 
+ 887 |   num++;                                 | True                      | 
+ 888 |   s++;                                   | True                      | 
+ 889 |  }                                       | True                      | 
+ 890 |                                          | True                      | 
+ 891 |  G.fs_type_list = xzalloc(num * sizeof(G | True                      | 
+ 892 |  G.fs_type_flag = xzalloc(num * sizeof(G | True                      | 
+ 893 |  G.fs_type_negated = -1; /* not yet know | True                      | 
+ 894 |                                          | True                      | 
+ 895 |  num = 0;                                | True                      | 
+ 896 |  s = fs_type;                            | True                      | 
+ 897 |  while (1) {                             | True                      | 
+ 898 |   char *comma;                           | True                      | 
+ 899 |                                          | True                      | 
+ 900 |   negate = 0;                            | True                      | 
+ 901 |   if (s[0] == 'n' && s[1] == 'o') { /* " | True                      | 
+ 902 |    s += 2;                               | True                      | 
+ 903 |    negate = 1;                           | True                      | 
+ 904 |   } else if (s[0] == '!') {              | True                      | 
+ 905 |    s++;                                  | True                      | 
+ 906 |    negate = 1;                           | True                      | 
+ 907 |   }                                      | True                      | 
+ 908 |                                          | True                      | 
+ 909 |   if (strcmp(s, "loop") == 0)            | True                      | 
+ 910 |    /* loop is really short-hand for opts | True                      | 
+ 911 |    goto loop_special_case;               | True                      | 
+ 912 |   if (is_prefixed_with(s, "opts=")) {    | True                      | 
+ 913 |    s += 5;                               | True                      | 
+ 914 |  loop_special_case:                      | True                      | 
+ 915 |    G.fs_type_flag[num] = negate ? FS_TYP | True                      | 
+ 916 |   } else {                               | True                      | 
+ 917 |    if (G.fs_type_negated == -1)          | True                      | 
+ 918 |     G.fs_type_negated = negate;          | True                      | 
+ 919 |    if (G.fs_type_negated != negate)      | True                      | 
+ 920 |     bb_simple_error_msg_and_die(         | True                      | 
+ 921 | "either all or none of the filesystem ty | True                      | 
+ 922 | "with 'no' or '!'");                     | True                      | 
+ 923 |   }                                      | True                      | 
+ 924 |   comma = strchrnul(s, ',');             | True                      | 
+ 925 |   G.fs_type_list[num++] = xstrndup(s, co | True                      | 
+ 926 |   if (*comma == '\0')                    | True                      | 
+ 927 |    break;                                | True                      | 
+ 928 |   s = comma + 1;                         | True                      | 
+ 929 |  }                                       | True                      | 
+ 930 | }                                        | True                      | 
+ 931 |                                          | True                      | 
+ 932 | static char **new_args(void)             | True                      | 
+ 933 | {                                        | True                      | 
+ 934 |  G.args = xrealloc_vector(G.args, 2, G.n | True                      | 
+ 935 |  return &G.args[G.num_args++];           | True                      | 
+ 936 | }                                        | True                      | 
+ 937 |                                          | True                      | 
+ 938 | int fsck_main(int argc, char **argv) MAI | True                      | 
+ 939 | int fsck_main(int argc UNUSED_PARAM, cha | True                      | 
+ 940 | {                                        | True                      | 
+ 941 |  int i, status;                          | True                      | 
+ 942 |  /*int interactive;*/                    | True                      | 
+ 943 |  struct fs_info *fs;                     | True                      | 
+ 944 |  const char *fstab;                      | True                      | 
+ 945 |  char *tmp;                              | True                      | 
+ 946 |  char **devices;                         | True                      | 
+ 947 |  int num_devices;                        | True                      | 
+ 948 |  smallint opts_for_fsck;                 | True                      | 
+ 949 |  smallint doall;                         | True                      | 
+ 950 |  smallint notitle;                       | True                      | 
+ 951 |                                          | True                      | 
+ 952 |  INIT_G();                               | True                      | 
+ 953 |                                          | True                      | 
+ 954 |  /* we want wait() to be interruptible * | True                      | 
+ 955 |  signal_no_SA_RESTART_empty_mask(SIGINT, | True                      | 
+ 956 |  signal_no_SA_RESTART_empty_mask(SIGTERM | True                      | 
+ 957 |                                          | True                      | 
+ 958 |  setbuf(stdout, NULL);                   | True                      | 
+ 959 |                                          | True                      | 
+ 960 |  opts_for_fsck = doall = notitle = 0;    | True                      | 
+ 961 |  devices = NULL;                         | True                      | 
+ 962 |  num_devices = 0;                        | True                      | 
+ 963 |  new_args(); /* G.args[0] = NULL, will b | True                      | 
+ 964 |  /* G.instance_list = NULL; - in bss, so | True                      | 
+ 965 |                                          | True                      | 
+ 966 |  while (*++argv) {                       | True                      | 
+ 967 |   int j;                                 | True                      | 
+ 968 |   int optpos;                            | True                      | 
+ 969 |   char *options;                         | True                      | 
+ 970 |   char *arg = *argv;                     | True                      | 
+ 971 |                                          | True                      | 
+ 972 |   /* "/dev/blk" or "/path" or "UUID=xxx" | True                      | 
+ 973 |   if ((arg[0] == '/' && !opts_for_fsck)  | True                      | 
+ 974 | // FIXME: must check that arg is a blkde | True                      | 
+ 975 | // "/path", "UUID=xxx" or "LABEL=xxx" in | True                      | 
+ 976 | // ("UUID=xxx"/"LABEL=xxx" can probably  | True                      | 
+ 977 |    devices = xrealloc_vector(devices, 2, | True                      | 
+ 978 |    devices[num_devices++] = arg;         | True                      | 
+ 979 |    continue;                             | True                      | 
+ 980 |   }                                      | True                      | 
+ 981 |                                          | True                      | 
+ 982 |   if (arg[0] != '-' || opts_for_fsck) {  | True                      | 
+ 983 |    *new_args() = arg;                    | True                      | 
+ 984 |    continue;                             | True                      | 
+ 985 |   }                                      | True                      | 
+ 986 |                                          | True                      | 
+ 987 |   if (LONE_CHAR(arg + 1, '-')) { /* "--" | True                      | 
+ 988 |    opts_for_fsck = 1;                    | True                      | 
+ 989 |    continue;                             | True                      | 
+ 990 |   }                                      | True                      | 
+ 991 |                                          | True                      | 
+ 992 |   optpos = 0;                            | True                      | 
+ 993 |   options = NULL;                        | True                      | 
+ 994 |   for (j = 1; arg[j]; j++) {             | True                      | 
+ 995 |    switch (arg[j]) {                     | True                      | 
+ 996 |    case 'A':                             | True                      | 
+ 997 |     doall = 1;                           | True                      | 
+ 998 |     break;                               | True                      | 
+ 999 | #if DO_PROGRESS_INDICATOR                | True                      | 
+1000 |    case 'C':                             | DO_PROGRESS_INDICATOR     | 
+1001 |     progress = 1;                        | DO_PROGRESS_INDICATOR     | 
+1002 |     if (arg[++j]) { /* -Cn */            | DO_PROGRESS_INDICATOR     | 
+1003 |      progress_fd = xatoi_positive(&arg[j | DO_PROGRESS_INDICATOR     | 
+1004 |      goto next_arg;                      | DO_PROGRESS_INDICATOR     | 
+1005 |     }                                    | DO_PROGRESS_INDICATOR     | 
+1006 |     /* -C n */                           | DO_PROGRESS_INDICATOR     | 
+1007 |     if (!*++argv)                        | DO_PROGRESS_INDICATOR     | 
+1008 |      bb_show_usage();                    | DO_PROGRESS_INDICATOR     | 
+1009 |     progress_fd = xatoi_positive(*argv); | DO_PROGRESS_INDICATOR     | 
+1010 |     goto next_arg;                       | DO_PROGRESS_INDICATOR     | 
+1011 | #endif                                   | True                      | 
+1012 |    case 'V':                             | True                      | 
+1013 |     G.verbose++;                         | True                      | 
+1014 |     break;                               | True                      | 
+1015 |    case 'N':                             | True                      | 
+1016 |     G.noexecute = 1;                     | True                      | 
+1017 |     break;                               | True                      | 
+1018 |    case 'R':                             | True                      | 
+1019 |     G.skip_root = 1;                     | True                      | 
+1020 |     break;                               | True                      | 
+1021 |    case 'T':                             | True                      | 
+1022 |     notitle = 1;                         | True                      | 
+1023 |     break;                               | True                      | 
+1024 | /*   case 'M':                           | True                      | 
+1025 |     like_mount = 1;                      | True                      | 
+1026 |     break; */                            | True                      | 
+1027 |    case 'P':                             | True                      | 
+1028 |     G.parallel_root = 1;                 | True                      | 
+1029 |     break;                               | True                      | 
+1030 |    case 's':                             | True                      | 
+1031 |     G.serialize = 1;                     | True                      | 
+1032 |     break;                               | True                      | 
+1033 |    case 't':                             | True                      | 
+1034 |     if (G.fstype)                        | True                      | 
+1035 |      bb_show_usage();                    | True                      | 
+1036 |     if (arg[++j])                        | True                      | 
+1037 |      tmp = &arg[j];                      | True                      | 
+1038 |     else if (*++argv)                    | True                      | 
+1039 |      tmp = *argv;                        | True                      | 
+1040 |     else                                 | True                      | 
+1041 |      bb_show_usage();                    | True                      | 
+1042 |     G.fstype = xstrdup(tmp);             | True                      | 
+1043 |     compile_fs_type(G.fstype);           | True                      | 
+1044 |     goto next_arg;                       | True                      | 
+1045 |    case '?':                             | True                      | 
+1046 |     bb_show_usage();                     | True                      | 
+1047 |     break;                               | True                      | 
+1048 |    default:                              | True                      | 
+1049 |     optpos++;                            | True                      | 
+1050 |     /* one extra for '\0' */             | True                      | 
+1051 |     options = xrealloc(options, optpos + | True                      | 
+1052 |     options[optpos] = arg[j];            | True                      | 
+1053 |     break;                               | True                      | 
+1054 |    }                                     | True                      | 
+1055 |   }                                      | True                      | 
+1056 |  next_arg:                               | True                      | 
+1057 |   if (optpos) {                          | True                      | 
+1058 |    options[0] = '-';                     | True                      | 
+1059 |    options[optpos + 1] = '\0';           | True                      | 
+1060 |    *new_args() = options;                | True                      | 
+1061 |   }                                      | True                      | 
+1062 |  }                                       | True                      | 
+1063 |  if (getenv("FSCK_FORCE_ALL_PARALLEL"))  | True                      | 
+1064 |   G.force_all_parallel = 1;              | True                      | 
+1065 |  tmp = getenv("FSCK_MAX_INST");          | True                      | 
+1066 |  G.max_running = INT_MAX;                | True                      | 
+1067 |  if (tmp)                                | True                      | 
+1068 |   G.max_running = xatoi(tmp);            | True                      | 
+1069 |  new_args(); /* G.args[G.num_args - 2] w | True                      | 
+1070 |  new_args(); /* G.args[G.num_args - 1] i | True                      | 
+1071 |                                          | True                      | 
+1072 |  if (!notitle)                           | True                      | 
+1073 |   puts("fsck (busybox "BB_VER")");       | True                      | 
+1074 |                                          | True                      | 
+1075 |  /* Even plain "fsck /dev/hda1" needs fs | True                      | 
+1076 |   * so we are scanning it anyway */      | True                      | 
+1077 |  fstab = getenv("FSTAB_FILE");           | True                      | 
+1078 |  if (!fstab)                             | True                      | 
+1079 |   fstab = "/etc/fstab";                  | True                      | 
+1080 |  load_fs_info(fstab);                    | True                      | 
+1081 |                                          | True                      | 
+1082 |  /*interactive = (num_devices == 1) | G. | True                      | 
+1083 |                                          | True                      | 
+1084 |  if (num_devices == 0)                   | True                      | 
+1085 |   /*interactive =*/ G.serialize = doall  | True                      | 
+1086 |  if (doall)                              | True                      | 
+1087 |   return check_all();                    | True                      | 
+1088 |                                          | True                      | 
+1089 |  status = 0;                             | True                      | 
+1090 |  for (i = 0; i < num_devices; i++) {     | True                      | 
+1091 |   if (bb_got_signal) {                   | True                      | 
+1092 |    kill_all_if_got_signal();             | True                      | 
+1093 |    break;                                | True                      | 
+1094 |   }                                      | True                      | 
+1095 |                                          | True                      | 
+1096 |   fs = lookup(devices[i]);               | True                      | 
+1097 |   if (!fs)                               | True                      | 
+1098 |    fs = create_fs_device(devices[i], "", | True                      | 
+1099 |   fsck_device(fs /*, interactive */);    | True                      | 
+1100 |                                          | True                      | 
+1101 |   if (G.serialize                        | True                      | 
+1102 |    || (G.num_running >= G.max_running)   | True                      | 
+1103 |   ) {                                    | True                      | 
+1104 |    int exit_status = wait_one(0);        | True                      | 
+1105 |    if (exit_status >= 0)                 | True                      | 
+1106 |     status |= exit_status;               | True                      | 
+1107 |    if (G.verbose > 1)                    | True                      | 
+1108 |     puts("------------------------------ | True                      | 
+1109 |   }                                      | True                      | 
+1110 |  }                                       | True                      | 
+1111 |  status |= wait_many(FLAG_WAIT_ALL);     | True                      | 
+1112 |  return status;                          | True                      | 
+1113 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +143MB, 321ms             | 

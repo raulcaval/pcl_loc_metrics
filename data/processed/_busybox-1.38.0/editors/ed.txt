@@ -1,0 +1,1036 @@
+FILE: data/raw/busybox-1.38.0/editors/ed.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Copyright (c) 2002 by David I. Bell   | True                      | 
+   4 |  * Permission is granted to use, distrib | True                      | 
+   5 |  * provided that this copyright notice r | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * The "ed" built-in command (much simpl | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config ED                       | True                      | 
+  10 | //config: bool "ed (16 kb)"              | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: The original 1970's Unix text  | True                      | 
+  14 | //config: Small, simple, evil. Part of S | True                      | 
+  15 | //config: this, you don't need it.       | True                      | 
+  16 |                                          | True                      | 
+  17 | //kbuild:lib-$(CONFIG_ED) += ed.o        | True                      | 
+  18 |                                          | True                      | 
+  19 | //applet:IF_ED(APPLET(ed, BB_DIR_BIN, BB | True                      | 
+  20 |                                          | True                      | 
+  21 | //usage:#define ed_trivial_usage "[-p PR | True                      | 
+  22 | //usage:#define ed_full_usage ""         | True                      | 
+  23 |                                          | True                      | 
+  24 | #include "libbb.h"                       | True                      | 
+  25 | #include "common_bufsiz.h"               | True                      | 
+  26 |                                          | True                      | 
+  27 | typedef struct LINE {                    | True                      | 
+  28 |  struct LINE *next;                      | True                      | 
+  29 |  struct LINE *prev;                      | True                      | 
+  30 |  int len;                                | True                      | 
+  31 |  char data[1];                           | True                      | 
+  32 | } LINE;                                  | True                      | 
+  33 |                                          | True                      | 
+  34 | #define searchString bb_common_bufsiz1   | True                      | 
+  35 |                                          | True                      | 
+  36 | enum {                                   | True                      | 
+  37 |  USERSIZE = COMMON_BUFSIZE > 1024 ? 1024 | True                      | 
+  38 |           : COMMON_BUFSIZE - 1, /* max l | True                      | 
+  39 |  INITBUF_SIZE = 1024, /* initial buffer  | True                      | 
+  40 | };                                       | True                      | 
+  41 |                                          | True                      | 
+  42 | struct globals {                         | True                      | 
+  43 |  int curNum;                             | True                      | 
+  44 |  int lastNum;                            | True                      | 
+  45 |  int bufUsed;                            | True                      | 
+  46 |  int bufSize;                            | True                      | 
+  47 |  LINE *curLine;                          | True                      | 
+  48 |  char *bufBase;                          | True                      | 
+  49 |  char *bufPtr;                           | True                      | 
+  50 |  char *fileName;                         | True                      | 
+  51 |  const char *prompt;                     | True                      | 
+  52 |  LINE lines;                             | True                      | 
+  53 |  smallint dirty;                         | True                      | 
+  54 |  int marks[26];                          | True                      | 
+  55 | };                                       | True                      | 
+  56 | #define G (*ptr_to_globals)              | True                      | 
+  57 | #define curLine            (G.curLine    | True                      | 
+  58 | #define bufBase            (G.bufBase    | True                      | 
+  59 | #define bufPtr             (G.bufPtr     | True                      | 
+  60 | #define fileName           (G.fileName   | True                      | 
+  61 | #define prompt             (G.prompt     | True                      | 
+  62 | #define curNum             (G.curNum     | True                      | 
+  63 | #define lastNum            (G.lastNum    | True                      | 
+  64 | #define bufUsed            (G.bufUsed    | True                      | 
+  65 | #define bufSize            (G.bufSize    | True                      | 
+  66 | #define dirty              (G.dirty      | True                      | 
+  67 | #define lines              (G.lines      | True                      | 
+  68 | #define marks              (G.marks      | True                      | 
+  69 | #define INIT_G() do { \                  | True                      | 
+  70 |  setup_common_bufsiz(); \                | True                      | 
+  71 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+  72 | } while (0)                              | True                      | 
+  73 |                                          | True                      | 
+  74 | #define OPTION_STR "sp:"                 | True                      | 
+  75 | enum {                                   | True                      | 
+  76 |  OPT_s = (1 << 0),                       | True                      | 
+  77 | };                                       | True                      | 
+  78 |                                          | True                      | 
+  79 | static int bad_nums(int num1, int num2,  | True                      | 
+  80 | {                                        | True                      | 
+  81 |  if ((num1 < 1) || (num2 > lastNum) || ( | True                      | 
+  82 |   bb_error_msg("bad line range for %s",  | True                      | 
+  83 |   return 1;                              | True                      | 
+  84 |  }                                       | True                      | 
+  85 |  return 0;                               | True                      | 
+  86 | }                                        | True                      | 
+  87 |                                          | True                      | 
+  88 | /*                                       | True                      | 
+  89 |  * Return a pointer to the specified lin | True                      | 
+  90 |  */                                      | True                      | 
+  91 | static LINE *findLine(int num)           | True                      | 
+  92 | {                                        | True                      | 
+  93 |  LINE *lp;                               | True                      | 
+  94 |  int lnum;                               | True                      | 
+  95 |                                          | True                      | 
+  96 |  if ((num < 1) || (num > lastNum)) {     | True                      | 
+  97 |   bb_error_msg("line number %d does not  | True                      | 
+  98 |   return NULL;                           | True                      | 
+  99 |  }                                       | True                      | 
+ 100 |                                          | True                      | 
+ 101 |  if (curNum <= 0) {                      | True                      | 
+ 102 |   curNum = 1;                            | True                      | 
+ 103 |   curLine = lines.next;                  | True                      | 
+ 104 |  }                                       | True                      | 
+ 105 |                                          | True                      | 
+ 106 |  if (num == curNum)                      | True                      | 
+ 107 |   return curLine;                        | True                      | 
+ 108 |                                          | True                      | 
+ 109 |  lp = curLine;                           | True                      | 
+ 110 |  lnum = curNum;                          | True                      | 
+ 111 |  if (num < (curNum / 2)) {               | True                      | 
+ 112 |   lp = lines.next;                       | True                      | 
+ 113 |   lnum = 1;                              | True                      | 
+ 114 |  } else if (num > ((curNum + lastNum) /  | True                      | 
+ 115 |   lp = lines.prev;                       | True                      | 
+ 116 |   lnum = lastNum;                        | True                      | 
+ 117 |  }                                       | True                      | 
+ 118 |                                          | True                      | 
+ 119 |  while (lnum < num) {                    | True                      | 
+ 120 |   lp = lp->next;                         | True                      | 
+ 121 |   lnum++;                                | True                      | 
+ 122 |  }                                       | True                      | 
+ 123 |                                          | True                      | 
+ 124 |  while (lnum > num) {                    | True                      | 
+ 125 |   lp = lp->prev;                         | True                      | 
+ 126 |   lnum--;                                | True                      | 
+ 127 |  }                                       | True                      | 
+ 128 |  return lp;                              | True                      | 
+ 129 | }                                        | True                      | 
+ 130 |                                          | True                      | 
+ 131 | /*                                       | True                      | 
+ 132 |  * Search a line for the specified strin | True                      | 
+ 133 |  * offset in the line.  Returns the offs | True                      | 
+ 134 |  */                                      | True                      | 
+ 135 | static int findString(const LINE *lp, co | True                      | 
+ 136 | {                                        | True                      | 
+ 137 |  int left;                               | True                      | 
+ 138 |  const char *cp, *ncp;                   | True                      | 
+ 139 |                                          | True                      | 
+ 140 |  cp = &lp->data[offset];                 | True                      | 
+ 141 |  left = lp->len - offset - len;          | True                      | 
+ 142 |                                          | True                      | 
+ 143 |  while (left >= 0) {                     | True                      | 
+ 144 |   ncp = memchr(cp, str[0], left + 1);    | True                      | 
+ 145 |   if (ncp == NULL)                       | True                      | 
+ 146 |    return -1;                            | True                      | 
+ 147 |   left -= (ncp - cp);                    | True                      | 
+ 148 |   cp = ncp;                              | True                      | 
+ 149 |   if (memcmp(cp, str, len) == 0)         | True                      | 
+ 150 |    return (cp - lp->data);               | True                      | 
+ 151 |   cp++;                                  | True                      | 
+ 152 |   left--;                                | True                      | 
+ 153 |  }                                       | True                      | 
+ 154 |                                          | True                      | 
+ 155 |  return -1;                              | True                      | 
+ 156 | }                                        | True                      | 
+ 157 |                                          | True                      | 
+ 158 | /*                                       | True                      | 
+ 159 |  * Search for a line which contains the  | True                      | 
+ 160 |  * If the string is "", then the previou | True                      | 
+ 161 |  * is used.  The currently searched for  | True                      | 
+ 162 |  * Returns the line number which matches | True                      | 
+ 163 |  * with an error printed.                | True                      | 
+ 164 |  */                                      | True                      | 
+ 165 | static NOINLINE int searchLines(const ch | True                      | 
+ 166 | {                                        | True                      | 
+ 167 |  const LINE *lp;                         | True                      | 
+ 168 |  int len;                                | True                      | 
+ 169 |                                          | True                      | 
+ 170 |  if (bad_nums(num1, num2, "search"))     | True                      | 
+ 171 |   return 0;                              | True                      | 
+ 172 |                                          | True                      | 
+ 173 |  if (*str == '\0') {                     | True                      | 
+ 174 |   if (searchString[0] == '\0') {         | True                      | 
+ 175 |    bb_simple_error_msg("no previous sear | True                      | 
+ 176 |    return 0;                             | True                      | 
+ 177 |   }                                      | True                      | 
+ 178 |   str = searchString;                    | True                      | 
+ 179 |  }                                       | True                      | 
+ 180 |                                          | True                      | 
+ 181 |  if (str != searchString)                | True                      | 
+ 182 |   strcpy(searchString, str);             | True                      | 
+ 183 |                                          | True                      | 
+ 184 |  len = strlen(str);                      | True                      | 
+ 185 |                                          | True                      | 
+ 186 |  lp = findLine(num1);                    | True                      | 
+ 187 |  if (lp == NULL)                         | True                      | 
+ 188 |   return 0;                              | True                      | 
+ 189 |                                          | True                      | 
+ 190 |  while (num1 <= num2) {                  | True                      | 
+ 191 |   if (findString(lp, str, len, 0) >= 0)  | True                      | 
+ 192 |    return num1;                          | True                      | 
+ 193 |   num1++;                                | True                      | 
+ 194 |   lp = lp->next;                         | True                      | 
+ 195 |  }                                       | True                      | 
+ 196 |                                          | True                      | 
+ 197 |  bb_error_msg("can't find string \"%s\"" | True                      | 
+ 198 |  return 0;                               | True                      | 
+ 199 | }                                        | True                      | 
+ 200 |                                          | True                      | 
+ 201 | /*                                       | True                      | 
+ 202 |  * Parse a line number argument if it is | True                      | 
+ 203 |  * or difference of numbers, ".", "$", " | True                      | 
+ 204 |  * Returns pointer which stopped the sca | True                      | 
+ 205 |  * (whether or not there was a number).  | True                      | 
+ 206 |  * Returns NULL if there was a parsing e | True                      | 
+ 207 |  * Whether there was a number is returne | True                      | 
+ 208 |  */                                      | True                      | 
+ 209 | static const char* getNum(const char *cp | True                      | 
+ 210 | {                                        | True                      | 
+ 211 |  char *endStr, str[USERSIZE];            | True                      | 
+ 212 |  int value, num;                         | True                      | 
+ 213 |  smallint haveNum, minus;                | True                      | 
+ 214 |                                          | True                      | 
+ 215 |  value = 0;                              | True                      | 
+ 216 |  haveNum = FALSE;                        | True                      | 
+ 217 |  minus = 0;                              | True                      | 
+ 218 |                                          | True                      | 
+ 219 |  while (TRUE) {                          | True                      | 
+ 220 |   cp = skip_whitespace(cp);              | True                      | 
+ 221 |                                          | True                      | 
+ 222 |   switch (*cp) {                         | True                      | 
+ 223 |    case '.':                             | True                      | 
+ 224 |     haveNum = TRUE;                      | True                      | 
+ 225 |     num = curNum;                        | True                      | 
+ 226 |     cp++;                                | True                      | 
+ 227 |     break;                               | True                      | 
+ 228 |                                          | True                      | 
+ 229 |    case '$':                             | True                      | 
+ 230 |     haveNum = TRUE;                      | True                      | 
+ 231 |     num = lastNum;                       | True                      | 
+ 232 |     cp++;                                | True                      | 
+ 233 |     break;                               | True                      | 
+ 234 |                                          | True                      | 
+ 235 |    case '\'':                            | True                      | 
+ 236 |     cp++;                                | True                      | 
+ 237 |     if ((unsigned)(*cp - 'a') >= 26) {   | True                      | 
+ 238 |      bb_simple_error_msg("bad mark name" | True                      | 
+ 239 |      return NULL;                        | True                      | 
+ 240 |     }                                    | True                      | 
+ 241 |     haveNum = TRUE;                      | True                      | 
+ 242 |     num = marks[(unsigned)(*cp - 'a')];  | True                      | 
+ 243 |     cp++;                                | True                      | 
+ 244 |     break;                               | True                      | 
+ 245 |                                          | True                      | 
+ 246 |    case '/':                             | True                      | 
+ 247 |     strcpy(str, ++cp);                   | True                      | 
+ 248 |     endStr = strchr(str, '/');           | True                      | 
+ 249 |     if (endStr) {                        | True                      | 
+ 250 |      *endStr++ = '\0';                   | True                      | 
+ 251 |      cp += (endStr - str);               | True                      | 
+ 252 |     } else                               | True                      | 
+ 253 |      cp = "";                            | True                      | 
+ 254 |     num = searchLines(str, curNum, lastN | True                      | 
+ 255 |     if (num == 0)                        | True                      | 
+ 256 |      return NULL;                        | True                      | 
+ 257 |     haveNum = TRUE;                      | True                      | 
+ 258 |     break;                               | True                      | 
+ 259 |                                          | True                      | 
+ 260 |    default:                              | True                      | 
+ 261 |     if (!isdigit(*cp)) {                 | True                      | 
+ 262 |      *retHaveNum = haveNum;              | True                      | 
+ 263 |      *retNum = value;                    | True                      | 
+ 264 |      return cp;                          | True                      | 
+ 265 |     }                                    | True                      | 
+ 266 |     num = 0;                             | True                      | 
+ 267 |     while (isdigit(*cp))                 | True                      | 
+ 268 |      num = num * 10 + *cp++ - '0';       | True                      | 
+ 269 |     haveNum = TRUE;                      | True                      | 
+ 270 |     break;                               | True                      | 
+ 271 |   }                                      | True                      | 
+ 272 |                                          | True                      | 
+ 273 |   value += (minus ? -num : num);         | True                      | 
+ 274 |                                          | True                      | 
+ 275 |   cp = skip_whitespace(cp);              | True                      | 
+ 276 |                                          | True                      | 
+ 277 |   switch (*cp) {                         | True                      | 
+ 278 |    case '-':                             | True                      | 
+ 279 |     minus = 1;                           | True                      | 
+ 280 |     cp++;                                | True                      | 
+ 281 |     break;                               | True                      | 
+ 282 |                                          | True                      | 
+ 283 |    case '+':                             | True                      | 
+ 284 |     minus = 0;                           | True                      | 
+ 285 |     cp++;                                | True                      | 
+ 286 |     break;                               | True                      | 
+ 287 |                                          | True                      | 
+ 288 |    default:                              | True                      | 
+ 289 |     *retHaveNum = haveNum;               | True                      | 
+ 290 |     *retNum = value;                     | True                      | 
+ 291 |     return cp;                           | True                      | 
+ 292 |   }                                      | True                      | 
+ 293 |  }                                       | True                      | 
+ 294 | }                                        | True                      | 
+ 295 |                                          | True                      | 
+ 296 | /*                                       | True                      | 
+ 297 |  * Set the current line number.          | True                      | 
+ 298 |  * Returns TRUE if successful.           | True                      | 
+ 299 |  */                                      | True                      | 
+ 300 | static int setCurNum(int num)            | True                      | 
+ 301 | {                                        | True                      | 
+ 302 |  LINE *lp;                               | True                      | 
+ 303 |                                          | True                      | 
+ 304 |  lp = findLine(num);                     | True                      | 
+ 305 |  if (lp == NULL)                         | True                      | 
+ 306 |   return FALSE;                          | True                      | 
+ 307 |  curNum = num;                           | True                      | 
+ 308 |  curLine = lp;                           | True                      | 
+ 309 |  return TRUE;                            | True                      | 
+ 310 | }                                        | True                      | 
+ 311 |                                          | True                      | 
+ 312 | /*                                       | True                      | 
+ 313 |  * Insert a new line with the specified  | True                      | 
+ 314 |  * The line is inserted so as to become  | True                      | 
+ 315 |  * thus pushing any existing and further | True                      | 
+ 316 |  * The inserted line is also set to beco | True                      | 
+ 317 |  * Returns TRUE if successful.           | True                      | 
+ 318 |  */                                      | True                      | 
+ 319 | static int insertLine(int num, const cha | True                      | 
+ 320 | {                                        | True                      | 
+ 321 |  LINE *newLp, *lp;                       | True                      | 
+ 322 |                                          | True                      | 
+ 323 |  if ((num < 1) || (num > lastNum + 1)) { | True                      | 
+ 324 |   bb_simple_error_msg("inserting at bad  | True                      | 
+ 325 |   return FALSE;                          | True                      | 
+ 326 |  }                                       | True                      | 
+ 327 |                                          | True                      | 
+ 328 |  newLp = xmalloc(sizeof(LINE) + len - 1) | True                      | 
+ 329 |                                          | True                      | 
+ 330 |  memcpy(newLp->data, data, len);         | True                      | 
+ 331 |  newLp->len = len;                       | True                      | 
+ 332 |                                          | True                      | 
+ 333 |  if (num > lastNum)                      | True                      | 
+ 334 |   lp = &lines;                           | True                      | 
+ 335 |  else {                                  | True                      | 
+ 336 |   lp = findLine(num);                    | True                      | 
+ 337 |   if (lp == NULL) {                      | True                      | 
+ 338 |    free((char *) newLp);                 | True                      | 
+ 339 |    return FALSE;                         | True                      | 
+ 340 |   }                                      | True                      | 
+ 341 |  }                                       | True                      | 
+ 342 |                                          | True                      | 
+ 343 |  newLp->next = lp;                       | True                      | 
+ 344 |  newLp->prev = lp->prev;                 | True                      | 
+ 345 |  lp->prev->next = newLp;                 | True                      | 
+ 346 |  lp->prev = newLp;                       | True                      | 
+ 347 |                                          | True                      | 
+ 348 |  if (num <= curNum)                      | True                      | 
+ 349 |   curLine = curLine->prev;               | True                      | 
+ 350 |  lastNum++;                              | True                      | 
+ 351 |  dirty = TRUE;                           | True                      | 
+ 352 |  return setCurNum(num);                  | True                      | 
+ 353 | }                                        | True                      | 
+ 354 |                                          | True                      | 
+ 355 | /*                                       | True                      | 
+ 356 |  * Add lines which are typed in by the u | True                      | 
+ 357 |  * The lines are inserted just before th | True                      | 
+ 358 |  * The lines are terminated by a line co | True                      | 
+ 359 |  * or by an end of file.                 | True                      | 
+ 360 |  */                                      | True                      | 
+ 361 | static void addLines(int num)            | True                      | 
+ 362 | {                                        | True                      | 
+ 363 |  int len;                                | True                      | 
+ 364 |  char buf[USERSIZE + 1];                 | True                      | 
+ 365 |                                          | True                      | 
+ 366 |  while (1) {                             | True                      | 
+ 367 |   /* Returns:                            | True                      | 
+ 368 |    * -1 on read errors or EOF, or on bar | True                      | 
+ 369 |    * 0  on ctrl-C,                       | True                      | 
+ 370 |    * >0 length of input string, includin | True                      | 
+ 371 |    */                                    | True                      | 
+ 372 |   len = read_line_input(NULL, "", buf, s | True                      | 
+ 373 |   if (len <= 0) {                        | True                      | 
+ 374 |    /* Previously, ctrl-C was exiting to  | True                      | 
+ 375 |     * Now we exit to ed prompt. Is in im | True                      | 
+ 376 |    return;                               | True                      | 
+ 377 |   }                                      | True                      | 
+ 378 |   if (buf[0] == '.' && buf[1] == '\n' && | True                      | 
+ 379 |    return;                               | True                      | 
+ 380 |   if (!insertLine(num++, buf, len))      | True                      | 
+ 381 |    return;                               | True                      | 
+ 382 |  }                                       | True                      | 
+ 383 | }                                        | True                      | 
+ 384 |                                          | True                      | 
+ 385 | /*                                       | True                      | 
+ 386 |  * Read lines from a file at the specifi | True                      | 
+ 387 |  * Returns TRUE if the file was successf | True                      | 
+ 388 |  */                                      | True                      | 
+ 389 | static int readLines(const char *file, i | True                      | 
+ 390 | {                                        | True                      | 
+ 391 |  int fd, cc;                             | True                      | 
+ 392 |  int len;                                | True                      | 
+ 393 |  unsigned charCount;                     | True                      | 
+ 394 |  char *cp;                               | True                      | 
+ 395 |                                          | True                      | 
+ 396 |  if ((num < 1) || (num > lastNum + 1)) { | True                      | 
+ 397 |   bb_simple_error_msg("bad line for read | True                      | 
+ 398 |   return FALSE;                          | True                      | 
+ 399 |  }                                       | True                      | 
+ 400 |                                          | True                      | 
+ 401 |  fd = open(file, 0);                     | True                      | 
+ 402 |  if (fd < 0) {                           | True                      | 
+ 403 |   bb_simple_perror_msg(file);            | True                      | 
+ 404 |   return FALSE;                          | True                      | 
+ 405 |  }                                       | True                      | 
+ 406 |                                          | True                      | 
+ 407 |  bufPtr = bufBase;                       | True                      | 
+ 408 |  bufUsed = 0;                            | True                      | 
+ 409 |  charCount = 0;                          | True                      | 
+ 410 |  cc = 0;                                 | True                      | 
+ 411 |                                          | True                      | 
+ 412 |  do {                                    | True                      | 
+ 413 |   cp = memchr(bufPtr, '\n', bufUsed);    | True                      | 
+ 414 |                                          | True                      | 
+ 415 |   if (cp) {                              | True                      | 
+ 416 |    len = (cp - bufPtr) + 1;              | True                      | 
+ 417 |    if (!insertLine(num, bufPtr, len)) {  | True                      | 
+ 418 |     close(fd);                           | True                      | 
+ 419 |     return FALSE;                        | True                      | 
+ 420 |    }                                     | True                      | 
+ 421 |    bufPtr += len;                        | True                      | 
+ 422 |    bufUsed -= len;                       | True                      | 
+ 423 |    charCount += len;                     | True                      | 
+ 424 |    num++;                                | True                      | 
+ 425 |    continue;                             | True                      | 
+ 426 |   }                                      | True                      | 
+ 427 |                                          | True                      | 
+ 428 |   if (bufPtr != bufBase) {               | True                      | 
+ 429 |    memcpy(bufBase, bufPtr, bufUsed);     | True                      | 
+ 430 |    bufPtr = bufBase + bufUsed;           | True                      | 
+ 431 |   }                                      | True                      | 
+ 432 |                                          | True                      | 
+ 433 |   if (bufUsed >= bufSize) {              | True                      | 
+ 434 |    len = (bufSize * 3) / 2;              | True                      | 
+ 435 |    cp = xrealloc(bufBase, len);          | True                      | 
+ 436 |    bufBase = cp;                         | True                      | 
+ 437 |    bufPtr = bufBase + bufUsed;           | True                      | 
+ 438 |    bufSize = len;                        | True                      | 
+ 439 |   }                                      | True                      | 
+ 440 |                                          | True                      | 
+ 441 |   cc = safe_read(fd, bufPtr, bufSize - b | True                      | 
+ 442 |   bufUsed += cc;                         | True                      | 
+ 443 |   bufPtr = bufBase;                      | True                      | 
+ 444 |  } while (cc > 0);                       | True                      | 
+ 445 |                                          | True                      | 
+ 446 |  if (cc < 0) {                           | True                      | 
+ 447 |   bb_simple_perror_msg(file);            | True                      | 
+ 448 |   close(fd);                             | True                      | 
+ 449 |   return FALSE;                          | True                      | 
+ 450 |  }                                       | True                      | 
+ 451 |                                          | True                      | 
+ 452 |  if (bufUsed) {                          | True                      | 
+ 453 |   if (!insertLine(num, bufPtr, bufUsed)) | True                      | 
+ 454 |    close(fd);                            | True                      | 
+ 455 |    return -1;                            | True                      | 
+ 456 |   }                                      | True                      | 
+ 457 |   charCount += bufUsed;                  | True                      | 
+ 458 |  }                                       | True                      | 
+ 459 |                                          | True                      | 
+ 460 |  close(fd);                              | True                      | 
+ 461 |                                          | True                      | 
+ 462 |  /* https://pubs.opengroup.org/onlinepub | True                      | 
+ 463 |   * "Read Command"                       | True                      | 
+ 464 |   * "...the number of bytes read shall b | True                      | 
+ 465 |   * in the following format:             | True                      | 
+ 466 |   * "%d\n", <number of bytes read>       | True                      | 
+ 467 |   */                                     | True                      | 
+ 468 |  if (!(option_mask32 & OPT_s))           | True                      | 
+ 469 |   printf("%u\n", charCount);             | True                      | 
+ 470 |  return TRUE;                            | True                      | 
+ 471 | }                                        | True                      | 
+ 472 |                                          | True                      | 
+ 473 | /*                                       | True                      | 
+ 474 |  * Write the specified lines out to the  | True                      | 
+ 475 |  * Returns TRUE if successful, or FALSE  | True                      | 
+ 476 |  */                                      | True                      | 
+ 477 | static int writeLines(const char *file,  | True                      | 
+ 478 | {                                        | True                      | 
+ 479 |  LINE *lp;                               | True                      | 
+ 480 |  int fd;                                 | True                      | 
+ 481 |  unsigned charCount;                     | True                      | 
+ 482 |                                          | True                      | 
+ 483 |  if (bad_nums(num1, num2, "write"))      | True                      | 
+ 484 |   return FALSE;                          | True                      | 
+ 485 |                                          | True                      | 
+ 486 |  charCount = 0;                          | True                      | 
+ 487 |                                          | True                      | 
+ 488 |  fd = creat(file, 0666);                 | True                      | 
+ 489 |  if (fd < 0) {                           | True                      | 
+ 490 |   bb_simple_perror_msg(file);            | True                      | 
+ 491 |   return FALSE;                          | True                      | 
+ 492 |  }                                       | True                      | 
+ 493 |                                          | True                      | 
+ 494 |  lp = findLine(num1);                    | True                      | 
+ 495 |  if (lp == NULL) {                       | True                      | 
+ 496 |   close(fd);                             | True                      | 
+ 497 |   return FALSE;                          | True                      | 
+ 498 |  }                                       | True                      | 
+ 499 |                                          | True                      | 
+ 500 |  while (num1++ <= num2) {                | True                      | 
+ 501 |   if (full_write(fd, lp->data, lp->len)  | True                      | 
+ 502 |    bb_simple_perror_msg(file);           | True                      | 
+ 503 |    close(fd);                            | True                      | 
+ 504 |    return FALSE;                         | True                      | 
+ 505 |   }                                      | True                      | 
+ 506 |   charCount += lp->len;                  | True                      | 
+ 507 |   lp = lp->next;                         | True                      | 
+ 508 |  }                                       | True                      | 
+ 509 |                                          | True                      | 
+ 510 |  if (close(fd) < 0) {                    | True                      | 
+ 511 |   bb_simple_perror_msg(file);            | True                      | 
+ 512 |   return FALSE;                          | True                      | 
+ 513 |  }                                       | True                      | 
+ 514 |                                          | True                      | 
+ 515 |  /* https://pubs.opengroup.org/onlinepub | True                      | 
+ 516 |   * "Write Command"                      | True                      | 
+ 517 |   * "...the number of bytes written shal | True                      | 
+ 518 |   * unless the -s option was specified,  | True                      | 
+ 519 |   * "%d\n", <number of bytes written>    | True                      | 
+ 520 |   */                                     | True                      | 
+ 521 |  if (!(option_mask32 & OPT_s))           | True                      | 
+ 522 |   printf("%u\n", charCount);             | True                      | 
+ 523 |  return TRUE;                            | True                      | 
+ 524 | }                                        | True                      | 
+ 525 |                                          | True                      | 
+ 526 | /*                                       | True                      | 
+ 527 |  * Print lines in a specified range.     | True                      | 
+ 528 |  * The last line printed becomes the cur | True                      | 
+ 529 |  * If expandFlag is TRUE, then the line  | True                      | 
+ 530 |  * show magic characters.                | True                      | 
+ 531 |  */                                      | True                      | 
+ 532 | static int printLines(int num1, int num2 | True                      | 
+ 533 | {                                        | True                      | 
+ 534 |  const LINE *lp;                         | True                      | 
+ 535 |  const char *cp;                         | True                      | 
+ 536 |  int ch, count;                          | True                      | 
+ 537 |                                          | True                      | 
+ 538 |  if (bad_nums(num1, num2, "print"))      | True                      | 
+ 539 |   return FALSE;                          | True                      | 
+ 540 |                                          | True                      | 
+ 541 |  lp = findLine(num1);                    | True                      | 
+ 542 |  if (lp == NULL)                         | True                      | 
+ 543 |   return FALSE;                          | True                      | 
+ 544 |                                          | True                      | 
+ 545 |  while (num1 <= num2) {                  | True                      | 
+ 546 |   if (!expandFlag) {                     | True                      | 
+ 547 |    write(STDOUT_FILENO, lp->data, lp->le | True                      | 
+ 548 |    setCurNum(num1++);                    | True                      | 
+ 549 |    lp = lp->next;                        | True                      | 
+ 550 |    continue;                             | True                      | 
+ 551 |   }                                      | True                      | 
+ 552 |                                          | True                      | 
+ 553 |   /*                                     | True                      | 
+ 554 |    * Show control characters and charact | True                      | 
+ 555 |    * high bit set specially.             | True                      | 
+ 556 |    */                                    | True                      | 
+ 557 |   cp = lp->data;                         | True                      | 
+ 558 |   count = lp->len;                       | True                      | 
+ 559 |                                          | True                      | 
+ 560 |   if ((count > 0) && (cp[count - 1] == ' | True                      | 
+ 561 |    count--;                              | True                      | 
+ 562 |                                          | True                      | 
+ 563 |   while (count-- > 0) {                  | True                      | 
+ 564 |    ch = (unsigned char) *cp++;           | True                      | 
+ 565 |    fputc_printable(ch | PRINTABLE_META,  | True                      | 
+ 566 |   }                                      | True                      | 
+ 567 |                                          | True                      | 
+ 568 |   fputs_stdout("$\n");                   | True                      | 
+ 569 |                                          | True                      | 
+ 570 |   setCurNum(num1++);                     | True                      | 
+ 571 |   lp = lp->next;                         | True                      | 
+ 572 |  }                                       | True                      | 
+ 573 |                                          | True                      | 
+ 574 |  return TRUE;                            | True                      | 
+ 575 | }                                        | True                      | 
+ 576 |                                          | True                      | 
+ 577 | /*                                       | True                      | 
+ 578 |  * Delete lines from the given range.    | True                      | 
+ 579 |  */                                      | True                      | 
+ 580 | static void deleteLines(int num1, int nu | True                      | 
+ 581 | {                                        | True                      | 
+ 582 |  LINE *lp, *nlp, *plp;                   | True                      | 
+ 583 |  int count;                              | True                      | 
+ 584 |                                          | True                      | 
+ 585 |  if (bad_nums(num1, num2, "delete"))     | True                      | 
+ 586 |   return;                                | True                      | 
+ 587 |                                          | True                      | 
+ 588 |  lp = findLine(num1);                    | True                      | 
+ 589 |  if (lp == NULL)                         | True                      | 
+ 590 |   return;                                | True                      | 
+ 591 |                                          | True                      | 
+ 592 |  if ((curNum >= num1) && (curNum <= num2 | True                      | 
+ 593 |   if (num2 < lastNum)                    | True                      | 
+ 594 |    setCurNum(num2 + 1);                  | True                      | 
+ 595 |   else if (num1 > 1)                     | True                      | 
+ 596 |    setCurNum(num1 - 1);                  | True                      | 
+ 597 |   else                                   | True                      | 
+ 598 |    curNum = 0;                           | True                      | 
+ 599 |  }                                       | True                      | 
+ 600 |                                          | True                      | 
+ 601 |  count = num2 - num1 + 1;                | True                      | 
+ 602 |  if (curNum > num2)                      | True                      | 
+ 603 |   curNum -= count;                       | True                      | 
+ 604 |  lastNum -= count;                       | True                      | 
+ 605 |                                          | True                      | 
+ 606 |  while (count-- > 0) {                   | True                      | 
+ 607 |   nlp = lp->next;                        | True                      | 
+ 608 |   plp = lp->prev;                        | True                      | 
+ 609 |   plp->next = nlp;                       | True                      | 
+ 610 |   nlp->prev = plp;                       | True                      | 
+ 611 |   free(lp);                              | True                      | 
+ 612 |   lp = nlp;                              | True                      | 
+ 613 |  }                                       | True                      | 
+ 614 |                                          | True                      | 
+ 615 |  dirty = TRUE;                           | True                      | 
+ 616 | }                                        | True                      | 
+ 617 |                                          | True                      | 
+ 618 | /*                                       | True                      | 
+ 619 |  * Do the substitute command.            | True                      | 
+ 620 |  * The current line is set to the last s | True                      | 
+ 621 |  */                                      | True                      | 
+ 622 | static void subCommand(const char *cmd,  | True                      | 
+ 623 | {                                        | True                      | 
+ 624 |  char *cp, *oldStr, *newStr, buf[USERSIZ | True                      | 
+ 625 |  int delim, oldLen, newLen, deltaLen, of | True                      | 
+ 626 |  LINE *lp, *nlp;                         | True                      | 
+ 627 |  int globalFlag, printFlag, didSub, need | True                      | 
+ 628 |                                          | True                      | 
+ 629 |  if (bad_nums(num1, num2, "substitute")) | True                      | 
+ 630 |   return;                                | True                      | 
+ 631 |                                          | True                      | 
+ 632 |  globalFlag = FALSE;                     | True                      | 
+ 633 |  printFlag = FALSE;                      | True                      | 
+ 634 |  didSub = FALSE;                         | True                      | 
+ 635 |  needPrint = FALSE;                      | True                      | 
+ 636 |                                          | True                      | 
+ 637 |  /*                                      | True                      | 
+ 638 |   * Copy the command so we can modify it | True                      | 
+ 639 |   */                                     | True                      | 
+ 640 |  strcpy(buf, cmd);                       | True                      | 
+ 641 |  cp = buf;                               | True                      | 
+ 642 |                                          | True                      | 
+ 643 |  if (isblank(*cp) || (*cp == '\0')) {    | True                      | 
+ 644 |   bb_simple_error_msg("bad delimiter for | True                      | 
+ 645 |   return;                                | True                      | 
+ 646 |  }                                       | True                      | 
+ 647 |                                          | True                      | 
+ 648 |  delim = *cp++;                          | True                      | 
+ 649 |  oldStr = cp;                            | True                      | 
+ 650 |                                          | True                      | 
+ 651 |  cp = strchr(cp, delim);                 | True                      | 
+ 652 |  if (cp == NULL) {                       | True                      | 
+ 653 |   bb_simple_error_msg("missing 2nd delim | True                      | 
+ 654 |   return;                                | True                      | 
+ 655 |  }                                       | True                      | 
+ 656 |                                          | True                      | 
+ 657 |  *cp++ = '\0';                           | True                      | 
+ 658 |                                          | True                      | 
+ 659 |  newStr = cp;                            | True                      | 
+ 660 |  cp = strchr(cp, delim);                 | True                      | 
+ 661 |                                          | True                      | 
+ 662 |  if (cp)                                 | True                      | 
+ 663 |   *cp++ = '\0';                          | True                      | 
+ 664 |  else                                    | True                      | 
+ 665 |   cp = (char*)"";                        | True                      | 
+ 666 |                                          | True                      | 
+ 667 |  while (*cp) switch (*cp++) {            | True                      | 
+ 668 |   case 'g':                              | True                      | 
+ 669 |    globalFlag = TRUE;                    | True                      | 
+ 670 |    break;                                | True                      | 
+ 671 |   case 'p':                              | True                      | 
+ 672 |    printFlag = TRUE;                     | True                      | 
+ 673 |    break;                                | True                      | 
+ 674 |   default:                               | True                      | 
+ 675 |    bb_simple_error_msg("unknown option f | True                      | 
+ 676 |    return;                               | True                      | 
+ 677 |  }                                       | True                      | 
+ 678 |                                          | True                      | 
+ 679 |  if (*oldStr == '\0') {                  | True                      | 
+ 680 |   if (searchString[0] == '\0') {         | True                      | 
+ 681 |    bb_simple_error_msg("no previous sear | True                      | 
+ 682 |    return;                               | True                      | 
+ 683 |   }                                      | True                      | 
+ 684 |   oldStr = searchString;                 | True                      | 
+ 685 |  }                                       | True                      | 
+ 686 |                                          | True                      | 
+ 687 |  if (oldStr != searchString)             | True                      | 
+ 688 |   strcpy(searchString, oldStr);          | True                      | 
+ 689 |                                          | True                      | 
+ 690 |  lp = findLine(num1);                    | True                      | 
+ 691 |  if (lp == NULL)                         | True                      | 
+ 692 |   return;                                | True                      | 
+ 693 |                                          | True                      | 
+ 694 |  oldLen = strlen(oldStr);                | True                      | 
+ 695 |  newLen = strlen(newStr);                | True                      | 
+ 696 |  deltaLen = newLen - oldLen;             | True                      | 
+ 697 |  offset = 0;                             | True                      | 
+ 698 |  nlp = NULL;                             | True                      | 
+ 699 |                                          | True                      | 
+ 700 |  while (num1 <= num2) {                  | True                      | 
+ 701 |   offset = findString(lp, oldStr, oldLen | True                      | 
+ 702 |                                          | True                      | 
+ 703 |   if (offset < 0) {                      | True                      | 
+ 704 |    if (needPrint) {                      | True                      | 
+ 705 |     printLines(num1, num1, FALSE);       | True                      | 
+ 706 |     needPrint = FALSE;                   | True                      | 
+ 707 |    }                                     | True                      | 
+ 708 |    offset = 0;                           | True                      | 
+ 709 |    lp = lp->next;                        | True                      | 
+ 710 |    num1++;                               | True                      | 
+ 711 |    continue;                             | True                      | 
+ 712 |   }                                      | True                      | 
+ 713 |                                          | True                      | 
+ 714 |   needPrint = printFlag;                 | True                      | 
+ 715 |   didSub = TRUE;                         | True                      | 
+ 716 |   dirty = TRUE;                          | True                      | 
+ 717 |                                          | True                      | 
+ 718 |   /*                                     | True                      | 
+ 719 |    * If the replacement string is the sa | True                      | 
+ 720 |    * than the old string, then the subst | True                      | 
+ 721 |    */                                    | True                      | 
+ 722 |   if (deltaLen <= 0) {                   | True                      | 
+ 723 |    memcpy(&lp->data[offset], newStr, new | True                      | 
+ 724 |    if (deltaLen) {                       | True                      | 
+ 725 |     memmove(&lp->data[offset + newLen],  | True                      | 
+ 726 |      &lp->data[offset + oldLen],         | True                      | 
+ 727 |      lp->len - offset - oldLen);         | True                      | 
+ 728 |                                          | True                      | 
+ 729 |     lp->len += deltaLen;                 | True                      | 
+ 730 |    }                                     | True                      | 
+ 731 |    offset += newLen;                     | True                      | 
+ 732 |    if (globalFlag)                       | True                      | 
+ 733 |     continue;                            | True                      | 
+ 734 |    if (needPrint) {                      | True                      | 
+ 735 |     printLines(num1, num1, FALSE);       | True                      | 
+ 736 |     needPrint = FALSE;                   | True                      | 
+ 737 |    }                                     | True                      | 
+ 738 |    lp = lp->next;                        | True                      | 
+ 739 |    num1++;                               | True                      | 
+ 740 |    continue;                             | True                      | 
+ 741 |   }                                      | True                      | 
+ 742 |                                          | True                      | 
+ 743 |   /*                                     | True                      | 
+ 744 |    * The new string is larger, so alloca | True                      | 
+ 745 |    * structure and use that.  Link it in | True                      | 
+ 746 |    * the old line structure.             | True                      | 
+ 747 |    */                                    | True                      | 
+ 748 |   nlp = xmalloc(sizeof(LINE) + lp->len + | True                      | 
+ 749 |                                          | True                      | 
+ 750 |   nlp->len = lp->len + deltaLen;         | True                      | 
+ 751 |                                          | True                      | 
+ 752 |   memcpy(nlp->data, lp->data, offset);   | True                      | 
+ 753 |   memcpy(&nlp->data[offset], newStr, new | True                      | 
+ 754 |   memcpy(&nlp->data[offset + newLen],    | True                      | 
+ 755 |    &lp->data[offset + oldLen],           | True                      | 
+ 756 |    lp->len - offset - oldLen);           | True                      | 
+ 757 |                                          | True                      | 
+ 758 |   nlp->next = lp->next;                  | True                      | 
+ 759 |   nlp->prev = lp->prev;                  | True                      | 
+ 760 |   nlp->prev->next = nlp;                 | True                      | 
+ 761 |   nlp->next->prev = nlp;                 | True                      | 
+ 762 |                                          | True                      | 
+ 763 |   if (curLine == lp)                     | True                      | 
+ 764 |    curLine = nlp;                        | True                      | 
+ 765 |                                          | True                      | 
+ 766 |   free(lp);                              | True                      | 
+ 767 |   lp = nlp;                              | True                      | 
+ 768 |                                          | True                      | 
+ 769 |   offset += newLen;                      | True                      | 
+ 770 |                                          | True                      | 
+ 771 |   if (globalFlag)                        | True                      | 
+ 772 |    continue;                             | True                      | 
+ 773 |                                          | True                      | 
+ 774 |   if (needPrint) {                       | True                      | 
+ 775 |    printLines(num1, num1, FALSE);        | True                      | 
+ 776 |    needPrint = FALSE;                    | True                      | 
+ 777 |   }                                      | True                      | 
+ 778 |                                          | True                      | 
+ 779 |   lp = lp->next;                         | True                      | 
+ 780 |   num1++;                                | True                      | 
+ 781 |  }                                       | True                      | 
+ 782 |                                          | True                      | 
+ 783 |  if (!didSub)                            | True                      | 
+ 784 |   bb_error_msg("no substitutions found f | True                      | 
+ 785 | }                                        | True                      | 
+ 786 |                                          | True                      | 
+ 787 | /*                                       | True                      | 
+ 788 |  * Read commands until we are told to st | True                      | 
+ 789 |  */                                      | True                      | 
+ 790 | static void doCommands(void)             | True                      | 
+ 791 | {                                        | True                      | 
+ 792 |  while (TRUE) {                          | True                      | 
+ 793 |   char buf[USERSIZE];                    | True                      | 
+ 794 |   const char *cp;                        | True                      | 
+ 795 |   int len;                               | True                      | 
+ 796 |   int n, num1, num2;                     | True                      | 
+ 797 |   smallint h, have1, have2;              | True                      | 
+ 798 |                                          | True                      | 
+ 799 |   /* Returns:                            | True                      | 
+ 800 |    * -1 on read errors or EOF, or on bar | True                      | 
+ 801 |    * 0  on ctrl-C,                       | True                      | 
+ 802 |    * >0 length of input string, includin | True                      | 
+ 803 |    */                                    | True                      | 
+ 804 |   len = read_line_input(NULL, prompt, bu | True                      | 
+ 805 |   if (len <= 0)                          | True                      | 
+ 806 |    return;                               | True                      | 
+ 807 |   while (len && isspace(buf[--len]))     | True                      | 
+ 808 |    buf[len] = '\0';                      | True                      | 
+ 809 |                                          | True                      | 
+ 810 |   if ((curNum == 0) && (lastNum > 0)) {  | True                      | 
+ 811 |    curNum = 1;                           | True                      | 
+ 812 |    curLine = lines.next;                 | True                      | 
+ 813 |   }                                      | True                      | 
+ 814 |                                          | True                      | 
+ 815 |   have1 = FALSE;                         | True                      | 
+ 816 |   have2 = FALSE;                         | True                      | 
+ 817 |   /* Don't pass &haveN, &numN to getNum( | True                      | 
+ 818 |    * compiler to keep them on stack, not | True                      | 
+ 819 |    * which is usually quite suboptimal.  | True                      | 
+ 820 |    * Using intermediate variables shrink | True                      | 
+ 821 |    */                                    | True                      | 
+ 822 |   cp = getNum(skip_whitespace(buf), &h,  | True                      | 
+ 823 |   if (!cp)                               | True                      | 
+ 824 |    continue;                             | True                      | 
+ 825 |   have1 = h;                             | True                      | 
+ 826 |   num1 = n;                              | True                      | 
+ 827 |   cp = skip_whitespace(cp);              | True                      | 
+ 828 |   if (*cp == ',') {                      | True                      | 
+ 829 |    cp = getNum(cp + 1, &h, &n);          | True                      | 
+ 830 |    if (!cp)                              | True                      | 
+ 831 |     continue;                            | True                      | 
+ 832 |    num2 = n;                             | True                      | 
+ 833 |    if (!have1)                           | True                      | 
+ 834 |     num1 = 1;                            | True                      | 
+ 835 |    if (!h)                               | True                      | 
+ 836 |     num2 = lastNum;                      | True                      | 
+ 837 |    have1 = TRUE;                         | True                      | 
+ 838 |    have2 = TRUE;                         | True                      | 
+ 839 |   }                                      | True                      | 
+ 840 |   if (!have1)                            | True                      | 
+ 841 |    num1 = curNum;                        | True                      | 
+ 842 |   if (!have2)                            | True                      | 
+ 843 |    num2 = num1;                          | True                      | 
+ 844 |                                          | True                      | 
+ 845 |   switch (*cp++) {                       | True                      | 
+ 846 |   case 'a':                              | True                      | 
+ 847 |    addLines(num1 + 1);                   | True                      | 
+ 848 |    break;                                | True                      | 
+ 849 |                                          | True                      | 
+ 850 |   case 'c':                              | True                      | 
+ 851 |    deleteLines(num1, num2);              | True                      | 
+ 852 |    addLines(num1);                       | True                      | 
+ 853 |    break;                                | True                      | 
+ 854 |                                          | True                      | 
+ 855 |   case 'd':                              | True                      | 
+ 856 |    deleteLines(num1, num2);              | True                      | 
+ 857 |    break;                                | True                      | 
+ 858 |                                          | True                      | 
+ 859 |   case 'f':                              | True                      | 
+ 860 |    if (*cp != '\0' && *cp != ' ') {      | True                      | 
+ 861 |     bb_simple_error_msg("bad file comman | True                      | 
+ 862 |     break;                               | True                      | 
+ 863 |    }                                     | True                      | 
+ 864 |    cp = skip_whitespace(cp);             | True                      | 
+ 865 |    if (*cp == '\0') {                    | True                      | 
+ 866 |     if (fileName)                        | True                      | 
+ 867 |      printf("\"%s\"\n", fileName);       | True                      | 
+ 868 |     else                                 | True                      | 
+ 869 |      puts("No file name");               | True                      | 
+ 870 |     break;                               | True                      | 
+ 871 |    }                                     | True                      | 
+ 872 |    free(fileName);                       | True                      | 
+ 873 |    fileName = xstrdup(cp);               | True                      | 
+ 874 |    break;                                | True                      | 
+ 875 |                                          | True                      | 
+ 876 |   case 'i':                              | True                      | 
+ 877 |    if (!have1 && lastNum == 0)           | True                      | 
+ 878 |     num1 = 1;                            | True                      | 
+ 879 |    addLines(num1);                       | True                      | 
+ 880 |    break;                                | True                      | 
+ 881 |                                          | True                      | 
+ 882 |   case 'k':                              | True                      | 
+ 883 |    cp = skip_whitespace(cp);             | True                      | 
+ 884 |    if ((unsigned)(*cp - 'a') >= 26 || cp | True                      | 
+ 885 |     bb_simple_error_msg("bad mark name") | True                      | 
+ 886 |     break;                               | True                      | 
+ 887 |    }                                     | True                      | 
+ 888 |    marks[(unsigned)(*cp - 'a')] = num2;  | True                      | 
+ 889 |    break;                                | True                      | 
+ 890 |                                          | True                      | 
+ 891 |   case 'l':                              | True                      | 
+ 892 |    printLines(num1, num2, TRUE);         | True                      | 
+ 893 |    break;                                | True                      | 
+ 894 |                                          | True                      | 
+ 895 |   case 'p':                              | True                      | 
+ 896 |    printLines(num1, num2, FALSE);        | True                      | 
+ 897 |    break;                                | True                      | 
+ 898 |                                          | True                      | 
+ 899 |   case 'q':                              | True                      | 
+ 900 |    cp = skip_whitespace(cp);             | True                      | 
+ 901 |    if (have1 || *cp) {                   | True                      | 
+ 902 |     bb_simple_error_msg("bad quit comman | True                      | 
+ 903 |     break;                               | True                      | 
+ 904 |    }                                     | True                      | 
+ 905 |    if (!dirty)                           | True                      | 
+ 906 |     return;                              | True                      | 
+ 907 |    len = read_line_input(NULL, "Really q | True                      | 
+ 908 |    /* read error/EOF - no way to continu | True                      | 
+ 909 |    if (len < 0)                          | True                      | 
+ 910 |     return;                              | True                      | 
+ 911 |    cp = skip_whitespace(buf);            | True                      | 
+ 912 |    if ((*cp | 0x20) == 'y') /* Y or y */ | True                      | 
+ 913 |     return;                              | True                      | 
+ 914 |    break;                                | True                      | 
+ 915 |                                          | True                      | 
+ 916 |   case 'r':                              | True                      | 
+ 917 |    if (*cp != '\0' && *cp != ' ') {      | True                      | 
+ 918 |     bb_simple_error_msg("bad read comman | True                      | 
+ 919 |     break;                               | True                      | 
+ 920 |    }                                     | True                      | 
+ 921 |    cp = skip_whitespace(cp);             | True                      | 
+ 922 |    if (*cp == '\0') {                    | True                      | 
+ 923 |     bb_simple_error_msg("no file name"); | True                      | 
+ 924 |     break;                               | True                      | 
+ 925 |    }                                     | True                      | 
+ 926 |    if (!have1)                           | True                      | 
+ 927 |     num1 = lastNum;                      | True                      | 
+ 928 |    if (readLines(cp, num1 + 1))          | True                      | 
+ 929 |     break;                               | True                      | 
+ 930 |    if (fileName == NULL)                 | True                      | 
+ 931 |     fileName = xstrdup(cp);              | True                      | 
+ 932 |    break;                                | True                      | 
+ 933 |                                          | True                      | 
+ 934 |   case 's':                              | True                      | 
+ 935 |    subCommand(cp, num1, num2);           | True                      | 
+ 936 |    break;                                | True                      | 
+ 937 |                                          | True                      | 
+ 938 |   case 'w':                              | True                      | 
+ 939 |    if (*cp != '\0' && *cp != ' ') {      | True                      | 
+ 940 |     bb_simple_error_msg("bad write comma | True                      | 
+ 941 |     break;                               | True                      | 
+ 942 |    }                                     | True                      | 
+ 943 |    cp = skip_whitespace(cp);             | True                      | 
+ 944 |    if (*cp == '\0') {                    | True                      | 
+ 945 |     cp = fileName;                       | True                      | 
+ 946 |     if (!cp) {                           | True                      | 
+ 947 |      bb_simple_error_msg("no file name s | True                      | 
+ 948 |      break;                              | True                      | 
+ 949 |     }                                    | True                      | 
+ 950 |    }                                     | True                      | 
+ 951 |    if (!have1) {                         | True                      | 
+ 952 |     num1 = 1;                            | True                      | 
+ 953 |     num2 = lastNum;                      | True                      | 
+ 954 |     dirty = FALSE;                       | True                      | 
+ 955 |    }                                     | True                      | 
+ 956 |    writeLines(cp, num1, num2);           | True                      | 
+ 957 |    break;                                | True                      | 
+ 958 |                                          | True                      | 
+ 959 |   case 'z':                              | True                      | 
+ 960 |    switch (*cp) {                        | True                      | 
+ 961 |    case '-':                             | True                      | 
+ 962 |     printLines(curNum - 21, curNum, FALS | True                      | 
+ 963 |     break;                               | True                      | 
+ 964 |    case '.':                             | True                      | 
+ 965 |     printLines(curNum - 11, curNum + 10, | True                      | 
+ 966 |     break;                               | True                      | 
+ 967 |    default:                              | True                      | 
+ 968 |     printLines(curNum, curNum + 21, FALS | True                      | 
+ 969 |     break;                               | True                      | 
+ 970 |    }                                     | True                      | 
+ 971 |    break;                                | True                      | 
+ 972 |                                          | True                      | 
+ 973 |   case '.':                              | True                      | 
+ 974 |    if (have1) {                          | True                      | 
+ 975 |     bb_simple_error_msg("no arguments al | True                      | 
+ 976 |     break;                               | True                      | 
+ 977 |    }                                     | True                      | 
+ 978 |    printLines(curNum, curNum, FALSE);    | True                      | 
+ 979 |    break;                                | True                      | 
+ 980 |                                          | True                      | 
+ 981 |   case '-':                              | True                      | 
+ 982 |    if (setCurNum(curNum - 1))            | True                      | 
+ 983 |     printLines(curNum, curNum, FALSE);   | True                      | 
+ 984 |    break;                                | True                      | 
+ 985 |                                          | True                      | 
+ 986 |   case '=':                              | True                      | 
+ 987 |    printf("%d\n", num1);                 | True                      | 
+ 988 |    break;                                | True                      | 
+ 989 |   case '\0':                             | True                      | 
+ 990 |    if (have1) {                          | True                      | 
+ 991 |     printLines(num2, num2, FALSE);       | True                      | 
+ 992 |     break;                               | True                      | 
+ 993 |    }                                     | True                      | 
+ 994 |    if (setCurNum(curNum + 1))            | True                      | 
+ 995 |     printLines(curNum, curNum, FALSE);   | True                      | 
+ 996 |    break;                                | True                      | 
+ 997 |                                          | True                      | 
+ 998 |   default:                               | True                      | 
+ 999 |    bb_simple_error_msg("unimplemented co | True                      | 
+1000 |    break;                                | True                      | 
+1001 |   }                                      | True                      | 
+1002 |  }                                       | True                      | 
+1003 | }                                        | True                      | 
+1004 |                                          | True                      | 
+1005 | int ed_main(int argc, char **argv) MAIN_ | True                      | 
+1006 | int ed_main(int argc UNUSED_PARAM, char  | True                      | 
+1007 | {                                        | True                      | 
+1008 |  INIT_G();                               | True                      | 
+1009 |                                          | True                      | 
+1010 |  bufSize = INITBUF_SIZE;                 | True                      | 
+1011 |  bufBase = xmalloc(bufSize);             | True                      | 
+1012 |  bufPtr = bufBase;                       | True                      | 
+1013 |  lines.next = &lines;                    | True                      | 
+1014 |  lines.prev = &lines;                    | True                      | 
+1015 |                                          | True                      | 
+1016 |  prompt = ""; /* no prompt by default */ | True                      | 
+1017 |  getopt32(argv, OPTION_STR, &prompt);    | True                      | 
+1018 |  argv += optind;                         | True                      | 
+1019 |                                          | True                      | 
+1020 |  if (argv[0]) {                          | True                      | 
+1021 |   fileName = xstrdup(argv[0]);           | True                      | 
+1022 |   if (!readLines(fileName, 1)) {         | True                      | 
+1023 |    return EXIT_SUCCESS;                  | True                      | 
+1024 |   }                                      | True                      | 
+1025 |   dirty = FALSE;                         | True                      | 
+1026 |  }                                       | True                      | 
+1027 |                                          | True                      | 
+1028 |  doCommands();                           | True                      | 
+1029 |  return EXIT_SUCCESS;                    | True                      | 
+1030 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +140MB, 296ms             | 

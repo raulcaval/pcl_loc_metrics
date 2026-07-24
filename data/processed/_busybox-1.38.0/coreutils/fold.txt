@@ -1,0 +1,192 @@
+FILE: data/raw/busybox-1.38.0/coreutils/fold.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * fold -- wrap each input line to fit i | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Written by David MacKenzie, djm@gnu.a | True                      | 
+   6 |  * Copyright (C) 91, 1995-2002 Free Soft | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Modified for busybox based on coreuti | True                      | 
+   9 |  * Copyright (C) 2003 Glenn McGrath      | True                      | 
+  10 |  *                                       | True                      | 
+  11 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  12 |  */                                      | True                      | 
+  13 | //config:config FOLD                     | True                      | 
+  14 | //config: bool "fold (4.8 kb)"           | True                      | 
+  15 | //config: default y                      | True                      | 
+  16 | //config: help                           | True                      | 
+  17 | //config: Wrap text to fit a specific wi | True                      | 
+  18 |                                          | True                      | 
+  19 | //applet:IF_FOLD(APPLET_NOEXEC(fold, fol | True                      | 
+  20 |                                          | True                      | 
+  21 | //kbuild:lib-$(CONFIG_FOLD) += fold.o    | True                      | 
+  22 |                                          | True                      | 
+  23 | //usage:#define fold_trivial_usage       | True                      | 
+  24 | //usage:       "[-bs] [-w WIDTH] [FILE]. | True                      | 
+  25 | //usage:#define fold_full_usage "\n\n"   | True                      | 
+  26 | //usage:       "Wrap input lines in FILE | True                      | 
+  27 | //usage:     "\n -b Count bytes rather t | True                      | 
+  28 | //usage:     "\n -s Break at spaces"     | True                      | 
+  29 | //usage:     "\n -w Use WIDTH columns in | True                      | 
+  30 |                                          | True                      | 
+  31 | #include "libbb.h"                       | True                      | 
+  32 | #include "unicode.h"                     | True                      | 
+  33 |                                          | True                      | 
+  34 | /* This is a NOEXEC applet. Be very care | True                      | 
+  35 |                                          | True                      | 
+  36 | /* Must match getopt32 call */           | True                      | 
+  37 | #define FLAG_COUNT_BYTES        1        | True                      | 
+  38 | #define FLAG_BREAK_SPACES       2        | True                      | 
+  39 | #define FLAG_WIDTH              4        | True                      | 
+  40 |                                          | True                      | 
+  41 | /* Assuming the current column is COLUMN | True                      | 
+  42 |    printing C will move the cursor to.   | True                      | 
+  43 |    The first column is 0. */             | True                      | 
+  44 | static int adjust_column(unsigned column | True                      | 
+  45 | {                                        | True                      | 
+  46 |  if (option_mask32 & FLAG_COUNT_BYTES)   | True                      | 
+  47 |   return ++column;                       | True                      | 
+  48 |                                          | True                      | 
+  49 |  if (c == '\t')                          | True                      | 
+  50 |   return column + 8 - column % 8;        | True                      | 
+  51 |                                          | True                      | 
+  52 |  if (c == '\b') {                        | True                      | 
+  53 |   if ((int)--column < 0)                 | True                      | 
+  54 |    column = 0;                           | True                      | 
+  55 |  }                                       | True                      | 
+  56 |  else if (c == '\r')                     | True                      | 
+  57 |   column = 0;                            | True                      | 
+  58 |  else { /* just a printable char */      | True                      | 
+  59 |   if (unicode_status != UNICODE_ON /* ev | True                      | 
+  60 |    || (c & 0xc0) != 0x80 /* it isn't a 2 | True                      | 
+  61 |   ) {                                    | True                      | 
+  62 |    column++;                             | True                      | 
+  63 |   }                                      | True                      | 
+  64 |  }                                       | True                      | 
+  65 |  return column;                          | True                      | 
+  66 | }                                        | True                      | 
+  67 |                                          | True                      | 
+  68 | /* Note that this function can write NUL | True                      | 
+  69 | static void write2stdout(const void *buf | True                      | 
+  70 | {                                        | True                      | 
+  71 |  fwrite(buf, 1, size, stdout);           | True                      | 
+  72 | }                                        | True                      | 
+  73 |                                          | True                      | 
+  74 | int fold_main(int argc, char **argv) MAI | True                      | 
+  75 | int fold_main(int argc UNUSED_PARAM, cha | True                      | 
+  76 | {                                        | True                      | 
+  77 |  char *line_out = NULL;                  | True                      | 
+  78 |  const char *w_opt = "80";               | True                      | 
+  79 |  unsigned width;                         | True                      | 
+  80 |  exitcode_t exitcode = EXIT_SUCCESS;     | True                      | 
+  81 |                                          | True                      | 
+  82 |  init_unicode();                         | True                      | 
+  83 |                                          | True                      | 
+  84 |  if (ENABLE_INCLUDE_SUSv2) {             | True                      | 
+  85 |   /* Turn any numeric options into -w op | True                      | 
+  86 |   int i;                                 | True                      | 
+  87 |   for (i = 1; argv[i]; i++) {            | True                      | 
+  88 |    const char *a = argv[i];              | True                      | 
+  89 |    if (*a == '-') {                      | True                      | 
+  90 |     a++;                                 | True                      | 
+  91 |     if (*a == '-' && !a[1]) /* "--" */   | True                      | 
+  92 |      break;                              | True                      | 
+  93 |     if (isdigit(*a))                     | True                      | 
+  94 |      argv[i] = xasprintf("-w%s", a);     | True                      | 
+  95 |    }                                     | True                      | 
+  96 |   }                                      | True                      | 
+  97 |  }                                       | True                      | 
+  98 |                                          | True                      | 
+  99 |  getopt32(argv, "bsw:", &w_opt);         | True                      | 
+ 100 |  width = xatou_range(w_opt, 1, 10000);   | True                      | 
+ 101 |                                          | True                      | 
+ 102 |  argv += optind;                         | True                      | 
+ 103 |  if (!*argv)                             | True                      | 
+ 104 |   *--argv = (char*)"-";                  | True                      | 
+ 105 |                                          | True                      | 
+ 106 |  do {                                    | True                      | 
+ 107 |   FILE *istream = fopen_or_warn_stdin(*a | True                      | 
+ 108 |   int c;                                 | True                      | 
+ 109 |   unsigned column = 0;     /* Screen col | True                      | 
+ 110 |   unsigned offset_out = 0; /* Index in ' | True                      | 
+ 111 |                                          | True                      | 
+ 112 |   if (istream == NULL) {                 | True                      | 
+ 113 |    exitcode = EXIT_FAILURE;              | True                      | 
+ 114 |    continue;                             | True                      | 
+ 115 |   }                                      | True                      | 
+ 116 |                                          | True                      | 
+ 117 |   while ((c = getc(istream)) != EOF) {   | True                      | 
+ 118 |    /* We grow line_out in chunks of 0x10 | True                      | 
+ 119 |    if ((offset_out & 0xfff) == 0) {      | True                      | 
+ 120 |     line_out = xrealloc(line_out, offset | True                      | 
+ 121 |    }                                     | True                      | 
+ 122 |  rescan:                                 | True                      | 
+ 123 |    line_out[offset_out] = c;             | True                      | 
+ 124 |    if (c == '\n') {                      | True                      | 
+ 125 |     write2stdout(line_out, offset_out +  | True                      | 
+ 126 |     column = offset_out = 0;             | True                      | 
+ 127 |     continue;                            | True                      | 
+ 128 |    }                                     | True                      | 
+ 129 |    column = adjust_column(column, c);    | True                      | 
+ 130 |    if (column <= width || offset_out ==  | True                      | 
+ 131 |     /* offset_out == 0 case happens      | True                      | 
+ 132 |      * with small width (say, 1) and tab | True                      | 
+ 133 |      * The very first tab already goes t | True                      | 
+ 134 |      * but we must not wrap it */        | True                      | 
+ 135 |     offset_out++;                        | True                      | 
+ 136 |     continue;                            | True                      | 
+ 137 |    }                                     | True                      | 
+ 138 |                                          | True                      | 
+ 139 |    /* This character would make the line | True                      | 
+ 140 |     * Print the line plus a newline, and | True                      | 
+ 141 |     * start the next line */             | True                      | 
+ 142 |    if (option_mask32 & FLAG_BREAK_SPACES | True                      | 
+ 143 |     unsigned i;                          | True                      | 
+ 144 |     unsigned logical_end;                | True                      | 
+ 145 |                                          | True                      | 
+ 146 |     /* Look for the last blank. */       | True                      | 
+ 147 |     for (logical_end = offset_out - 1; ( | True                      | 
+ 148 |      if (!isblank(line_out[logical_end]) | True                      | 
+ 149 |       continue;                          | True                      | 
+ 150 |                                          | True                      | 
+ 151 |      /* Found a space or tab.            | True                      | 
+ 152 |       * Output up to and including it, a | True                      | 
+ 153 |      logical_end++;                      | True                      | 
+ 154 |      /*line_out[logical_end] = '\n'; - N | True                      | 
+ 155 |      write2stdout(line_out, logical_end) | True                      | 
+ 156 |      putchar('\n');                      | True                      | 
+ 157 |      /* Move the remainder to the beginn | True                      | 
+ 158 |       * The areas being copied here migh | True                      | 
+ 159 |      memmove(line_out, line_out + logica | True                      | 
+ 160 |      offset_out -= logical_end;          | True                      | 
+ 161 |      for (column = i = 0; i < offset_out | True                      | 
+ 162 |       column = adjust_column(column, lin | True                      | 
+ 163 |      }                                   | True                      | 
+ 164 |      goto rescan;                        | True                      | 
+ 165 |     }                                    | True                      | 
+ 166 |     /* No blank found, wrap will split t | True                      | 
+ 167 |    }                                     | True                      | 
+ 168 |    /* Output what we accumulated up to n | True                      | 
+ 169 |    line_out[offset_out] = '\n';          | True                      | 
+ 170 |    write2stdout(line_out, offset_out + 1 | True                      | 
+ 171 |    column = offset_out = 0;              | True                      | 
+ 172 |    goto rescan;                          | True                      | 
+ 173 |   } /* while (not EOF) */                | True                      | 
+ 174 |                                          | True                      | 
+ 175 |   if (offset_out) {                      | True                      | 
+ 176 |    write2stdout(line_out, offset_out);   | True                      | 
+ 177 |   }                                      | True                      | 
+ 178 |                                          | True                      | 
+ 179 |   if (fclose_if_not_stdin(istream)) {    | True                      | 
+ 180 |    bb_simple_perror_msg(*argv);          | True                      | 
+ 181 |    exitcode = EXIT_FAILURE;              | True                      | 
+ 182 |   }                                      | True                      | 
+ 183 |  } while (*++argv);                      | True                      | 
+ 184 |                                          | True                      | 
+ 185 |  fflush_stdout_and_exit(exitcode);       | True                      | 
+ 186 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +19MB, 254ms              | 

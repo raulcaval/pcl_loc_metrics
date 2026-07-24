@@ -1,0 +1,581 @@
+FILE: data/raw/busybox-1.38.0/networking/dnsd.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Mini DNS server implementation for bu | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2005 Roberto A. Fogliet | True                      | 
+   6 |  * Copyright (C) 2005 Odd Arild Olsen (o | True                      | 
+   7 |  * Copyright (C) 2003 Paul Sheer         | True                      | 
+   8 |  *                                       | True                      | 
+   9 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  10 |  *                                       | True                      | 
+  11 |  * Odd Arild Olsen started out with the  | True                      | 
+  12 |  * it into a shape which I believe is bo | True                      | 
+  13 |  * I also reused the input buffer for ou | True                      | 
+  14 |  * need.  [1] http://threading.2038bug.c | True                      | 
+  15 |  *                                       | True                      | 
+  16 |  * Some bugfix and minor changes was app | True                      | 
+  17 |  * the first porting of oao' scdns to bu | True                      | 
+  18 |  */                                      | True                      | 
+  19 | //config:config DNSD                     | True                      | 
+  20 | //config: bool "dnsd (10 kb)"            | True                      | 
+  21 | //config: default y                      | True                      | 
+  22 | //config: help                           | True                      | 
+  23 | //config: Small and static DNS server da | True                      | 
+  24 |                                          | True                      | 
+  25 | //applet:IF_DNSD(APPLET(dnsd, BB_DIR_USR | True                      | 
+  26 |                                          | True                      | 
+  27 | //kbuild:lib-$(CONFIG_DNSD) += dnsd.o    | True                      | 
+  28 |                                          | True                      | 
+  29 | //usage:#define dnsd_trivial_usage       | True                      | 
+  30 | //usage:       "[-dvs] [-c CONFFILE] [-t | True                      | 
+  31 | //usage:#define dnsd_full_usage "\n\n"   | True                      | 
+  32 | //usage:       "Small static DNS server  | True                      | 
+  33 | //usage:     "\n -c FILE Config file"    | True                      | 
+  34 | //usage:     "\n -t SEC TTL"             | True                      | 
+  35 | //usage:     "\n -p PORT Listen on PORT" | True                      | 
+  36 | //usage:     "\n -i ADDR Listen on ADDR" | True                      | 
+  37 | //usage:     "\n -d Daemonize"           | True                      | 
+  38 | //usage:     "\n -v Verbose"             | True                      | 
+  39 | //usage:     "\n -s Send successful repl | True                      | 
+  40 | //usage:     "\n  to use /etc/resolv.con | True                      | 
+  41 | //usage:     "\n   nameserver DNSD_SERVE | True                      | 
+  42 | //usage:     "\n   nameserver NORMAL_DNS | True                      | 
+  43 |                                          | True                      | 
+  44 | #include "libbb.h"                       | True                      | 
+  45 | #include <syslog.h>                      | True                      | 
+  46 |                                          | True                      | 
+  47 | //#define DEBUG 1                        | True                      | 
+  48 | #define DEBUG 0                          | True                      | 
+  49 |                                          | True                      | 
+  50 | enum {                                   | True                      | 
+  51 |  /* can tweak this */                    | True                      | 
+  52 |  DEFAULT_TTL = 120,                      | True                      | 
+  53 |                                          | True                      | 
+  54 |  /* cannot get bigger packets than 512 p | True                      | 
+  55 |  MAX_PACK_LEN = 512,                     | True                      | 
+  56 |  IP_STRING_LEN = sizeof(".xxx.xxx.xxx.xx | True                      | 
+  57 |  MAX_NAME_LEN = IP_STRING_LEN - 1 + size | True                      | 
+  58 |  REQ_A = 1,                              | True                      | 
+  59 |  REQ_PTR = 12,                           | True                      | 
+  60 | };                                       | True                      | 
+  61 |                                          | True                      | 
+  62 | /* the message from client and first par | True                      | 
+  63 | struct dns_head {                        | True                      | 
+  64 |  uint16_t id;                            | True                      | 
+  65 |  uint16_t flags;                         | True                      | 
+  66 |  uint16_t nquer;                         | True                      | 
+  67 |  uint16_t nansw;                         | True                      | 
+  68 |  uint16_t nauth;                         | True                      | 
+  69 |  uint16_t nadd;                          | True                      | 
+  70 | };                                       | True                      | 
+  71 | /* Structure used to access type and cla | True                      | 
+  72 |  * They are totally unaligned, but gcc 4 | True                      | 
+  73 |  * is 16-bit aligned and replaces 16-bit | True                      | 
+  74 |  * with aligned halfword access on arm92 | True                      | 
+  75 |  * Oh well. Slapping PACKED everywhere s | True                      | 
+  76 | struct type_and_class {                  | True                      | 
+  77 |  uint16_t type PACKED;                   | True                      | 
+  78 |  uint16_t class PACKED;                  | True                      | 
+  79 | } PACKED;                                | True                      | 
+  80 | /* element of known name, ip address and | True                      | 
+  81 | struct dns_entry {                       | True                      | 
+  82 |  struct dns_entry *next;                 | True                      | 
+  83 |  uint32_t ip;                            | True                      | 
+  84 |  char rip[IP_STRING_LEN]; /* length deci | True                      | 
+  85 |  char name[1];                           | True                      | 
+  86 | };                                       | True                      | 
+  87 |                                          | True                      | 
+  88 | #define OPT_verbose (option_mask32 & 1)  | True                      | 
+  89 | #define OPT_silent  (option_mask32 & 2)  | True                      | 
+  90 |                                          | True                      | 
+  91 |                                          | True                      | 
+  92 | /*                                       | True                      | 
+  93 |  * Insert length of substrings instead o | True                      | 
+  94 |  */                                      | True                      | 
+  95 | static void undot(char *rip)             | True                      | 
+  96 | {                                        | True                      | 
+  97 |  int i = 0;                              | True                      | 
+  98 |  int s = 0;                              | True                      | 
+  99 |                                          | True                      | 
+ 100 |  while (rip[i])                          | True                      | 
+ 101 |   i++;                                   | True                      | 
+ 102 |  for (--i; i >= 0; i--) {                | True                      | 
+ 103 |   if (rip[i] == '.') {                   | True                      | 
+ 104 |    rip[i] = s;                           | True                      | 
+ 105 |    s = 0;                                | True                      | 
+ 106 |   } else {                               | True                      | 
+ 107 |    s++;                                  | True                      | 
+ 108 |   }                                      | True                      | 
+ 109 |  }                                       | True                      | 
+ 110 | }                                        | True                      | 
+ 111 |                                          | True                      | 
+ 112 | /*                                       | True                      | 
+ 113 |  * Read hostname/IP records from file    | True                      | 
+ 114 |  */                                      | True                      | 
+ 115 | static struct dns_entry *parse_conf_file | True                      | 
+ 116 | {                                        | True                      | 
+ 117 |  char *token[2];                         | True                      | 
+ 118 |  parser_t *parser;                       | True                      | 
+ 119 |  struct dns_entry *m, *conf_data;        | True                      | 
+ 120 |  struct dns_entry **nextp;               | True                      | 
+ 121 |                                          | True                      | 
+ 122 |  conf_data = NULL;                       | True                      | 
+ 123 |  nextp = &conf_data;                     | True                      | 
+ 124 |                                          | True                      | 
+ 125 |  parser = config_open(fileconf);         | True                      | 
+ 126 |  while (config_read(parser, token, 2, 2, | True                      | 
+ 127 |   struct in_addr ip;                     | True                      | 
+ 128 |   uint32_t v32;                          | True                      | 
+ 129 |                                          | True                      | 
+ 130 |   if (inet_aton(token[1], &ip) == 0) {   | True                      | 
+ 131 |    bb_error_msg("error at line %u, skipp | True                      | 
+ 132 |    continue;                             | True                      | 
+ 133 |   }                                      | True                      | 
+ 134 |                                          | True                      | 
+ 135 |   if (OPT_verbose)                       | True                      | 
+ 136 |    bb_info_msg("name:%s, ip:%s", token[0 | True                      | 
+ 137 |                                          | True                      | 
+ 138 |   /* sizeof(*m) includes 1 byte for m->n | True                      | 
+ 139 |   m = xzalloc(sizeof(*m) + strlen(token[ | True                      | 
+ 140 |   /*m->next = NULL;*/                    | True                      | 
+ 141 |   *nextp = m;                            | True                      | 
+ 142 |   nextp = &m->next;                      | True                      | 
+ 143 |                                          | True                      | 
+ 144 |   m->name[0] = '.';                      | True                      | 
+ 145 |   strcpy(m->name + 1, token[0]);         | True                      | 
+ 146 |   undot(m->name);                        | True                      | 
+ 147 |   m->ip = ip.s_addr; /* in network order | True                      | 
+ 148 |   v32 = ntohl(m->ip);                    | True                      | 
+ 149 |   /* inverted order */                   | True                      | 
+ 150 |   sprintf(m->rip, ".%u.%u.%u.%u",        | True                      | 
+ 151 |    (uint8_t)(v32),                       | True                      | 
+ 152 |    (uint8_t)(v32 >> 8),                  | True                      | 
+ 153 |    (uint8_t)(v32 >> 16),                 | True                      | 
+ 154 |    (v32 >> 24)                           | True                      | 
+ 155 |   );                                     | True                      | 
+ 156 |   undot(m->rip);                         | True                      | 
+ 157 |  }                                       | True                      | 
+ 158 |  config_close(parser);                   | True                      | 
+ 159 |  return conf_data;                       | True                      | 
+ 160 | }                                        | True                      | 
+ 161 |                                          | True                      | 
+ 162 | /*                                       | True                      | 
+ 163 |  * Look query up in dns records and retu | True                      | 
+ 164 |  */                                      | True                      | 
+ 165 | static char *table_lookup(struct dns_ent | True                      | 
+ 166 |   uint16_t type,                         | True                      | 
+ 167 |   char* query_string)                    | True                      | 
+ 168 | {                                        | True                      | 
+ 169 |  while (d) {                             | True                      | 
+ 170 |   unsigned len = d->name[0];             | True                      | 
+ 171 |   /* d->name[len] is the last (non NUL)  | True                      | 
+ 172 | #if DEBUG                                | True                      | 
+ 173 |   char *p, *q;                           | DEBUG                     | 
+ 174 |   q = query_string + 1;                  | DEBUG                     | 
+ 175 |   p = d->name + 1;                       | DEBUG                     | 
+ 176 |   fprintf(stderr, "%d/%d p:%s q:%s %d\n" | DEBUG                     | 
+ 177 |    (int)strlen(p), len,                  | DEBUG                     | 
+ 178 |    p, q, (int)strlen(q)                  | DEBUG                     | 
+ 179 |   );                                     | DEBUG                     | 
+ 180 | #endif                                   | True                      | 
+ 181 |   if (type == htons(REQ_A)) {            | True                      | 
+ 182 |    /* search by host name */             | True                      | 
+ 183 |    if (len != 1 || d->name[1] != '*') {  | True                      | 
+ 184 | /* we are lax, hope no name component is | True                      | 
+ 185 |  * (which will be represented as 'A','B' | True                      | 
+ 186 |  * Actually, I think false matches are h | True                      | 
+ 187 |  * Example.                              | True                      | 
+ 188 |  * [31] len is represented as '1', [65]  | True                      | 
+ 189 |  * [65]   <65 same chars>[31]<31 same ch | True                      | 
+ 190 |  * [65+32]<65 same chars>1   <31 same ch | True                      | 
+ 191 |  * This example seems to be the minimal  | True                      | 
+ 192 |  */                                      | True                      | 
+ 193 |     if (strcasecmp(d->name, query_string | True                      | 
+ 194 |      goto next;                          | True                      | 
+ 195 |    }                                     | True                      | 
+ 196 |    return (char *)&d->ip;                | True                      | 
+ 197 | #if DEBUG                                | True                      | 
+ 198 |    fprintf(stderr, "Found IP:%x\n", (int | DEBUG                     | 
+ 199 | #endif                                   | True                      | 
+ 200 |    return 0;                             | True                      | 
+ 201 |   }                                      | True                      | 
+ 202 |   /* search by IP-address */             | True                      | 
+ 203 |   if ((len != 1 || d->name[1] != '*')    | True                      | 
+ 204 |   /* we assume (do not check) that query | True                      | 
+ 205 |    * ends in ".in-addr.arpa" */          | True                      | 
+ 206 |    && is_prefixed_with(query_string, d-> | True                      | 
+ 207 |   ) {                                    | True                      | 
+ 208 | #if DEBUG                                | True                      | 
+ 209 |    fprintf(stderr, "Found name:%s\n", d- | DEBUG                     | 
+ 210 | #endif                                   | True                      | 
+ 211 |    return d->name;                       | True                      | 
+ 212 |   }                                      | True                      | 
+ 213 |  next:                                   | True                      | 
+ 214 |   d = d->next;                           | True                      | 
+ 215 |  }                                       | True                      | 
+ 216 |                                          | True                      | 
+ 217 |  return NULL;                            | True                      | 
+ 218 | }                                        | True                      | 
+ 219 |                                          | True                      | 
+ 220 | /*                                       | True                      | 
+ 221 |  * Decode message and generate answer    | True                      | 
+ 222 |  */                                      | True                      | 
+ 223 | /* RFC 1035                              | True                      | 
+ 224 | ...                                      | True                      | 
+ 225 | Whenever an octet represents a numeric q | True                      | 
+ 226 | in the diagram is the high order or most | True                      | 
+ 227 | That is, the bit labeled 0 is the most s | True                      | 
+ 228 | ...                                      | True                      | 
+ 229 |                                          | True                      | 
+ 230 | 4.1.1. Header section format             | True                      | 
+ 231 |       0  1  2  3  4  5  6  7  8  9 10 11 | True                      | 
+ 232 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 233 |     |                      ID            | True                      | 
+ 234 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 235 |     |QR|   OPCODE  |AA|TC|RD|RA| 0  0  0 | True                      | 
+ 236 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 237 |     |                    QDCOUNT         | True                      | 
+ 238 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 239 |     |                    ANCOUNT         | True                      | 
+ 240 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 241 |     |                    NSCOUNT         | True                      | 
+ 242 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 243 |     |                    ARCOUNT         | True                      | 
+ 244 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 245 | ID      16 bit random identifier assigne | True                      | 
+ 246 |         Used to match query/response.    | True                      | 
+ 247 | QR      message is a query (0), or a res | True                      | 
+ 248 | OPCODE  0   standard query (QUERY)       | True                      | 
+ 249 |         1   inverse query (IQUERY)       | True                      | 
+ 250 |         2   server status request (STATU | True                      | 
+ 251 | AA      Authoritative Answer - this bit  | True                      | 
+ 252 |         Responding name server is an aut | True                      | 
+ 253 |         in question section. Answer sect | True                      | 
+ 254 |         because of aliases.  The AA bit  | True                      | 
+ 255 |         the query name, or the first own | True                      | 
+ 256 | TC      TrunCation - this message was tr | True                      | 
+ 257 | RD      Recursion Desired - this bit may | True                      | 
+ 258 |         is copied into the response.  If | True                      | 
+ 259 |         the name server to pursue the qu | True                      | 
+ 260 |         Recursive query support is optio | True                      | 
+ 261 | RA      Recursion Available - this be is | True                      | 
+ 262 |         response, and denotes whether re | True                      | 
+ 263 |         available in the name server.    | True                      | 
+ 264 | RCODE   Response code.                   | True                      | 
+ 265 |         0   No error condition           | True                      | 
+ 266 |         1   Format error                 | True                      | 
+ 267 |         2   Server failure - server was  | True                      | 
+ 268 |             due to a problem with the na | True                      | 
+ 269 |         3   Name Error - meaningful only | True                      | 
+ 270 |             an authoritative name server | True                      | 
+ 271 |             does not exist.              | True                      | 
+ 272 |         4   Not Implemented.             | True                      | 
+ 273 |         5   Refused.                     | True                      | 
+ 274 | QDCOUNT number of entries in the questio | True                      | 
+ 275 | ANCOUNT number of records in the answer  | True                      | 
+ 276 | NSCOUNT number of records in the authori | True                      | 
+ 277 | ARCOUNT number of records in the additio | True                      | 
+ 278 |                                          | True                      | 
+ 279 | 4.1.2. Question section format           | True                      | 
+ 280 |                                          | True                      | 
+ 281 | The section contains QDCOUNT (usually 1) | True                      | 
+ 282 |       0  1  2  3  4  5  6  7  8  9 10 11 | True                      | 
+ 283 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 284 |     /                     QNAME          | True                      | 
+ 285 |     /                                    | True                      | 
+ 286 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 287 |     |                     QTYPE          | True                      | 
+ 288 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 289 |     |                     QCLASS         | True                      | 
+ 290 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 291 | QNAME   a domain name represented as a s | True                      | 
+ 292 |         each label consists of a length  | True                      | 
+ 293 |         number of octets. The domain nam | True                      | 
+ 294 |         zero length octet for the null l | True                      | 
+ 295 |         that this field may be an odd nu | True                      | 
+ 296 |         padding is used.                 | True                      | 
+ 297 | QTYPE   a two octet type of the query.   | True                      | 
+ 298 |           1 a host address [REQ_A const] | True                      | 
+ 299 |           2 an authoritative name server | True                      | 
+ 300 |           3 a mail destination (Obsolete | True                      | 
+ 301 |           4 a mail forwarder (Obsolete - | True                      | 
+ 302 |           5 the canonical name for an al | True                      | 
+ 303 |           6 marks the start of a zone of | True                      | 
+ 304 |           7 a mailbox domain name (EXPER | True                      | 
+ 305 |           8 a mail group member (EXPERIM | True                      | 
+ 306 |           9 a mail rename domain name (E | True                      | 
+ 307 |          10 a null RR (EXPERIMENTAL)     | True                      | 
+ 308 |          11 a well known service descrip | True                      | 
+ 309 |          12 a domain name pointer [REQ_P | True                      | 
+ 310 |          13 host information             | True                      | 
+ 311 |          14 mailbox or mail list informa | True                      | 
+ 312 |          15 mail exchange                | True                      | 
+ 313 |          16 text strings                 | True                      | 
+ 314 |        0x1c IPv6?                        | True                      | 
+ 315 |         252 a request for a transfer of  | True                      | 
+ 316 |         253 a request for mailbox-relate | True                      | 
+ 317 |         254 a request for mail agent RRs | True                      | 
+ 318 |         255 a request for all records    | True                      | 
+ 319 | QCLASS  a two octet code that specifies  | True                      | 
+ 320 |           1 the Internet                 | True                      | 
+ 321 |         (others are historic only)       | True                      | 
+ 322 |         255 any class                    | True                      | 
+ 323 |                                          | True                      | 
+ 324 | 4.1.3. Resource Record format            | True                      | 
+ 325 |                                          | True                      | 
+ 326 | The answer, authority, and additional se | True                      | 
+ 327 | a variable number of resource records, w | True                      | 
+ 328 | is specified in the corresponding count  | True                      | 
+ 329 | Each resource record has this format:    | True                      | 
+ 330 |       0  1  2  3  4  5  6  7  8  9 10 11 | True                      | 
+ 331 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 332 |     /                                    | True                      | 
+ 333 |     /                      NAME          | True                      | 
+ 334 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 335 |     |                      TYPE          | True                      | 
+ 336 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 337 |     |                     CLASS          | True                      | 
+ 338 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 339 |     |                      TTL           | True                      | 
+ 340 |     |                                    | True                      | 
+ 341 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 342 |     |                   RDLENGTH         | True                      | 
+ 343 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 344 |     /                     RDATA          | True                      | 
+ 345 |     /                                    | True                      | 
+ 346 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 347 | NAME    a domain name to which this reso | True                      | 
+ 348 | TYPE    two octets containing one of the | True                      | 
+ 349 |         field specifies the meaning of t | True                      | 
+ 350 | CLASS   two octets which specify the cla | True                      | 
+ 351 | TTL     a 32 bit unsigned integer that s | True                      | 
+ 352 |         (in seconds) that the record may | True                      | 
+ 353 | RDLENGTH a 16 bit integer, length in oct | True                      | 
+ 354 | RDATA   a variable length string of octe | True                      | 
+ 355 |         The format of this information v | True                      | 
+ 356 |         and CLASS of the resource record | True                      | 
+ 357 |         If the TYPE is A and the CLASS i | True                      | 
+ 358 |                                          | True                      | 
+ 359 | 4.1.4. Message compression               | True                      | 
+ 360 |                                          | True                      | 
+ 361 | In order to reduce the size of messages, | True                      | 
+ 362 | An entire domain name or a list of label | True                      | 
+ 363 | is replaced with a pointer to a prior oc | True                      | 
+ 364 |                                          | True                      | 
+ 365 | The pointer takes the form of a two octe | True                      | 
+ 366 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 367 |     | 1  1|                OFFSET        | True                      | 
+ 368 |     +--+--+--+--+--+--+--+--+--+--+--+-- | True                      | 
+ 369 | The first two bits are ones.  This allow | True                      | 
+ 370 | from a label, since the label must begin | True                      | 
+ 371 | labels are restricted to 63 octets or le | True                      | 
+ 372 | an offset from the start of the message  | True                      | 
+ 373 | of the ID field in the domain header).   | True                      | 
+ 374 | A zero offset specifies the first byte o | True                      | 
+ 375 | Domain name in a message can be represen | True                      | 
+ 376 |    - a sequence of labels ending in a ze | True                      | 
+ 377 |    - a pointer                           | True                      | 
+ 378 |    - a sequence of labels ending with a  | True                      | 
+ 379 |  */                                      | True                      | 
+ 380 | static int process_packet(struct dns_ent | True                      | 
+ 381 |   uint32_t conf_ttl,                     | True                      | 
+ 382 |   uint8_t *buf,                          | True                      | 
+ 383 |   unsigned buflen)                       | True                      | 
+ 384 | {                                        | True                      | 
+ 385 |  struct dns_head *head;                  | True                      | 
+ 386 |  struct type_and_class *unaligned_type_c | True                      | 
+ 387 |  const char *err_msg;                    | True                      | 
+ 388 |  char *query_string;                     | True                      | 
+ 389 |  char *answstr;                          | True                      | 
+ 390 |  uint8_t *answb;                         | True                      | 
+ 391 |  uint16_t outr_rlen;                     | True                      | 
+ 392 |  uint16_t outr_flags;                    | True                      | 
+ 393 |  uint16_t type;                          | True                      | 
+ 394 |  uint16_t class;                         | True                      | 
+ 395 |  int query_len;                          | True                      | 
+ 396 |                                          | True                      | 
+ 397 |  head = (struct dns_head *)buf;          | True                      | 
+ 398 |  if (head->nquer == 0) {                 | True                      | 
+ 399 |   bb_simple_error_msg("packet has 0 quer | True                      | 
+ 400 |   return 0; /* don't reply */            | True                      | 
+ 401 |  }                                       | True                      | 
+ 402 |  if (head->flags & htons(0x8000)) { /* Q | True                      | 
+ 403 |   bb_simple_error_msg("response packet,  | True                      | 
+ 404 |   return 0; /* don't reply */            | True                      | 
+ 405 |  }                                       | True                      | 
+ 406 |                                          | True                      | 
+ 407 |  /* start of query string */             | True                      | 
+ 408 |  query_string = (void *)(head + 1);      | True                      | 
+ 409 |  /* caller guarantees strlen is <= MAX_P | True                      | 
+ 410 |  query_len = strlen(query_string) + 1;   | True                      | 
+ 411 |  /* may be unaligned! */                 | True                      | 
+ 412 |  unaligned_type_class = (void *)(query_s | True                      | 
+ 413 |  query_len += sizeof(*unaligned_type_cla | True                      | 
+ 414 |  /* where to append answer block */      | True                      | 
+ 415 |  answb = (void *)(unaligned_type_class + | True                      | 
+ 416 |                                          | True                      | 
+ 417 |  if (buflen < answb - buf) {             | True                      | 
+ 418 |   bb_simple_error_msg("packet too short" | True                      | 
+ 419 |   return 0; /* don't reply */            | True                      | 
+ 420 |  }                                       | True                      | 
+ 421 |                                          | True                      | 
+ 422 |  /* QR = 1 "response", RCODE = 4 "Not Im | True                      | 
+ 423 |  outr_flags = htons(0x8000 | 4);         | True                      | 
+ 424 |  err_msg = NULL;                         | True                      | 
+ 425 |                                          | True                      | 
+ 426 |  /* OPCODE != 0 "standard query"? */     | True                      | 
+ 427 |  if ((head->flags & htons(0x7800)) != 0) | True                      | 
+ 428 |   err_msg = "opcode != 0";               | True                      | 
+ 429 |   goto empty_packet;                     | True                      | 
+ 430 |  }                                       | True                      | 
+ 431 |  move_from_unaligned16(class, &unaligned | True                      | 
+ 432 |  if (class != htons(1)) { /* not class I | True                      | 
+ 433 |   err_msg = "class != 1";                | True                      | 
+ 434 |   goto empty_packet;                     | True                      | 
+ 435 |  }                                       | True                      | 
+ 436 |  move_from_unaligned16(type, &unaligned_ | True                      | 
+ 437 |  if (type != htons(REQ_A) && type != hto | True                      | 
+ 438 |   /* we can't handle this query type */  | True                      | 
+ 439 | //TODO: happens all the time with REQ_AA | True                      | 
+ 440 |   err_msg = "type is !REQ_A and !REQ_PTR | True                      | 
+ 441 |   goto empty_packet;                     | True                      | 
+ 442 |  }                                       | True                      | 
+ 443 |                                          | True                      | 
+ 444 |  /* look up the name */                  | True                      | 
+ 445 |  answstr = table_lookup(conf_data, type, | True                      | 
+ 446 | #if DEBUG                                | True                      | 
+ 447 |  /* Shows lengths instead of dots, unusa | DEBUG                     | 
+ 448 |  bb_info_msg("'%s'->'%s'", query_string, | DEBUG                     | 
+ 449 | #endif                                   | True                      | 
+ 450 |  outr_rlen = 4;                          | True                      | 
+ 451 |  if (answstr && type == htons(REQ_PTR))  | True                      | 
+ 452 |   /* returning a host name */            | True                      | 
+ 453 |   outr_rlen = strlen(answstr) + 1;       | True                      | 
+ 454 |  }                                       | True                      | 
+ 455 |  if (!answstr                            | True                      | 
+ 456 |   || (unsigned)(answb - buf) + query_len | True                      | 
+ 457 |  ) {                                     | True                      | 
+ 458 |   /* QR = 1 "response"                   | True                      | 
+ 459 |    * AA = 1 "Authoritative Answer"       | True                      | 
+ 460 |    * RCODE = 3 "Name Error" */           | True                      | 
+ 461 |   err_msg = "name is not found";         | True                      | 
+ 462 |   outr_flags = htons(0x8000 | 0x0400 | 3 | True                      | 
+ 463 |   goto empty_packet;                     | True                      | 
+ 464 |  }                                       | True                      | 
+ 465 |                                          | True                      | 
+ 466 |  /* Append answer Resource Record */     | True                      | 
+ 467 |  memcpy(answb, query_string, query_len); | True                      | 
+ 468 |  answb += query_len;                     | True                      | 
+ 469 |  move_to_unaligned32((uint32_t *)answb,  | True                      | 
+ 470 |  answb += 4;                             | True                      | 
+ 471 |  move_to_unaligned16((uint16_t *)answb,  | True                      | 
+ 472 |  answb += 2;                             | True                      | 
+ 473 |  memcpy(answb, answstr, outr_rlen);      | True                      | 
+ 474 |  answb += outr_rlen;                     | True                      | 
+ 475 |                                          | True                      | 
+ 476 |  /* QR = 1 "response",                   | True                      | 
+ 477 |   * AA = 1 "Authoritative Answer",       | True                      | 
+ 478 |   * TODO: need to set RA bit 0x80? One u | True                      | 
+ 479 |   * "Got recursion not available from SE | True                      | 
+ 480 |   * "** server can't find HOSTNAME"      | True                      | 
+ 481 |   * RCODE = 0 "success"                  | True                      | 
+ 482 |   */                                     | True                      | 
+ 483 |  if (OPT_verbose)                        | True                      | 
+ 484 |   bb_simple_info_msg("returning positive | True                      | 
+ 485 |  outr_flags = htons(0x8000 | 0x0400 | 0) | True                      | 
+ 486 |  /* we have one answer */                | True                      | 
+ 487 |  head->nansw = htons(1);                 | True                      | 
+ 488 |                                          | True                      | 
+ 489 |  empty_packet:                           | True                      | 
+ 490 |  if ((outr_flags & htons(0xf)) != 0) { / | True                      | 
+ 491 |   if (OPT_verbose) {                     | True                      | 
+ 492 |    bb_error_msg("%s, %s",                | True                      | 
+ 493 |     err_msg,                             | True                      | 
+ 494 |     OPT_silent ? "dropping query" : "sen | True                      | 
+ 495 |    );                                    | True                      | 
+ 496 |   }                                      | True                      | 
+ 497 |   if (OPT_silent)                        | True                      | 
+ 498 |    return 0;                             | True                      | 
+ 499 |  }                                       | True                      | 
+ 500 |  head->flags |= outr_flags;              | True                      | 
+ 501 |  head->nauth = head->nadd = 0;           | True                      | 
+ 502 |  head->nquer = htons(1); // why???       | True                      | 
+ 503 |                                          | True                      | 
+ 504 |  return answb - buf;                     | True                      | 
+ 505 | }                                        | True                      | 
+ 506 |                                          | True                      | 
+ 507 | int dnsd_main(int argc, char **argv) MAI | True                      | 
+ 508 | int dnsd_main(int argc UNUSED_PARAM, cha | True                      | 
+ 509 | {                                        | True                      | 
+ 510 |  const char *listen_interface = "0.0.0.0 | True                      | 
+ 511 |  const char *fileconf = "/etc/dnsd.conf" | True                      | 
+ 512 |  struct dns_entry *conf_data;            | True                      | 
+ 513 |  uint32_t conf_ttl = DEFAULT_TTL;        | True                      | 
+ 514 |  char *sttl, *sport;                     | True                      | 
+ 515 |  len_and_sockaddr *lsa, *from, *to;      | True                      | 
+ 516 |  unsigned lsa_size;                      | True                      | 
+ 517 |  int udps, opts;                         | True                      | 
+ 518 |  uint16_t port = 53;                     | True                      | 
+ 519 |  /* Ensure buf is 32bit aligned (we need | True                      | 
+ 520 |  uint8_t buf[MAX_PACK_LEN + 1] ALIGN4;   | True                      | 
+ 521 |                                          | True                      | 
+ 522 |  opts = getopt32(argv, "vsi:c:t:p:d", &l | True                      | 
+ 523 |  //if (opts & (1 << 0)) // -v            | True                      | 
+ 524 |  //if (opts & (1 << 1)) // -s            | True                      | 
+ 525 |  //if (opts & (1 << 2)) // -i            | True                      | 
+ 526 |  //if (opts & (1 << 3)) // -c            | True                      | 
+ 527 |  if (opts & (1 << 4)) // -t              | True                      | 
+ 528 |   conf_ttl = xatou_range(sttl, 1, 0xffff | True                      | 
+ 529 |  if (opts & (1 << 5)) // -p              | True                      | 
+ 530 |   port = xatou_range(sport, 1, 0xffff);  | True                      | 
+ 531 |  if (opts & (1 << 6)) { // -d            | True                      | 
+ 532 |   bb_daemonize_or_rexec(DAEMON_CLOSE_EXT | True                      | 
+ 533 |   openlog(applet_name, LOG_PID, LOG_DAEM | True                      | 
+ 534 |   logmode = LOGMODE_SYSLOG;              | True                      | 
+ 535 |  }                                       | True                      | 
+ 536 |                                          | True                      | 
+ 537 |  conf_data = parse_conf_file(fileconf);  | True                      | 
+ 538 |                                          | True                      | 
+ 539 |  lsa = xdotted2sockaddr(listen_interface | True                      | 
+ 540 |  udps = xsocket(lsa->u.sa.sa_family, SOC | True                      | 
+ 541 |  xbind(udps, &lsa->u.sa, lsa->len);      | True                      | 
+ 542 |  socket_want_pktinfo(udps); /* needed fo | True                      | 
+ 543 |  lsa_size = LSA_LEN_SIZE + lsa->len;     | True                      | 
+ 544 |  from = xzalloc(lsa_size);               | True                      | 
+ 545 |  to = xzalloc(lsa_size);                 | True                      | 
+ 546 |                                          | True                      | 
+ 547 |  {                                       | True                      | 
+ 548 |   char *p = xmalloc_sockaddr2dotted(&lsa | True                      | 
+ 549 |   bb_info_msg("accepting UDP packets on  | True                      | 
+ 550 |   free(p);                               | True                      | 
+ 551 |  }                                       | True                      | 
+ 552 |                                          | True                      | 
+ 553 |  while (1) {                             | True                      | 
+ 554 |   int r;                                 | True                      | 
+ 555 |   /* Try to get *DEST* address (to which | True                      | 
+ 556 |    * this query was directed), and reply | True                      | 
+ 557 |    * Or else we can exhibit usual UDP ug | True                      | 
+ 558 |    * [ip1.multihomed.ip2] <=  query to i | True                      | 
+ 559 |    * [ip1.multihomed.ip2] => reply from  | True                      | 
+ 560 |   memcpy(to, lsa, lsa_size);             | True                      | 
+ 561 |   r = recv_from_to(udps, buf, MAX_PACK_L | True                      | 
+ 562 |   if (r < 12 || r > MAX_PACK_LEN) {      | True                      | 
+ 563 |    bb_error_msg("packet size %d, ignored | True                      | 
+ 564 |    continue;                             | True                      | 
+ 565 |   }                                      | True                      | 
+ 566 |   if (OPT_verbose)                       | True                      | 
+ 567 |    bb_simple_info_msg("got UDP packet"); | True                      | 
+ 568 |   buf[r] = '\0'; /* paranoia */          | True                      | 
+ 569 |   r = process_packet(conf_data, conf_ttl | True                      | 
+ 570 |   if (r <= 0)                            | True                      | 
+ 571 |    continue;                             | True                      | 
+ 572 |   send_to_from(udps, buf, r, 0, &from->u | True                      | 
+ 573 |  }                                       | True                      | 
+ 574 |  return 0;                               | True                      | 
+ 575 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +114MB, 271ms             | 

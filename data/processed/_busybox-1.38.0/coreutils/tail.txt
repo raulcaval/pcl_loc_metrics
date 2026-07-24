@@ -1,0 +1,427 @@
+FILE: data/raw/busybox-1.38.0/coreutils/tail.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                                  | 
+-----+------------------------------------------+------------------------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                                   | 
+   2 | /*                                       | True                                                                   | 
+   3 |  * Mini tail implementation for busybox  | True                                                                   | 
+   4 |  *                                       | True                                                                   | 
+   5 |  * Copyright (C) 2001 by Matt Kraai <kra | True                                                                   | 
+   6 |  *                                       | True                                                                   | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                                                                   | 
+   8 |  */                                      | True                                                                   | 
+   9 | /* Mar 16, 2003      Manuel Novoa III    | True                                                                   | 
+  10 |  *                                       | True                                                                   | 
+  11 |  * Pretty much rewritten to fix numerous | True                                                                   | 
+  12 |  * Bugs fixed (although I may have forgo | True                                                                   | 
+  13 |  * 1) mixing printf/write without fflush | True                                                                   | 
+  14 |  * 2) no check that any open files are p | True                                                                   | 
+  15 |  * 3) optstring had -q taking an arg     | True                                                                   | 
+  16 |  * 4) no error checking on write in some | True                                                                   | 
+  17 |  * 5) q and s interaction bug            | True                                                                   | 
+  18 |  * 6) no check for lseek error           | True                                                                   | 
+  19 |  * 7) lseek attempted when count==0 even | True                                                                   | 
+  20 |  */                                      | True                                                                   | 
+  21 | //config:config TAIL                     | True                                                                   | 
+  22 | //config: bool "tail (7.2 kb)"           | True                                                                   | 
+  23 | //config: default y                      | True                                                                   | 
+  24 | //config: help                           | True                                                                   | 
+  25 | //config: tail is used to print the last | True                                                                   | 
+  26 | //config: from files.                    | True                                                                   | 
+  27 | //config:                                | True                                                                   | 
+  28 | //config:config FEATURE_FANCY_TAIL       | True                                                                   | 
+  29 | //config: bool "Enable -q, -s, -v, and - | True                                                                   | 
+  30 | //config: default y                      | True                                                                   | 
+  31 | //config: depends on TAIL                | True                                                                   | 
+  32 | //config: help                           | True                                                                   | 
+  33 | //config: These options are provided by  | True                                                                   | 
+  34 | //config: are not specified in the SUSv3 | True                                                                   | 
+  35 | //config:  -q      Never output headers  | True                                                                   | 
+  36 | //config:  -s SEC  Wait SEC seconds betw | True                                                                   | 
+  37 | //config:  -v      Always output headers | True                                                                   | 
+  38 | //config:  -F      Same as -f, but keep  | True                                                                   | 
+  39 |                                          | True                                                                   | 
+  40 | //applet:IF_TAIL(APPLET(tail, BB_DIR_USR | True                                                                   | 
+  41 |                                          | True                                                                   | 
+  42 | //kbuild:lib-$(CONFIG_TAIL) += tail.o    | True                                                                   | 
+  43 |                                          | True                                                                   | 
+  44 | /* BB_AUDIT SUSv3 compliant (need fancy  | True                                                                   | 
+  45 | /* BB_AUDIT GNU compatible -c, -q, and - | True                                                                   | 
+  46 | /* http://www.opengroup.org/onlinepubs/0 | True                                                                   | 
+  47 |                                          | True                                                                   | 
+  48 | //usage:#define tail_trivial_usage       | True                                                                   | 
+  49 | //usage:       "[OPTIONS] [FILE]..."     | True                                                                   | 
+  50 | //usage:#define tail_full_usage "\n\n"   | True                                                                   | 
+  51 | //usage:       "Print last 10 lines of F | True                                                                   | 
+  52 | //usage:       "With more than one FILE, | True                                                                   | 
+  53 | //usage:     "\n -c [+]N[bkm] Print last | True                                                                   | 
+  54 | //usage:     "\n -n N[bkm] Print last N  | True                                                                   | 
+  55 | //usage:     "\n -n +N[bkm] Start on Nth | True                                                                   | 
+  56 | //usage:     "\n   (b:*512 k:*1024 m:*10 | True                                                                   | 
+  57 | //usage: IF_FEATURE_FANCY_TAIL(          | True                                                                   | 
+  58 | //usage:     "\n -q  Never print headers | True                                                                   | 
+  59 | //usage:     "\n -v  Always print header | True                                                                   | 
+  60 | //usage: )                               | True                                                                   | 
+  61 | //usage:     "\n -f  Print data as file  | True                                                                   | 
+  62 | //usage: IF_FEATURE_FANCY_TAIL(          | True                                                                   | 
+  63 | //usage:     "\n -F  Same as -f, but kee | True                                                                   | 
+  64 | //usage:     "\n -s SECONDS Wait SECONDS | True                                                                   | 
+  65 | //usage: )                               | True                                                                   | 
+  66 | //usage:                                 | True                                                                   | 
+  67 | //usage:#define tail_example_usage       | True                                                                   | 
+  68 | //usage:       "$ tail -n 1 /etc/resolv. | True                                                                   | 
+  69 | //usage:       "nameserver 10.0.0.1\n"   | True                                                                   | 
+  70 |                                          | True                                                                   | 
+  71 | #include "libbb.h"                       | True                                                                   | 
+  72 | #include "common_bufsiz.h"               | True                                                                   | 
+  73 |                                          | True                                                                   | 
+  74 | struct globals {                         | True                                                                   | 
+  75 |  bool from_top;                          | True                                                                   | 
+  76 |  bool exitcode;                          | True                                                                   | 
+  77 | } FIX_ALIASING;                          | True                                                                   | 
+  78 | #define G (*(struct globals*)bb_common_b | True                                                                   | 
+  79 | #define INIT_G() do { setup_common_bufsi | True                                                                   | 
+  80 |                                          | True                                                                   | 
+  81 | static void tail_xprint_header(const cha | True                                                                   | 
+  82 | {                                        | True                                                                   | 
+  83 |  if (fdprintf(STDOUT_FILENO, fmt, filena | True                                                                   | 
+  84 |   bb_perror_nomsg_and_die();             | True                                                                   | 
+  85 | }                                        | True                                                                   | 
+  86 |                                          | True                                                                   | 
+  87 | static ssize_t tail_read(int fd, char *b | True                                                                   | 
+  88 | {                                        | True                                                                   | 
+  89 |  ssize_t r;                              | True                                                                   | 
+  90 |                                          | True                                                                   | 
+  91 |  r = full_read(fd, buf, count);          | True                                                                   | 
+  92 |  if (r < 0) {                            | True                                                                   | 
+  93 |   bb_simple_perror_msg(bb_msg_read_error | True                                                                   | 
+  94 |   G.exitcode = EXIT_FAILURE;             | True                                                                   | 
+  95 |  }                                       | True                                                                   | 
+  96 |                                          | True                                                                   | 
+  97 |  return r;                               | True                                                                   | 
+  98 | }                                        | True                                                                   | 
+  99 |                                          | True                                                                   | 
+ 100 | #define header_fmt_str "\n==> %s <==\n"  | True                                                                   | 
+ 101 |                                          | True                                                                   | 
+ 102 | static unsigned eat_num(const char *p)   | True                                                                   | 
+ 103 | {                                        | True                                                                   | 
+ 104 |  if (*p == '-')                          | True                                                                   | 
+ 105 |   p++;                                   | True                                                                   | 
+ 106 |  else if (*p == '+') {                   | True                                                                   | 
+ 107 |   p++;                                   | True                                                                   | 
+ 108 |   G.from_top = 1;                        | True                                                                   | 
+ 109 |  }                                       | True                                                                   | 
+ 110 |  return xatou_sfx(p, bkm_suffixes);      | True                                                                   | 
+ 111 | }                                        | True                                                                   | 
+ 112 |                                          | True                                                                   | 
+ 113 | int tail_main(int argc, char **argv) MAI | True                                                                   | 
+ 114 | int tail_main(int argc, char **argv)     | True                                                                   | 
+ 115 | {                                        | True                                                                   | 
+ 116 |  unsigned count = 10;                    | True                                                                   | 
+ 117 |  unsigned sleep_period = 1;              | True                                                                   | 
+ 118 |  const char *str_c, *str_n;              | True                                                                   | 
+ 119 |                                          | True                                                                   | 
+ 120 |  char *tailbuf;                          | True                                                                   | 
+ 121 |  size_t tailbufsize;                     | True                                                                   | 
+ 122 |  unsigned header_threshold = 1;          | True                                                                   | 
+ 123 |  unsigned nfiles;                        | True                                                                   | 
+ 124 |  int i, opt;                             | True                                                                   | 
+ 125 |                                          | True                                                                   | 
+ 126 |  int *fds;                               | True                                                                   | 
+ 127 |  const char *fmt;                        | True                                                                   | 
+ 128 |  int prev_fd;                            | True                                                                   | 
+ 129 |                                          | True                                                                   | 
+ 130 |  INIT_G();                               | True                                                                   | 
+ 131 |                                          | True                                                                   | 
+ 132 | #if ENABLE_INCLUDE_SUSv2 || ENABLE_FEATU | True                                                                   | 
+ 133 |  /* Allow legacy syntax of an initial nu | !ENABLE_INCLUDE_SUSv2&&ENABLE_FEATURE_FANCY_TAIL||ENABLE_INCLUDE_SUSv2 | 
+ 134 |  if (argv[1] && (argv[1][0] == '+' || ar | !ENABLE_INCLUDE_SUSv2&&ENABLE_FEATURE_FANCY_TAIL||ENABLE_INCLUDE_SUSv2 | 
+ 135 |   && isdigit(argv[1][1])                 | !ENABLE_INCLUDE_SUSv2&&ENABLE_FEATURE_FANCY_TAIL||ENABLE_INCLUDE_SUSv2 | 
+ 136 |  ) {                                     | !ENABLE_INCLUDE_SUSv2&&ENABLE_FEATURE_FANCY_TAIL||ENABLE_INCLUDE_SUSv2 | 
+ 137 |   count = eat_num(argv[1]);              | !ENABLE_INCLUDE_SUSv2&&ENABLE_FEATURE_FANCY_TAIL||ENABLE_INCLUDE_SUSv2 | 
+ 138 |   argv++;                                | !ENABLE_INCLUDE_SUSv2&&ENABLE_FEATURE_FANCY_TAIL||ENABLE_INCLUDE_SUSv2 | 
+ 139 |   argc--;                                | !ENABLE_INCLUDE_SUSv2&&ENABLE_FEATURE_FANCY_TAIL||ENABLE_INCLUDE_SUSv2 | 
+ 140 |  }                                       | !ENABLE_INCLUDE_SUSv2&&ENABLE_FEATURE_FANCY_TAIL||ENABLE_INCLUDE_SUSv2 | 
+ 141 | #endif                                   | True                                                                   | 
+ 142 |                                          | True                                                                   | 
+ 143 |  /* -s NUM, -F imlies -f */              | True                                                                   | 
+ 144 |  opt = getopt32(argv, IF_FEATURE_FANCY_T | True                                                                   | 
+ 145 |    "fc:n:"IF_FEATURE_FANCY_TAIL("qs:+vF" | True                                                                   | 
+ 146 |    IF_FEATURE_FANCY_TAIL("\0" "Ff"),     | True                                                                   | 
+ 147 |    &str_c, &str_n IF_FEATURE_FANCY_TAIL( | True                                                                   | 
+ 148 |  );                                      | True                                                                   | 
+ 149 | #define FOLLOW (opt & 0x1)               | True                                                                   | 
+ 150 | #define COUNT_BYTES (opt & 0x2)          | True                                                                   | 
+ 151 |  //if (opt & 0x1) // -f                  | True                                                                   | 
+ 152 |  if (opt & 0x2) count = eat_num(str_c);  | True                                                                   | 
+ 153 |  if (opt & 0x4) count = eat_num(str_n);  | True                                                                   | 
+ 154 | #if ENABLE_FEATURE_FANCY_TAIL            | True                                                                   | 
+ 155 |  /* q: make it impossible for nfiles to  | ENABLE_FEATURE_FANCY_TAIL                                              | 
+ 156 |  if (opt & 0x8) header_threshold = UINT_ | ENABLE_FEATURE_FANCY_TAIL                                              | 
+ 157 |  //if (opt & 0x10) // -s                 | ENABLE_FEATURE_FANCY_TAIL                                              | 
+ 158 |  if (opt & 0x20) header_threshold = 0; / | ENABLE_FEATURE_FANCY_TAIL                                              | 
+ 159 | # define FOLLOW_RETRY (opt & 0x40)       | ENABLE_FEATURE_FANCY_TAIL                                              | 
+ 160 | #else                                    | True                                                                   | 
+ 161 | # define FOLLOW_RETRY 0                  | !ENABLE_FEATURE_FANCY_TAIL                                             | 
+ 162 | #endif                                   | True                                                                   | 
+ 163 |  argc -= optind;                         | True                                                                   | 
+ 164 |  argv += optind;                         | True                                                                   | 
+ 165 |                                          | True                                                                   | 
+ 166 |  /* open all the files */                | True                                                                   | 
+ 167 |  fds = xmalloc(sizeof(fds[0]) * (argc +  | True                                                                   | 
+ 168 |  if (!argv[0]) {                         | True                                                                   | 
+ 169 |   struct stat statbuf;                   | True                                                                   | 
+ 170 |                                          | True                                                                   | 
+ 171 |   if (fstat(STDIN_FILENO, &statbuf) == 0 | True                                                                   | 
+ 172 |    && S_ISFIFO(statbuf.st_mode)          | True                                                                   | 
+ 173 |   ) {                                    | True                                                                   | 
+ 174 |    opt &= ~1; /* clear FOLLOW */         | True                                                                   | 
+ 175 |   }                                      | True                                                                   | 
+ 176 |   argv[0] = (char *) bb_msg_standard_inp | True                                                                   | 
+ 177 |  }                                       | True                                                                   | 
+ 178 |  nfiles = i = 0;                         | True                                                                   | 
+ 179 |  do {                                    | True                                                                   | 
+ 180 |   int fd = open_or_warn_stdin(argv[i]);  | True                                                                   | 
+ 181 |   if (fd < 0 && !FOLLOW_RETRY) {         | True                                                                   | 
+ 182 |    G.exitcode = EXIT_FAILURE;            | True                                                                   | 
+ 183 |    continue;                             | True                                                                   | 
+ 184 |   }                                      | True                                                                   | 
+ 185 |   fds[nfiles] = fd;                      | True                                                                   | 
+ 186 |   argv[nfiles++] = argv[i];              | True                                                                   | 
+ 187 |  } while (++i < argc);                   | True                                                                   | 
+ 188 |                                          | True                                                                   | 
+ 189 |  if (!nfiles)                            | True                                                                   | 
+ 190 |   bb_simple_error_msg_and_die("no files" | True                                                                   | 
+ 191 |                                          | True                                                                   | 
+ 192 |  /* prepare the buffer */                | True                                                                   | 
+ 193 |  tailbufsize = BUFSIZ;                   | True                                                                   | 
+ 194 |  if (!G.from_top && COUNT_BYTES) {       | True                                                                   | 
+ 195 |   if (tailbufsize < count + BUFSIZ) {    | True                                                                   | 
+ 196 |    tailbufsize = count + BUFSIZ;         | True                                                                   | 
+ 197 |   }                                      | True                                                                   | 
+ 198 |  }                                       | True                                                                   | 
+ 199 |  /* tail -c1024m REGULAR_FILE doesn't re | True                                                                   | 
+ 200 |   * (In fact, it doesn't need ANY memory | True                                                                   | 
+ 201 |   */                                     | True                                                                   | 
+ 202 |  tailbuf = NULL;                         | True                                                                   | 
+ 203 |                                          | True                                                                   | 
+ 204 |  /* tail the files */                    | True                                                                   | 
+ 205 |                                          | True                                                                   | 
+ 206 |  fmt = header_fmt_str + 1; /* skip leadi | True                                                                   | 
+ 207 |  i = 0;                                  | True                                                                   | 
+ 208 |  do {                                    | True                                                                   | 
+ 209 |   char *buf;                             | True                                                                   | 
+ 210 |   int taillen;                           | True                                                                   | 
+ 211 |   int newlines_seen;                     | True                                                                   | 
+ 212 |   unsigned seen;                         | True                                                                   | 
+ 213 |   int nread;                             | True                                                                   | 
+ 214 |   int fd = fds[i];                       | True                                                                   | 
+ 215 |                                          | True                                                                   | 
+ 216 |   if (ENABLE_FEATURE_FANCY_TAIL && fd <  | True                                                                   | 
+ 217 |    continue; /* may happen with -F */    | True                                                                   | 
+ 218 |                                          | True                                                                   | 
+ 219 |   if (nfiles > header_threshold) {       | True                                                                   | 
+ 220 |    tail_xprint_header(fmt, argv[i]);     | True                                                                   | 
+ 221 |    fmt = header_fmt_str;                 | True                                                                   | 
+ 222 |   }                                      | True                                                                   | 
+ 223 |                                          | True                                                                   | 
+ 224 |   if (!G.from_top) {                     | True                                                                   | 
+ 225 |    off_t current = lseek(fd, 0, SEEK_END | True                                                                   | 
+ 226 |    if (current > 0) {                    | True                                                                   | 
+ 227 |     unsigned off;                        | True                                                                   | 
+ 228 |     if (COUNT_BYTES) {                   | True                                                                   | 
+ 229 |     /* Optimizing count-bytes case if th | True                                                                   | 
+ 230 |      * Beware of backing up too far.     | True                                                                   | 
+ 231 |      * Also we exclude files with size 0 | True                                                                   | 
+ 232 |      if (count == 0)                     | True                                                                   | 
+ 233 |       continue; /* showing zero bytes is | True                                                                   | 
+ 234 |      current -= count;                   | True                                                                   | 
+ 235 |      if (current < 0)                    | True                                                                   | 
+ 236 |       current = 0;                       | True                                                                   | 
+ 237 |      xlseek(fd, current, SEEK_SET);      | True                                                                   | 
+ 238 |      bb_copyfd_size(fd, STDOUT_FILENO, c | True                                                                   | 
+ 239 |      continue;                           | True                                                                   | 
+ 240 |     }                                    | True                                                                   | 
+ 241 | #if 1 /* This is technically incorrect f | True                                                                   | 
+ 242 |     /* Optimizing count-lines case if th | True                                                                   | 
+ 243 |      * We assume the lines are <64k.     | True                                                                   | 
+ 244 |      * (Users complain that tail takes t | True                                                                   | 
+ 245 |      * on multi-gigabyte files) */       | True                                                                   | 
+ 246 |     off = (count | 0xf); /* for small co | True                                                                   | 
+ 247 |     if (off > (INT_MAX / (64*1024)))     | True                                                                   | 
+ 248 |      off = (INT_MAX / (64*1024));        | True                                                                   | 
+ 249 |     current -= off * (64*1024);          | True                                                                   | 
+ 250 |     if (current < 0)                     | True                                                                   | 
+ 251 |      current = 0;                        | True                                                                   | 
+ 252 |     xlseek(fd, current, SEEK_SET);       | True                                                                   | 
+ 253 | #endif                                   | True                                                                   | 
+ 254 |    }                                     | True                                                                   | 
+ 255 |   }                                      | True                                                                   | 
+ 256 |                                          | True                                                                   | 
+ 257 |   if (!tailbuf)                          | True                                                                   | 
+ 258 |    tailbuf = xmalloc(tailbufsize);       | True                                                                   | 
+ 259 |                                          | True                                                                   | 
+ 260 |   buf = tailbuf;                         | True                                                                   | 
+ 261 |   taillen = 0;                           | True                                                                   | 
+ 262 |   /* "We saw 1st line/byte".             | True                                                                   | 
+ 263 |    * Used only by +N code ("start from N | True                                                                   | 
+ 264 |   seen = 1;                              | True                                                                   | 
+ 265 |   newlines_seen = 0;                     | True                                                                   | 
+ 266 |   while ((nread = tail_read(fd, buf, tai | True                                                                   | 
+ 267 |    if (G.from_top) {                     | True                                                                   | 
+ 268 |     int nwrite = nread;                  | True                                                                   | 
+ 269 |     if (seen < count) {                  | True                                                                   | 
+ 270 |      /* We need to skip a few more bytes | True                                                                   | 
+ 271 |      if (COUNT_BYTES) {                  | True                                                                   | 
+ 272 |       nwrite -= (count - seen);          | True                                                                   | 
+ 273 |       seen += nread;                     | True                                                                   | 
+ 274 |      } else {                            | True                                                                   | 
+ 275 |       char *s = buf;                     | True                                                                   | 
+ 276 |       do {                               | True                                                                   | 
+ 277 |        --nwrite;                         | True                                                                   | 
+ 278 |        if (*s++ == '\n' && ++seen == cou | True                                                                   | 
+ 279 |         break;                           | True                                                                   | 
+ 280 |        }                                 | True                                                                   | 
+ 281 |       } while (nwrite);                  | True                                                                   | 
+ 282 |      }                                   | True                                                                   | 
+ 283 |     }                                    | True                                                                   | 
+ 284 |     if (nwrite > 0)                      | True                                                                   | 
+ 285 |      xwrite(STDOUT_FILENO, buf + nread - | True                                                                   | 
+ 286 |    } else if (count) {                   | True                                                                   | 
+ 287 |     if (COUNT_BYTES) {                   | True                                                                   | 
+ 288 |      taillen += nread;                   | True                                                                   | 
+ 289 |      if (taillen > (int)count) {         | True                                                                   | 
+ 290 |       memmove(tailbuf, tailbuf + taillen | True                                                                   | 
+ 291 |       taillen = count;                   | True                                                                   | 
+ 292 |      }                                   | True                                                                   | 
+ 293 |     } else {                             | True                                                                   | 
+ 294 |      int k = nread;                      | True                                                                   | 
+ 295 |      int newlines_in_buf = 0;            | True                                                                   | 
+ 296 |                                          | True                                                                   | 
+ 297 |      do { /* count '\n' in last read */  | True                                                                   | 
+ 298 |       k--;                               | True                                                                   | 
+ 299 |       if (buf[k] == '\n') {              | True                                                                   | 
+ 300 |        newlines_in_buf++;                | True                                                                   | 
+ 301 |       }                                  | True                                                                   | 
+ 302 |      } while (k);                        | True                                                                   | 
+ 303 |                                          | True                                                                   | 
+ 304 |      if (newlines_seen + newlines_in_buf | True                                                                   | 
+ 305 |       newlines_seen += newlines_in_buf;  | True                                                                   | 
+ 306 |       taillen += nread;                  | True                                                                   | 
+ 307 |      } else {                            | True                                                                   | 
+ 308 |       int extra = (buf[nread-1] != '\n') | True                                                                   | 
+ 309 |       char *s;                           | True                                                                   | 
+ 310 |                                          | True                                                                   | 
+ 311 |       k = newlines_seen + newlines_in_bu | True                                                                   | 
+ 312 |       s = tailbuf;                       | True                                                                   | 
+ 313 |       while (k) {                        | True                                                                   | 
+ 314 |        if (*s == '\n') {                 | True                                                                   | 
+ 315 |         k--;                             | True                                                                   | 
+ 316 |        }                                 | True                                                                   | 
+ 317 |        s++;                              | True                                                                   | 
+ 318 |       }                                  | True                                                                   | 
+ 319 |       taillen += nread - (s - tailbuf);  | True                                                                   | 
+ 320 |       memmove(tailbuf, s, taillen);      | True                                                                   | 
+ 321 |       newlines_seen = count - extra;     | True                                                                   | 
+ 322 |      }                                   | True                                                                   | 
+ 323 |      if (tailbufsize < (size_t)taillen + | True                                                                   | 
+ 324 |       tailbufsize = taillen + BUFSIZ;    | True                                                                   | 
+ 325 |       tailbuf = xrealloc(tailbuf, tailbu | True                                                                   | 
+ 326 |      }                                   | True                                                                   | 
+ 327 |     }                                    | True                                                                   | 
+ 328 |     buf = tailbuf + taillen;             | True                                                                   | 
+ 329 |    }                                     | True                                                                   | 
+ 330 |   } /* while (tail_read() > 0) */        | True                                                                   | 
+ 331 |   if (!G.from_top) {                     | True                                                                   | 
+ 332 |    xwrite(STDOUT_FILENO, tailbuf, taille | True                                                                   | 
+ 333 |   }                                      | True                                                                   | 
+ 334 |  } while (++i < nfiles);                 | True                                                                   | 
+ 335 |  prev_fd = fds[i-1];                     | True                                                                   | 
+ 336 |                                          | True                                                                   | 
+ 337 |  tailbuf = xrealloc(tailbuf, BUFSIZ);    | True                                                                   | 
+ 338 |                                          | True                                                                   | 
+ 339 |  fmt = NULL;                             | True                                                                   | 
+ 340 |                                          | True                                                                   | 
+ 341 |  if (FOLLOW) while (1) {                 | True                                                                   | 
+ 342 |   sleep(sleep_period);                   | True                                                                   | 
+ 343 |                                          | True                                                                   | 
+ 344 |   i = 0;                                 | True                                                                   | 
+ 345 |   do {                                   | True                                                                   | 
+ 346 |    int nread;                            | True                                                                   | 
+ 347 |    const char *filename = argv[i];       | True                                                                   | 
+ 348 |    int fd = fds[i];                      | True                                                                   | 
+ 349 |    int new_fd = -1;                      | True                                                                   | 
+ 350 |    struct stat sbuf;                     | True                                                                   | 
+ 351 |                                          | True                                                                   | 
+ 352 |    if (FOLLOW_RETRY) {                   | True                                                                   | 
+ 353 |     struct stat fsbuf;                   | True                                                                   | 
+ 354 |                                          | True                                                                   | 
+ 355 |     if (fd < 0                           | True                                                                   | 
+ 356 |      || fstat(fd, &fsbuf) < 0            | True                                                                   | 
+ 357 |      || stat(filename, &sbuf) < 0        | True                                                                   | 
+ 358 |      || fsbuf.st_dev != sbuf.st_dev      | True                                                                   | 
+ 359 |      || fsbuf.st_ino != sbuf.st_ino      | True                                                                   | 
+ 360 |     ) {                                  | True                                                                   | 
+ 361 |      /* Looks like file has been created | True                                                                   | 
+ 362 |      new_fd = open(filename, O_RDONLY);  | True                                                                   | 
+ 363 |      if (new_fd >= 0) {                  | True                                                                   | 
+ 364 |       bb_error_msg("%s has %s; following | True                                                                   | 
+ 365 |        filename, (fd < 0) ? "appeared" : | True                                                                   | 
+ 366 |       );                                 | True                                                                   | 
+ 367 |       if (fd < 0) {                      | True                                                                   | 
+ 368 |        /* No previously open fd for this | True                                                                   | 
+ 369 |         * start using new_fd immediately | True                                                                   | 
+ 370 |        fds[i] = fd = new_fd;             | True                                                                   | 
+ 371 |        new_fd = -1;                      | True                                                                   | 
+ 372 |       }                                  | True                                                                   | 
+ 373 |      } else if (fd >= 0) {               | True                                                                   | 
+ 374 |       bb_perror_msg("%s has been renamed | True                                                                   | 
+ 375 |      }                                   | True                                                                   | 
+ 376 |     }                                    | True                                                                   | 
+ 377 |    }                                     | True                                                                   | 
+ 378 |    if (ENABLE_FEATURE_FANCY_TAIL && fd < | True                                                                   | 
+ 379 |     continue;                            | True                                                                   | 
+ 380 |    if (nfiles > header_threshold) {      | True                                                                   | 
+ 381 |     fmt = header_fmt_str;                | True                                                                   | 
+ 382 |    }                                     | True                                                                   | 
+ 383 |    for (;;) {                            | True                                                                   | 
+ 384 |     /* tail -f keeps following files eve | True                                                                   | 
+ 385 |     /* /proc files report zero st_size,  | True                                                                   | 
+ 386 |     if (fstat(fd, &sbuf) == 0            | True                                                                   | 
+ 387 |      /* && S_ISREG(sbuf.st_mode) TODO? * | True                                                                   | 
+ 388 |      && sbuf.st_size > 0                 | True                                                                   | 
+ 389 |     ) {                                  | True                                                                   | 
+ 390 |      off_t current = lseek(fd, 0, SEEK_C | True                                                                   | 
+ 391 |      if (sbuf.st_size < current) {       | True                                                                   | 
+ 392 |       //bb_perror_msg("%s: file truncate | True                                                                   | 
+ 393 |       xlseek(fd, 0, SEEK_SET);           | True                                                                   | 
+ 394 |      }                                   | True                                                                   | 
+ 395 |     }                                    | True                                                                   | 
+ 396 |                                          | True                                                                   | 
+ 397 |     nread = tail_read(fd, tailbuf, BUFSI | True                                                                   | 
+ 398 |     if (nread <= 0) {                    | True                                                                   | 
+ 399 |      if (new_fd < 0)                     | True                                                                   | 
+ 400 |       break;                             | True                                                                   | 
+ 401 |      /* Switch to "tail -F"ing the new f | True                                                                   | 
+ 402 |      xmove_fd(new_fd, fd);               | True                                                                   | 
+ 403 |      new_fd = -1;                        | True                                                                   | 
+ 404 |      continue;                           | True                                                                   | 
+ 405 |     }                                    | True                                                                   | 
+ 406 |     if (fmt && (fd != prev_fd)) {        | True                                                                   | 
+ 407 |      tail_xprint_header(fmt, filename);  | True                                                                   | 
+ 408 |      fmt = NULL;                         | True                                                                   | 
+ 409 |      prev_fd = fd;                       | True                                                                   | 
+ 410 |     }                                    | True                                                                   | 
+ 411 |     xwrite(STDOUT_FILENO, tailbuf, nread | True                                                                   | 
+ 412 |    }                                     | True                                                                   | 
+ 413 |   } while (++i < nfiles);                | True                                                                   | 
+ 414 |  } /* while (1) */                       | True                                                                   | 
+ 415 |                                          | True                                                                   | 
+ 416 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                                                                   | 
+ 417 |   free(fds);                             | True                                                                   | 
+ 418 |   free(tailbuf);                         | True                                                                   | 
+ 419 |  }                                       | True                                                                   | 
+ 420 |  return G.exitcode;                      | True                                                                   | 
+ 421 | }                                        | True                                                                   | 
+-----+------------------------------------------+------------------------------------------------------------------------+
+     |                                          | +112MB, 258ms                                                          | 

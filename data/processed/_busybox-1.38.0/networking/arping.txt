@@ -1,0 +1,443 @@
+FILE: data/raw/busybox-1.38.0/networking/arping.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Author: Alexey Kuznetsov <kuznet@ms2. | True                      | 
+   6 |  * Busybox port: Nick Fedchik <nick@fedc | True                      | 
+   7 |  */                                      | True                      | 
+   8 | //config:config ARPING                   | True                      | 
+   9 | //config: bool "arping (9.1 kb)"         | True                      | 
+  10 | //config: default y                      | True                      | 
+  11 | //config: help                           | True                      | 
+  12 | //config: Ping hosts by ARP packets.     | True                      | 
+  13 |                                          | True                      | 
+  14 | //applet:IF_ARPING(APPLET(arping, BB_DIR | True                      | 
+  15 |                                          | True                      | 
+  16 | //kbuild:lib-$(CONFIG_ARPING) += arping. | True                      | 
+  17 |                                          | True                      | 
+  18 | //usage:#define arping_trivial_usage     | True                      | 
+  19 | //usage:       "[-fqbDUA] [-c CNT] [-w T | True                      | 
+  20 | //usage:#define arping_full_usage "\n\n" | True                      | 
+  21 | //usage:       "Send ARP requests/replie | True                      | 
+  22 | //usage:     "\n -f  Quit on first ARP r | True                      | 
+  23 | //usage:     "\n -q  Quiet"              | True                      | 
+  24 | //usage:     "\n -b  Keep broadcasting,  | True                      | 
+  25 | //usage:     "\n -D  Exit with 1 if DST_ | True                      | 
+  26 | //usage:     "\n -U  Unsolicited ARP mod | True                      | 
+  27 | //usage:     "\n -A  ARP answer mode, up | True                      | 
+  28 | //usage:     "\n -c N  Stop after sendin | True                      | 
+  29 | //usage:     "\n -w TIMEOUT Seconds to w | True                      | 
+  30 | //NB: in iputils-s20160308, iface is man | True                      | 
+  31 | //usage:     "\n -I IFACE Interface to u | True                      | 
+  32 | //usage:     "\n -s SRC_IP Sender IP add | True                      | 
+  33 | //usage:     "\n DST_IP  Target IP addre | True                      | 
+  34 |                                          | True                      | 
+  35 | #include <arpa/inet.h>                   | True                      | 
+  36 | #include <net/if.h>                      | True                      | 
+  37 | #include <netinet/ether.h>               | True                      | 
+  38 | #include <netpacket/packet.h>            | True                      | 
+  39 |                                          | True                      | 
+  40 | #include "libbb.h"                       | True                      | 
+  41 | #include "common_bufsiz.h"               | True                      | 
+  42 |                                          | True                      | 
+  43 | /* We don't expect to see 1000+ seconds  | True                      | 
+  44 | #define MONOTONIC_US() ((unsigned)monoto | True                      | 
+  45 |                                          | True                      | 
+  46 | enum {                                   | True                      | 
+  47 |  UNSOLICITED   = 1 << 0,                 | True                      | 
+  48 |  DAD           = 1 << 1,                 | True                      | 
+  49 |  ADVERT        = 1 << 2,                 | True                      | 
+  50 |  QUIET         = 1 << 3,                 | True                      | 
+  51 |  QUIT_ON_REPLY = 1 << 4,                 | True                      | 
+  52 |  BCAST_ONLY    = 1 << 5,                 | True                      | 
+  53 |  UNICASTING    = 1 << 6,                 | True                      | 
+  54 |  TIMEOUT       = 1 << 7,                 | True                      | 
+  55 | };                                       | True                      | 
+  56 | #define GETOPT32(str_timeout, device, so | True                      | 
+  57 |  getopt32(argv, "^" \                    | True                      | 
+  58 |   "UDAqfbc:+w:I:s:" \                    | True                      | 
+  59 |   /* DAD also sets quit_on_reply, */ \   | True                      | 
+  60 |   /* advert also sets unsolicited: */ \  | True                      | 
+  61 |   "\0" "=1:Df:AU", \                     | True                      | 
+  62 |   &count, &str_timeout, &device, &source | True                      | 
+  63 |  );                                      | True                      | 
+  64 |                                          | True                      | 
+  65 | struct globals {                         | True                      | 
+  66 |  struct in_addr src;                     | True                      | 
+  67 |  struct in_addr dst;                     | True                      | 
+  68 |  struct sockaddr_ll me;                  | True                      | 
+  69 |  struct sockaddr_ll he;                  | True                      | 
+  70 |                                          | True                      | 
+  71 |  int count; // = -1;                     | True                      | 
+  72 |  unsigned last;                          | True                      | 
+  73 |  unsigned timeout_us;                    | True                      | 
+  74 |  unsigned start;                         | True                      | 
+  75 |                                          | True                      | 
+  76 |  unsigned sent;                          | True                      | 
+  77 |  unsigned brd_sent;                      | True                      | 
+  78 |  unsigned received;                      | True                      | 
+  79 |  unsigned brd_recv;                      | True                      | 
+  80 |  unsigned req_recv;                      | True                      | 
+  81 |                                          | True                      | 
+  82 |  /* should be in main(), but are here to | True                      | 
+  83 |  struct ifreq ifr;                       | True                      | 
+  84 |  struct sockaddr_in probe_saddr;         | True                      | 
+  85 |  sigset_t sset;                          | True                      | 
+  86 |  unsigned char packet[4096];             | True                      | 
+  87 | } FIX_ALIASING;                          | True                      | 
+  88 | #define src        (G.src       )        | True                      | 
+  89 | #define dst        (G.dst       )        | True                      | 
+  90 | #define me         (G.me        )        | True                      | 
+  91 | #define he         (G.he        )        | True                      | 
+  92 | #define count      (G.count     )        | True                      | 
+  93 | #define last       (G.last      )        | True                      | 
+  94 | #define timeout_us (G.timeout_us)        | True                      | 
+  95 | #define start      (G.start     )        | True                      | 
+  96 | #define sent       (G.sent      )        | True                      | 
+  97 | #define brd_sent   (G.brd_sent  )        | True                      | 
+  98 | #define received   (G.received  )        | True                      | 
+  99 | #define brd_recv   (G.brd_recv  )        | True                      | 
+ 100 | #define req_recv   (G.req_recv  )        | True                      | 
+ 101 | //#define G (*(struct globals*)bb_common | True                      | 
+ 102 | #define G (*ptr_to_globals)              | True                      | 
+ 103 | #define INIT_G() do { \                  | True                      | 
+ 104 |  /*setup_common_bufsiz();*/ \            | True                      | 
+ 105 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+ 106 |  count = -1; \                           | True                      | 
+ 107 | } while (0)                              | True                      | 
+ 108 |                                          | True                      | 
+ 109 | #define sock_fd 3                        | True                      | 
+ 110 |                                          | True                      | 
+ 111 | static int send_pack(struct in_addr *src | True                      | 
+ 112 |    struct in_addr *dst_addr,             | True                      | 
+ 113 |    struct sockaddr_ll *ME,               | True                      | 
+ 114 |    struct sockaddr_ll *HE)               | True                      | 
+ 115 | {                                        | True                      | 
+ 116 |  int err;                                | True                      | 
+ 117 |  unsigned char buf[256];                 | True                      | 
+ 118 |  struct arphdr *ah = (struct arphdr *) b | True                      | 
+ 119 |  unsigned char *p;                       | True                      | 
+ 120 |                                          | True                      | 
+ 121 |  ah->ar_hrd = htons(ARPHRD_ETHER);       | True                      | 
+ 122 |  ah->ar_pro = htons(ETH_P_IP);           | True                      | 
+ 123 |  ah->ar_hln = ME->sll_halen;             | True                      | 
+ 124 |  ah->ar_pln = 4;                         | True                      | 
+ 125 |  ah->ar_op = option_mask32 & ADVERT ? ht | True                      | 
+ 126 |                                          | True                      | 
+ 127 |  p = (unsigned char *) (ah + 1);         | True                      | 
+ 128 |  p = mempcpy(p, &ME->sll_addr, ah->ar_hl | True                      | 
+ 129 |  p = mempcpy(p, src_addr, 4);            | True                      | 
+ 130 |                                          | True                      | 
+ 131 |  if (option_mask32 & ADVERT)             | True                      | 
+ 132 |   p = mempcpy(p, &ME->sll_addr, ah->ar_h | True                      | 
+ 133 |  else                                    | True                      | 
+ 134 |   p = mempcpy(p, &HE->sll_addr, ah->ar_h | True                      | 
+ 135 |                                          | True                      | 
+ 136 |  p = mempcpy(p, dst_addr, 4);            | True                      | 
+ 137 |                                          | True                      | 
+ 138 |  err = sendto(sock_fd, buf, p - buf, 0,  | True                      | 
+ 139 |  if (err == p - buf) {                   | True                      | 
+ 140 |   last = MONOTONIC_US();                 | True                      | 
+ 141 |   sent++;                                | True                      | 
+ 142 |   if (!(option_mask32 & UNICASTING))     | True                      | 
+ 143 |    brd_sent++;                           | True                      | 
+ 144 |  }                                       | True                      | 
+ 145 |  return err;                             | True                      | 
+ 146 | }                                        | True                      | 
+ 147 |                                          | True                      | 
+ 148 | static void finish(void) NORETURN;       | True                      | 
+ 149 | static void finish(void)                 | True                      | 
+ 150 | {                                        | True                      | 
+ 151 |  if (!(option_mask32 & QUIET)) {         | True                      | 
+ 152 |   printf("Sent %u probe(s) (%u broadcast | True                      | 
+ 153 |    "Received %u response(s)"             | True                      | 
+ 154 |    " (%u request(s), %u broadcast(s))\n" | True                      | 
+ 155 |    sent, brd_sent,                       | True                      | 
+ 156 |    received,                             | True                      | 
+ 157 |    req_recv, brd_recv);                  | True                      | 
+ 158 |  }                                       | True                      | 
+ 159 |  if (option_mask32 & DAD)                | True                      | 
+ 160 |   exit(!!received);                      | True                      | 
+ 161 |  if (option_mask32 & UNSOLICITED)        | True                      | 
+ 162 |   exit_SUCCESS();                        | True                      | 
+ 163 |  exit(!received);                        | True                      | 
+ 164 | }                                        | True                      | 
+ 165 |                                          | True                      | 
+ 166 | static void catcher(void)                | True                      | 
+ 167 | {                                        | True                      | 
+ 168 |  unsigned now;                           | True                      | 
+ 169 |                                          | True                      | 
+ 170 |  now = MONOTONIC_US();                   | True                      | 
+ 171 |  if (start == 0)                         | True                      | 
+ 172 |   start = now;                           | True                      | 
+ 173 |                                          | True                      | 
+ 174 |  if (count == 0 || (timeout_us && (now - | True                      | 
+ 175 |   finish();                              | True                      | 
+ 176 |                                          | True                      | 
+ 177 |  /* count < 0 means "infinite count" */  | True                      | 
+ 178 |  if (count > 0)                          | True                      | 
+ 179 |   count--;                               | True                      | 
+ 180 |                                          | True                      | 
+ 181 |  if (last == 0 || (now - last) > 500000) | True                      | 
+ 182 |   send_pack(&src, &dst, &me, &he);       | True                      | 
+ 183 |   if (count == 0 && (option_mask32 & UNS | True                      | 
+ 184 |    finish();                             | True                      | 
+ 185 |  }                                       | True                      | 
+ 186 |  alarm(1);                               | True                      | 
+ 187 | }                                        | True                      | 
+ 188 |                                          | True                      | 
+ 189 | static void recv_pack(unsigned char *buf | True                      | 
+ 190 | {                                        | True                      | 
+ 191 |  struct arphdr *ah = (struct arphdr *) b | True                      | 
+ 192 |  unsigned char *p = (unsigned char *) (a | True                      | 
+ 193 |  struct in_addr src_ip, dst_ip;          | True                      | 
+ 194 |                                          | True                      | 
+ 195 |  /* moves below assume in_addr is 4 byte | True                      | 
+ 196 |  BUILD_BUG_ON(sizeof(struct in_addr) !=  | True                      | 
+ 197 |  BUILD_BUG_ON(sizeof(src_ip.s_addr) != 4 | True                      | 
+ 198 |                                          | True                      | 
+ 199 |  /* Filter out wild packets */           | True                      | 
+ 200 |  if (FROM->sll_pkttype != PACKET_HOST    | True                      | 
+ 201 |   && FROM->sll_pkttype != PACKET_BROADCA | True                      | 
+ 202 |   && FROM->sll_pkttype != PACKET_MULTICA | True                      | 
+ 203 |   return;                                | True                      | 
+ 204 |                                          | True                      | 
+ 205 |  /* Only these types are recognized */   | True                      | 
+ 206 |  if (ah->ar_op != htons(ARPOP_REQUEST) & | True                      | 
+ 207 |   return;                                | True                      | 
+ 208 |                                          | True                      | 
+ 209 |  /* ARPHRD check and this darned FDDI ha | True                      | 
+ 210 |  if (ah->ar_hrd != htons(FROM->sll_hatyp | True                      | 
+ 211 |   && (FROM->sll_hatype != ARPHRD_FDDI || | True                      | 
+ 212 |   return;                                | True                      | 
+ 213 |                                          | True                      | 
+ 214 |  /* Protocol must be IP. */              | True                      | 
+ 215 |  if (ah->ar_pro != htons(ETH_P_IP)       | True                      | 
+ 216 |   || (ah->ar_pln != 4)                   | True                      | 
+ 217 |   || (ah->ar_hln != me.sll_halen)        | True                      | 
+ 218 |   || (len < (int)(sizeof(*ah) + 2 * (4 + | True                      | 
+ 219 |  ) {                                     | True                      | 
+ 220 |   return;                                | True                      | 
+ 221 |  }                                       | True                      | 
+ 222 |                                          | True                      | 
+ 223 |  move_from_unaligned32(src_ip.s_addr, p  | True                      | 
+ 224 |  move_from_unaligned32(dst_ip.s_addr, p  | True                      | 
+ 225 |                                          | True                      | 
+ 226 |  if (dst.s_addr != src_ip.s_addr)        | True                      | 
+ 227 |   return;                                | True                      | 
+ 228 |  if (!(option_mask32 & DAD)) {           | True                      | 
+ 229 |   if ((src.s_addr != dst_ip.s_addr)      | True                      | 
+ 230 |    || (memcmp(p + ah->ar_hln + 4, &me.sl | True                      | 
+ 231 |    return;                               | True                      | 
+ 232 |  } else {                                | True                      | 
+ 233 |   /* DAD packet was:                     | True                      | 
+ 234 |      src_ip = 0 (or some src)            | True                      | 
+ 235 |      src_hw = ME                         | True                      | 
+ 236 |      dst_ip = tested address             | True                      | 
+ 237 |      dst_hw = <unspec>                   | True                      | 
+ 238 |                                          | True                      | 
+ 239 |      We fail, if receive request/reply w | True                      | 
+ 240 |      src_ip = tested_address             | True                      | 
+ 241 |      src_hw != ME                        | True                      | 
+ 242 |      if src_ip in request was not zero,  | True                      | 
+ 243 |      also that it matches to dst_ip, oth | True                      | 
+ 244 |      dst_ip/dst_hw do not matter.        | True                      | 
+ 245 |    */                                    | True                      | 
+ 246 |   if ((memcmp(p, &me.sll_addr, me.sll_ha | True                      | 
+ 247 |    || (src.s_addr && src.s_addr != dst_i | True                      | 
+ 248 |    return;                               | True                      | 
+ 249 |  }                                       | True                      | 
+ 250 |  if (!(option_mask32 & QUIET)) {         | True                      | 
+ 251 |   int s_printed = 0;                     | True                      | 
+ 252 |                                          | True                      | 
+ 253 | //TODO: arping from iputils-s20160308 pr | True                      | 
+ 254 |   printf("%scast re%s from %s [%02x:%02x | True                      | 
+ 255 |    FROM->sll_pkttype == PACKET_HOST ? "U | True                      | 
+ 256 |    ah->ar_op == htons(ARPOP_REPLY) ? "pl | True                      | 
+ 257 |    inet_ntoa(src_ip),                    | True                      | 
+ 258 |    p[0], p[1], p[2], p[3], p[4], p[5]    | True                      | 
+ 259 |   );                                     | True                      | 
+ 260 |   if (dst_ip.s_addr != src.s_addr) {     | True                      | 
+ 261 |    printf("for %s", inet_ntoa(dst_ip));  | True                      | 
+ 262 |    s_printed = 1;                        | True                      | 
+ 263 |   }                                      | True                      | 
+ 264 |   if (memcmp(p + ah->ar_hln + 4, me.sll_ | True                      | 
+ 265 |    unsigned char *pp = p + ah->ar_hln +  | True                      | 
+ 266 |    if (!s_printed)                       | True                      | 
+ 267 |     printf(" for");                      | True                      | 
+ 268 |    printf(" [%02x:%02x:%02x:%02x:%02x:%0 | True                      | 
+ 269 |     pp[0], pp[1], pp[2], pp[3], pp[4], p | True                      | 
+ 270 |    );                                    | True                      | 
+ 271 |   }                                      | True                      | 
+ 272 |                                          | True                      | 
+ 273 |   if (last) {                            | True                      | 
+ 274 |    unsigned diff = MONOTONIC_US() - last | True                      | 
+ 275 |    printf(" %u.%03ums\n", diff / 1000, d | True                      | 
+ 276 |   } else {                               | True                      | 
+ 277 |    puts(" UNSOLICITED?");                | True                      | 
+ 278 |   }                                      | True                      | 
+ 279 |   fflush_all();                          | True                      | 
+ 280 |  }                                       | True                      | 
+ 281 |  received++;                             | True                      | 
+ 282 |  if (FROM->sll_pkttype != PACKET_HOST)   | True                      | 
+ 283 |   brd_recv++;                            | True                      | 
+ 284 |  if (ah->ar_op == htons(ARPOP_REQUEST))  | True                      | 
+ 285 |   req_recv++;                            | True                      | 
+ 286 |  if (option_mask32 & QUIT_ON_REPLY)      | True                      | 
+ 287 |   finish();                              | True                      | 
+ 288 |  if (!(option_mask32 & BCAST_ONLY)) {    | True                      | 
+ 289 |   memcpy(he.sll_addr, p, me.sll_halen);  | True                      | 
+ 290 |   option_mask32 |= UNICASTING;           | True                      | 
+ 291 |  }                                       | True                      | 
+ 292 | }                                        | True                      | 
+ 293 |                                          | True                      | 
+ 294 | int arping_main(int argc, char **argv) M | True                      | 
+ 295 | int arping_main(int argc UNUSED_PARAM, c | True                      | 
+ 296 | {                                        | True                      | 
+ 297 |  const char *device = "eth0";            | True                      | 
+ 298 |  char *source = NULL;                    | True                      | 
+ 299 |  char *target;                           | True                      | 
+ 300 |  char *err_str;                          | True                      | 
+ 301 |                                          | True                      | 
+ 302 |  INIT_G();                               | True                      | 
+ 303 |                                          | True                      | 
+ 304 |  xmove_fd(xsocket(AF_PACKET, SOCK_DGRAM, | True                      | 
+ 305 |                                          | True                      | 
+ 306 |  // If you ever change BB_SUID_DROP to B | True                      | 
+ 307 |  // drop suid root privileges here:      | True                      | 
+ 308 |  //xsetuid(getuid());                    | True                      | 
+ 309 |                                          | True                      | 
+ 310 |  {                                       | True                      | 
+ 311 |   unsigned opt;                          | True                      | 
+ 312 |   char *str_timeout;                     | True                      | 
+ 313 |                                          | True                      | 
+ 314 |   opt = GETOPT32(str_timeout, device, so | True                      | 
+ 315 |   if (opt & TIMEOUT)                     | True                      | 
+ 316 |    timeout_us = xatou_range(str_timeout, | True                      | 
+ 317 |  }                                       | True                      | 
+ 318 |                                          | True                      | 
+ 319 |  target = argv[optind];                  | True                      | 
+ 320 |  err_str = xasprintf("interface %s %%s", | True                      | 
+ 321 |  xfunc_error_retval = 2;                 | True                      | 
+ 322 |                                          | True                      | 
+ 323 |  /*memset(&G.ifr, 0, sizeof(G.ifr)); - z | True                      | 
+ 324 |  strncpy_IFNAMSIZ(G.ifr.ifr_name, device | True                      | 
+ 325 |  ioctl_or_perror_and_die(sock_fd, SIOCGI | True                      | 
+ 326 |  me.sll_ifindex = G.ifr.ifr_ifindex;     | True                      | 
+ 327 |                                          | True                      | 
+ 328 |  xioctl(sock_fd, SIOCGIFFLAGS, (char *)  | True                      | 
+ 329 |                                          | True                      | 
+ 330 |  if (!(G.ifr.ifr_flags & IFF_UP)) {      | True                      | 
+ 331 |   bb_error_msg_and_die(err_str, "is down | True                      | 
+ 332 |  }                                       | True                      | 
+ 333 |  if (G.ifr.ifr_flags & (IFF_NOARP | IFF_ | True                      | 
+ 334 |   bb_error_msg(err_str, "is not ARPable" | True                      | 
+ 335 |   BUILD_BUG_ON(DAD != 2);                | True                      | 
+ 336 |   /* exit 0 if DAD, else exit 2 */       | True                      | 
+ 337 |   return (~option_mask32 & DAD);         | True                      | 
+ 338 |  }                                       | True                      | 
+ 339 |                                          | True                      | 
+ 340 |  /* if (!inet_aton(target, &dst)) - not  | True                      | 
+ 341 |   len_and_sockaddr *lsa;                 | True                      | 
+ 342 |   lsa = xhost_and_af2sockaddr(target, 0, | True                      | 
+ 343 |   dst = lsa->u.sin.sin_addr;             | True                      | 
+ 344 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                      | 
+ 345 |    free(lsa);                            | True                      | 
+ 346 |  }                                       | True                      | 
+ 347 |                                          | True                      | 
+ 348 |  if (source && !inet_aton(source, &src)) | True                      | 
+ 349 |   bb_error_msg_and_die("invalid source a | True                      | 
+ 350 |  }                                       | True                      | 
+ 351 |                                          | True                      | 
+ 352 |  if ((option_mask32 & (DAD|UNSOLICITED)) | True                      | 
+ 353 |   src = dst;                             | True                      | 
+ 354 |                                          | True                      | 
+ 355 |  if (!(option_mask32 & DAD) || src.s_add | True                      | 
+ 356 |   /*struct sockaddr_in probe_saddr;*/    | True                      | 
+ 357 |   int probe_fd = xsocket(AF_INET, SOCK_D | True                      | 
+ 358 |                                          | True                      | 
+ 359 |   setsockopt_bindtodevice(probe_fd, devi | True                      | 
+ 360 |                                          | True                      | 
+ 361 |   /*memset(&G.probe_saddr, 0, sizeof(G.p | True                      | 
+ 362 |   G.probe_saddr.sin_family = AF_INET;    | True                      | 
+ 363 |   if (src.s_addr) {                      | True                      | 
+ 364 |    /* Check that this is indeed our IP * | True                      | 
+ 365 |    G.probe_saddr.sin_addr = src;         | True                      | 
+ 366 |    xbind(probe_fd, (struct sockaddr *) & | True                      | 
+ 367 |   } else { /* !(option_mask32 & DAD) cas | True                      | 
+ 368 |    /* Find IP address on this iface */   | True                      | 
+ 369 |    G.probe_saddr.sin_port = htons(1025); | True                      | 
+ 370 |    G.probe_saddr.sin_addr = dst;         | True                      | 
+ 371 |                                          | True                      | 
+ 372 |    if (setsockopt_SOL_SOCKET_1(probe_fd, | True                      | 
+ 373 |     bb_perror_msg("setsockopt(%s)", "SO_ | True                      | 
+ 374 |    xconnect(probe_fd, (struct sockaddr * | True                      | 
+ 375 |    bb_getsockname(probe_fd, (struct sock | True                      | 
+ 376 |    if (G.probe_saddr.sin_family != AF_IN | True                      | 
+ 377 |     bb_simple_error_msg_and_die("no IP a | True                      | 
+ 378 |    src = G.probe_saddr.sin_addr;         | True                      | 
+ 379 |   }                                      | True                      | 
+ 380 |   close(probe_fd);                       | True                      | 
+ 381 |  }                                       | True                      | 
+ 382 |                                          | True                      | 
+ 383 |  me.sll_family = AF_PACKET;              | True                      | 
+ 384 |  //me.sll_ifindex = ifindex; - done befo | True                      | 
+ 385 |  me.sll_protocol = htons(ETH_P_ARP);     | True                      | 
+ 386 |  xbind(sock_fd, (struct sockaddr *) &me, | True                      | 
+ 387 |                                          | True                      | 
+ 388 |  bb_getsockname(sock_fd, (struct sockadd | True                      | 
+ 389 |  //never happens:                        | True                      | 
+ 390 |  //if (getsockname(sock_fd, (struct sock | True                      | 
+ 391 |  // bb_perror_msg_and_die("getsockname") | True                      | 
+ 392 |  if (me.sll_halen == 0) {                | True                      | 
+ 393 |   bb_error_msg(err_str, "is not ARPable  | True                      | 
+ 394 |   BUILD_BUG_ON(DAD != 2);                | True                      | 
+ 395 |   /* exit 0 if DAD, else exit 2 */       | True                      | 
+ 396 |   return (~option_mask32 & DAD);         | True                      | 
+ 397 |  }                                       | True                      | 
+ 398 |  he = me;                                | True                      | 
+ 399 |  memset(he.sll_addr, -1, he.sll_halen);  | True                      | 
+ 400 |                                          | True                      | 
+ 401 |  if (!(option_mask32 & QUIET)) {         | True                      | 
+ 402 |   /* inet_ntoa uses static storage, can' | True                      | 
+ 403 |   printf("ARPING %s", inet_ntoa(dst));   | True                      | 
+ 404 |   printf(" from %s %s\n", inet_ntoa(src) | True                      | 
+ 405 |  }                                       | True                      | 
+ 406 |                                          | True                      | 
+ 407 |  /*sigemptyset(&G.sset); - zeroed by INI | True                      | 
+ 408 |  sigaddset(&G.sset, SIGALRM);            | True                      | 
+ 409 |  sigaddset(&G.sset, SIGINT);             | True                      | 
+ 410 |  signal_SA_RESTART_empty_mask(SIGINT,  ( | True                      | 
+ 411 |  signal_SA_RESTART_empty_mask(SIGALRM, ( | True                      | 
+ 412 |                                          | True                      | 
+ 413 |  /* Send the first packet, arm ALRM */   | True                      | 
+ 414 |  catcher();                              | True                      | 
+ 415 |                                          | True                      | 
+ 416 |  while (1) {                             | True                      | 
+ 417 |   struct sockaddr_ll from;               | True                      | 
+ 418 |   socklen_t alen = sizeof(from);         | True                      | 
+ 419 |   int cc;                                | True                      | 
+ 420 |                                          | True                      | 
+ 421 |   /* Unblock SIGALRM so that the previou | True                      | 
+ 422 |    * can prevent recvfrom from blocking  | True                      | 
+ 423 |    * inherited procmask is blocking SIGA | True                      | 
+ 424 |    */                                    | True                      | 
+ 425 |   sigprocmask(SIG_UNBLOCK, &G.sset, NULL | True                      | 
+ 426 |                                          | True                      | 
+ 427 |   cc = recvfrom(sock_fd, G.packet, sizeo | True                      | 
+ 428 |                                          | True                      | 
+ 429 |   /* Don't allow SIGALRMs while we proce | True                      | 
+ 430 |   sigprocmask(SIG_BLOCK, &G.sset, NULL); | True                      | 
+ 431 |   if (cc < 0) {                          | True                      | 
+ 432 |    bb_simple_perror_msg("recvfrom");     | True                      | 
+ 433 |    continue;                             | True                      | 
+ 434 |   }                                      | True                      | 
+ 435 |   recv_pack(G.packet, cc, &from);        | True                      | 
+ 436 |  }                                       | True                      | 
+ 437 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +110MB, 284ms             | 

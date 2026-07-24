@@ -1,0 +1,365 @@
+FILE: data/raw/busybox-1.38.0/networking/libiproute/ipneigh.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Authors: Alexey Kuznetsov, <kuznet@ms | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Ported to Busybox by:  Curt Brune <cu | True                      | 
+   8 |  */                                      | True                      | 
+   9 | #include "ip_common.h"  /* #include "lib | True                      | 
+  10 | #include "common_bufsiz.h"               | True                      | 
+  11 | #include "rt_names.h"                    | True                      | 
+  12 | #include "utils.h"                       | True                      | 
+  13 | #include <linux/neighbour.h>             | True                      | 
+  14 | #include <net/if_arp.h>                  | True                      | 
+  15 |                                          | True                      | 
+  16 | //static int xshow_stats = 3;            | True                      | 
+  17 | enum { xshow_stats = 3 };                | True                      | 
+  18 |                                          | True                      | 
+  19 | static inline uint32_t rta_getattr_u32(c | True                      | 
+  20 | {                                        | True                      | 
+  21 |  return *(uint32_t *)RTA_DATA(rta);      | True                      | 
+  22 | }                                        | True                      | 
+  23 |                                          | True                      | 
+  24 | #ifndef RTAX_RTTVAR                      | True                      | 
+  25 | #define RTAX_RTTVAR RTAX_HOPS            | !(RTAX_RTTVAR)            | 
+  26 | #endif                                   | True                      | 
+  27 |                                          | True                      | 
+  28 |                                          | True                      | 
+  29 | struct filter_t {                        | True                      | 
+  30 |  int family;                             | True                      | 
+  31 |  int index;                              | True                      | 
+  32 |  int state;                              | True                      | 
+  33 |  int unused_only;                        | True                      | 
+  34 |  inet_prefix pfx;                        | True                      | 
+  35 |  /* Misnomer. Does not mean "flushed N s | True                      | 
+  36 |  /* More like "no_of_flush_commands_cons | True                      | 
+  37 |  int flushed;                            | True                      | 
+  38 |  /* Flush cmd buf. If !NULL, print_neigh | True                      | 
+  39 |  char *flushb;                           | True                      | 
+  40 |  int flushp;                             | True                      | 
+  41 |  int flushe;                             | True                      | 
+  42 |  struct rtnl_handle *rth;                | True                      | 
+  43 | } FIX_ALIASING;                          | True                      | 
+  44 | typedef struct filter_t filter_t;        | True                      | 
+  45 |                                          | True                      | 
+  46 | #define G_filter (*(filter_t*)bb_common_ | True                      | 
+  47 | #define INIT_G() do { setup_common_bufsi | True                      | 
+  48 |                                          | True                      | 
+  49 | static int flush_update(void)            | True                      | 
+  50 | {                                        | True                      | 
+  51 |  if (rtnl_send_check(G_filter.rth, G_fil | True                      | 
+  52 |   bb_simple_perror_msg("can't send flush | True                      | 
+  53 |   return -1;                             | True                      | 
+  54 |  }                                       | True                      | 
+  55 |  G_filter.flushp = 0;                    | True                      | 
+  56 |  return 0;                               | True                      | 
+  57 | }                                        | True                      | 
+  58 |                                          | True                      | 
+  59 | static unsigned nud_state_a2n(char *arg) | True                      | 
+  60 | {                                        | True                      | 
+  61 |  static const char keywords[] ALIGN1 =   | True                      | 
+  62 |   /* "ip neigh show/flush" parameters: * | True                      | 
+  63 |   "permanent\0" "reachable\0"   "noarp\0 | True                      | 
+  64 |   "stale\0"     "incomplete\0"  "delay\0 | True                      | 
+  65 |   "failed\0"                             | True                      | 
+  66 |   ;                                      | True                      | 
+  67 |  static uint8_t nuds[] ALIGN1 = {        | True                      | 
+  68 |   NUD_PERMANENT,NUD_REACHABLE, NUD_NOARP | True                      | 
+  69 |   NUD_STALE,    NUD_INCOMPLETE,NUD_DELAY | True                      | 
+  70 |   NUD_FAILED                             | True                      | 
+  71 |  };                                      | True                      | 
+  72 |  int id;                                 | True                      | 
+  73 |                                          | True                      | 
+  74 |  BUILD_BUG_ON(                           | True                      | 
+  75 |   (NUD_PERMANENT|NUD_REACHABLE| NUD_NOAR | True                      | 
+  76 |   NUD_STALE|    NUD_INCOMPLETE|NUD_DELAY | True                      | 
+  77 |   NUD_FAILED) > 0xff                     | True                      | 
+  78 |  );                                      | True                      | 
+  79 |                                          | True                      | 
+  80 |  id = index_in_substrings(keywords, arg) | True                      | 
+  81 |  if (id < 0)                             | True                      | 
+  82 |   bb_error_msg_and_die(bb_msg_invalid_ar | True                      | 
+  83 |  return nuds[id];                        | True                      | 
+  84 | }                                        | True                      | 
+  85 |                                          | True                      | 
+  86 | #ifndef NDA_RTA                          | True                      | 
+  87 | #define NDA_RTA(r) \                     | !(NDA_RTA)                | 
+  88 |  ((struct rtattr*)(((char*)(r)) + NLMSG_ | !(NDA_RTA)                | 
+  89 | #endif                                   | True                      | 
+  90 |                                          | True                      | 
+  91 |                                          | True                      | 
+  92 | static int FAST_FUNC print_neigh(const s | True                      | 
+  93 |      struct nlmsghdr *n, void *arg UNUSE | True                      | 
+  94 | {                                        | True                      | 
+  95 |  struct ndmsg *r = NLMSG_DATA(n);        | True                      | 
+  96 |  int len = n->nlmsg_len;                 | True                      | 
+  97 |  struct rtattr *tb[NDA_MAX+1];           | True                      | 
+  98 |                                          | True                      | 
+  99 |  if (n->nlmsg_type != RTM_NEWNEIGH && n- | True                      | 
+ 100 |   bb_error_msg_and_die("not RTM_NEWNEIGH | True                      | 
+ 101 |          n->nlmsg_len, n->nlmsg_type,    | True                      | 
+ 102 |          n->nlmsg_flags);                | True                      | 
+ 103 |  }                                       | True                      | 
+ 104 |  len -= NLMSG_LENGTH(sizeof(*r));        | True                      | 
+ 105 |  if (len < 0) {                          | True                      | 
+ 106 |   bb_error_msg_and_die("BUG: wrong nlmsg | True                      | 
+ 107 |  }                                       | True                      | 
+ 108 |                                          | True                      | 
+ 109 |  if (G_filter.flushb && n->nlmsg_type != | True                      | 
+ 110 |   return 0;                              | True                      | 
+ 111 |                                          | True                      | 
+ 112 |  if (G_filter.family && G_filter.family  | True                      | 
+ 113 |   return 0;                              | True                      | 
+ 114 |  if (G_filter.index && G_filter.index != | True                      | 
+ 115 |   return 0;                              | True                      | 
+ 116 |  if (!(G_filter.state&r->ndm_state)      | True                      | 
+ 117 |   && !(r->ndm_flags & NTF_PROXY)         | True                      | 
+ 118 |   && (r->ndm_state || !(G_filter.state & | True                      | 
+ 119 |   && (r->ndm_family != AF_DECnet)        | True                      | 
+ 120 |  ) {                                     | True                      | 
+ 121 |   return 0;                              | True                      | 
+ 122 |  }                                       | True                      | 
+ 123 |                                          | True                      | 
+ 124 |  parse_rtattr(tb, NDA_MAX, NDA_RTA(r), n | True                      | 
+ 125 |                                          | True                      | 
+ 126 |  if (tb[NDA_DST]) {                      | True                      | 
+ 127 |   if (G_filter.pfx.family) {             | True                      | 
+ 128 |    inet_prefix dst;                      | True                      | 
+ 129 |    memset(&dst, 0, sizeof(dst));         | True                      | 
+ 130 |    dst.family = r->ndm_family;           | True                      | 
+ 131 |    memcpy(&dst.data, RTA_DATA(tb[NDA_DST | True                      | 
+ 132 |    if (inet_addr_match(&dst, &G_filter.p | True                      | 
+ 133 |     return 0;                            | True                      | 
+ 134 |   }                                      | True                      | 
+ 135 |  }                                       | True                      | 
+ 136 |  if (G_filter.unused_only && tb[NDA_CACH | True                      | 
+ 137 |   struct nda_cacheinfo *ci = RTA_DATA(tb | True                      | 
+ 138 |   if (ci->ndm_refcnt)                    | True                      | 
+ 139 |    return 0;                             | True                      | 
+ 140 |  }                                       | True                      | 
+ 141 |                                          | True                      | 
+ 142 |  if (G_filter.flushb) {                  | True                      | 
+ 143 |   struct nlmsghdr *fn;                   | True                      | 
+ 144 |   if (NLMSG_ALIGN(G_filter.flushp) + n-> | True                      | 
+ 145 |    if (flush_update())                   | True                      | 
+ 146 |     return -1;                           | True                      | 
+ 147 |   }                                      | True                      | 
+ 148 |   fn = (struct nlmsghdr*)(G_filter.flush | True                      | 
+ 149 |   memcpy(fn, n, n->nlmsg_len);           | True                      | 
+ 150 |   fn->nlmsg_type = RTM_DELNEIGH;         | True                      | 
+ 151 |   fn->nlmsg_flags = NLM_F_REQUEST;       | True                      | 
+ 152 |   fn->nlmsg_seq = ++(G_filter.rth->seq); | True                      | 
+ 153 |   G_filter.flushp = (((char*)fn) + n->nl | True                      | 
+ 154 |   G_filter.flushed++;                    | True                      | 
+ 155 |   if (xshow_stats < 2)                   | True                      | 
+ 156 |    return 0;                             | True                      | 
+ 157 |  }                                       | True                      | 
+ 158 |                                          | True                      | 
+ 159 |  if (tb[NDA_DST]) {                      | True                      | 
+ 160 |   printf("%s ",                          | True                      | 
+ 161 |          format_host(r->ndm_family,      | True                      | 
+ 162 |        RTA_PAYLOAD(tb[NDA_DST]),         | True                      | 
+ 163 |        RTA_DATA(tb[NDA_DST]))            | True                      | 
+ 164 |   );                                     | True                      | 
+ 165 |  }                                       | True                      | 
+ 166 |  if (!G_filter.index && r->ndm_ifindex)  | True                      | 
+ 167 |   printf("dev %s ", ll_index_to_name(r-> | True                      | 
+ 168 |  if (tb[NDA_LLADDR]) {                   | True                      | 
+ 169 |   SPRINT_BUF(b1);                        | True                      | 
+ 170 |   printf("lladdr %s", ll_addr_n2a(RTA_DA | True                      | 
+ 171 |       RTA_PAYLOAD(tb[NDA_LLADDR]),       | True                      | 
+ 172 |       ARPHRD_ETHER,                      | True                      | 
+ 173 |       b1, sizeof(b1)));                  | True                      | 
+ 174 |  }                                       | True                      | 
+ 175 |  if (r->ndm_flags & NTF_ROUTER) {        | True                      | 
+ 176 |   printf(" router");                     | True                      | 
+ 177 |  }                                       | True                      | 
+ 178 |  if (r->ndm_flags & NTF_PROXY) {         | True                      | 
+ 179 |   printf(" proxy");                      | True                      | 
+ 180 |  }                                       | True                      | 
+ 181 |  if (tb[NDA_CACHEINFO] && xshow_stats) { | True                      | 
+ 182 |   struct nda_cacheinfo *ci = RTA_DATA(tb | True                      | 
+ 183 |   int hz = get_hz();                     | True                      | 
+ 184 |                                          | True                      | 
+ 185 |   if (ci->ndm_refcnt)                    | True                      | 
+ 186 |    printf(" ref %d", ci->ndm_refcnt);    | True                      | 
+ 187 |   printf(" used %d/%d/%d", ci->ndm_used/ | True                      | 
+ 188 |          ci->ndm_confirmed/hz, ci->ndm_u | True                      | 
+ 189 |  }                                       | True                      | 
+ 190 |                                          | True                      | 
+ 191 |  if (tb[NDA_PROBES] && xshow_stats) {    | True                      | 
+ 192 |   uint32_t p = rta_getattr_u32(tb[NDA_PR | True                      | 
+ 193 |   printf(" probes %u", p);               | True                      | 
+ 194 |  }                                       | True                      | 
+ 195 |                                          | True                      | 
+ 196 |  /*if (r->ndm_state)*/ {                 | True                      | 
+ 197 |   int nud = r->ndm_state;                | True                      | 
+ 198 |   char c = ' ';                          | True                      | 
+ 199 | #define PRINT_FLAG(f) \                  | True                      | 
+ 200 |   if (nud & NUD_##f) { \                 | True                      | 
+ 201 |    printf("%c"#f, c); \                  | True                      | 
+ 202 |    c = ','; \                            | True                      | 
+ 203 |   }                                      | True                      | 
+ 204 |   PRINT_FLAG(INCOMPLETE);                | True                      | 
+ 205 |   PRINT_FLAG(REACHABLE);                 | True                      | 
+ 206 |   PRINT_FLAG(STALE);                     | True                      | 
+ 207 |   PRINT_FLAG(DELAY);                     | True                      | 
+ 208 |   PRINT_FLAG(PROBE);                     | True                      | 
+ 209 |   PRINT_FLAG(FAILED);                    | True                      | 
+ 210 |   PRINT_FLAG(NOARP);                     | True                      | 
+ 211 |   PRINT_FLAG(PERMANENT);                 | True                      | 
+ 212 | #undef PRINT_FLAG                        | True                      | 
+ 213 |  }                                       | True                      | 
+ 214 |  bb_putchar('\n');                       | True                      | 
+ 215 |                                          | True                      | 
+ 216 |  return 0;                               | True                      | 
+ 217 | }                                        | True                      | 
+ 218 |                                          | True                      | 
+ 219 | static void ipneigh_reset_filter(void)   | True                      | 
+ 220 | {                                        | True                      | 
+ 221 |  memset(&G_filter, 0, sizeof(G_filter)); | True                      | 
+ 222 |  G_filter.state = ~0;                    | True                      | 
+ 223 | }                                        | True                      | 
+ 224 |                                          | True                      | 
+ 225 | #define MAX_ROUNDS 10                    | True                      | 
+ 226 | /* Return value becomes exitcode. It's o | True                      | 
+ 227 | static int FAST_FUNC ipneigh_list_or_flu | True                      | 
+ 228 | {                                        | True                      | 
+ 229 |  static const char keywords[] ALIGN1 =   | True                      | 
+ 230 |   /* "ip neigh show/flush" parameters: * | True                      | 
+ 231 |   "to\0" "dev\0"   "nud\0";              | True                      | 
+ 232 |  enum {                                  | True                      | 
+ 233 |   KW_to, KW_dev, KW_nud,                 | True                      | 
+ 234 |  };                                      | True                      | 
+ 235 |  struct rtnl_handle rth;                 | True                      | 
+ 236 |  struct ndmsg ndm = { 0 };               | True                      | 
+ 237 |  char *filter_dev = NULL;                | True                      | 
+ 238 |  int state_given = 0;                    | True                      | 
+ 239 |  int arg;                                | True                      | 
+ 240 |                                          | True                      | 
+ 241 |  ipneigh_reset_filter();                 | True                      | 
+ 242 |                                          | True                      | 
+ 243 |  if (flush && !*argv)                    | True                      | 
+ 244 |   bb_error_msg_and_die(bb_msg_requires_a | True                      | 
+ 245 |                                          | True                      | 
+ 246 |  if (!G_filter.family)                   | True                      | 
+ 247 |   G_filter.family = preferred_family;    | True                      | 
+ 248 |                                          | True                      | 
+ 249 |  G_filter.state = (flush) ?              | True                      | 
+ 250 |   ~(NUD_PERMANENT|NUD_NOARP) : 0xFF & ~N | True                      | 
+ 251 |                                          | True                      | 
+ 252 |  while (*argv) {                         | True                      | 
+ 253 |   arg = index_in_substrings(keywords, *a | True                      | 
+ 254 |   if (arg == KW_dev) {                   | True                      | 
+ 255 |    NEXT_ARG();                           | True                      | 
+ 256 |    filter_dev = *argv;                   | True                      | 
+ 257 |   } else if (arg == KW_nud) {            | True                      | 
+ 258 |    unsigned state;                       | True                      | 
+ 259 |    NEXT_ARG();                           | True                      | 
+ 260 |    if (!state_given) {                   | True                      | 
+ 261 |     state_given = 1;                     | True                      | 
+ 262 |     G_filter.state = 0;                  | True                      | 
+ 263 |    }                                     | True                      | 
+ 264 |    if (strcmp(*argv, "all") == 0) {      | True                      | 
+ 265 |     state = ~0;                          | True                      | 
+ 266 |     if (flush)                           | True                      | 
+ 267 |      state &= ~NUD_NOARP;                | True                      | 
+ 268 |    } else {                              | True                      | 
+ 269 |     state = nud_state_a2n(*argv);        | True                      | 
+ 270 |    }                                     | True                      | 
+ 271 |    if (state == 0)                       | True                      | 
+ 272 |     state = 0x100;                       | True                      | 
+ 273 |    G_filter.state |= state;              | True                      | 
+ 274 |   } else {                               | True                      | 
+ 275 |    if (arg == KW_to) {                   | True                      | 
+ 276 |     NEXT_ARG();                          | True                      | 
+ 277 |    }                                     | True                      | 
+ 278 |    get_prefix(&G_filter.pfx, *argv, G_fi | True                      | 
+ 279 |    if (G_filter.family == AF_UNSPEC)     | True                      | 
+ 280 |     G_filter.family = G_filter.pfx.famil | True                      | 
+ 281 |   }                                      | True                      | 
+ 282 |   argv++;                                | True                      | 
+ 283 |  }                                       | True                      | 
+ 284 |                                          | True                      | 
+ 285 |  xrtnl_open(&rth);                       | True                      | 
+ 286 |  ll_init_map(&rth);                      | True                      | 
+ 287 |                                          | True                      | 
+ 288 |  if (filter_dev)  {                      | True                      | 
+ 289 |   G_filter.index = xll_name_to_index(fil | True                      | 
+ 290 |   if (G_filter.index == 0) {             | True                      | 
+ 291 |    bb_error_msg_and_die("can't find devi | True                      | 
+ 292 |   }                                      | True                      | 
+ 293 |  }                                       | True                      | 
+ 294 |                                          | True                      | 
+ 295 |  if (flush) {                            | True                      | 
+ 296 |   int round = 0;                         | True                      | 
+ 297 |   char flushb[4096-512];                 | True                      | 
+ 298 |   G_filter.flushb = flushb;              | True                      | 
+ 299 |   G_filter.flushp = 0;                   | True                      | 
+ 300 |   G_filter.flushe = sizeof(flushb);      | True                      | 
+ 301 |   G_filter.state &= ~NUD_FAILED;         | True                      | 
+ 302 |   G_filter.rth = &rth;                   | True                      | 
+ 303 |                                          | True                      | 
+ 304 |   while (round < MAX_ROUNDS) {           | True                      | 
+ 305 |    xrtnl_wilddump_request(&rth, G_filter | True                      | 
+ 306 |    G_filter.flushed = 0;                 | True                      | 
+ 307 |    if (xrtnl_dump_filter(&rth, print_nei | True                      | 
+ 308 |     bb_simple_perror_msg_and_die("flush  | True                      | 
+ 309 |    }                                     | True                      | 
+ 310 |    if (G_filter.flushed == 0) {          | True                      | 
+ 311 |     if (round == 0)                      | True                      | 
+ 312 |      puts("Nothing to flush");           | True                      | 
+ 313 |     else                                 | True                      | 
+ 314 |      printf("*** Flush is complete after | True                      | 
+ 315 |     return 0;                            | True                      | 
+ 316 |    }                                     | True                      | 
+ 317 |    round++;                              | True                      | 
+ 318 |    if (flush_update() < 0)               | True                      | 
+ 319 |     xfunc_die();                         | True                      | 
+ 320 |    printf("\n*** Round %d, deleting %d e | True                      | 
+ 321 |   }                                      | True                      | 
+ 322 |   bb_error_msg_and_die("*** Flush not co | True                      | 
+ 323 |  }                                       | True                      | 
+ 324 |                                          | True                      | 
+ 325 |  ndm.ndm_family = G_filter.family;       | True                      | 
+ 326 |                                          | True                      | 
+ 327 |  if (rtnl_dump_request(&rth, RTM_GETNEIG | True                      | 
+ 328 |   bb_simple_perror_msg_and_die("can't se | True                      | 
+ 329 |  }                                       | True                      | 
+ 330 |                                          | True                      | 
+ 331 |  if (xrtnl_dump_filter(&rth, print_neigh | True                      | 
+ 332 |   bb_simple_error_msg_and_die("dump term | True                      | 
+ 333 |  }                                       | True                      | 
+ 334 |                                          | True                      | 
+ 335 |  return 0;                               | True                      | 
+ 336 | }                                        | True                      | 
+ 337 |                                          | True                      | 
+ 338 | /* Return value becomes exitcode. It's o | True                      | 
+ 339 | int FAST_FUNC do_ipneigh(char **argv)    | True                      | 
+ 340 | {                                        | True                      | 
+ 341 |  static const char ip_neigh_commands[] A | True                      | 
+ 342 |   /*0-1*/ "show\0"  "flush\0";           | True                      | 
+ 343 |  int command_num;                        | True                      | 
+ 344 |                                          | True                      | 
+ 345 |  INIT_G();                               | True                      | 
+ 346 |                                          | True                      | 
+ 347 |  if (!*argv)                             | True                      | 
+ 348 |   return ipneigh_list_or_flush(argv, 0); | True                      | 
+ 349 |                                          | True                      | 
+ 350 |  command_num = index_in_substrings(ip_ne | True                      | 
+ 351 |  switch (command_num) {                  | True                      | 
+ 352 |   case 0: /* show */                     | True                      | 
+ 353 |    return ipneigh_list_or_flush(argv + 1 | True                      | 
+ 354 |   case 1: /* flush */                    | True                      | 
+ 355 |    return ipneigh_list_or_flush(argv + 1 | True                      | 
+ 356 |  }                                       | True                      | 
+ 357 |  invarg_1_to_2(*argv, applet_name);      | True                      | 
+ 358 |  return 1;                               | True                      | 
+ 359 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +116MB, 349ms             | 

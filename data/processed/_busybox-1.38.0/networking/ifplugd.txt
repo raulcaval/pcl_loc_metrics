@@ -1,0 +1,774 @@
+FILE: data/raw/busybox-1.38.0/networking/ifplugd.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * ifplugd for busybox, based on ifplugd | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2009 Maksym Kryzhanovsk | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config IFPLUGD                  | True                      | 
+  10 | //config: bool "ifplugd (11 kb)"         | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Network interface plug detecti | True                      | 
+  14 |                                          | True                      | 
+  15 | //applet:IF_IFPLUGD(APPLET(ifplugd, BB_D | True                      | 
+  16 |                                          | True                      | 
+  17 | //kbuild:lib-$(CONFIG_IFPLUGD) += ifplug | True                      | 
+  18 |                                          | True                      | 
+  19 | //usage:#define ifplugd_trivial_usage    | True                      | 
+  20 | //usage:       "[OPTIONS]"               | True                      | 
+  21 | //usage:#define ifplugd_full_usage "\n\n | True                      | 
+  22 | //usage:       "Network interface plug d | True                      | 
+  23 | //usage:     "\n -n  Run in foreground"  | True                      | 
+  24 | //usage:     "\n -s  Don't log to syslog | True                      | 
+  25 | //usage:     "\n -i IFACE Interface"     | True                      | 
+  26 | //usage:     "\n -f/-F  Treat link detec | True                      | 
+  27 | //usage:     "\n   (otherwise exit on er | True                      | 
+  28 | //usage:     "\n -a  Don't up interface  | True                      | 
+  29 | //usage:     "\n -M  Monitor creation/de | True                      | 
+  30 | //usage:     "\n   (otherwise it must ex | True                      | 
+  31 | //usage:     "\n -A  Don't up newly appe | True                      | 
+  32 | //usage:     "\n -r PROG  Script to run" | True                      | 
+  33 | //usage:     "\n -x ARG  Extra argument  | True                      | 
+  34 | //usage:     "\n -I  Don't exit on nonze | True                      | 
+  35 | //usage:     "\n -p  Don't run \"up\" sc | True                      | 
+  36 | //usage:     "\n -q  Don't run \"down\"  | True                      | 
+  37 | //usage:     "\n -l  Always run script o | True                      | 
+  38 | //usage:     "\n -t SECS  Poll time in s | True                      | 
+  39 | //usage:     "\n -u SECS  Delay before r | True                      | 
+  40 | //usage:     "\n -d SECS  Delay after li | True                      | 
+  41 | //usage:     "\n -m MODE  API mode (mii, | True                      | 
+  42 | //usage:     "\n -k  Kill running daemon | True                      | 
+  43 |                                          | True                      | 
+  44 | #include "libbb.h"                       | True                      | 
+  45 |                                          | True                      | 
+  46 | #include "fix_u32.h"                     | True                      | 
+  47 | #include <linux/if.h>                    | True                      | 
+  48 | #include <linux/mii.h>                   | True                      | 
+  49 | #include <linux/ethtool.h>               | True                      | 
+  50 | #ifdef HAVE_NET_ETHERNET_H               | True                      | 
+  51 | /* musl breakage:                        | (HAVE_NET_ETHERNET_H)     | 
+  52 |  * In file included from /usr/include/ne | (HAVE_NET_ETHERNET_H)     | 
+  53 |  *                  from networking/ifpl | (HAVE_NET_ETHERNET_H)     | 
+  54 |  * /usr/include/netinet/if_ether.h:96: e | (HAVE_NET_ETHERNET_H)     | 
+  55 |  *                                       | (HAVE_NET_ETHERNET_H)     | 
+  56 |  * Build succeeds without it on musl. Co | (HAVE_NET_ETHERNET_H)     | 
+  57 |  * If on your system you need it, consid | (HAVE_NET_ETHERNET_H)     | 
+  58 |  * and copy-pasting its definitions here | (HAVE_NET_ETHERNET_H)     | 
+  59 |  * conflicting definition of struct ethh | (HAVE_NET_ETHERNET_H)     | 
+  60 |  */                                      | (HAVE_NET_ETHERNET_H)     | 
+  61 | /* # include <net/ethernet.h> */         | (HAVE_NET_ETHERNET_H)     | 
+  62 | #endif                                   | True                      | 
+  63 | #include <linux/netlink.h>               | True                      | 
+  64 | #include <linux/rtnetlink.h>             | True                      | 
+  65 | #include <linux/sockios.h>               | True                      | 
+  66 | #include <syslog.h>                      | True                      | 
+  67 |                                          | True                      | 
+  68 | #define __user                           | True                      | 
+  69 | #include <linux/wireless.h>              | True                      | 
+  70 |                                          | True                      | 
+  71 | #ifndef ETH_ALEN                         | True                      | 
+  72 | # define ETH_ALEN  6                     | !(ETH_ALEN)               | 
+  73 | #endif                                   | True                      | 
+  74 |                                          | True                      | 
+  75 | /*                                       | True                      | 
+  76 | From initial port to busybox, removed mo | True                      | 
+  77 | converting implementation of a polymorph | True                      | 
+  78 | functional style. The main role is run a | True                      | 
+  79 | changed, other activities like audio sig | True                      | 
+  80 | are on the script itself.                | True                      | 
+  81 |                                          | True                      | 
+  82 | One questionable point of the design is  | True                      | 
+  83 |                                          | True                      | 
+  84 | We have 1 second timeout by default to p | True                      | 
+  85 | it is short enough so that there are no  | True                      | 
+  86 | using netlink to get "instantaneous" int | True                      | 
+  87 | notifications. We can check for interfac | True                      | 
+  88 | doing some fast ioctl using its name.    | True                      | 
+  89 |                                          | True                      | 
+  90 | Netlink code then can be just dropped (1 | True                      | 
+  91 | */                                       | True                      | 
+  92 |                                          | True                      | 
+  93 |                                          | True                      | 
+  94 | #define IFPLUGD_ENV_PREVIOUS "IFPLUGD_PR | True                      | 
+  95 | #define IFPLUGD_ENV_CURRENT "IFPLUGD_CUR | True                      | 
+  96 |                                          | True                      | 
+  97 | enum {                                   | True                      | 
+  98 |  FLAG_NO_AUTO   = 1 <<  0, // -a, Don't  | True                      | 
+  99 |  FLAG_NO_DAEMON   = 1 <<  1, // -n, Do n | True                      | 
+ 100 |  FLAG_NO_SYSLOG   = 1 <<  2, // -s, Do n | True                      | 
+ 101 |  FLAG_IGNORE_FAIL  = 1 <<  3, // -f, Ign | True                      | 
+ 102 |  FLAG_IGNORE_FAIL_POSITIVE = 1 <<  4, // | True                      | 
+ 103 |  FLAG_IFACE   = 1 <<  5, // -i, Specify  | True                      | 
+ 104 |  FLAG_RUN   = 1 <<  6, // -r, Specify pr | True                      | 
+ 105 |  FLAG_IGNORE_RETVAL  = 1 <<  7, // -I, D | True                      | 
+ 106 |  FLAG_POLL_TIME   = 1 <<  8, // -t, Spec | True                      | 
+ 107 |  FLAG_DELAY_UP   = 1 <<  9, // -u, Speci | True                      | 
+ 108 |  FLAG_DELAY_DOWN   = 1 << 10, // -d, Spe | True                      | 
+ 109 |  FLAG_API_MODE   = 1 << 11, // -m, Force | True                      | 
+ 110 |  FLAG_NO_STARTUP   = 1 << 12, // -p, Don | True                      | 
+ 111 |  FLAG_NO_SHUTDOWN  = 1 << 13, // -q, Don | True                      | 
+ 112 |  FLAG_INITIAL_DOWN  = 1 << 14, // -l, Ru | True                      | 
+ 113 |  FLAG_EXTRA_ARG   = 1 << 15, // -x, Spec | True                      | 
+ 114 |  FLAG_MONITOR   = 1 << 16, // -M, Use in | True                      | 
+ 115 |  FLAG_NO_UP_NEW_IFACE  = 1 << 17, // -A, | True                      | 
+ 116 | #if ENABLE_FEATURE_PIDFILE               | True                      | 
+ 117 |  FLAG_KILL   = 1 << 18, // -k, Kill a ru | ENABLE_FEATURE_PIDFILE    | 
+ 118 | #endif                                   | True                      | 
+ 119 | };                                       | True                      | 
+ 120 | #if ENABLE_FEATURE_PIDFILE               | True                      | 
+ 121 | # define OPTION_STR "+ansfFi:r:It:+u:+d: | ENABLE_FEATURE_PIDFILE    | 
+ 122 | #else                                    | True                      | 
+ 123 | # define OPTION_STR "+ansfFi:r:It:+u:+d: | !ENABLE_FEATURE_PIDFILE   | 
+ 124 | #endif                                   | True                      | 
+ 125 |                                          | True                      | 
+ 126 | enum { // interface status               | True                      | 
+ 127 |  IFSTATUS_ERR = -1,                      | True                      | 
+ 128 |  IFSTATUS_DOWN = 0,                      | True                      | 
+ 129 |  IFSTATUS_UP = 1,                        | True                      | 
+ 130 | };                                       | True                      | 
+ 131 |                                          | True                      | 
+ 132 | enum { // constant fds                   | True                      | 
+ 133 |  ioctl_fd = 3,                           | True                      | 
+ 134 |  netlink_fd = 4,                         | True                      | 
+ 135 | };                                       | True                      | 
+ 136 |                                          | True                      | 
+ 137 | struct globals {                         | True                      | 
+ 138 |  smallint iface_last_status;             | True                      | 
+ 139 |  smallint iface_prev_status;             | True                      | 
+ 140 |  smallint iface_exists;                  | True                      | 
+ 141 |  smallint api_method_num;                | True                      | 
+ 142 |                                          | True                      | 
+ 143 |  /* Used in getopt32, must have sizeof = | True                      | 
+ 144 |  unsigned poll_time;                     | True                      | 
+ 145 |  unsigned delay_up;                      | True                      | 
+ 146 |  unsigned delay_down;                    | True                      | 
+ 147 |                                          | True                      | 
+ 148 |  const char *iface;                      | True                      | 
+ 149 |  const char *api_mode;                   | True                      | 
+ 150 |  const char *script_name;                | True                      | 
+ 151 |  const char *extra_arg;                  | True                      | 
+ 152 | };                                       | True                      | 
+ 153 | #define G (*ptr_to_globals)              | True                      | 
+ 154 | #define INIT_G() do { \                  | True                      | 
+ 155 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+ 156 |  G.iface_last_status = -1; \             | True                      | 
+ 157 |  G.iface_exists   = 1; \                 | True                      | 
+ 158 |  G.poll_time      = 1; \                 | True                      | 
+ 159 |  G.delay_down     = 5; \                 | True                      | 
+ 160 |  G.iface          = "eth0"; \            | True                      | 
+ 161 |  G.api_mode       = "a"; \               | True                      | 
+ 162 |  G.script_name    = "/etc/ifplugd/ifplug | True                      | 
+ 163 | } while (0)                              | True                      | 
+ 164 |                                          | True                      | 
+ 165 |                                          | True                      | 
+ 166 | /* Utility routines */                   | True                      | 
+ 167 |                                          | True                      | 
+ 168 | static void set_ifreq_to_ifname(struct i | True                      | 
+ 169 | {                                        | True                      | 
+ 170 |  memset(ifreq, 0, sizeof(struct ifreq)); | True                      | 
+ 171 |  strncpy_IFNAMSIZ(ifreq->ifr_name, G.ifa | True                      | 
+ 172 | }                                        | True                      | 
+ 173 |                                          | True                      | 
+ 174 | static int network_ioctl(int request, vo | True                      | 
+ 175 | {                                        | True                      | 
+ 176 |  int r = ioctl(ioctl_fd, request, data); | True                      | 
+ 177 |  if (r < 0 && errmsg)                    | True                      | 
+ 178 |   bb_perror_msg("%s failed", errmsg);    | True                      | 
+ 179 |  return r;                               | True                      | 
+ 180 | }                                        | True                      | 
+ 181 |                                          | True                      | 
+ 182 | /* Link detection routines and table */  | True                      | 
+ 183 |                                          | True                      | 
+ 184 | static smallint detect_link_mii(void)    | True                      | 
+ 185 | {                                        | True                      | 
+ 186 |  /* char buffer instead of bona-fide str | True                      | 
+ 187 |  char buf[sizeof(struct ifreq)];         | True                      | 
+ 188 |  struct ifreq *const ifreq = (void *)buf | True                      | 
+ 189 |                                          | True                      | 
+ 190 |  struct mii_ioctl_data *mii = (void *)&i | True                      | 
+ 191 |                                          | True                      | 
+ 192 |  set_ifreq_to_ifname(ifreq);             | True                      | 
+ 193 |                                          | True                      | 
+ 194 |  if (network_ioctl(SIOCGMIIPHY, ifreq, " | True                      | 
+ 195 |   return IFSTATUS_ERR;                   | True                      | 
+ 196 |  }                                       | True                      | 
+ 197 |                                          | True                      | 
+ 198 |  mii->reg_num = 1;                       | True                      | 
+ 199 |                                          | True                      | 
+ 200 |  if (network_ioctl(SIOCGMIIREG, ifreq, " | True                      | 
+ 201 |   return IFSTATUS_ERR;                   | True                      | 
+ 202 |  }                                       | True                      | 
+ 203 |                                          | True                      | 
+ 204 |  return (mii->val_out & 0x0004) ? IFSTAT | True                      | 
+ 205 | }                                        | True                      | 
+ 206 |                                          | True                      | 
+ 207 | static smallint detect_link_priv(void)   | True                      | 
+ 208 | {                                        | True                      | 
+ 209 |  /* char buffer instead of bona-fide str | True                      | 
+ 210 |  char buf[sizeof(struct ifreq)];         | True                      | 
+ 211 |  struct ifreq *const ifreq = (void *)buf | True                      | 
+ 212 |                                          | True                      | 
+ 213 |  struct mii_ioctl_data *mii = (void *)&i | True                      | 
+ 214 |                                          | True                      | 
+ 215 |  set_ifreq_to_ifname(ifreq);             | True                      | 
+ 216 |                                          | True                      | 
+ 217 |  if (network_ioctl(SIOCDEVPRIVATE, ifreq | True                      | 
+ 218 |   return IFSTATUS_ERR;                   | True                      | 
+ 219 |  }                                       | True                      | 
+ 220 |                                          | True                      | 
+ 221 |  mii->reg_num = 1;                       | True                      | 
+ 222 |                                          | True                      | 
+ 223 |  if (network_ioctl(SIOCDEVPRIVATE+1, ifr | True                      | 
+ 224 |   return IFSTATUS_ERR;                   | True                      | 
+ 225 |  }                                       | True                      | 
+ 226 |                                          | True                      | 
+ 227 |  return (mii->val_out & 0x0004) ? IFSTAT | True                      | 
+ 228 | }                                        | True                      | 
+ 229 |                                          | True                      | 
+ 230 | static smallint detect_link_ethtool(void | True                      | 
+ 231 | {                                        | True                      | 
+ 232 |  struct ifreq ifreq;                     | True                      | 
+ 233 |  struct ethtool_value edata;             | True                      | 
+ 234 |                                          | True                      | 
+ 235 |  set_ifreq_to_ifname(&ifreq);            | True                      | 
+ 236 |                                          | True                      | 
+ 237 |  edata.cmd = ETHTOOL_GLINK;              | True                      | 
+ 238 |  ifreq.ifr_data = (void*) &edata;        | True                      | 
+ 239 |                                          | True                      | 
+ 240 |  if (network_ioctl(SIOCETHTOOL, &ifreq,  | True                      | 
+ 241 |   return IFSTATUS_ERR;                   | True                      | 
+ 242 |  }                                       | True                      | 
+ 243 |                                          | True                      | 
+ 244 |  return edata.data ? IFSTATUS_UP : IFSTA | True                      | 
+ 245 | }                                        | True                      | 
+ 246 |                                          | True                      | 
+ 247 | static smallint detect_link_iff(void)    | True                      | 
+ 248 | {                                        | True                      | 
+ 249 |  struct ifreq ifreq;                     | True                      | 
+ 250 |                                          | True                      | 
+ 251 |  set_ifreq_to_ifname(&ifreq);            | True                      | 
+ 252 |                                          | True                      | 
+ 253 |  if (network_ioctl(SIOCGIFFLAGS, &ifreq, | True                      | 
+ 254 |   return IFSTATUS_ERR;                   | True                      | 
+ 255 |  }                                       | True                      | 
+ 256 |                                          | True                      | 
+ 257 |  /* If IFF_UP is not set (interface is d | True                      | 
+ 258 |   * regardless of link status. Simply co | True                      | 
+ 259 |   * no point in reporting spurious link  | True                      | 
+ 260 |   * by admin. When/if it will be brought | True                      | 
+ 261 |   * we'll report real link status.       | True                      | 
+ 262 |   */                                     | True                      | 
+ 263 |  if (!(ifreq.ifr_flags & IFF_UP) && G.if | True                      | 
+ 264 |   return G.iface_last_status;            | True                      | 
+ 265 |                                          | True                      | 
+ 266 |  return (ifreq.ifr_flags & IFF_RUNNING)  | True                      | 
+ 267 | }                                        | True                      | 
+ 268 |                                          | True                      | 
+ 269 | static smallint detect_link_wlan(void)   | True                      | 
+ 270 | {                                        | True                      | 
+ 271 |  int i;                                  | True                      | 
+ 272 |  struct iwreq iwrequest;                 | True                      | 
+ 273 |  uint8_t mac[ETH_ALEN];                  | True                      | 
+ 274 |                                          | True                      | 
+ 275 |  memset(&iwrequest, 0, sizeof(iwrequest) | True                      | 
+ 276 |  strncpy_IFNAMSIZ(iwrequest.ifr_ifrn.ifr | True                      | 
+ 277 |                                          | True                      | 
+ 278 |  if (network_ioctl(SIOCGIWAP, &iwrequest | True                      | 
+ 279 |   return IFSTATUS_ERR;                   | True                      | 
+ 280 |  }                                       | True                      | 
+ 281 |                                          | True                      | 
+ 282 |  memcpy(mac, &iwrequest.u.ap_addr.sa_dat | True                      | 
+ 283 |                                          | True                      | 
+ 284 |  if (mac[0] == 0xFF || mac[0] == 0x44 || | True                      | 
+ 285 |   for (i = 1; i < ETH_ALEN; ++i) {       | True                      | 
+ 286 |    if (mac[i] != mac[0])                 | True                      | 
+ 287 |     return IFSTATUS_UP;                  | True                      | 
+ 288 |   }                                      | True                      | 
+ 289 |   return IFSTATUS_DOWN;                  | True                      | 
+ 290 |  }                                       | True                      | 
+ 291 |                                          | True                      | 
+ 292 |  return IFSTATUS_UP;                     | True                      | 
+ 293 | }                                        | True                      | 
+ 294 |                                          | True                      | 
+ 295 | enum { // api mode                       | True                      | 
+ 296 |  API_ETHTOOL, // 'e'                     | True                      | 
+ 297 |  API_MII,     // 'm'                     | True                      | 
+ 298 |  API_PRIVATE, // 'p'                     | True                      | 
+ 299 |  API_WLAN,    // 'w'                     | True                      | 
+ 300 |  API_IFF,     // 'i'                     | True                      | 
+ 301 |  API_AUTO,    // 'a'                     | True                      | 
+ 302 | };                                       | True                      | 
+ 303 |                                          | True                      | 
+ 304 | static const char api_modes[] ALIGN1 = " | True                      | 
+ 305 |                                          | True                      | 
+ 306 | static const struct {                    | True                      | 
+ 307 |  const char *name;                       | True                      | 
+ 308 |  smallint (*func)(void);                 | True                      | 
+ 309 | } method_table[] ALIGN_PTR = {           | True                      | 
+ 310 |  { "SIOCETHTOOL"       , &detect_link_et | True                      | 
+ 311 |  { "SIOCGMIIPHY"       , &detect_link_mi | True                      | 
+ 312 |  { "SIOCDEVPRIVATE"    , &detect_link_pr | True                      | 
+ 313 |  { "wireless extension", &detect_link_wl | True                      | 
+ 314 |  { "IFF_RUNNING"       , &detect_link_if | True                      | 
+ 315 | };                                       | True                      | 
+ 316 |                                          | True                      | 
+ 317 | static const char *strstatus(int status) | True                      | 
+ 318 | {                                        | True                      | 
+ 319 |  if (status == IFSTATUS_ERR)             | True                      | 
+ 320 |   return "error";                        | True                      | 
+ 321 |  return "down\0up" + (status * 5);       | True                      | 
+ 322 | }                                        | True                      | 
+ 323 |                                          | True                      | 
+ 324 | static int run_script(const char *action | True                      | 
+ 325 | {                                        | True                      | 
+ 326 |  char *env_PREVIOUS, *env_CURRENT;       | True                      | 
+ 327 |  char *argv[5];                          | True                      | 
+ 328 |  int r;                                  | True                      | 
+ 329 |                                          | True                      | 
+ 330 |  bb_info_msg("executing '%s %s %s'", G.s | True                      | 
+ 331 |                                          | True                      | 
+ 332 |  argv[0] = (char*) G.script_name;        | True                      | 
+ 333 |  argv[1] = (char*) G.iface;              | True                      | 
+ 334 |  argv[2] = (char*) action;               | True                      | 
+ 335 |  argv[3] = (char*) G.extra_arg;          | True                      | 
+ 336 |  argv[4] = NULL;                         | True                      | 
+ 337 |                                          | True                      | 
+ 338 |  env_PREVIOUS = xasprintf("%s=%s", IFPLU | True                      | 
+ 339 |  putenv(env_PREVIOUS);                   | True                      | 
+ 340 |  env_CURRENT = xasprintf("%s=%s", IFPLUG | True                      | 
+ 341 |  putenv(env_CURRENT);                    | True                      | 
+ 342 |                                          | True                      | 
+ 343 |  /* r < 0 - can't exec, 0 <= r < 0x180 - | True                      | 
+ 344 |  r = spawn_and_wait(argv);               | True                      | 
+ 345 |                                          | True                      | 
+ 346 |  bb_unsetenv_and_free(env_PREVIOUS);     | True                      | 
+ 347 |  bb_unsetenv_and_free(env_CURRENT);      | True                      | 
+ 348 |                                          | True                      | 
+ 349 |  bb_info_msg("exit code: %d", r & 0xff); | True                      | 
+ 350 |  return (option_mask32 & FLAG_IGNORE_RET | True                      | 
+ 351 | }                                        | True                      | 
+ 352 |                                          | True                      | 
+ 353 | static void up_iface(void)               | True                      | 
+ 354 | {                                        | True                      | 
+ 355 |  struct ifreq ifrequest;                 | True                      | 
+ 356 |                                          | True                      | 
+ 357 |  if (!G.iface_exists)                    | True                      | 
+ 358 |   return;                                | True                      | 
+ 359 |                                          | True                      | 
+ 360 |  set_ifreq_to_ifname(&ifrequest);        | True                      | 
+ 361 |  if (network_ioctl(SIOCGIFFLAGS, &ifrequ | True                      | 
+ 362 |   G.iface_exists = 0;                    | True                      | 
+ 363 |   return;                                | True                      | 
+ 364 |  }                                       | True                      | 
+ 365 |                                          | True                      | 
+ 366 |  if (!(ifrequest.ifr_flags & IFF_UP)) {  | True                      | 
+ 367 |   ifrequest.ifr_flags |= IFF_UP;         | True                      | 
+ 368 |   /* Let user know we mess up with inter | True                      | 
+ 369 |   bb_simple_info_msg("upping interface") | True                      | 
+ 370 |   if (network_ioctl(SIOCSIFFLAGS, &ifreq | True                      | 
+ 371 |    if (errno != ENODEV && errno != EADDR | True                      | 
+ 372 |     xfunc_die();                         | True                      | 
+ 373 |    G.iface_exists = 0;                   | True                      | 
+ 374 |    return;                               | True                      | 
+ 375 |   }                                      | True                      | 
+ 376 |  }                                       | True                      | 
+ 377 |                                          | True                      | 
+ 378 | #if 0 /* why do we mess with IP addr? It | True                      | 
+ 379 |  if (network_ioctl(SIOCGIFADDR, &ifreque | 0                         | 
+ 380 |  } else if (ifrequest.ifr_addr.sa_family | 0                         | 
+ 381 |   bb_perror_msg("the interface is not IP | 0                         | 
+ 382 |  } else {                                | 0                         | 
+ 383 |   ((struct sockaddr_in*)(&ifrequest.ifr_ | 0                         | 
+ 384 |   network_ioctl(SIOCSIFADDR, &ifrequest, | 0                         | 
+ 385 |  }                                       | 0                         | 
+ 386 |  network_ioctl(SIOCGIFFLAGS, &ifrequest, | 0                         | 
+ 387 | #endif                                   | True                      | 
+ 388 | }                                        | True                      | 
+ 389 |                                          | True                      | 
+ 390 | static void maybe_up_new_iface(void)     | True                      | 
+ 391 | {                                        | True                      | 
+ 392 |  if (!(option_mask32 & FLAG_NO_UP_NEW_IF | True                      | 
+ 393 |   up_iface();                            | True                      | 
+ 394 |                                          | True                      | 
+ 395 | #if 0 /* bloat */                        | True                      | 
+ 396 |  struct ifreq ifrequest;                 | 0                         | 
+ 397 |  struct ethtool_drvinfo driver_info;     | 0                         | 
+ 398 |                                          | 0                         | 
+ 399 |  set_ifreq_to_ifname(&ifrequest);        | 0                         | 
+ 400 |  driver_info.cmd = ETHTOOL_GDRVINFO;     | 0                         | 
+ 401 |  ifrequest.ifr_data = &driver_info;      | 0                         | 
+ 402 |  if (network_ioctl(SIOCETHTOOL, &ifreque | 0                         | 
+ 403 |   char buf[sizeof("/xx:xx:xx:xx:xx:xx")] | 0                         | 
+ 404 |                                          | 0                         | 
+ 405 |   /* Get MAC */                          | 0                         | 
+ 406 |   buf[0] = '\0';                         | 0                         | 
+ 407 |   set_ifreq_to_ifname(&ifrequest);       | 0                         | 
+ 408 |   if (network_ioctl(SIOCGIFHWADDR, &ifre | 0                         | 
+ 409 |    sprintf(buf, "/%02X:%02X:%02X:%02X:%0 | 0                         | 
+ 410 |     (uint8_t)(ifrequest.ifr_hwaddr.sa_da | 0                         | 
+ 411 |     (uint8_t)(ifrequest.ifr_hwaddr.sa_da | 0                         | 
+ 412 |     (uint8_t)(ifrequest.ifr_hwaddr.sa_da | 0                         | 
+ 413 |     (uint8_t)(ifrequest.ifr_hwaddr.sa_da | 0                         | 
+ 414 |     (uint8_t)(ifrequest.ifr_hwaddr.sa_da | 0                         | 
+ 415 |     (uint8_t)(ifrequest.ifr_hwaddr.sa_da | 0                         | 
+ 416 |   }                                      | 0                         | 
+ 417 |                                          | 0                         | 
+ 418 |   bb_info_msg("using interface %s%s with | 0                         | 
+ 419 |    G.iface, buf, driver_info.driver, dri | 0                         | 
+ 420 |  }                                       | 0                         | 
+ 421 | #endif                                   | True                      | 
+ 422 |  if (G.api_mode[0] == 'a')               | True                      | 
+ 423 |   G.api_method_num = API_AUTO;           | True                      | 
+ 424 | }                                        | True                      | 
+ 425 |                                          | True                      | 
+ 426 | static smallint detect_link(void)        | True                      | 
+ 427 | {                                        | True                      | 
+ 428 |  smallint status;                        | True                      | 
+ 429 |                                          | True                      | 
+ 430 |  if (!G.iface_exists)                    | True                      | 
+ 431 |   return (option_mask32 & FLAG_MONITOR)  | True                      | 
+ 432 |                                          | True                      | 
+ 433 |  /* Some drivers can't detect link statu | True                      | 
+ 434 |   * I imagine detect_link_iff() is the m | True                      | 
+ 435 |   * That's why -a "noauto" in an option, | True                      | 
+ 436 |   */                                     | True                      | 
+ 437 |  if (!(option_mask32 & FLAG_NO_AUTO))    | True                      | 
+ 438 |   up_iface();                            | True                      | 
+ 439 |                                          | True                      | 
+ 440 |  if (G.api_method_num == API_AUTO) {     | True                      | 
+ 441 |   int i;                                 | True                      | 
+ 442 |   smallint sv_logmode;                   | True                      | 
+ 443 |                                          | True                      | 
+ 444 |   sv_logmode = logmode;                  | True                      | 
+ 445 |   for (i = 0; i < ARRAY_SIZE(method_tabl | True                      | 
+ 446 |    logmode = LOGMODE_NONE;               | True                      | 
+ 447 |    status = method_table[i].func();      | True                      | 
+ 448 |    logmode = sv_logmode;                 | True                      | 
+ 449 |    if (status != IFSTATUS_ERR) {         | True                      | 
+ 450 |     G.api_method_num = i;                | True                      | 
+ 451 |     bb_info_msg("using %s detection mode | True                      | 
+ 452 |     break;                               | True                      | 
+ 453 |    }                                     | True                      | 
+ 454 |   }                                      | True                      | 
+ 455 |  } else {                                | True                      | 
+ 456 |   status = method_table[G.api_method_num | True                      | 
+ 457 |  }                                       | True                      | 
+ 458 |                                          | True                      | 
+ 459 |  if (status == IFSTATUS_ERR) {           | True                      | 
+ 460 |   if (option_mask32 & FLAG_IGNORE_FAIL)  | True                      | 
+ 461 |    status = IFSTATUS_DOWN;               | True                      | 
+ 462 |   else if (option_mask32 & FLAG_IGNORE_F | True                      | 
+ 463 |    status = IFSTATUS_UP;                 | True                      | 
+ 464 |   else if (G.api_mode[0] == 'a')         | True                      | 
+ 465 |    bb_simple_error_msg("can't detect lin | True                      | 
+ 466 |  }                                       | True                      | 
+ 467 |                                          | True                      | 
+ 468 |  if (status != G.iface_last_status) {    | True                      | 
+ 469 |   G.iface_prev_status = G.iface_last_sta | True                      | 
+ 470 |   G.iface_last_status = status;          | True                      | 
+ 471 |  }                                       | True                      | 
+ 472 |                                          | True                      | 
+ 473 |  return status;                          | True                      | 
+ 474 | }                                        | True                      | 
+ 475 |                                          | True                      | 
+ 476 | static NOINLINE int check_existence_thro | True                      | 
+ 477 | {                                        | True                      | 
+ 478 |  int iface_len;                          | True                      | 
+ 479 |  /* Buffer was 1K, but on linux-3.9.9 it | True                      | 
+ 480 |   * netlink.h: "limit to 8K to avoid MSG | True                      | 
+ 481 |   * Note: on error returns (-1) we exit, | True                      | 
+ 482 |   */                                     | True                      | 
+ 483 |  enum { BUF_SIZE = 8 * 1024 };           | True                      | 
+ 484 |  char *replybuf = xmalloc(BUF_SIZE);     | True                      | 
+ 485 |                                          | True                      | 
+ 486 |  iface_len = strlen(G.iface);            | True                      | 
+ 487 |  while (1) {                             | True                      | 
+ 488 |   struct nlmsghdr *mhdr;                 | True                      | 
+ 489 |   ssize_t bytes;                         | True                      | 
+ 490 |                                          | True                      | 
+ 491 |   bytes = recv(netlink_fd, replybuf, BUF | True                      | 
+ 492 |   if (bytes < 0) {                       | True                      | 
+ 493 |    if (errno == EAGAIN)                  | True                      | 
+ 494 |     goto ret;                            | True                      | 
+ 495 |    if (errno == EINTR)                   | True                      | 
+ 496 |     continue;                            | True                      | 
+ 497 |    bb_simple_perror_msg("netlink: recv") | True                      | 
+ 498 |    return -1;                            | True                      | 
+ 499 |   }                                      | True                      | 
+ 500 |                                          | True                      | 
+ 501 |   mhdr = (struct nlmsghdr*)replybuf;     | True                      | 
+ 502 |   while (bytes > 0) {                    | True                      | 
+ 503 |    if (!NLMSG_OK(mhdr, bytes)) {         | True                      | 
+ 504 |     bb_simple_error_msg("netlink packet  | True                      | 
+ 505 |     return -1;                           | True                      | 
+ 506 |    }                                     | True                      | 
+ 507 |                                          | True                      | 
+ 508 |    if (mhdr->nlmsg_type == RTM_NEWLINK | | True                      | 
+ 509 |     struct rtattr *attr;                 | True                      | 
+ 510 |     int attr_len;                        | True                      | 
+ 511 |                                          | True                      | 
+ 512 |     if (mhdr->nlmsg_len < NLMSG_LENGTH(s | True                      | 
+ 513 |      bb_simple_error_msg("netlink packet | True                      | 
+ 514 |      return -1;                          | True                      | 
+ 515 |     }                                    | True                      | 
+ 516 |                                          | True                      | 
+ 517 |     attr = IFLA_RTA(NLMSG_DATA(mhdr));   | True                      | 
+ 518 |     attr_len = IFLA_PAYLOAD(mhdr);       | True                      | 
+ 519 |                                          | True                      | 
+ 520 |     while (RTA_OK(attr, attr_len)) {     | True                      | 
+ 521 |      if (attr->rta_type == IFLA_IFNAME)  | True                      | 
+ 522 |       int len = RTA_PAYLOAD(attr);       | True                      | 
+ 523 |       if (len > IFNAMSIZ)                | True                      | 
+ 524 |        len = IFNAMSIZ;                   | True                      | 
+ 525 |       if (iface_len <= len               | True                      | 
+ 526 |        && strncmp(G.iface, RTA_DATA(attr | True                      | 
+ 527 |       ) {                                | True                      | 
+ 528 |        G.iface_exists = (mhdr->nlmsg_typ | True                      | 
+ 529 |       }                                  | True                      | 
+ 530 |      }                                   | True                      | 
+ 531 |      attr = RTA_NEXT(attr, attr_len);    | True                      | 
+ 532 |     }                                    | True                      | 
+ 533 |    }                                     | True                      | 
+ 534 |                                          | True                      | 
+ 535 |    mhdr = NLMSG_NEXT(mhdr, bytes);       | True                      | 
+ 536 |   }                                      | True                      | 
+ 537 |  }                                       | True                      | 
+ 538 |                                          | True                      | 
+ 539 |  ret:                                    | True                      | 
+ 540 |  free(replybuf);                         | True                      | 
+ 541 |  return G.iface_exists;                  | True                      | 
+ 542 | }                                        | True                      | 
+ 543 |                                          | True                      | 
+ 544 | #if ENABLE_FEATURE_PIDFILE               | True                      | 
+ 545 | static NOINLINE pid_t read_pid(const cha | ENABLE_FEATURE_PIDFILE    | 
+ 546 | {                                        | ENABLE_FEATURE_PIDFILE    | 
+ 547 |  int len;                                | ENABLE_FEATURE_PIDFILE    | 
+ 548 |  char buf[128];                          | ENABLE_FEATURE_PIDFILE    | 
+ 549 |                                          | ENABLE_FEATURE_PIDFILE    | 
+ 550 |  len = open_read_close(filename, buf, 12 | ENABLE_FEATURE_PIDFILE    | 
+ 551 |  if (len > 0) {                          | ENABLE_FEATURE_PIDFILE    | 
+ 552 |   buf[len] = '\0';                       | ENABLE_FEATURE_PIDFILE    | 
+ 553 |   /* returns ULONG_MAX on error => -1 */ | ENABLE_FEATURE_PIDFILE    | 
+ 554 |   return bb_strtoul(buf, NULL, 10);      | ENABLE_FEATURE_PIDFILE    | 
+ 555 |  }                                       | ENABLE_FEATURE_PIDFILE    | 
+ 556 |  return 0;                               | ENABLE_FEATURE_PIDFILE    | 
+ 557 | }                                        | ENABLE_FEATURE_PIDFILE    | 
+ 558 | #endif                                   | True                      | 
+ 559 |                                          | True                      | 
+ 560 | int ifplugd_main(int argc, char **argv)  | True                      | 
+ 561 | int ifplugd_main(int argc UNUSED_PARAM,  | True                      | 
+ 562 | {                                        | True                      | 
+ 563 |  int iface_status;                       | True                      | 
+ 564 |  int delay_time;                         | True                      | 
+ 565 |  const char *iface_status_str;           | True                      | 
+ 566 |  struct pollfd netlink_pollfd[1];        | True                      | 
+ 567 |  unsigned opts;                          | True                      | 
+ 568 |  const char *api_mode_found;             | True                      | 
+ 569 | #if ENABLE_FEATURE_PIDFILE               | True                      | 
+ 570 |  char *pidfile_name;                     | ENABLE_FEATURE_PIDFILE    | 
+ 571 |  pid_t pid_from_pidfile;                 | ENABLE_FEATURE_PIDFILE    | 
+ 572 | #endif                                   | True                      | 
+ 573 |                                          | True                      | 
+ 574 |  INIT_G();                               | True                      | 
+ 575 |                                          | True                      | 
+ 576 |  opts = getopt32(argv, OPTION_STR,       | True                      | 
+ 577 |   &G.iface, &G.script_name, &G.poll_time | True                      | 
+ 578 |   &G.delay_down, &G.api_mode, &G.extra_a | True                      | 
+ 579 |  G.poll_time *= 1000;                    | True                      | 
+ 580 |                                          | True                      | 
+ 581 |  applet_name = xasprintf("ifplugd(%s)",  | True                      | 
+ 582 |                                          | True                      | 
+ 583 | #if ENABLE_FEATURE_PIDFILE               | True                      | 
+ 584 |  pidfile_name = xasprintf(CONFIG_PID_FIL | ENABLE_FEATURE_PIDFILE    | 
+ 585 |  pid_from_pidfile = read_pid(pidfile_nam | ENABLE_FEATURE_PIDFILE    | 
+ 586 |                                          | ENABLE_FEATURE_PIDFILE    | 
+ 587 |  if (opts & FLAG_KILL) {                 | ENABLE_FEATURE_PIDFILE    | 
+ 588 |   if (pid_from_pidfile > 0)              | ENABLE_FEATURE_PIDFILE    | 
+ 589 |    /* Upstream tool use SIGINT for -k */ | ENABLE_FEATURE_PIDFILE    | 
+ 590 |    kill(pid_from_pidfile, SIGINT);       | ENABLE_FEATURE_PIDFILE    | 
+ 591 |   return EXIT_SUCCESS;                   | ENABLE_FEATURE_PIDFILE    | 
+ 592 |  }                                       | ENABLE_FEATURE_PIDFILE    | 
+ 593 |                                          | ENABLE_FEATURE_PIDFILE    | 
+ 594 |  if (pid_from_pidfile > 0 && kill(pid_fr | ENABLE_FEATURE_PIDFILE    | 
+ 595 |   bb_simple_error_msg_and_die("daemon al | ENABLE_FEATURE_PIDFILE    | 
+ 596 | #endif                                   | True                      | 
+ 597 |                                          | True                      | 
+ 598 |  api_mode_found = strchr(api_modes, G.ap | True                      | 
+ 599 |  if (!api_mode_found)                    | True                      | 
+ 600 |   bb_error_msg_and_die("unknown API mode | True                      | 
+ 601 |  G.api_method_num = api_mode_found - api | True                      | 
+ 602 |                                          | True                      | 
+ 603 |  if (!(opts & FLAG_NO_DAEMON))           | True                      | 
+ 604 |   bb_daemonize_or_rexec(DAEMON_CHDIR_ROO | True                      | 
+ 605 |                                          | True                      | 
+ 606 |  xmove_fd(xsocket(AF_INET, SOCK_DGRAM, 0 | True                      | 
+ 607 |  if (opts & FLAG_MONITOR) {              | True                      | 
+ 608 |   int fd = create_and_bind_to_netlink(NE | True                      | 
+ 609 |   xmove_fd(fd, netlink_fd);              | True                      | 
+ 610 |  }                                       | True                      | 
+ 611 |                                          | True                      | 
+ 612 |  write_pidfile(pidfile_name);            | True                      | 
+ 613 |                                          | True                      | 
+ 614 |  /* this can't be moved before socket cr | True                      | 
+ 615 |  if (!(opts & FLAG_NO_SYSLOG)) {         | True                      | 
+ 616 |   openlog(applet_name, 0, LOG_DAEMON);   | True                      | 
+ 617 |   logmode |= LOGMODE_SYSLOG;             | True                      | 
+ 618 |  }                                       | True                      | 
+ 619 |                                          | True                      | 
+ 620 |  bb_signals(0                            | True                      | 
+ 621 |   | (1 << SIGINT )                       | True                      | 
+ 622 |   | (1 << SIGTERM)                       | True                      | 
+ 623 |   | (1 << SIGQUIT)                       | True                      | 
+ 624 |   | (1 << SIGHUP ) /* why we ignore it?  | True                      | 
+ 625 |   /* | (1 << SIGCHLD) - run_script does  | True                      | 
+ 626 |   , record_signo);                       | True                      | 
+ 627 |                                          | True                      | 
+ 628 |  bb_info_msg("started: %s", bb_banner);  | True                      | 
+ 629 |                                          | True                      | 
+ 630 |  if (opts & FLAG_MONITOR) {              | True                      | 
+ 631 |   struct ifreq ifrequest;                | True                      | 
+ 632 |   set_ifreq_to_ifname(&ifrequest);       | True                      | 
+ 633 |   G.iface_exists = (network_ioctl(SIOCGI | True                      | 
+ 634 |  }                                       | True                      | 
+ 635 |                                          | True                      | 
+ 636 |  if (G.iface_exists)                     | True                      | 
+ 637 |   maybe_up_new_iface();                  | True                      | 
+ 638 |                                          | True                      | 
+ 639 |  iface_status = detect_link();           | True                      | 
+ 640 |  if (iface_status == IFSTATUS_ERR)       | True                      | 
+ 641 |   goto exiting;                          | True                      | 
+ 642 |  iface_status_str = strstatus(iface_stat | True                      | 
+ 643 |                                          | True                      | 
+ 644 |  if (opts & FLAG_MONITOR) {              | True                      | 
+ 645 |   bb_info_msg("interface %s",            | True                      | 
+ 646 |    G.iface_exists ? "exists"             | True                      | 
+ 647 |    : "doesn't exist, waiting");          | True                      | 
+ 648 |  }                                       | True                      | 
+ 649 |  /* else we assume it always exists, but | True                      | 
+ 650 |   * by potentially lying that it really  | True                      | 
+ 651 |                                          | True                      | 
+ 652 |  if (G.iface_exists) {                   | True                      | 
+ 653 |   bb_info_msg("link is %s", iface_status | True                      | 
+ 654 |  }                                       | True                      | 
+ 655 |                                          | True                      | 
+ 656 |  if ((!(opts & FLAG_NO_STARTUP)          | True                      | 
+ 657 |       && iface_status == IFSTATUS_UP     | True                      | 
+ 658 |      )                                   | True                      | 
+ 659 |   || (opts & FLAG_INITIAL_DOWN)          | True                      | 
+ 660 |  ) {                                     | True                      | 
+ 661 |   if (run_script(iface_status_str) != 0) | True                      | 
+ 662 |    goto exiting;                         | True                      | 
+ 663 |  }                                       | True                      | 
+ 664 |                                          | True                      | 
+ 665 |  /* Main loop */                         | True                      | 
+ 666 |  netlink_pollfd[0].fd = netlink_fd;      | True                      | 
+ 667 |  netlink_pollfd[0].events = POLLIN;      | True                      | 
+ 668 |  delay_time = 0;                         | True                      | 
+ 669 |  while (1) {                             | True                      | 
+ 670 |   int iface_status_old;                  | True                      | 
+ 671 |                                          | True                      | 
+ 672 |   switch (bb_got_signal) {               | True                      | 
+ 673 |   case SIGINT:                           | True                      | 
+ 674 |   case SIGTERM:                          | True                      | 
+ 675 |    bb_got_signal = 0;                    | True                      | 
+ 676 |    goto cleanup;                         | True                      | 
+ 677 |   case SIGQUIT:                          | True                      | 
+ 678 |    bb_got_signal = 0;                    | True                      | 
+ 679 |    goto exiting;                         | True                      | 
+ 680 |   default:                               | True                      | 
+ 681 |    bb_got_signal = 0;                    | True                      | 
+ 682 |   /* do not clear bb_got_signal if alrea | True                      | 
+ 683 |   case 0:                                | True                      | 
+ 684 |    break;                                | True                      | 
+ 685 |   }                                      | True                      | 
+ 686 |                                          | True                      | 
+ 687 |   if (poll(netlink_pollfd,               | True                      | 
+ 688 |     (opts & FLAG_MONITOR) ? 1 : 0,       | True                      | 
+ 689 |     G.poll_time                          | True                      | 
+ 690 |    ) < 0                                 | True                      | 
+ 691 |   ) {                                    | True                      | 
+ 692 |    if (errno == EINTR)                   | True                      | 
+ 693 |     continue;                            | True                      | 
+ 694 |    bb_simple_perror_msg("poll");         | True                      | 
+ 695 |    goto exiting;                         | True                      | 
+ 696 |   }                                      | True                      | 
+ 697 |                                          | True                      | 
+ 698 |   if ((opts & FLAG_MONITOR)              | True                      | 
+ 699 |    && (netlink_pollfd[0].revents & POLLI | True                      | 
+ 700 |   ) {                                    | True                      | 
+ 701 |    int iface_exists_old;                 | True                      | 
+ 702 |                                          | True                      | 
+ 703 |    iface_exists_old = G.iface_exists;    | True                      | 
+ 704 |    G.iface_exists = check_existence_thro | True                      | 
+ 705 |    if (G.iface_exists < 0) /* error */   | True                      | 
+ 706 |     goto exiting;                        | True                      | 
+ 707 |    if (iface_exists_old != G.iface_exist | True                      | 
+ 708 |     bb_info_msg("interface %sappeared",  | True                      | 
+ 709 |       G.iface_exists ? "" : "dis");      | True                      | 
+ 710 |     if (G.iface_exists)                  | True                      | 
+ 711 |      maybe_up_new_iface();               | True                      | 
+ 712 |    }                                     | True                      | 
+ 713 |   }                                      | True                      | 
+ 714 |                                          | True                      | 
+ 715 |   /* note: if !G.iface_exists, returns D | True                      | 
+ 716 |   iface_status_old = iface_status;       | True                      | 
+ 717 |   iface_status = detect_link();          | True                      | 
+ 718 |   if (iface_status == IFSTATUS_ERR) {    | True                      | 
+ 719 |    if (!(opts & FLAG_MONITOR))           | True                      | 
+ 720 |     goto exiting;                        | True                      | 
+ 721 |    iface_status = IFSTATUS_DOWN;         | True                      | 
+ 722 |   }                                      | True                      | 
+ 723 |   iface_status_str = strstatus(iface_sta | True                      | 
+ 724 |                                          | True                      | 
+ 725 |   if (iface_status_old != iface_status)  | True                      | 
+ 726 |    bb_info_msg("link is %s", iface_statu | True                      | 
+ 727 |                                          | True                      | 
+ 728 |    if (delay_time) {                     | True                      | 
+ 729 |     /* link restored its old status befo | True                      | 
+ 730 |      * we ran script. don't run the scri | True                      | 
+ 731 |     delay_time = 0;                      | True                      | 
+ 732 |    } else {                              | True                      | 
+ 733 |     delay_time = monotonic_sec();        | True                      | 
+ 734 |     if (iface_status == IFSTATUS_UP)     | True                      | 
+ 735 |      delay_time += G.delay_up;           | True                      | 
+ 736 |     if (iface_status == IFSTATUS_DOWN)   | True                      | 
+ 737 |      delay_time += G.delay_down;         | True                      | 
+ 738 | #if 0  /* if you are back in 1970... */  | True                      | 
+ 739 |     if (delay_time == 0) {               | 0                         | 
+ 740 |      sleep1();                           | 0                         | 
+ 741 |      delay_time = 1;                     | 0                         | 
+ 742 |     }                                    | 0                         | 
+ 743 | #endif                                   | True                      | 
+ 744 |    }                                     | True                      | 
+ 745 |   }                                      | True                      | 
+ 746 |                                          | True                      | 
+ 747 |   if (delay_time && (int)(monotonic_sec( | True                      | 
+ 748 |    if (run_script(iface_status_str) != 0 | True                      | 
+ 749 |     goto exiting;                        | True                      | 
+ 750 |    delay_time = 0;                       | True                      | 
+ 751 |   }                                      | True                      | 
+ 752 |  } /* while (1) */                       | True                      | 
+ 753 |                                          | True                      | 
+ 754 |  cleanup:                                | True                      | 
+ 755 |  if (!(opts & FLAG_NO_SHUTDOWN)          | True                      | 
+ 756 |   && (iface_status == IFSTATUS_UP        | True                      | 
+ 757 |       || (iface_status == IFSTATUS_DOWN  | True                      | 
+ 758 |      )                                   | True                      | 
+ 759 |  ) {                                     | True                      | 
+ 760 |   setenv(IFPLUGD_ENV_PREVIOUS, strstatus | True                      | 
+ 761 |   setenv(IFPLUGD_ENV_CURRENT, strstatus( | True                      | 
+ 762 |   run_script("down\0up"); /* reusing str | True                      | 
+ 763 |  }                                       | True                      | 
+ 764 |                                          | True                      | 
+ 765 |  exiting:                                | True                      | 
+ 766 |  remove_pidfile(pidfile_name);           | True                      | 
+ 767 |  bb_simple_error_msg_and_die("exiting"); | True                      | 
+ 768 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +130MB, 295ms             | 

@@ -1,0 +1,353 @@
+FILE: data/raw/busybox-1.38.0/util-linux/hexdump_xxd.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * xxd implementation for busybox        | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (c) 2017 Denys Vlasenko <vd | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config XXD                      | True                      | 
+  10 | //config: bool "xxd (11 kb)"             | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: The xxd utility is used to dis | True                      | 
+  14 | //config: way that is comparable to the  | True                      | 
+  15 |                                          | True                      | 
+  16 | //applet:IF_XXD(APPLET_NOEXEC(xxd, xxd,  | True                      | 
+  17 |                                          | True                      | 
+  18 | //kbuild:lib-$(CONFIG_XXD) += hexdump_xx | True                      | 
+  19 |                                          | True                      | 
+  20 | // $ xxd --version                       | True                      | 
+  21 | // xxd V1.10 27oct98 by Juergen Weigert  | True                      | 
+  22 | // $ xxd --help                          | True                      | 
+  23 | // Usage:                                | True                      | 
+  24 | //       xxd [options] [infile [outfile] | True                      | 
+  25 | //    or                                 | True                      | 
+  26 | //       xxd -r [-s [-]offset] [-c cols] | True                      | 
+  27 | // Options:                              | True                      | 
+  28 | //    -a          toggle autoskip: A sin | True                      | 
+  29 | //    -b          binary digit dump (inc | True                      | 
+  30 | //    -c cols     format <cols> octets p | True                      | 
+  31 | //    -E          show characters in EBC | True                      | 
+  32 | //    -e          little-endian dump (in | True                      | 
+  33 | //    -g          number of octets per g | True                      | 
+  34 | //    -i          output in C include fi | True                      | 
+  35 | //    -l len      stop after <len> octet | True                      | 
+  36 | //    -o off      add <off> to the displ | True                      | 
+  37 | //    -ps         output in postscript p | True                      | 
+  38 | //    -r          reverse operation: con | True                      | 
+  39 | //    -r -s off   revert with <off> adde | True                      | 
+  40 | //    -s [+][-]seek  start at <seek> byt | True                      | 
+  41 | //    -u          use upper case hex let | True                      | 
+  42 |                                          | True                      | 
+  43 | //xxd V1.10 accepts and ignores ANY stri | True                      | 
+  44 | //Essentially, the syntax is as if -p ha | True                      | 
+  45 | //Therefore: -pc50 != -p -c50            | True                      | 
+  46 |                                          | True                      | 
+  47 | //usage:#define xxd_trivial_usage        | True                      | 
+  48 | //usage:       "[-ri] [-ps] [-g N] [-c N | True                      | 
+  49 | //usage:#define xxd_full_usage "\n\n"    | True                      | 
+  50 | //usage:       "Hex dump FILE (or stdin) | True                      | 
+  51 | //usage:     "\n -g N  Bytes per group ( | True                      | 
+  52 | //usage:     "\n -c N  Bytes per line (d | True                      | 
+  53 | //usage:     "\n -ps  Show only hex byte | True                      | 
+  54 | //usage:     "\n -i  C include file styl | True                      | 
+  55 | // exactly the same help text lines in h | True                      | 
+  56 | //usage:     "\n -l LENGTH Show only fir | True                      | 
+  57 | //usage:     "\n -s OFFSET Skip OFFSET b | True                      | 
+  58 | //usage:     "\n -o OFFSET Add OFFSET to | True                      | 
+  59 | //usage:     "\n -r  Reverse (with -p, a | True                      | 
+  60 |                                          | True                      | 
+  61 | #include "libbb.h"                       | True                      | 
+  62 | #include "common_bufsiz.h"               | True                      | 
+  63 | #include "dump.h"                        | True                      | 
+  64 |                                          | True                      | 
+  65 | /* This is a NOEXEC applet. Be very care | True                      | 
+  66 |                                          | True                      | 
+  67 | #define OPT_l (1 << 0)                   | True                      | 
+  68 | #define OPT_s (1 << 1)                   | True                      | 
+  69 | #define OPT_a (1 << 2)                   | True                      | 
+  70 | #define OPT_p (1 << 3)                   | True                      | 
+  71 | #define OPT_i (1 << 4)                   | True                      | 
+  72 | #define OPT_r (1 << 5)                   | True                      | 
+  73 | #define OPT_g (1 << 6)                   | True                      | 
+  74 | #define OPT_c (1 << 7)                   | True                      | 
+  75 | #define OPT_o (1 << 8)                   | True                      | 
+  76 |                                          | True                      | 
+  77 | #define fillbuf bb_common_bufsiz1        | True                      | 
+  78 |                                          | True                      | 
+  79 | static void write_zeros(off_t count)     | True                      | 
+  80 | {                                        | True                      | 
+  81 |  errno = 0;                              | True                      | 
+  82 |  do {                                    | True                      | 
+  83 |   unsigned sz = count < COMMON_BUFSIZE ? | True                      | 
+  84 |   if (fwrite(fillbuf, 1, sz, stdout) !=  | True                      | 
+  85 |    bb_simple_perror_msg_and_die("write e | True                      | 
+  86 |   count -= sz;                           | True                      | 
+  87 |  } while (count != 0);                   | True                      | 
+  88 | }                                        | True                      | 
+  89 |                                          | True                      | 
+  90 | static void reverse(unsigned opt, const  | True                      | 
+  91 | {                                        | True                      | 
+  92 |  FILE *fp;                               | True                      | 
+  93 |  char *buf;                              | True                      | 
+  94 |  off_t cur, opt_s_ofs;                   | True                      | 
+  95 |                                          | True                      | 
+  96 |  memset(fillbuf, 0, COMMON_BUFSIZE);     | True                      | 
+  97 |  opt_s_ofs = cur = 0;                    | True                      | 
+  98 |  if (opt_s) {                            | True                      | 
+  99 |   opt_s_ofs = BB_STRTOOFF(opt_s, NULL, 0 | True                      | 
+ 100 |   if (errno || opt_s_ofs < 0)            | True                      | 
+ 101 |    bb_error_msg_and_die("invalid number  | True                      | 
+ 102 |  }                                       | True                      | 
+ 103 |                                          | True                      | 
+ 104 |  fp = filename ? xfopen_for_read(filenam | True                      | 
+ 105 |                                          | True                      | 
+ 106 |  get_new_line:                           | True                      | 
+ 107 |  while ((buf = xmalloc_fgetline(fp)) !=  | True                      | 
+ 108 |   char *p;                               | True                      | 
+ 109 |                                          | True                      | 
+ 110 |   p = buf;                               | True                      | 
+ 111 |   if (!(opt & OPT_p)) {                  | True                      | 
+ 112 |    char *end;                            | True                      | 
+ 113 |    off_t ofs;                            | True                      | 
+ 114 |  skip_address:                           | True                      | 
+ 115 |    p = skip_whitespace(p);               | True                      | 
+ 116 |    ofs = BB_STRTOOFF(p, &end, 16);       | True                      | 
+ 117 |    if ((errno && errno != EINVAL)        | True                      | 
+ 118 |     || ofs < 0                           | True                      | 
+ 119 |    /* -s SEEK value should be added befo | True                      | 
+ 120 |     || (ofs += opt_s_ofs) < 0            | True                      | 
+ 121 |    ) {                                   | True                      | 
+ 122 |     bb_error_msg_and_die("invalid number | True                      | 
+ 123 |    }                                     | True                      | 
+ 124 |    if (ofs != cur) {                     | True                      | 
+ 125 |     if (fseeko(stdout, ofs, SEEK_SET) != | True                      | 
+ 126 |      if (ofs < cur)                      | True                      | 
+ 127 |       bb_simple_perror_msg_and_die("cann | True                      | 
+ 128 |      write_zeros(ofs - cur);             | True                      | 
+ 129 |     }                                    | True                      | 
+ 130 |     cur = ofs;                           | True                      | 
+ 131 |    }                                     | True                      | 
+ 132 |    p = end;                              | True                      | 
+ 133 |    /* NB: for xxd -r, first hex portion  | True                      | 
+ 134 |    /* But if colon is there, skip it: */ | True                      | 
+ 135 |    if (*p == ':')                        | True                      | 
+ 136 |     p++;                                 | True                      | 
+ 137 |   }                                      | True                      | 
+ 138 |                                          | True                      | 
+ 139 |   /* Process hex bytes optionally separa | True                      | 
+ 140 |   for (;;) {                             | True                      | 
+ 141 |    uint8_t val, c;                       | True                      | 
+ 142 |    int badchar = 0;                      | True                      | 
+ 143 |  nibble1:                                | True                      | 
+ 144 |    if (opt & OPT_p)                      | True                      | 
+ 145 |     p = skip_whitespace(p);              | True                      | 
+ 146 |    c = *p++;                             | True                      | 
+ 147 |    if (isdigit(c))                       | True                      | 
+ 148 |     val = c - '0';                       | True                      | 
+ 149 |    else if ((c|0x20) >= 'a' && (c|0x20)  | True                      | 
+ 150 |     val = (c|0x20) - ('a' - 10);         | True                      | 
+ 151 |    else {                                | True                      | 
+ 152 |     /* xxd V1.10 allows one non-hexnum c | True                      | 
+ 153 |      *  echo -e "31 !3 0a 0a" | xxd -r - | True                      | 
+ 154 |      * is "10<a0>" (no <cr>) - "!" is ig | True                      | 
+ 155 |      * but stops for more than one:      | True                      | 
+ 156 |      *  echo -e "31 !!343434\n30 0a" | x | True                      | 
+ 157 |      * is "10<cr>" - "!!" drops rest of  | True                      | 
+ 158 |      * Note: this also covers whitespace | True                      | 
+ 159 |      * xxxxxxxx: 3031 3233 3435 3637 383 | True                      | 
+ 160 |      *  detects this ^ - skips this one  | True                      | 
+ 161 |      * xxxxxxxx: 3031 3233 3435 3637 383 | True                      | 
+ 162 |      *                                   | True                      | 
+ 163 |      */                                  | True                      | 
+ 164 |     if (c == '\0' || badchar)            | True                      | 
+ 165 |      break;                              | True                      | 
+ 166 |     badchar++;                           | True                      | 
+ 167 |     goto nibble1;                        | True                      | 
+ 168 |    }                                     | True                      | 
+ 169 |    val <<= 4;                            | True                      | 
+ 170 |                                          | True                      | 
+ 171 |  nibble2:                                | True                      | 
+ 172 |    if (opt & OPT_p) {                    | True                      | 
+ 173 |     /* Works the same with xxd V1.10:    | True                      | 
+ 174 |      *  echo "31 09 32 0a" | xxd -r -p   | True                      | 
+ 175 |      *  echo "31 0 9 32 0a" | xxd -r -p  | True                      | 
+ 176 |      * thus allow whitespace (even multi | True                      | 
+ 177 |      * after byte's 1st char:            | True                      | 
+ 178 |      */                                  | True                      | 
+ 179 |     p = skip_whitespace(p);              | True                      | 
+ 180 |    }                                     | True                      | 
+ 181 |                                          | True                      | 
+ 182 |    c = *p++;                             | True                      | 
+ 183 |    if (isdigit(c))                       | True                      | 
+ 184 |     val |= c - '0';                      | True                      | 
+ 185 |    else if ((c|0x20) >= 'a' && (c|0x20)  | True                      | 
+ 186 |     val |= (c|0x20) - ('a' - 10);        | True                      | 
+ 187 |    else {                                | True                      | 
+ 188 |     if (c != '\0') {                     | True                      | 
+ 189 |      /* "...3<not_hex_char>...": ignore  | True                      | 
+ 190 |       * skip everything up to next hexch | True                      | 
+ 191 |       */                                 | True                      | 
+ 192 |      while (!isxdigit(*p)) {             | True                      | 
+ 193 |       if (*p == '\0') {                  | True                      | 
+ 194 |        free(buf);                        | True                      | 
+ 195 |        goto get_new_line;                | True                      | 
+ 196 |       }                                  | True                      | 
+ 197 |       p++;                               | True                      | 
+ 198 |      }                                   | True                      | 
+ 199 |      goto nibble1;                       | True                      | 
+ 200 |     }                                    | True                      | 
+ 201 |     /* Nibbles can join even through new | True                      | 
+ 202 |      * echo -e "31 3\n2 0a" | xxd -r -p  | True                      | 
+ 203 |      * is "12<cr>".                      | True                      | 
+ 204 |      */                                  | True                      | 
+ 205 |     free(buf);                           | True                      | 
+ 206 |     p = buf = xmalloc_fgetline(fp);      | True                      | 
+ 207 |     if (!buf)                            | True                      | 
+ 208 |      break;                              | True                      | 
+ 209 |     if (!(opt & OPT_p)) /* -p and !-p: d | True                      | 
+ 210 |      goto skip_address;                  | True                      | 
+ 211 |     goto nibble2;                        | True                      | 
+ 212 |    }                                     | True                      | 
+ 213 |    putchar(val);                         | True                      | 
+ 214 |    cur++;                                | True                      | 
+ 215 |   } /* for(;;) */                        | True                      | 
+ 216 |   free(buf);                             | True                      | 
+ 217 |  }                                       | True                      | 
+ 218 |  //fclose(fp);                           | True                      | 
+ 219 |  fflush_stdout_and_exit_SUCCESS();       | True                      | 
+ 220 | }                                        | True                      | 
+ 221 |                                          | True                      | 
+ 222 | static void print_C_style(const char *p, | True                      | 
+ 223 | {                                        | True                      | 
+ 224 |  printf(hdr, isdigit(p[0]) ? "__" : ""); | True                      | 
+ 225 |  while (*p) {                            | True                      | 
+ 226 |   bb_putchar(isalnum(*p) ? *p : '_');    | True                      | 
+ 227 |   p++;                                   | True                      | 
+ 228 |  }                                       | True                      | 
+ 229 | }                                        | True                      | 
+ 230 |                                          | True                      | 
+ 231 | int xxd_main(int argc, char **argv) MAIN | True                      | 
+ 232 | int xxd_main(int argc UNUSED_PARAM, char | True                      | 
+ 233 | {                                        | True                      | 
+ 234 |  char buf[80];                           | True                      | 
+ 235 |  dumper_t *dumper;                       | True                      | 
+ 236 |  char *opt_l, *opt_o;                    | True                      | 
+ 237 |  char *opt_s = NULL;                     | True                      | 
+ 238 |  unsigned bytes = 2;                     | True                      | 
+ 239 |  unsigned cols = 0;                      | True                      | 
+ 240 |  unsigned opt;                           | True                      | 
+ 241 |  int r;                                  | True                      | 
+ 242 |                                          | True                      | 
+ 243 |  setup_common_bufsiz();                  | True                      | 
+ 244 |                                          | True                      | 
+ 245 |  dumper = alloc_dumper();                | True                      | 
+ 246 |                                          | True                      | 
+ 247 |  opt = getopt32(argv, "^" "l:s:ap::irg:+ | True                      | 
+ 248 |    &opt_l, &opt_s, NULL, &bytes, &cols,  | True                      | 
+ 249 |  );                                      | True                      | 
+ 250 |  argv += optind;                         | True                      | 
+ 251 |                                          | True                      | 
+ 252 |  dumper->dump_vflag = ALL;               | True                      | 
+ 253 | // if (opt & OPT_a)                      | True                      | 
+ 254 | //  dumper->dump_vflag = SKIPNUL; ..does | True                      | 
+ 255 |  if (opt & OPT_l) {                      | True                      | 
+ 256 |   dumper->dump_length = xstrtou_range(   | True                      | 
+ 257 |     opt_l,                               | True                      | 
+ 258 |     /*base:*/ 0,                         | True                      | 
+ 259 |     /*lo:*/ 0, /*hi:*/ INT_MAX           | True                      | 
+ 260 |   );                                     | True                      | 
+ 261 |  }                                       | True                      | 
+ 262 |  if (opt & OPT_s) {                      | True                      | 
+ 263 |   dumper->dump_skip = xstrtoull_range(   | True                      | 
+ 264 |     opt_s,                               | True                      | 
+ 265 |     /*base:*/ 0,                         | True                      | 
+ 266 |     /*lo:*/ 0, /*hi:*/ OFF_T_MAX         | True                      | 
+ 267 |   );                                     | True                      | 
+ 268 |   //BUGGY for /proc/version (unseekable? | True                      | 
+ 269 |  }                                       | True                      | 
+ 270 |                                          | True                      | 
+ 271 |  if (opt & OPT_r) {                      | True                      | 
+ 272 |   reverse(opt, argv[0], opt_s);          | True                      | 
+ 273 |  }                                       | True                      | 
+ 274 |                                          | True                      | 
+ 275 |  if (opt & OPT_o) {                      | True                      | 
+ 276 |   /* -o accepts negative numbers too */  | True                      | 
+ 277 |   dumper->xxd_displayoff = xstrtoll(opt_ | True                      | 
+ 278 |  }                                       | True                      | 
+ 279 |                                          | True                      | 
+ 280 |  if (opt & OPT_p) {                      | True                      | 
+ 281 |   if (cols == 0)                         | True                      | 
+ 282 |    cols = 30;                            | True                      | 
+ 283 |   bytes = cols; /* -p ignores -gN */     | True                      | 
+ 284 |  } else {                                | True                      | 
+ 285 |   if (cols == 0)                         | True                      | 
+ 286 |    cols = (opt & OPT_i) ? 12 : 16;       | True                      | 
+ 287 |   if (opt & OPT_i) {                     | True                      | 
+ 288 |    bytes = 1; // -i ignores -gN          | True                      | 
+ 289 |    // output is "  0xXX, 0xXX, 0xXX...", | True                      | 
+ 290 |    bb_dump_add(dumper, "\" \"");         | True                      | 
+ 291 |   } else                                 | True                      | 
+ 292 |    bb_dump_add(dumper, "\"%08_ax: \"");  | True                      | 
+ 293 |  }                                       | True                      | 
+ 294 |                                          | True                      | 
+ 295 |  if (bytes < 1 || bytes >= cols) {       | True                      | 
+ 296 |   sprintf(buf, "%u/1 \"%%02x\"", cols);  | True                      | 
+ 297 |   bb_dump_add(dumper, buf);              | True                      | 
+ 298 |  }                                       | True                      | 
+ 299 |  else if (bytes == 1) {                  | True                      | 
+ 300 |   if (opt & OPT_i)                       | True                      | 
+ 301 |    sprintf(buf, "%u/1 \" 0x%%02x,\"", co | True                      | 
+ 302 | //TODO: compat: omit the last comma afte | True                      | 
+ 303 |   else                                   | True                      | 
+ 304 |    sprintf(buf, "%u/1 \"%%02x \"", cols) | True                      | 
+ 305 |   bb_dump_add(dumper, buf);              | True                      | 
+ 306 |  }                                       | True                      | 
+ 307 |  else {                                  | True                      | 
+ 308 | /* Format "print byte" with and without  | True                      | 
+ 309 | #define BS "/1 \"%02x \""                | True                      | 
+ 310 | #define B  "/1 \"%02x\""                 | True                      | 
+ 311 |   unsigned i;                            | True                      | 
+ 312 |   char *bigbuf = xmalloc(cols * (sizeof( | True                      | 
+ 313 |   char *p = bigbuf;                      | True                      | 
+ 314 |   for (i = 1; i <= cols; i++) {          | True                      | 
+ 315 |    if (i == cols || i % bytes)           | True                      | 
+ 316 |     p = stpcpy(p, B);                    | True                      | 
+ 317 |    else                                  | True                      | 
+ 318 |     p = stpcpy(p, BS);                   | True                      | 
+ 319 |   }                                      | True                      | 
+ 320 |   // for -g3, this results in B B BS B B | True                      | 
+ 321 |   // todo: can be more clever and use    | True                      | 
+ 322 |   // one 'bytes-1/1 "%02x"' format inste | True                      | 
+ 323 |   //bb_error_msg("ADDED:'%s'", bigbuf);  | True                      | 
+ 324 |   bb_dump_add(dumper, bigbuf);           | True                      | 
+ 325 |   free(bigbuf);                          | True                      | 
+ 326 |  }                                       | True                      | 
+ 327 |                                          | True                      | 
+ 328 |  if (!(opt & (OPT_p|OPT_i))) {           | True                      | 
+ 329 |   sprintf(buf, "\"  \"%u/1 \"%%_p\"\"\n\ | True                      | 
+ 330 |   bb_dump_add(dumper, buf);              | True                      | 
+ 331 |  } else {                                | True                      | 
+ 332 |   bb_dump_add(dumper, "\"\n\"");         | True                      | 
+ 333 |   dumper->xxd_eofstring = "\n";          | True                      | 
+ 334 |  }                                       | True                      | 
+ 335 |                                          | True                      | 
+ 336 |  if ((opt & OPT_i) && argv[0]) {         | True                      | 
+ 337 |   print_C_style(argv[0], "unsigned char  | True                      | 
+ 338 |   puts("[] = {");                        | True                      | 
+ 339 | //TODO: if file does not exist, shouldn' | True                      | 
+ 340 |  }                                       | True                      | 
+ 341 |  r = bb_dump_dump(dumper, argv);         | True                      | 
+ 342 |  if (r == 0 && (opt & OPT_i) && argv[0]) | True                      | 
+ 343 |   print_C_style(argv[0], "};\nunsigned i | True                      | 
+ 344 |   printf("_len = %"OFF_FMT"u;\n", dumper | True                      | 
+ 345 |  }                                       | True                      | 
+ 346 |  return r;                               | True                      | 
+ 347 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +109MB, 233ms             | 

@@ -1,0 +1,388 @@
+FILE: data/raw/busybox-1.38.0/util-linux/lsblk.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Mini lsblk implementation for busybox | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   6 |  */                                      | True                      | 
+   7 | //config:config LSBLK                    | True                      | 
+   8 | //config: bool "lsblk (2.5 kb)"          | True                      | 
+   9 | //config: default y                      | True                      | 
+  10 | //config: help                           | True                      | 
+  11 | //config: List information about all ava | True                      | 
+  12 |                                          | True                      | 
+  13 | //applet:IF_LSBLK(APPLET(lsblk, BB_DIR_U | True                      | 
+  14 |                                          | True                      | 
+  15 | //kbuild:lib-$(CONFIG_LSBLK) += lsblk.o  | True                      | 
+  16 |                                          | True                      | 
+  17 | //usage:#define lsblk_trivial_usage      | True                      | 
+  18 | //usage:       "[BLOCKDEV]..."           | True                      | 
+  19 | //usage:#define lsblk_full_usage "\n\n"  | True                      | 
+  20 | //usage:       "List block devices"      | True                      | 
+  21 |                                          | True                      | 
+  22 | /* from util-linux 2.41.1                | True                      | 
+  23 |  -A, --noempty        don't print empty  | True                      | 
+  24 |  -D, --discard        print discard capa | True                      | 
+  25 |  -E, --dedup <column> de-duplicate outpu | True                      | 
+  26 |  -I, --include <list> show only devices  | True                      | 
+  27 |  -J, --json           use JSON output fo | True                      | 
+  28 |  -M, --merge          group parents of s | True                      | 
+  29 |  -O, --output-all     output all columns | True                      | 
+  30 |  -P, --pairs          use key="value" ou | True                      | 
+  31 |  -Q, --filter <expr>  print only lines m | True                      | 
+  32 |      --highlight <expr> colorize lines m | True                      | 
+  33 |      --ct-filter <expr> restrict the nex | True                      | 
+  34 |      --ct <name>[:<param>[:<func>]] defi | True                      | 
+  35 |  -S, --scsi           output info about  | True                      | 
+  36 |  -N, --nvme           output info about  | True                      | 
+  37 |  -v, --virtio         output info about  | True                      | 
+  38 |  -T, --tree[=<column>] use tree format o | True                      | 
+  39 |  -a, --all            print all devices  | True                      | 
+  40 |  -b, --bytes          print SIZE in byte | True                      | 
+  41 |  -d, --nodeps         don't print slaves | True                      | 
+  42 |  -e, --exclude <list> exclude devices by | True                      | 
+  43 |  -f, --fs             output info about  | True                      | 
+  44 |  -i, --ascii          use ascii characte | True                      | 
+  45 |  -l, --list           use list format ou | True                      | 
+  46 |  -m, --perms          output info about  | True                      | 
+  47 |  -n, --noheadings     don't print headin | True                      | 
+  48 |  -o, --output <list>  output columns (se | True                      | 
+  49 |  -p, --paths          print complete dev | True                      | 
+  50 |  -r, --raw            use raw output for | True                      | 
+  51 |  -s, --inverse        inverse dependenci | True                      | 
+  52 |  -t, --topology       output info about  | True                      | 
+  53 |  -w, --width <num>    specifies output w | True                      | 
+  54 |  -x, --sort <column>  sort output by <co | True                      | 
+  55 |  -y, --shell          use column names t | True                      | 
+  56 |  -z, --zoned          print zone related | True                      | 
+  57 |      --sysroot <dir>  use specified dire | True                      | 
+  58 |      --properties-by <list>              | True                      | 
+  59 |                       methods used to ga | True                      | 
+  60 |  -H, --list-columns   list the available | True                      | 
+  61 | */                                       | True                      | 
+  62 | #include "libbb.h"                       | True                      | 
+  63 | #include <mntent.h>                      | True                      | 
+  64 |                                          | True                      | 
+  65 | struct blockdev_info {                   | True                      | 
+  66 |  char *name;                             | True                      | 
+  67 |  unsigned long long size;                | True                      | 
+  68 |  const char *type;                       | True                      | 
+  69 |  const char *majmin;                     | True                      | 
+  70 |  //const char *mountpoint;               | True                      | 
+  71 | };                                       | True                      | 
+  72 |                                          | True                      | 
+  73 | struct globals {                         | True                      | 
+  74 |  struct blockdev_info *list;             | True                      | 
+  75 |  char *mountinfo;                        | True                      | 
+  76 |  unsigned count;                         | True                      | 
+  77 |  unsigned exitcode;                      | True                      | 
+  78 | };                                       | True                      | 
+  79 | #define G (*ptr_to_globals)              | True                      | 
+  80 | #define INIT_G() do { \                  | True                      | 
+  81 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+  82 | } while (0)                              | True                      | 
+  83 |                                          | True                      | 
+  84 | static struct blockdev_info *get_or_crea | True                      | 
+  85 | {                                        | True                      | 
+  86 |  unsigned i;                             | True                      | 
+  87 |                                          | True                      | 
+  88 |  for (i = 0; i < G.count; i++) {         | True                      | 
+  89 |   if (strcmp(G.list[i].name, devname) == | True                      | 
+  90 |    return &G.list[i];                    | True                      | 
+  91 |  }                                       | True                      | 
+  92 |  G.list = xrealloc_vector(G.list, 4, G.c | True                      | 
+  93 |  G.list[G.count].name = xstrdup(devname) | True                      | 
+  94 |  return &G.list[G.count++];              | True                      | 
+  95 | }                                        | True                      | 
+  96 |                                          | True                      | 
+  97 | static char *get_mountpoints(const char  | True                      | 
+  98 | {                                        | True                      | 
+  99 |  unsigned len;                           | True                      | 
+ 100 |  char *p, *mountpoints;                  | True                      | 
+ 101 |                                          | True                      | 
+ 102 |  mountpoints = NULL;                     | True                      | 
+ 103 |  len = strlen(majmin);                   | True                      | 
+ 104 |  p = G.mountinfo; // contents of "/proc/ | True                      | 
+ 105 |  /* lines a-la "63 1 259:3 / /MNTPOINT p | True                      | 
+ 106 |  while (*p) {                            | True                      | 
+ 107 |   char *e;                               | True                      | 
+ 108 |                                          | True                      | 
+ 109 |   p = skip_non_whitespace(p);            | True                      | 
+ 110 |   if (*p != ' ') break;                  | True                      | 
+ 111 |   // at " 1 259:3"                       | True                      | 
+ 112 |   p = skip_non_whitespace(p + 1);        | True                      | 
+ 113 |   if (*p != ' ') break;                  | True                      | 
+ 114 |   p++;                                   | True                      | 
+ 115 |   // at "259:3 / /MNTPOINT"              | True                      | 
+ 116 |   if (strncmp(p, majmin, len) != 0 || (p | True                      | 
+ 117 |    p = strchr(p, '\n');                  | True                      | 
+ 118 |    if (!p)                               | True                      | 
+ 119 |     break;                               | True                      | 
+ 120 |    p++;                                  | True                      | 
+ 121 |    continue;                             | True                      | 
+ 122 |   }                                      | True                      | 
+ 123 |   // at " / /MNTPOINT"                   | True                      | 
+ 124 |   p = skip_non_whitespace(p + 1);        | True                      | 
+ 125 |   if (*p != ' ') break;                  | True                      | 
+ 126 |                                          | True                      | 
+ 127 |   // at " /MNTPOINT"                     | True                      | 
+ 128 |   e = skip_non_whitespace(p + 1);        | True                      | 
+ 129 |   // e is at the end of " /MNTPOINT"     | True                      | 
+ 130 | // NO. We return " /MNT1 /MNT2 /MNT3" _w | True                      | 
+ 131 | //  if (!mountpoints)                    | True                      | 
+ 132 | //   p++;                                | True                      | 
+ 133 |   xasprintf_inplace(mountpoints, "%s%.*s | True                      | 
+ 134 |    mountpoints ? mountpoints : "", (int) | True                      | 
+ 135 |  }                                       | True                      | 
+ 136 |  return mountpoints;                     | True                      | 
+ 137 | }                                        | True                      | 
+ 138 |                                          | True                      | 
+ 139 | static char *get_majmin_from_stat(const  | True                      | 
+ 140 | {                                        | True                      | 
+ 141 |  struct stat st;                         | True                      | 
+ 142 |  if (stat(filename, &st) == 0 && S_ISBLK | True                      | 
+ 143 |   return xasprintf("%u:%u",              | True                      | 
+ 144 |    (unsigned)major(st.st_rdev),          | True                      | 
+ 145 |    (unsigned)minor(st.st_rdev)           | True                      | 
+ 146 |   );                                     | True                      | 
+ 147 |  }                                       | True                      | 
+ 148 |  bb_error_msg("%s: not a block device",  | True                      | 
+ 149 |  G.exitcode |= 64; /* util-linux compat  | True                      | 
+ 150 |  return NULL;                            | True                      | 
+ 151 | }                                        | True                      | 
+ 152 |                                          | True                      | 
+ 153 | static unsigned long long read_ull(const | True                      | 
+ 154 | {                                        | True                      | 
+ 155 |  char *filename;                         | True                      | 
+ 156 |  ssize_t len;                            | True                      | 
+ 157 |  unsigned long long size = ~0ULL; /* err | True                      | 
+ 158 |  char buf[sizeof(size)*3];               | True                      | 
+ 159 |                                          | True                      | 
+ 160 |  filename = concat_path_file(path, name) | True                      | 
+ 161 |  len = open_read_close(filename, buf, si | True                      | 
+ 162 | #if 0                                    | True                      | 
+ 163 | bb_error_msg("open_read_close('%s'):'%.* | 0                         | 
+ 164 |     filename,                            | 0                         | 
+ 165 |     len < 0 ? 5 : (int)len,              | 0                         | 
+ 166 |     len < 0 ? "ERROR" : buf              | 0                         | 
+ 167 | );                                       | 0                         | 
+ 168 | #endif                                   | True                      | 
+ 169 |  free(filename);                         | True                      | 
+ 170 |  if (len > 0 && len < sizeof(buf) - 1) { | True                      | 
+ 171 |   buf[len] = '\0';                       | True                      | 
+ 172 |   size = bb_strtoull(buf, NULL, 10);     | True                      | 
+ 173 |  }                                       | True                      | 
+ 174 |  return size;                            | True                      | 
+ 175 | }                                        | True                      | 
+ 176 |                                          | True                      | 
+ 177 | /* For reading one-line /sys files. Trun | True                      | 
+ 178 | static char *read_str(const char *path,  | True                      | 
+ 179 | {                                        | True                      | 
+ 180 |  char *filename;                         | True                      | 
+ 181 |  char *res;                              | True                      | 
+ 182 |                                          | True                      | 
+ 183 |  filename = concat_path_file(path, name) | True                      | 
+ 184 |  res = xmalloc_open_read_close(filename, | True                      | 
+ 185 | //bb_error_msg("open_read_close('%s'):'% | True                      | 
+ 186 |  free(filename);                         | True                      | 
+ 187 |                                          | True                      | 
+ 188 |  if (res)                                | True                      | 
+ 189 |   strchrnul(res, '\n')[0] = '\0';        | True                      | 
+ 190 |  return res;                             | True                      | 
+ 191 | }                                        | True                      | 
+ 192 |                                          | True                      | 
+ 193 | /* To see what util-linux does:          | True                      | 
+ 194 |  * strace -eopen,openat,getdents,getdent | True                      | 
+ 195 |  * What I observed:                      | True                      | 
+ 196 |  * open("/sys/block")+getdents()         | True                      | 
+ 197 |  * For each found entry DEV:             | True                      | 
+ 198 |  *    open("/sys/block/DEV/hidden")+read | True                      | 
+ 199 |  *    MAJMIN=open("/sys/block/DEV/dev")+ | True                      | 
+ 200 |  *    open("/sys/dev/block/MAJMIN/size") | True                      | 
+ 201 |  *    open("/sys/dev/block/MAJMIN")+getd | True                      | 
+ 202 |  *    For each found entry PART:         | True                      | 
+ 203 |  *       open("/sys/block/PART/hidden")  | True                      | 
+ 204 |  *       else                            | True                      | 
+ 205 |  *       MAJMIN1=open("/sys/block/DEV/PA | True                      | 
+ 206 |  *       recurse into handling MAJMIN1 f | True                      | 
+ 207 |  */                                      | True                      | 
+ 208 | static void process__sys_block_NAME(cons | True                      | 
+ 209 |                                          | True                      | 
+ 210 | /* Note: consumes malloc'ed majmin */    | True                      | 
+ 211 | static void process__sys_dev_block_MAJMI | True                      | 
+ 212 | {                                        | True                      | 
+ 213 |  DIR *dir;                               | True                      | 
+ 214 |  struct dirent *entry;                   | True                      | 
+ 215 |  struct blockdev_info *info;             | True                      | 
+ 216 |                                          | True                      | 
+ 217 |  info = get_or_create_info(devname);     | True                      | 
+ 218 |  if (info->type) /* we already saw this  | True                      | 
+ 219 |   return;                                | True                      | 
+ 220 |                                          | True                      | 
+ 221 |  info->size = read_ull(path, "size");    | True                      | 
+ 222 | //see util-linux's lsblk.c::static char  | True                      | 
+ 223 |  info->type = (                          | True                      | 
+ 224 |   (long long)read_ull(path, "partition") | True                      | 
+ 225 |   : is_prefixed_with(devname, "loop") ?  | True                      | 
+ 226 |   : "disk"                               | True                      | 
+ 227 |  );                                      | True                      | 
+ 228 | //TODO: ^^^^ read from /sys/XYZ/uevent,  | True                      | 
+ 229 |  info->majmin = majmin;                  | True                      | 
+ 230 |  //info->rm = ...;                       | True                      | 
+ 231 |  //info->ro = ...;                       | True                      | 
+ 232 |  //info->mountpoint = get_mountpoint(maj | True                      | 
+ 233 |                                          | True                      | 
+ 234 |  /* Scan for partititons */              | True                      | 
+ 235 |  dir = xopendir(path);                   | True                      | 
+ 236 |  while ((entry = readdir(dir)) != NULL)  | True                      | 
+ 237 |   if (is_prefixed_with(entry->d_name, de | True                      | 
+ 238 |    char *part = xasprintf("/sys/block/%s | True                      | 
+ 239 |    process__sys_block_NAME(part, entry-> | True                      | 
+ 240 |    free(part);                           | True                      | 
+ 241 |   }                                      | True                      | 
+ 242 |  }                                       | True                      | 
+ 243 |  closedir(dir);                          | True                      | 
+ 244 | }                                        | True                      | 
+ 245 | static void process__sys_block_NAME(cons | True                      | 
+ 246 | {                                        | True                      | 
+ 247 |  char *majmin = read_str(path, "dev");   | True                      | 
+ 248 | //bb_error_msg("%s/dev:'%s'", path, majm | True                      | 
+ 249 |  if (majmin /*&& majmin[0]*/) {          | True                      | 
+ 250 |   char *sys_dev_block_MAJMIN = concat_pa | True                      | 
+ 251 |   process__sys_dev_block_MAJMIN(sys_dev_ | True                      | 
+ 252 |   /* ^^^ consumes malloc'ed majmin */    | True                      | 
+ 253 |   free(sys_dev_block_MAJMIN);            | True                      | 
+ 254 |  }                                       | True                      | 
+ 255 |  /* WRONG: free(majmin); */              | True                      | 
+ 256 | // return !majmin; /* 1 if no PATH/dev w | True                      | 
+ 257 | }                                        | True                      | 
+ 258 |                                          | True                      | 
+ 259 | static int compare_devices(const void *a | True                      | 
+ 260 | {                                        | True                      | 
+ 261 |  const struct blockdev_info *da = (const | True                      | 
+ 262 |  const struct blockdev_info *db = (const | True                      | 
+ 263 |  return strcmp(da->name, db->name);      | True                      | 
+ 264 | }                                        | True                      | 
+ 265 |                                          | True                      | 
+ 266 | int lsblk_main(int argc, char **argv) MA | True                      | 
+ 267 | int lsblk_main(int argc UNUSED_PARAM, ch | True                      | 
+ 268 | {                                        | True                      | 
+ 269 |  unsigned i;                             | True                      | 
+ 270 |                                          | True                      | 
+ 271 |  INIT_G();                               | True                      | 
+ 272 |                                          | True                      | 
+ 273 |  /* support/ignore -a ("all") */         | True                      | 
+ 274 |  getopt32(argv, "a");                    | True                      | 
+ 275 |  argv += optind;                         | True                      | 
+ 276 |                                          | True                      | 
+ 277 |  G.mountinfo = xmalloc_xopen_read_close( | True                      | 
+ 278 |                                          | True                      | 
+ 279 |  /* If specific devices are requested, p | True                      | 
+ 280 |  if (*argv) {                            | True                      | 
+ 281 |   while (*argv) {                        | True                      | 
+ 282 |    char *majmin;                         | True                      | 
+ 283 |    char *sys_dev_block_MAJMIN;           | True                      | 
+ 284 |    char *target;                         | True                      | 
+ 285 |    char *name;                           | True                      | 
+ 286 |                                          | True                      | 
+ 287 |    /* Try:                               | True                      | 
+ 288 |     * cp -a /dev/DISK /tmp/bogusname; ls | True                      | 
+ 289 |     * ^^^^ should still show "DISK" as t | True                      | 
+ 290 |     */                                   | True                      | 
+ 291 |    majmin = get_majmin_from_stat(*argv++ | True                      | 
+ 292 | //bb_error_msg("get_majmin_from_stat('%s | True                      | 
+ 293 |    if (!majmin)                          | True                      | 
+ 294 |     continue;                            | True                      | 
+ 295 |                                          | True                      | 
+ 296 |    sys_dev_block_MAJMIN = concat_path_fi | True                      | 
+ 297 |    /* util-linux 2.41.1 gets the "real n | True                      | 
+ 298 |    target = xmalloc_readlink(sys_dev_blo | True                      | 
+ 299 | //bb_error_msg("target:'%s'", target);   | True                      | 
+ 300 |    if (target) {                         | True                      | 
+ 301 |     name = strrchr(target, '/');         | True                      | 
+ 302 |     if (name && *++name) {               | True                      | 
+ 303 |      char *sys_block_NAME;               | True                      | 
+ 304 | // Maybe there's a reason why util-linux | True                      | 
+ 305 | // In which case uncomment this, and exp | True                      | 
+ 306 | //     int err;                          | True                      | 
+ 307 | //                                       | True                      | 
+ 308 | //     sys_block_NAME = concat_path_file | True                      | 
+ 309 | //     err = process__sys_block_NAME(sys | True                      | 
+ 310 | //     free(sys_block_NAME);             | True                      | 
+ 311 | //     /* "/sys/block/NAME/dev" wasn't f | True                      | 
+ 312 | //     if (err) {                        | True                      | 
+ 313 |       /* util-linux seems to test for ex | True                      | 
+ 314 |        * if that exists, it *guesses* pa | True                      | 
+ 315 |        * We just try /sys/class/block/NA | True                      | 
+ 316 |        */                                | True                      | 
+ 317 |       sys_block_NAME = concat_path_file( | True                      | 
+ 318 |       process__sys_block_NAME(sys_block_ | True                      | 
+ 319 |       free(sys_block_NAME);              | True                      | 
+ 320 | //     }                                 | True                      | 
+ 321 |     }                                    | True                      | 
+ 322 |     free(target);                        | True                      | 
+ 323 |    }                                     | True                      | 
+ 324 |    free(majmin);                         | True                      | 
+ 325 |    free(sys_dev_block_MAJMIN);           | True                      | 
+ 326 |   }                                      | True                      | 
+ 327 |  } else {                                | True                      | 
+ 328 |   DIR *dir;                              | True                      | 
+ 329 |   struct dirent *entry;                  | True                      | 
+ 330 |                                          | True                      | 
+ 331 |   /* Read all devices from /sys/block */ | True                      | 
+ 332 |   dir = xopendir("/sys/block");          | True                      | 
+ 333 |   while ((entry = readdir(dir)) != NULL) | True                      | 
+ 334 |    char *sys_block_NAME;                 | True                      | 
+ 335 |    if (DOT_OR_DOTDOT(entry->d_name))     | True                      | 
+ 336 |     continue;                            | True                      | 
+ 337 |    sys_block_NAME = concat_path_file("/s | True                      | 
+ 338 |    process__sys_block_NAME(sys_block_NAM | True                      | 
+ 339 |    free(sys_block_NAME);                 | True                      | 
+ 340 |   }                                      | True                      | 
+ 341 |   closedir(dir);                         | True                      | 
+ 342 |  }                                       | True                      | 
+ 343 |                                          | True                      | 
+ 344 |  if (G.count == 0)                       | True                      | 
+ 345 |   return 32; /* try "lsblk /dev/null DOE | True                      | 
+ 346 |                                          | True                      | 
+ 347 |  /* Sort devices by name */              | True                      | 
+ 348 |  qsort(G.list, G.count, sizeof(G.list[0] | True                      | 
+ 349 |                                          | True                      | 
+ 350 |  /* Print header */                      | True                      | 
+ 351 |  printf("%-15s MAJ:MIN  SIZE TYPE MOUNTP | True                      | 
+ 352 |  //util-linux 2.41.1 default set of fiel | True                      | 
+ 353 |  //"NAME        MAJ:MIN RM   SIZE RO TYP | True                      | 
+ 354 |                                          | True                      | 
+ 355 |  /* Print devices */                     | True                      | 
+ 356 |  for (i = 0; i < G.count; i++) {         | True                      | 
+ 357 |   char buf6[6];                          | True                      | 
+ 358 |   char *mnt, *e;                         | True                      | 
+ 359 |                                          | True                      | 
+ 360 |   mnt = (get_mountpoints(G.list[i].majmi | True                      | 
+ 361 |   e = strchrnul(mnt[0] ? mnt + 1 : "", ' | True                      | 
+ 362 |   smart_ulltoa5(G.list[i].size * 512, bu | True                      | 
+ 363 |   printf("%-15s %-7s %.5s %4s%.*s\n",    | True                      | 
+ 364 |    G.list[i].name,                       | True                      | 
+ 365 |    G.list[i].majmin,                     | True                      | 
+ 366 |    buf6,                                 | True                      | 
+ 367 |    G.list[i].type,                       | True                      | 
+ 368 |    (int)(e - mnt), mnt                   | True                      | 
+ 369 |   );                                     | True                      | 
+ 370 |   while (*mnt == ' ') {                  | True                      | 
+ 371 | //util-linux prints multiple mountpoints | True                      | 
+ 372 | //DEVNAME     259:3    0 475.4G  0 part  | True                      | 
+ 373 | //                                       | True                      | 
+ 374 |    mnt = skip_non_whitespace(mnt + 1);   | True                      | 
+ 375 |    if (!mnt[0]) break;                   | True                      | 
+ 376 |    e = strchrnul(mnt + 1, ' ');          | True                      | 
+ 377 |    printf("%34s%.*s\n", "", (int)(e - mn | True                      | 
+ 378 |   }                                      | True                      | 
+ 379 |  }                                       | True                      | 
+ 380 |                                          | True                      | 
+ 381 |  fflush_stdout_and_exit(G.exitcode);     | True                      | 
+ 382 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +111MB, 253ms             | 

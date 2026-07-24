@@ -1,0 +1,767 @@
+FILE: data/raw/busybox-1.38.0/libbb/pw_encrypt_des.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * FreeSec: libcrypt for NetBSD          | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * Copyright (c) 1994 David Burren       | True                      | 
+   5 |  * All rights reserved.                  | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Adapted for FreeBSD-2.0 by Geoffrey M | True                      | 
+   8 |  * this file should now *only* export cr | True                      | 
+   9 |  * binaries of libcrypt exportable from  | True                      | 
+  10 |  *                                       | True                      | 
+  11 |  * Adapted for FreeBSD-4.0 by Mark R V M | True                      | 
+  12 |  * this file should now *only* export cr | True                      | 
+  13 |  * a module that can be optionally inclu | True                      | 
+  14 |  *                                       | True                      | 
+  15 |  * Redistribution and use in source and  | True                      | 
+  16 |  * modification, are permitted provided  | True                      | 
+  17 |  * are met:                              | True                      | 
+  18 |  * 1. Redistributions of source code mus | True                      | 
+  19 |  *    notice, this list of conditions an | True                      | 
+  20 |  * 2. Redistributions in binary form mus | True                      | 
+  21 |  *    notice, this list of conditions an | True                      | 
+  22 |  *    documentation and/or other materia | True                      | 
+  23 |  * 3. Neither the name of the author nor | True                      | 
+  24 |  *    may be used to endorse or promote  | True                      | 
+  25 |  *    without specific prior written per | True                      | 
+  26 |  *                                       | True                      | 
+  27 |  * THIS SOFTWARE IS PROVIDED BY THE AUTH | True                      | 
+  28 |  * ANY EXPRESS OR IMPLIED WARRANTIES, IN | True                      | 
+  29 |  * IMPLIED WARRANTIES OF MERCHANTABILITY | True                      | 
+  30 |  * ARE DISCLAIMED.  IN NO EVENT SHALL TH | True                      | 
+  31 |  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, | True                      | 
+  32 |  * DAMAGES (INCLUDING, BUT NOT LIMITED T | True                      | 
+  33 |  * OR SERVICES; LOSS OF USE, DATA, OR PR | True                      | 
+  34 |  * HOWEVER CAUSED AND ON ANY THEORY OF L | True                      | 
+  35 |  * LIABILITY, OR TORT (INCLUDING NEGLIGE | True                      | 
+  36 |  * OUT OF THE USE OF THIS SOFTWARE, EVEN | True                      | 
+  37 |  * SUCH DAMAGE.                          | True                      | 
+  38 |  *                                       | True                      | 
+  39 |  * This is an original implementation of | True                      | 
+  40 |  * by David Burren <davidb@werj.com.au>. | True                      | 
+  41 |  *                                       | True                      | 
+  42 |  * An excellent reference on the underly | True                      | 
+  43 |  * algorithms) is:                       | True                      | 
+  44 |  *                                       | True                      | 
+  45 |  * B. Schneier, Applied Cryptography: pr | True                      | 
+  46 |  * and source code in C, John Wiley & So | True                      | 
+  47 |  *                                       | True                      | 
+  48 |  * Note that in that book's description  | True                      | 
+  49 |  * pbox, and final permutations are inve | True                      | 
+  50 |  * attention of the author).  A list of  | True                      | 
+  51 |  * posted to the sci.crypt newsgroup by  | True                      | 
+  52 |  *                                       | True                      | 
+  53 |  * ARCHITECTURE ASSUMPTIONS:             | True                      | 
+  54 |  * It is assumed that the 8-byte arrays  | True                      | 
+  55 |  * addressed as arrays of uint32_t's (ie | True                      | 
+  56 |  * alignment).                           | True                      | 
+  57 |  */                                      | True                      | 
+  58 |                                          | True                      | 
+  59 |                                          | True                      | 
+  60 | /* Parts busybox doesn't need or had opt | True                      | 
+  61 | #define USE_PRECOMPUTED_u_sbox 1         | True                      | 
+  62 | #define USE_REPETITIVE_SPEEDUP 0         | True                      | 
+  63 | #define USE_ip_mask 0                    | True                      | 
+  64 | #define USE_de_keys 0                    | True                      | 
+  65 |                                          | True                      | 
+  66 |                                          | True                      | 
+  67 | /* A pile of data */                     | True                      | 
+  68 | static const uint8_t IP[64] ALIGN1 = {   | True                      | 
+  69 |  58, 50, 42, 34, 26, 18, 10,  2, 60, 52, | True                      | 
+  70 |  62, 54, 46, 38, 30, 22, 14,  6, 64, 56, | True                      | 
+  71 |  57, 49, 41, 33, 25, 17,  9,  1, 59, 51, | True                      | 
+  72 |  61, 53, 45, 37, 29, 21, 13,  5, 63, 55, | True                      | 
+  73 | };                                       | True                      | 
+  74 |                                          | True                      | 
+  75 | static const uint8_t key_perm[56] ALIGN1 | True                      | 
+  76 |  57, 49, 41, 33, 25, 17,  9,  1, 58, 50, | True                      | 
+  77 |  10,  2, 59, 51, 43, 35, 27, 19, 11,  3, | True                      | 
+  78 |  63, 55, 47, 39, 31, 23, 15,  7, 62, 54, | True                      | 
+  79 |  14,  6, 61, 53, 45, 37, 29, 21, 13,  5, | True                      | 
+  80 | };                                       | True                      | 
+  81 |                                          | True                      | 
+  82 | static const uint8_t key_shifts[16] ALIG | True                      | 
+  83 |  1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2,  | True                      | 
+  84 | };                                       | True                      | 
+  85 |                                          | True                      | 
+  86 | static const uint8_t comp_perm[48] ALIGN | True                      | 
+  87 |  14, 17, 11, 24,  1,  5,  3, 28, 15,  6, | True                      | 
+  88 |  23, 19, 12,  4, 26,  8, 16,  7, 27, 20, | True                      | 
+  89 |  41, 52, 31, 37, 47, 55, 30, 40, 51, 45, | True                      | 
+  90 |  44, 49, 39, 56, 34, 53, 46, 42, 50, 36, | True                      | 
+  91 | };                                       | True                      | 
+  92 |                                          | True                      | 
+  93 | /*                                       | True                      | 
+  94 |  * No E box is used, as it's replaced by | True                      | 
+  95 |  */                                      | True                      | 
+  96 | #if !USE_PRECOMPUTED_u_sbox              | True                      | 
+  97 | static const uint8_t sbox[8][64] = {     | !USE_PRECOMPUTED_u_sbox   | 
+  98 |  { 14,  4, 13,  1,  2, 15, 11,  8,  3, 1 | !USE_PRECOMPUTED_u_sbox   | 
+  99 |    0, 15,  7,  4, 14,  2, 13,  1, 10,  6 | !USE_PRECOMPUTED_u_sbox   | 
+ 100 |    4,  1, 14,  8, 13,  6,  2, 11, 15, 12 | !USE_PRECOMPUTED_u_sbox   | 
+ 101 |   15, 12,  8,  2,  4,  9,  1,  7,  5, 11 | !USE_PRECOMPUTED_u_sbox   | 
+ 102 |  },                                      | !USE_PRECOMPUTED_u_sbox   | 
+ 103 |  { 15,  1,  8, 14,  6, 11,  3,  4,  9,   | !USE_PRECOMPUTED_u_sbox   | 
+ 104 |    3, 13,  4,  7, 15,  2,  8, 14, 12,  0 | !USE_PRECOMPUTED_u_sbox   | 
+ 105 |    0, 14,  7, 11, 10,  4, 13,  1,  5,  8 | !USE_PRECOMPUTED_u_sbox   | 
+ 106 |   13,  8, 10,  1,  3, 15,  4,  2, 11,  6 | !USE_PRECOMPUTED_u_sbox   | 
+ 107 |  },                                      | !USE_PRECOMPUTED_u_sbox   | 
+ 108 |  { 10,  0,  9, 14,  6,  3, 15,  5,  1, 1 | !USE_PRECOMPUTED_u_sbox   | 
+ 109 |   13,  7,  0,  9,  3,  4,  6, 10,  2,  8 | !USE_PRECOMPUTED_u_sbox   | 
+ 110 |   13,  6,  4,  9,  8, 15,  3,  0, 11,  1 | !USE_PRECOMPUTED_u_sbox   | 
+ 111 |    1, 10, 13,  0,  6,  9,  8,  7,  4, 15 | !USE_PRECOMPUTED_u_sbox   | 
+ 112 |  },                                      | !USE_PRECOMPUTED_u_sbox   | 
+ 113 |  {  7, 13, 14,  3,  0,  6,  9, 10,  1,   | !USE_PRECOMPUTED_u_sbox   | 
+ 114 |   13,  8, 11,  5,  6, 15,  0,  3,  4,  7 | !USE_PRECOMPUTED_u_sbox   | 
+ 115 |   10,  6,  9,  0, 12, 11,  7, 13, 15,  1 | !USE_PRECOMPUTED_u_sbox   | 
+ 116 |    3, 15,  0,  6, 10,  1, 13,  8,  9,  4 | !USE_PRECOMPUTED_u_sbox   | 
+ 117 |  },                                      | !USE_PRECOMPUTED_u_sbox   | 
+ 118 |  {  2, 12,  4,  1,  7, 10, 11,  6,  8,   | !USE_PRECOMPUTED_u_sbox   | 
+ 119 |   14, 11,  2, 12,  4,  7, 13,  1,  5,  0 | !USE_PRECOMPUTED_u_sbox   | 
+ 120 |    4,  2,  1, 11, 10, 13,  7,  8, 15,  9 | !USE_PRECOMPUTED_u_sbox   | 
+ 121 |   11,  8, 12,  7,  1, 14,  2, 13,  6, 15 | !USE_PRECOMPUTED_u_sbox   | 
+ 122 |  },                                      | !USE_PRECOMPUTED_u_sbox   | 
+ 123 |  { 12,  1, 10, 15,  9,  2,  6,  8,  0, 1 | !USE_PRECOMPUTED_u_sbox   | 
+ 124 |   10, 15,  4,  2,  7, 12,  9,  5,  6,  1 | !USE_PRECOMPUTED_u_sbox   | 
+ 125 |    9, 14, 15,  5,  2,  8, 12,  3,  7,  0 | !USE_PRECOMPUTED_u_sbox   | 
+ 126 |    4,  3,  2, 12,  9,  5, 15, 10, 11, 14 | !USE_PRECOMPUTED_u_sbox   | 
+ 127 |  },                                      | !USE_PRECOMPUTED_u_sbox   | 
+ 128 |  {  4, 11,  2, 14, 15,  0,  8, 13,  3, 1 | !USE_PRECOMPUTED_u_sbox   | 
+ 129 |   13,  0, 11,  7,  4,  9,  1, 10, 14,  3 | !USE_PRECOMPUTED_u_sbox   | 
+ 130 |    1,  4, 11, 13, 12,  3,  7, 14, 10, 15 | !USE_PRECOMPUTED_u_sbox   | 
+ 131 |    6, 11, 13,  8,  1,  4, 10,  7,  9,  5 | !USE_PRECOMPUTED_u_sbox   | 
+ 132 |  },                                      | !USE_PRECOMPUTED_u_sbox   | 
+ 133 |  { 13,  2,  8,  4,  6, 15, 11,  1, 10,   | !USE_PRECOMPUTED_u_sbox   | 
+ 134 |    1, 15, 13,  8, 10,  3,  7,  4, 12,  5 | !USE_PRECOMPUTED_u_sbox   | 
+ 135 |    7, 11,  4,  1,  9, 12, 14,  2,  0,  6 | !USE_PRECOMPUTED_u_sbox   | 
+ 136 |    2,  1, 14,  7,  4, 10,  8, 13, 15, 12 | !USE_PRECOMPUTED_u_sbox   | 
+ 137 |  }                                       | !USE_PRECOMPUTED_u_sbox   | 
+ 138 | };                                       | !USE_PRECOMPUTED_u_sbox   | 
+ 139 | #else /* precomputed, with half-bytes pa | True                      | 
+ 140 | static const uint8_t u_sbox[8][32] = {   | True                      | 
+ 141 |  { 0x0e, 0xf4, 0x7d, 0x41, 0xe2, 0x2f, 0 | True                      | 
+ 142 |   0xa3, 0x6a, 0xc6, 0xbc, 0x95, 0x59, 0x | True                      | 
+ 143 |   0xf4, 0xc1, 0x8e, 0x28, 0x4d, 0x96, 0x | True                      | 
+ 144 |   0x5f, 0xbc, 0x39, 0xe7, 0xa3, 0x0a, 0x | True                      | 
+ 145 |  },                                      | True                      | 
+ 146 |  { 0x3f, 0xd1, 0x48, 0x7e, 0xf6, 0x2b, 0 | True                      | 
+ 147 |   0xc9, 0x07, 0x12, 0xad, 0x6c, 0x90, 0x | True                      | 
+ 148 |   0xd0, 0x8e, 0xa7, 0x1b, 0x3a, 0xf4, 0x | True                      | 
+ 149 |   0xb5, 0x68, 0x7c, 0xc6, 0x09, 0x53, 0x | True                      | 
+ 150 |  },                                      | True                      | 
+ 151 |  { 0xda, 0x70, 0x09, 0x9e, 0x36, 0x43, 0 | True                      | 
+ 152 |   0x21, 0x8d, 0x5c, 0xe7, 0xcb, 0xb4, 0x | True                      | 
+ 153 |   0x1d, 0xa6, 0xd4, 0x09, 0x68, 0x9f, 0x | True                      | 
+ 154 |   0x4b, 0xf1, 0xe2, 0x3c, 0xb5, 0x5a, 0x | True                      | 
+ 155 |  },                                      | True                      | 
+ 156 |  { 0xd7, 0x8d, 0xbe, 0x53, 0x60, 0xf6, 0 | True                      | 
+ 157 |   0x41, 0x72, 0x28, 0xc5, 0x1b, 0xac, 0x | True                      | 
+ 158 |   0x3a, 0xf6, 0x09, 0x60, 0xac, 0x1b, 0x | True                      | 
+ 159 |   0x9f, 0x41, 0x53, 0xbe, 0xc5, 0x72, 0x | True                      | 
+ 160 |  },                                      | True                      | 
+ 161 |  { 0xe2, 0xbc, 0x24, 0xc1, 0x47, 0x7a, 0 | True                      | 
+ 162 |   0x58, 0x05, 0xf3, 0xaf, 0x3d, 0x90, 0x | True                      | 
+ 163 |   0xb4, 0x82, 0xc1, 0x7b, 0x1a, 0xed, 0x | True                      | 
+ 164 |   0x6f, 0xf9, 0x0c, 0x95, 0xa6, 0x43, 0x | True                      | 
+ 165 |  },                                      | True                      | 
+ 166 |  { 0xac, 0xf1, 0x4a, 0x2f, 0x79, 0xc2, 0 | True                      | 
+ 167 |   0x60, 0x1d, 0xd3, 0xe4, 0x0e, 0xb7, 0x | True                      | 
+ 168 |   0x49, 0x3e, 0x2f, 0xc5, 0x92, 0x58, 0x | True                      | 
+ 169 |   0xb7, 0xe0, 0x14, 0x7a, 0x61, 0x0d, 0x | True                      | 
+ 170 |  },                                      | True                      | 
+ 171 |  { 0xd4, 0x0b, 0xb2, 0x7e, 0x4f, 0x90, 0 | True                      | 
+ 172 |   0xe3, 0x3c, 0x59, 0xc7, 0x25, 0xfa, 0x | True                      | 
+ 173 |   0x61, 0xb4, 0xdb, 0x8d, 0x1c, 0x43, 0x | True                      | 
+ 174 |   0x9a, 0x5f, 0x06, 0xf8, 0xe0, 0x25, 0x | True                      | 
+ 175 |  },                                      | True                      | 
+ 176 |  { 0x1d, 0xf2, 0xd8, 0x84, 0xa6, 0x3f, 0 | True                      | 
+ 177 |   0xca, 0x59, 0x63, 0xbe, 0x05, 0xe0, 0x | True                      | 
+ 178 |   0x27, 0x1b, 0xe4, 0x71, 0x49, 0xac, 0x | True                      | 
+ 179 |   0xf0, 0xc6, 0x9a, 0x0d, 0x3f, 0x53, 0x | True                      | 
+ 180 |  },                                      | True                      | 
+ 181 | };                                       | True                      | 
+ 182 | #endif                                   | True                      | 
+ 183 |                                          | True                      | 
+ 184 | static const uint8_t pbox[32] ALIGN1 = { | True                      | 
+ 185 |  16,  7, 20, 21, 29, 12, 28, 17,  1, 15, | True                      | 
+ 186 |   2,  8, 24, 14, 32, 27,  3,  9, 19, 13, | True                      | 
+ 187 | };                                       | True                      | 
+ 188 |                                          | True                      | 
+ 189 | static const uint8_t bits8[8] ALIGN1 = { | True                      | 
+ 190 |                                          | True                      | 
+ 191 |                                          | True                      | 
+ 192 | /* Static stuff that stays resident and  | True                      | 
+ 193 |  * being initialized, and therefore does | True                      | 
+ 194 |  * reentrant. */                         | True                      | 
+ 195 | struct const_des_ctx {                   | True                      | 
+ 196 | #if USE_ip_mask                          | True                      | 
+ 197 |  uint8_t init_perm[64]; /* referenced 2  | USE_ip_mask               | 
+ 198 | #endif                                   | True                      | 
+ 199 |  uint8_t final_perm[64]; /* 2 times */   | True                      | 
+ 200 |  uint8_t m_sbox[4][4096]; /* 5 times */  | True                      | 
+ 201 | };                                       | True                      | 
+ 202 | #define C (*cctx)                        | True                      | 
+ 203 | #define init_perm  (C.init_perm )        | True                      | 
+ 204 | #define final_perm (C.final_perm)        | True                      | 
+ 205 | #define m_sbox     (C.m_sbox    )        | True                      | 
+ 206 |                                          | True                      | 
+ 207 | static struct const_des_ctx*             | True                      | 
+ 208 | const_des_init(void)                     | True                      | 
+ 209 | {                                        | True                      | 
+ 210 |  unsigned i, j, b;                       | True                      | 
+ 211 |  struct const_des_ctx *cctx;             | True                      | 
+ 212 |                                          | True                      | 
+ 213 | #if !USE_PRECOMPUTED_u_sbox              | True                      | 
+ 214 |  uint8_t u_sbox[8][64];                  | !USE_PRECOMPUTED_u_sbox   | 
+ 215 |                                          | !USE_PRECOMPUTED_u_sbox   | 
+ 216 |  cctx = xmalloc(sizeof(*cctx));          | !USE_PRECOMPUTED_u_sbox   | 
+ 217 |                                          | !USE_PRECOMPUTED_u_sbox   | 
+ 218 |  /* Invert the S-boxes, reordering the i | !USE_PRECOMPUTED_u_sbox   | 
+ 219 |  for (i = 0; i < 8; i++) {               | !USE_PRECOMPUTED_u_sbox   | 
+ 220 |   for (j = 0; j < 64; j++) {             | !USE_PRECOMPUTED_u_sbox   | 
+ 221 |    b = (j & 0x20) | ((j & 1) << 4) | ((j | !USE_PRECOMPUTED_u_sbox   | 
+ 222 |    u_sbox[i][j] = sbox[i][b];            | !USE_PRECOMPUTED_u_sbox   | 
+ 223 |   }                                      | !USE_PRECOMPUTED_u_sbox   | 
+ 224 |  }                                       | !USE_PRECOMPUTED_u_sbox   | 
+ 225 |  for (i = 0; i < 8; i++) {               | !USE_PRECOMPUTED_u_sbox   | 
+ 226 |   fprintf(stderr, "\t{\t");              | !USE_PRECOMPUTED_u_sbox   | 
+ 227 |   for (j = 0; j < 64; j+=2)              | !USE_PRECOMPUTED_u_sbox   | 
+ 228 |    fprintf(stderr, " 0x%02x,", u_sbox[i] | !USE_PRECOMPUTED_u_sbox   | 
+ 229 |   fprintf(stderr, "\n\t},\n");           | !USE_PRECOMPUTED_u_sbox   | 
+ 230 |  }                                       | !USE_PRECOMPUTED_u_sbox   | 
+ 231 |  /*                                      | !USE_PRECOMPUTED_u_sbox   | 
+ 232 |   * Convert the inverted S-boxes into 4  | !USE_PRECOMPUTED_u_sbox   | 
+ 233 |   * Each will handle 12 bits of the S-bo | !USE_PRECOMPUTED_u_sbox   | 
+ 234 |   */                                     | !USE_PRECOMPUTED_u_sbox   | 
+ 235 |  for (b = 0; b < 4; b++)                 | !USE_PRECOMPUTED_u_sbox   | 
+ 236 |   for (i = 0; i < 64; i++)               | !USE_PRECOMPUTED_u_sbox   | 
+ 237 |    for (j = 0; j < 64; j++)              | !USE_PRECOMPUTED_u_sbox   | 
+ 238 |     m_sbox[b][(i << 6) | j] =            | !USE_PRECOMPUTED_u_sbox   | 
+ 239 |      (uint8_t)((u_sbox[(b << 1)][i] << 4 | !USE_PRECOMPUTED_u_sbox   | 
+ 240 |       u_sbox[(b << 1) + 1][j]);          | !USE_PRECOMPUTED_u_sbox   | 
+ 241 | #else                                    | True                      | 
+ 242 |  cctx = xmalloc(sizeof(*cctx));          | True                      | 
+ 243 |                                          | True                      | 
+ 244 |  /*                                      | True                      | 
+ 245 |   * Convert the inverted S-boxes into 4  | True                      | 
+ 246 |   * Each will handle 12 bits of the S-bo | True                      | 
+ 247 |   */                                     | True                      | 
+ 248 |  for (b = 0; b < 4; b++)                 | True                      | 
+ 249 |   for (i = 0; i < 64; i++)               | True                      | 
+ 250 |    for (j = 0; j < 64; j++) {            | True                      | 
+ 251 |   uint8_t lo, hi;                        | True                      | 
+ 252 |   hi = u_sbox[(b << 1)][i / 2];          | True                      | 
+ 253 |   if (!(i & 1))                          | True                      | 
+ 254 |    hi <<= 4;                             | True                      | 
+ 255 |   lo = u_sbox[(b << 1) + 1][j / 2];      | True                      | 
+ 256 |   if (j & 1)                             | True                      | 
+ 257 |    lo >>= 4;                             | True                      | 
+ 258 |   m_sbox[b][(i << 6) | j] = (hi & 0xf0)  | True                      | 
+ 259 |  }                                       | True                      | 
+ 260 | #endif                                   | True                      | 
+ 261 |                                          | True                      | 
+ 262 |  /*                                      | True                      | 
+ 263 |   * Set up the initial & final permutati | True                      | 
+ 264 |   */                                     | True                      | 
+ 265 |  for (i = 0; i < 64; i++) {              | True                      | 
+ 266 |   final_perm[i] = IP[i] - 1;             | True                      | 
+ 267 | #if USE_ip_mask                          | True                      | 
+ 268 |   init_perm[final_perm[i]] = (uint8_t)i; | USE_ip_mask               | 
+ 269 | #endif                                   | True                      | 
+ 270 |  }                                       | True                      | 
+ 271 |                                          | True                      | 
+ 272 |  return cctx;                            | True                      | 
+ 273 | }                                        | True                      | 
+ 274 |                                          | True                      | 
+ 275 |                                          | True                      | 
+ 276 | struct des_ctx {                         | True                      | 
+ 277 |  const struct const_des_ctx *const_ctx;  | True                      | 
+ 278 |  uint32_t saltbits; /* referenced 5 time | True                      | 
+ 279 | #if USE_REPETITIVE_SPEEDUP               | True                      | 
+ 280 |  uint32_t old_salt; /* 3 times */        | USE_REPETITIVE_SPEEDUP    | 
+ 281 |  uint32_t old_rawkey0, old_rawkey1; /* 3 | USE_REPETITIVE_SPEEDUP    | 
+ 282 | #endif                                   | True                      | 
+ 283 |  uint8_t un_pbox[32]; /* 2 times */      | True                      | 
+ 284 |  uint8_t inv_comp_perm[56]; /* 3 times * | True                      | 
+ 285 |  uint8_t inv_key_perm[64]; /* 3 times */ | True                      | 
+ 286 |  uint32_t en_keysl[16], en_keysr[16]; /* | True                      | 
+ 287 | #if USE_de_keys                          | True                      | 
+ 288 |  uint32_t de_keysl[16], de_keysr[16]; /* | USE_de_keys               | 
+ 289 | #endif                                   | True                      | 
+ 290 | #if USE_ip_mask                          | True                      | 
+ 291 |  uint32_t ip_maskl[8][256], ip_maskr[8][ | USE_ip_mask               | 
+ 292 | #endif                                   | True                      | 
+ 293 |  uint32_t fp_maskl[8][256], fp_maskr[8][ | True                      | 
+ 294 |  uint32_t key_perm_maskl[8][128], key_pe | True                      | 
+ 295 |  uint32_t comp_maskl[8][128], comp_maskr | True                      | 
+ 296 |  uint32_t psbox[4][256]; /* 5 times */   | True                      | 
+ 297 | };                                       | True                      | 
+ 298 | #define D (*ctx)                         | True                      | 
+ 299 | #define const_ctx       (D.const_ctx     | True                      | 
+ 300 | #define saltbits        (D.saltbits      | True                      | 
+ 301 | #define old_salt        (D.old_salt      | True                      | 
+ 302 | #define old_rawkey0     (D.old_rawkey0   | True                      | 
+ 303 | #define old_rawkey1     (D.old_rawkey1   | True                      | 
+ 304 | #define un_pbox         (D.un_pbox       | True                      | 
+ 305 | #define inv_comp_perm   (D.inv_comp_perm | True                      | 
+ 306 | #define inv_key_perm    (D.inv_key_perm  | True                      | 
+ 307 | #define en_keysl        (D.en_keysl      | True                      | 
+ 308 | #define en_keysr        (D.en_keysr      | True                      | 
+ 309 | #define de_keysl        (D.de_keysl      | True                      | 
+ 310 | #define de_keysr        (D.de_keysr      | True                      | 
+ 311 | #define ip_maskl        (D.ip_maskl      | True                      | 
+ 312 | #define ip_maskr        (D.ip_maskr      | True                      | 
+ 313 | #define fp_maskl        (D.fp_maskl      | True                      | 
+ 314 | #define fp_maskr        (D.fp_maskr      | True                      | 
+ 315 | #define key_perm_maskl  (D.key_perm_mask | True                      | 
+ 316 | #define key_perm_maskr  (D.key_perm_mask | True                      | 
+ 317 | #define comp_maskl      (D.comp_maskl    | True                      | 
+ 318 | #define comp_maskr      (D.comp_maskr    | True                      | 
+ 319 | #define psbox           (D.psbox         | True                      | 
+ 320 |                                          | True                      | 
+ 321 | static struct des_ctx*                   | True                      | 
+ 322 | des_init(struct des_ctx *ctx, const stru | True                      | 
+ 323 | {                                        | True                      | 
+ 324 |  int i, j, b, k, inbit, obit;            | True                      | 
+ 325 |  uint32_t p;                             | True                      | 
+ 326 |  const uint32_t *bits28, *bits24;        | True                      | 
+ 327 |  uint32_t bits32[32];                    | True                      | 
+ 328 |                                          | True                      | 
+ 329 |  if (!ctx)                               | True                      | 
+ 330 |   ctx = xmalloc(sizeof(*ctx));           | True                      | 
+ 331 |  const_ctx = cctx;                       | True                      | 
+ 332 |                                          | True                      | 
+ 333 |  p = 0x80000000U;                        | True                      | 
+ 334 |  for (i = 0; p; i++) {                   | True                      | 
+ 335 |   bits32[i] = p;                         | True                      | 
+ 336 |   p >>= 1;                               | True                      | 
+ 337 |  }                                       | True                      | 
+ 338 |                                          | True                      | 
+ 339 | #if USE_REPETITIVE_SPEEDUP               | True                      | 
+ 340 |  old_rawkey0 = old_rawkey1 = 0;          | USE_REPETITIVE_SPEEDUP    | 
+ 341 |  old_salt = 0;                           | USE_REPETITIVE_SPEEDUP    | 
+ 342 | #endif                                   | True                      | 
+ 343 |  //saltbits = 0; /* not needed: we call  | True                      | 
+ 344 |  bits28 = bits32 + 4;                    | True                      | 
+ 345 |  bits24 = bits28 + 4;                    | True                      | 
+ 346 |                                          | True                      | 
+ 347 |  /* Initialise the inverted key permutat | True                      | 
+ 348 |  for (i = 0; i < 64; i++) {              | True                      | 
+ 349 |   inv_key_perm[i] = 255;                 | True                      | 
+ 350 |  }                                       | True                      | 
+ 351 |                                          | True                      | 
+ 352 |  /*                                      | True                      | 
+ 353 |   * Invert the key permutation and initi | True                      | 
+ 354 |   * compression permutation.             | True                      | 
+ 355 |   */                                     | True                      | 
+ 356 |  for (i = 0; i < 56; i++) {              | True                      | 
+ 357 |   inv_key_perm[key_perm[i] - 1] = (uint8 | True                      | 
+ 358 |   inv_comp_perm[i] = 255;                | True                      | 
+ 359 |  }                                       | True                      | 
+ 360 |                                          | True                      | 
+ 361 |  /* Invert the key compression permutati | True                      | 
+ 362 |  for (i = 0; i < 48; i++) {              | True                      | 
+ 363 |   inv_comp_perm[comp_perm[i] - 1] = (uin | True                      | 
+ 364 |  }                                       | True                      | 
+ 365 |                                          | True                      | 
+ 366 |  /*                                      | True                      | 
+ 367 |   * Set up the OR-mask arrays for the in | True                      | 
+ 368 |   * and for the key initial and compress | True                      | 
+ 369 |   */                                     | True                      | 
+ 370 |  for (k = 0; k < 8; k++) {               | True                      | 
+ 371 |   uint32_t il, ir;                       | True                      | 
+ 372 |   uint32_t fl, fr;                       | True                      | 
+ 373 |   for (i = 0; i < 256; i++) {            | True                      | 
+ 374 | #if USE_ip_mask                          | True                      | 
+ 375 |    il = 0;                               | USE_ip_mask               | 
+ 376 |    ir = 0;                               | USE_ip_mask               | 
+ 377 | #endif                                   | True                      | 
+ 378 |    fl = 0;                               | True                      | 
+ 379 |    fr = 0;                               | True                      | 
+ 380 |    for (j = 0; j < 8; j++) {             | True                      | 
+ 381 |     inbit = 8 * k + j;                   | True                      | 
+ 382 |     if (i & bits8[j]) {                  | True                      | 
+ 383 | #if USE_ip_mask                          | True                      | 
+ 384 |      obit = init_perm[inbit];            | USE_ip_mask               | 
+ 385 |      if (obit < 32)                      | USE_ip_mask               | 
+ 386 |       il |= bits32[obit];                | USE_ip_mask               | 
+ 387 |      else                                | USE_ip_mask               | 
+ 388 |       ir |= bits32[obit - 32];           | USE_ip_mask               | 
+ 389 | #endif                                   | True                      | 
+ 390 |      obit = final_perm[inbit];           | True                      | 
+ 391 |      if (obit < 32)                      | True                      | 
+ 392 |       fl |= bits32[obit];                | True                      | 
+ 393 |      else                                | True                      | 
+ 394 |       fr |= bits32[obit - 32];           | True                      | 
+ 395 |     }                                    | True                      | 
+ 396 |    }                                     | True                      | 
+ 397 | #if USE_ip_mask                          | True                      | 
+ 398 |    ip_maskl[k][i] = il;                  | USE_ip_mask               | 
+ 399 |    ip_maskr[k][i] = ir;                  | USE_ip_mask               | 
+ 400 | #endif                                   | True                      | 
+ 401 |    fp_maskl[k][i] = fl;                  | True                      | 
+ 402 |    fp_maskr[k][i] = fr;                  | True                      | 
+ 403 |   }                                      | True                      | 
+ 404 |   for (i = 0; i < 128; i++) {            | True                      | 
+ 405 |    il = 0;                               | True                      | 
+ 406 |    ir = 0;                               | True                      | 
+ 407 |    for (j = 0; j < 7; j++) {             | True                      | 
+ 408 |     inbit = 8 * k + j;                   | True                      | 
+ 409 |     if (i & bits8[j + 1]) {              | True                      | 
+ 410 |      obit = inv_key_perm[inbit];         | True                      | 
+ 411 |      if (obit == 255)                    | True                      | 
+ 412 |       continue;                          | True                      | 
+ 413 |      if (obit < 28)                      | True                      | 
+ 414 |       il |= bits28[obit];                | True                      | 
+ 415 |      else                                | True                      | 
+ 416 |       ir |= bits28[obit - 28];           | True                      | 
+ 417 |     }                                    | True                      | 
+ 418 |    }                                     | True                      | 
+ 419 |    key_perm_maskl[k][i] = il;            | True                      | 
+ 420 |    key_perm_maskr[k][i] = ir;            | True                      | 
+ 421 |    il = 0;                               | True                      | 
+ 422 |    ir = 0;                               | True                      | 
+ 423 |    for (j = 0; j < 7; j++) {             | True                      | 
+ 424 |     inbit = 7 * k + j;                   | True                      | 
+ 425 |     if (i & bits8[j + 1]) {              | True                      | 
+ 426 |      obit = inv_comp_perm[inbit];        | True                      | 
+ 427 |      if (obit == 255)                    | True                      | 
+ 428 |       continue;                          | True                      | 
+ 429 |      if (obit < 24)                      | True                      | 
+ 430 |       il |= bits24[obit];                | True                      | 
+ 431 |      else                                | True                      | 
+ 432 |       ir |= bits24[obit - 24];           | True                      | 
+ 433 |     }                                    | True                      | 
+ 434 |    }                                     | True                      | 
+ 435 |    comp_maskl[k][i] = il;                | True                      | 
+ 436 |    comp_maskr[k][i] = ir;                | True                      | 
+ 437 |   }                                      | True                      | 
+ 438 |  }                                       | True                      | 
+ 439 |                                          | True                      | 
+ 440 |  /*                                      | True                      | 
+ 441 |   * Invert the P-box permutation, and co | True                      | 
+ 442 |   * handling the output of the S-box arr | True                      | 
+ 443 |   */                                     | True                      | 
+ 444 |  for (i = 0; i < 32; i++)                | True                      | 
+ 445 |   un_pbox[pbox[i] - 1] = (uint8_t)i;     | True                      | 
+ 446 |                                          | True                      | 
+ 447 |  for (b = 0; b < 4; b++) {               | True                      | 
+ 448 |   for (i = 0; i < 256; i++) {            | True                      | 
+ 449 |    p = 0;                                | True                      | 
+ 450 |    for (j = 0; j < 8; j++) {             | True                      | 
+ 451 |     if (i & bits8[j])                    | True                      | 
+ 452 |      p |= bits32[un_pbox[8 * b + j]];    | True                      | 
+ 453 |    }                                     | True                      | 
+ 454 |    psbox[b][i] = p;                      | True                      | 
+ 455 |   }                                      | True                      | 
+ 456 |  }                                       | True                      | 
+ 457 |                                          | True                      | 
+ 458 |  return ctx;                             | True                      | 
+ 459 | }                                        | True                      | 
+ 460 |                                          | True                      | 
+ 461 | /* Accepts 24-bit salt at max */         | True                      | 
+ 462 | static void                              | True                      | 
+ 463 | setup_salt(struct des_ctx *ctx, uint32_t | True                      | 
+ 464 | {                                        | True                      | 
+ 465 |  uint32_t invbits;                       | True                      | 
+ 466 |                                          | True                      | 
+ 467 | #if USE_REPETITIVE_SPEEDUP               | True                      | 
+ 468 |  if (salt == old_salt)                   | USE_REPETITIVE_SPEEDUP    | 
+ 469 |   return;                                | USE_REPETITIVE_SPEEDUP    | 
+ 470 |  old_salt = salt;                        | USE_REPETITIVE_SPEEDUP    | 
+ 471 | #endif                                   | True                      | 
+ 472 |                                          | True                      | 
+ 473 |  invbits = 0;                            | True                      | 
+ 474 |                                          | True                      | 
+ 475 |  salt |= (1 << 24);                      | True                      | 
+ 476 |  do {                                    | True                      | 
+ 477 |   invbits = (invbits << 1) + (salt & 1); | True                      | 
+ 478 |   salt >>= 1;                            | True                      | 
+ 479 |  } while (salt != 1);                    | True                      | 
+ 480 |                                          | True                      | 
+ 481 |  saltbits = invbits;                     | True                      | 
+ 482 | }                                        | True                      | 
+ 483 |                                          | True                      | 
+ 484 | static void                              | True                      | 
+ 485 | des_setkey(struct des_ctx *ctx, const ch | True                      | 
+ 486 | {                                        | True                      | 
+ 487 |  uint32_t k0, k1, rawkey0, rawkey1;      | True                      | 
+ 488 |  int shifts, round;                      | True                      | 
+ 489 |                                          | True                      | 
+ 490 |  rawkey0 = ntohl(*(const uint32_t *) key | True                      | 
+ 491 |  rawkey1 = ntohl(*(const uint32_t *) (ke | True                      | 
+ 492 |                                          | True                      | 
+ 493 | #if USE_REPETITIVE_SPEEDUP               | True                      | 
+ 494 |  if ((rawkey0 | rawkey1)                 | USE_REPETITIVE_SPEEDUP    | 
+ 495 |   && rawkey0 == old_rawkey0              | USE_REPETITIVE_SPEEDUP    | 
+ 496 |   && rawkey1 == old_rawkey1              | USE_REPETITIVE_SPEEDUP    | 
+ 497 |  ) {                                     | USE_REPETITIVE_SPEEDUP    | 
+ 498 |   /*                                     | USE_REPETITIVE_SPEEDUP    | 
+ 499 |    * Already setup for this key.         | USE_REPETITIVE_SPEEDUP    | 
+ 500 |    * This optimisation fails on a zero k | USE_REPETITIVE_SPEEDUP    | 
+ 501 |    * has bad parity anyway) in order to  | USE_REPETITIVE_SPEEDUP    | 
+ 502 |    * conditions.                         | USE_REPETITIVE_SPEEDUP    | 
+ 503 |    */                                    | USE_REPETITIVE_SPEEDUP    | 
+ 504 |   return;                                | USE_REPETITIVE_SPEEDUP    | 
+ 505 |  }                                       | USE_REPETITIVE_SPEEDUP    | 
+ 506 |  old_rawkey0 = rawkey0;                  | USE_REPETITIVE_SPEEDUP    | 
+ 507 |  old_rawkey1 = rawkey1;                  | USE_REPETITIVE_SPEEDUP    | 
+ 508 | #endif                                   | True                      | 
+ 509 |                                          | True                      | 
+ 510 |  /*                                      | True                      | 
+ 511 |   * Do key permutation and split into tw | True                      | 
+ 512 |   */                                     | True                      | 
+ 513 |  k0 = key_perm_maskl[0][rawkey0 >> 25]   | True                      | 
+ 514 |     | key_perm_maskl[1][(rawkey0 >> 17)  | True                      | 
+ 515 |     | key_perm_maskl[2][(rawkey0 >> 9) & | True                      | 
+ 516 |     | key_perm_maskl[3][(rawkey0 >> 1) & | True                      | 
+ 517 |     | key_perm_maskl[4][rawkey1 >> 25]   | True                      | 
+ 518 |     | key_perm_maskl[5][(rawkey1 >> 17)  | True                      | 
+ 519 |     | key_perm_maskl[6][(rawkey1 >> 9) & | True                      | 
+ 520 |     | key_perm_maskl[7][(rawkey1 >> 1) & | True                      | 
+ 521 |  k1 = key_perm_maskr[0][rawkey0 >> 25]   | True                      | 
+ 522 |     | key_perm_maskr[1][(rawkey0 >> 17)  | True                      | 
+ 523 |     | key_perm_maskr[2][(rawkey0 >> 9) & | True                      | 
+ 524 |     | key_perm_maskr[3][(rawkey0 >> 1) & | True                      | 
+ 525 |     | key_perm_maskr[4][rawkey1 >> 25]   | True                      | 
+ 526 |     | key_perm_maskr[5][(rawkey1 >> 17)  | True                      | 
+ 527 |     | key_perm_maskr[6][(rawkey1 >> 9) & | True                      | 
+ 528 |     | key_perm_maskr[7][(rawkey1 >> 1) & | True                      | 
+ 529 |  /*                                      | True                      | 
+ 530 |   * Rotate subkeys and do compression pe | True                      | 
+ 531 |   */                                     | True                      | 
+ 532 |  shifts = 0;                             | True                      | 
+ 533 |  for (round = 0; round < 16; round++) {  | True                      | 
+ 534 |   uint32_t t0, t1;                       | True                      | 
+ 535 |                                          | True                      | 
+ 536 |   shifts += key_shifts[round];           | True                      | 
+ 537 |                                          | True                      | 
+ 538 |   t0 = (k0 << shifts) | (k0 >> (28 - shi | True                      | 
+ 539 |   t1 = (k1 << shifts) | (k1 >> (28 - shi | True                      | 
+ 540 |                                          | True                      | 
+ 541 | #if USE_de_keys                          | True                      | 
+ 542 |   de_keysl[15 - round] =                 | USE_de_keys               | 
+ 543 | #endif                                   | True                      | 
+ 544 |   en_keysl[round] = comp_maskl[0][(t0 >> | True                      | 
+ 545 |     | comp_maskl[1][(t0 >> 14) & 0x7f]   | True                      | 
+ 546 |     | comp_maskl[2][(t0 >> 7) & 0x7f]    | True                      | 
+ 547 |     | comp_maskl[3][t0 & 0x7f]           | True                      | 
+ 548 |     | comp_maskl[4][(t1 >> 21) & 0x7f]   | True                      | 
+ 549 |     | comp_maskl[5][(t1 >> 14) & 0x7f]   | True                      | 
+ 550 |     | comp_maskl[6][(t1 >> 7) & 0x7f]    | True                      | 
+ 551 |     | comp_maskl[7][t1 & 0x7f];          | True                      | 
+ 552 |                                          | True                      | 
+ 553 | #if USE_de_keys                          | True                      | 
+ 554 |   de_keysr[15 - round] =                 | USE_de_keys               | 
+ 555 | #endif                                   | True                      | 
+ 556 |   en_keysr[round] = comp_maskr[0][(t0 >> | True                      | 
+ 557 |     | comp_maskr[1][(t0 >> 14) & 0x7f]   | True                      | 
+ 558 |     | comp_maskr[2][(t0 >> 7) & 0x7f]    | True                      | 
+ 559 |     | comp_maskr[3][t0 & 0x7f]           | True                      | 
+ 560 |     | comp_maskr[4][(t1 >> 21) & 0x7f]   | True                      | 
+ 561 |     | comp_maskr[5][(t1 >> 14) & 0x7f]   | True                      | 
+ 562 |     | comp_maskr[6][(t1 >> 7) & 0x7f]    | True                      | 
+ 563 |     | comp_maskr[7][t1 & 0x7f];          | True                      | 
+ 564 |  }                                       | True                      | 
+ 565 | }                                        | True                      | 
+ 566 |                                          | True                      | 
+ 567 |                                          | True                      | 
+ 568 | static void                              | True                      | 
+ 569 | do_des(struct des_ctx *ctx, /*uint32_t l | True                      | 
+ 570 | {                                        | True                      | 
+ 571 |  const struct const_des_ctx *cctx = cons | True                      | 
+ 572 |  /*                                      | True                      | 
+ 573 |   * l_in, r_in, l_out, and r_out are in  | True                      | 
+ 574 |   */                                     | True                      | 
+ 575 |  uint32_t l, r, *kl, *kr;                | True                      | 
+ 576 |  uint32_t f = f; /* silence gcc */       | True                      | 
+ 577 |  uint32_t r48l, r48r;                    | True                      | 
+ 578 |  int round;                              | True                      | 
+ 579 |                                          | True                      | 
+ 580 |  /* Do initial permutation (IP). */      | True                      | 
+ 581 | #if USE_ip_mask                          | True                      | 
+ 582 |  uint32_t l_in = 0;                      | USE_ip_mask               | 
+ 583 |  uint32_t r_in = 0;                      | USE_ip_mask               | 
+ 584 |  l = ip_maskl[0][l_in >> 24]             | USE_ip_mask               | 
+ 585 |    | ip_maskl[1][(l_in >> 16) & 0xff]    | USE_ip_mask               | 
+ 586 |    | ip_maskl[2][(l_in >> 8) & 0xff]     | USE_ip_mask               | 
+ 587 |    | ip_maskl[3][l_in & 0xff]            | USE_ip_mask               | 
+ 588 |    | ip_maskl[4][r_in >> 24]             | USE_ip_mask               | 
+ 589 |    | ip_maskl[5][(r_in >> 16) & 0xff]    | USE_ip_mask               | 
+ 590 |    | ip_maskl[6][(r_in >> 8) & 0xff]     | USE_ip_mask               | 
+ 591 |    | ip_maskl[7][r_in & 0xff];           | USE_ip_mask               | 
+ 592 |  r = ip_maskr[0][l_in >> 24]             | USE_ip_mask               | 
+ 593 |    | ip_maskr[1][(l_in >> 16) & 0xff]    | USE_ip_mask               | 
+ 594 |    | ip_maskr[2][(l_in >> 8) & 0xff]     | USE_ip_mask               | 
+ 595 |    | ip_maskr[3][l_in & 0xff]            | USE_ip_mask               | 
+ 596 |    | ip_maskr[4][r_in >> 24]             | USE_ip_mask               | 
+ 597 |    | ip_maskr[5][(r_in >> 16) & 0xff]    | USE_ip_mask               | 
+ 598 |    | ip_maskr[6][(r_in >> 8) & 0xff]     | USE_ip_mask               | 
+ 599 |    | ip_maskr[7][r_in & 0xff];           | USE_ip_mask               | 
+ 600 | #elif 0 /* -65 bytes (using the fact tha | True                      | 
+ 601 |  l = r = 0;                              | 0                         | 
+ 602 |  for (round = 0; round < 8; round++) {   | 0                         | 
+ 603 |   l |= ip_maskl[round][0];               | 0                         | 
+ 604 |   r |= ip_maskr[round][0];               | 0                         | 
+ 605 |  }                                       | 0                         | 
+ 606 |  bb_error_msg("l:%x r:%x", l, r); /* rep | 0                         | 
+ 607 | #else /* using the fact that ip_maskX[]  | True                      | 
+ 608 |  l = r = 0;                              | True                      | 
+ 609 | #endif                                   | True                      | 
+ 610 |                                          | True                      | 
+ 611 |  do {                                    | True                      | 
+ 612 |   /* Do each round. */                   | True                      | 
+ 613 |   kl = en_keysl;                         | True                      | 
+ 614 |   kr = en_keysr;                         | True                      | 
+ 615 |   round = 16;                            | True                      | 
+ 616 |   do {                                   | True                      | 
+ 617 |    /* Expand R to 48 bits (simulate the  | True                      | 
+ 618 |    r48l = ((r & 0x00000001) << 23)       | True                      | 
+ 619 |     | ((r & 0xf8000000) >> 9)            | True                      | 
+ 620 |     | ((r & 0x1f800000) >> 11)           | True                      | 
+ 621 |     | ((r & 0x01f80000) >> 13)           | True                      | 
+ 622 |     | ((r & 0x001f8000) >> 15);          | True                      | 
+ 623 |                                          | True                      | 
+ 624 |    r48r = ((r & 0x0001f800) << 7)        | True                      | 
+ 625 |     | ((r & 0x00001f80) << 5)            | True                      | 
+ 626 |     | ((r & 0x000001f8) << 3)            | True                      | 
+ 627 |     | ((r & 0x0000001f) << 1)            | True                      | 
+ 628 |     | ((r & 0x80000000) >> 31);          | True                      | 
+ 629 |    /*                                    | True                      | 
+ 630 |     * Do salting for crypt() and friends | True                      | 
+ 631 |     * XOR with the permuted key.         | True                      | 
+ 632 |     */                                   | True                      | 
+ 633 |    f = (r48l ^ r48r) & saltbits;         | True                      | 
+ 634 |    r48l ^= f ^ *kl++;                    | True                      | 
+ 635 |    r48r ^= f ^ *kr++;                    | True                      | 
+ 636 |    /*                                    | True                      | 
+ 637 |     * Do sbox lookups (which shrink it b | True                      | 
+ 638 |     * and do the pbox permutation at the | True                      | 
+ 639 |     */                                   | True                      | 
+ 640 |    f = psbox[0][m_sbox[0][r48l >> 12]]   | True                      | 
+ 641 |      | psbox[1][m_sbox[1][r48l & 0xfff]] | True                      | 
+ 642 |      | psbox[2][m_sbox[2][r48r >> 12]]   | True                      | 
+ 643 |      | psbox[3][m_sbox[3][r48r & 0xfff]] | True                      | 
+ 644 |    /* Now that we've permuted things, co | True                      | 
+ 645 |    f ^= l;                               | True                      | 
+ 646 |    l = r;                                | True                      | 
+ 647 |    r = f;                                | True                      | 
+ 648 |   } while (--round);                     | True                      | 
+ 649 |   r = l;                                 | True                      | 
+ 650 |   l = f;                                 | True                      | 
+ 651 |  } while (--count);                      | True                      | 
+ 652 |                                          | True                      | 
+ 653 |  /* Do final permutation (inverse of IP) | True                      | 
+ 654 |  *l_out = fp_maskl[0][l >> 24]           | True                      | 
+ 655 |   | fp_maskl[1][(l >> 16) & 0xff]        | True                      | 
+ 656 |   | fp_maskl[2][(l >> 8) & 0xff]         | True                      | 
+ 657 |   | fp_maskl[3][l & 0xff]                | True                      | 
+ 658 |   | fp_maskl[4][r >> 24]                 | True                      | 
+ 659 |   | fp_maskl[5][(r >> 16) & 0xff]        | True                      | 
+ 660 |   | fp_maskl[6][(r >> 8) & 0xff]         | True                      | 
+ 661 |   | fp_maskl[7][r & 0xff];               | True                      | 
+ 662 |  *r_out = fp_maskr[0][l >> 24]           | True                      | 
+ 663 |   | fp_maskr[1][(l >> 16) & 0xff]        | True                      | 
+ 664 |   | fp_maskr[2][(l >> 8) & 0xff]         | True                      | 
+ 665 |   | fp_maskr[3][l & 0xff]                | True                      | 
+ 666 |   | fp_maskr[4][r >> 24]                 | True                      | 
+ 667 |   | fp_maskr[5][(r >> 16) & 0xff]        | True                      | 
+ 668 |   | fp_maskr[6][(r >> 8) & 0xff]         | True                      | 
+ 669 |   | fp_maskr[7][r & 0xff];               | True                      | 
+ 670 | }                                        | True                      | 
+ 671 |                                          | True                      | 
+ 672 | #define DES_OUT_BUFSIZE 21               | True                      | 
+ 673 |                                          | True                      | 
+ 674 | static char *                            | True                      | 
+ 675 | NOINLINE                                 | True                      | 
+ 676 | des_crypt(struct des_ctx *ctx, char outp | True                      | 
+ 677 |   const unsigned char *key, const unsign | True                      | 
+ 678 | {                                        | True                      | 
+ 679 |  uint32_t salt, r0, r1, keybuf[2];       | True                      | 
+ 680 |  uint8_t *q;                             | True                      | 
+ 681 |                                          | True                      | 
+ 682 |  /* Bad salt? Mimic crypt() API - return | True                      | 
+ 683 |  if (!salt_str[0] || !salt_str[1])       | True                      | 
+ 684 |   return NULL;                           | True                      | 
+ 685 |                                          | True                      | 
+ 686 |  /*                                      | True                      | 
+ 687 |   * Copy the key, shifting each characte | True                      | 
+ 688 |   * and padding with zeros.              | True                      | 
+ 689 |   */                                     | True                      | 
+ 690 |  q = (uint8_t *)keybuf;                  | True                      | 
+ 691 |  while (q - (uint8_t *)keybuf != 8) {    | True                      | 
+ 692 |   *q = *key << 1;                        | True                      | 
+ 693 |   if (*q)                                | True                      | 
+ 694 |    key++;                                | True                      | 
+ 695 |   q++;                                   | True                      | 
+ 696 |  }                                       | True                      | 
+ 697 |  des_setkey(ctx, (char *)keybuf);        | True                      | 
+ 698 |                                          | True                      | 
+ 699 |  /*                                      | True                      | 
+ 700 |   * salt_str - 2 chars of salt (converte | True                      | 
+ 701 |   * key - up to 8 characters             | True                      | 
+ 702 |   */                                     | True                      | 
+ 703 |  output[0] = salt_str[0];                | True                      | 
+ 704 |  output[1] = salt_str[1];                | True                      | 
+ 705 |                                          | True                      | 
+ 706 |  salt = a2i64(salt_str[0]);              | True                      | 
+ 707 |  if (salt >= 64)                         | True                      | 
+ 708 |   return NULL; /* bad salt char */       | True                      | 
+ 709 |  salt |= (a2i64(salt_str[1]) << 6);      | True                      | 
+ 710 |  if (salt >= (64 << 6))                  | True                      | 
+ 711 |   return NULL; /* bad salt char */       | True                      | 
+ 712 |  setup_salt(ctx, salt); /* set ctx->salt | True                      | 
+ 713 |                                          | True                      | 
+ 714 |  /* Do it. */                            | True                      | 
+ 715 |  do_des(ctx, /*0, 0,*/ &r0, &r1, 25 /* c | True                      | 
+ 716 |                                          | True                      | 
+ 717 |  /* Now encode the result. */            | True                      | 
+ 718 |  /* Each call takes low-order 24 bits an | True                      | 
+ 719 |  /* bits 31..8 of r0 */                  | True                      | 
+ 720 |  num2str64_4chars_msb_first(output + 2,  | True                      | 
+ 721 |  /* bits 7..0 of r0 and 31..16 of r1 */  | True                      | 
+ 722 |  num2str64_4chars_msb_first(output + 6,  | True                      | 
+ 723 |  /* bits 15..0 of r1 and two zero bits ( | True                      | 
+ 724 |  num2str64_4chars_msb_first(output + 10, | True                      | 
+ 725 |  /* extra zero byte is encoded as '.', f | True                      | 
+ 726 |  output[13] = '\0';                      | True                      | 
+ 727 |                                          | True                      | 
+ 728 |  return output;                          | True                      | 
+ 729 | }                                        | True                      | 
+ 730 |                                          | True                      | 
+ 731 | #undef USE_PRECOMPUTED_u_sbox            | True                      | 
+ 732 | #undef USE_REPETITIVE_SPEEDUP            | True                      | 
+ 733 | #undef USE_ip_mask                       | True                      | 
+ 734 | #undef USE_de_keys                       | True                      | 
+ 735 |                                          | True                      | 
+ 736 | #undef C                                 | True                      | 
+ 737 | #undef init_perm                         | True                      | 
+ 738 | #undef final_perm                        | True                      | 
+ 739 | #undef m_sbox                            | True                      | 
+ 740 | #undef D                                 | True                      | 
+ 741 | #undef const_ctx                         | True                      | 
+ 742 | #undef saltbits                          | True                      | 
+ 743 | #undef old_salt                          | True                      | 
+ 744 | #undef old_rawkey0                       | True                      | 
+ 745 | #undef old_rawkey1                       | True                      | 
+ 746 | #undef un_pbox                           | True                      | 
+ 747 | #undef inv_comp_perm                     | True                      | 
+ 748 | #undef inv_key_perm                      | True                      | 
+ 749 | #undef en_keysl                          | True                      | 
+ 750 | #undef en_keysr                          | True                      | 
+ 751 | #undef de_keysl                          | True                      | 
+ 752 | #undef de_keysr                          | True                      | 
+ 753 | #undef ip_maskl                          | True                      | 
+ 754 | #undef ip_maskr                          | True                      | 
+ 755 | #undef fp_maskl                          | True                      | 
+ 756 | #undef fp_maskr                          | True                      | 
+ 757 | #undef key_perm_maskl                    | True                      | 
+ 758 | #undef key_perm_maskr                    | True                      | 
+ 759 | #undef comp_maskl                        | True                      | 
+ 760 | #undef comp_maskr                        | True                      | 
+ 761 | #undef psbox                             | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +133MB, 346ms             | 

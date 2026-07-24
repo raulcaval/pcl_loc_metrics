@@ -1,0 +1,246 @@
+FILE: data/raw/busybox-1.38.0/util-linux/script.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * script implementation for busybox     | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * pascal.bellard@ads-lu.com             | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Based on code from util-linux v 2.12r | True                      | 
+   8 |  * Copyright (c) 1980                    | True                      | 
+   9 |  * The Regents of the University of Cali | True                      | 
+  10 |  *                                       | True                      | 
+  11 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  12 |  */                                      | True                      | 
+  13 | //config:config SCRIPT                   | True                      | 
+  14 | //config: bool "script (8.8 kb)"         | True                      | 
+  15 | //config: default y                      | True                      | 
+  16 | //config: help                           | True                      | 
+  17 | //config: The script makes typescript of | True                      | 
+  18 |                                          | True                      | 
+  19 | //applet:IF_SCRIPT(APPLET(script, BB_DIR | True                      | 
+  20 |                                          | True                      | 
+  21 | //kbuild:lib-$(CONFIG_SCRIPT) += script. | True                      | 
+  22 |                                          | True                      | 
+  23 | //usage:#define script_trivial_usage     | True                      | 
+  24 | //usage:       "[-afq] [-t[FILE]] [-c PR | True                      | 
+  25 | //usage:#define script_full_usage "\n\n" | True                      | 
+  26 | //usage:       "Default OUTFILE is 'type | True                      | 
+  27 | //usage:     "\n"                        | True                      | 
+  28 | //usage:     "\n -a Append output"       | True                      | 
+  29 | //usage:     "\n -c PROG Run PROG, not s | True                      | 
+  30 | /* Accepted but has no effect (we never  | True                      | 
+  31 | /*//usage:     "\n -f Flush output after | True                      | 
+  32 | //usage:     "\n -q Quiet"               | True                      | 
+  33 | //usage:     "\n -t[FILE] Send timing to | True                      | 
+  34 |                                          | True                      | 
+  35 | //util-linux-2.28:                       | True                      | 
+  36 | //-e: return exit code of the child      | True                      | 
+  37 |                                          | True                      | 
+  38 | //FYI (reported as bbox bug #2749):      | True                      | 
+  39 | // > script -q -c 'echo -e -n "1\n2\n3\n | True                      | 
+  40 | // > The output file on full-blown ubunt | True                      | 
+  41 | // > Output on Busybox system (arm-linux | True                      | 
+  42 | //however, in my test, "script" from uti | True                      | 
+  43 |                                          | True                      | 
+  44 | #include "libbb.h"                       | True                      | 
+  45 | #include "common_bufsiz.h"               | True                      | 
+  46 |                                          | True                      | 
+  47 | int script_main(int argc, char **argv) M | True                      | 
+  48 | int script_main(int argc UNUSED_PARAM, c | True                      | 
+  49 | {                                        | True                      | 
+  50 |  int opt;                                | True                      | 
+  51 |  int mode;                               | True                      | 
+  52 |  int child_pid;                          | True                      | 
+  53 |  int attr_ok; /* NB: 0: ok */            | True                      | 
+  54 |  int winsz_ok;                           | True                      | 
+  55 |  int pty;                                | True                      | 
+  56 |  char pty_line[GETPTY_BUFSIZE];          | True                      | 
+  57 |  struct termios tt, rtt;                 | True                      | 
+  58 |  struct winsize win;                     | True                      | 
+  59 |  FILE *timing_fp;                        | True                      | 
+  60 |  const char *str_t = NULL;               | True                      | 
+  61 |  const char *fname = "typescript";       | True                      | 
+  62 |  const char *shell;                      | True                      | 
+  63 |  char shell_opt[] = "-i";                | True                      | 
+  64 |  char *shell_arg = NULL;                 | True                      | 
+  65 |  enum {                                  | True                      | 
+  66 |   OPT_a = (1 << 0),                      | True                      | 
+  67 |   OPT_c = (1 << 1),                      | True                      | 
+  68 |   OPT_f = (1 << 2),                      | True                      | 
+  69 |   OPT_q = (1 << 3),                      | True                      | 
+  70 |   OPT_t = (1 << 4),                      | True                      | 
+  71 |  };                                      | True                      | 
+  72 |                                          | True                      | 
+  73 | #if ENABLE_LONG_OPTS                     | True                      | 
+  74 |  static const char script_longopts[] ALI | ENABLE_LONG_OPTS          | 
+  75 |   "append\0"  No_argument       "a"      | ENABLE_LONG_OPTS          | 
+  76 |   "command\0" Required_argument "c"      | ENABLE_LONG_OPTS          | 
+  77 |   "flush\0"   No_argument       "f"      | ENABLE_LONG_OPTS          | 
+  78 |   "quiet\0"   No_argument       "q"      | ENABLE_LONG_OPTS          | 
+  79 |   "timing\0"  Optional_argument "t"      | ENABLE_LONG_OPTS          | 
+  80 |   ;                                      | ENABLE_LONG_OPTS          | 
+  81 | #endif                                   | True                      | 
+  82 |                                          | True                      | 
+  83 |  opt = getopt32long(argv, "^" "ac:fqt::" | True                      | 
+  84 |     script_longopts,                     | True                      | 
+  85 |     &shell_arg, &str_t                   | True                      | 
+  86 |  );                                      | True                      | 
+  87 |  //argc -= optind;                       | True                      | 
+  88 |  argv += optind;                         | True                      | 
+  89 |  if (argv[0]) {                          | True                      | 
+  90 |   fname = argv[0];                       | True                      | 
+  91 |  }                                       | True                      | 
+  92 |  mode = O_CREAT|O_TRUNC|O_WRONLY;        | True                      | 
+  93 |  if (opt & OPT_a) {                      | True                      | 
+  94 |   mode = O_CREAT|O_APPEND|O_WRONLY;      | True                      | 
+  95 |  }                                       | True                      | 
+  96 |  if (opt & OPT_c) {                      | True                      | 
+  97 |   shell_opt[1] = 'c';                    | True                      | 
+  98 |  }                                       | True                      | 
+  99 |  if (!(opt & OPT_q)) {                   | True                      | 
+ 100 |   printf("Script started, file is %s\n", | True                      | 
+ 101 |  }                                       | True                      | 
+ 102 |  timing_fp = stderr;                     | True                      | 
+ 103 |  if (str_t) {                            | True                      | 
+ 104 |   timing_fp = xfopen_for_write(str_t);   | True                      | 
+ 105 |  }                                       | True                      | 
+ 106 |                                          | True                      | 
+ 107 |  shell = get_shell_name();               | True                      | 
+ 108 |                                          | True                      | 
+ 109 |  /* Some people run "script ... 0>&-".   | True                      | 
+ 110 |   * Our code assumes that STDIN_FILENO ! | True                      | 
+ 111 |   * Ensure STDIN_FILENO is not closed:   | True                      | 
+ 112 |   */                                     | True                      | 
+ 113 |  bb_sanitize_stdio();                    | True                      | 
+ 114 |                                          | True                      | 
+ 115 |  pty = xgetpty(pty_line);                | True                      | 
+ 116 |                                          | True                      | 
+ 117 |  /* get current stdin's tty params */    | True                      | 
+ 118 |  attr_ok = tcgetattr(0, &tt);            | True                      | 
+ 119 |  winsz_ok = ioctl(0, TIOCGWINSZ, (char * | True                      | 
+ 120 |                                          | True                      | 
+ 121 |  rtt = tt;                               | True                      | 
+ 122 |  cfmakeraw(&rtt);                        | True                      | 
+ 123 |  rtt.c_lflag &= ~ECHO;                   | True                      | 
+ 124 |  tcsetattr(0, TCSAFLUSH, &rtt);          | True                      | 
+ 125 |                                          | True                      | 
+ 126 |  /* "script" from util-linux exits when  | True                      | 
+ 127 |   * we wouldn't wait for EOF from slave  | True                      | 
+ 128 |   * (output may be produced by grandchil | True                      | 
+ 129 |  signal(SIGCHLD, record_signo);          | True                      | 
+ 130 |                                          | True                      | 
+ 131 |  /* TODO: SIGWINCH? pass window size cha | True                      | 
+ 132 |                                          | True                      | 
+ 133 |  child_pid = xvfork();                   | True                      | 
+ 134 |                                          | True                      | 
+ 135 |  if (child_pid) {                        | True                      | 
+ 136 |   /* parent */                           | True                      | 
+ 137 |   struct pollfd pfd[2];                  | True                      | 
+ 138 |   int outfd, count, loop;                | True                      | 
+ 139 |   double oldtime = time(NULL);           | True                      | 
+ 140 |   smallint fd_count = 2;                 | True                      | 
+ 141 |                                          | True                      | 
+ 142 | #define buf bb_common_bufsiz1            | True                      | 
+ 143 |   setup_common_bufsiz();                 | True                      | 
+ 144 |                                          | True                      | 
+ 145 |   outfd = xopen(fname, mode);            | True                      | 
+ 146 |   pfd[0].fd = pty;                       | True                      | 
+ 147 |   pfd[0].events = POLLIN;                | True                      | 
+ 148 |   pfd[1].fd = STDIN_FILENO;              | True                      | 
+ 149 |   pfd[1].events = POLLIN;                | True                      | 
+ 150 |   ndelay_on(pty); /* this descriptor is  | True                      | 
+ 151 |   /* ndelay_on(STDIN_FILENO); - NO, stdi | True                      | 
+ 152 |                                          | True                      | 
+ 153 |   /* copy stdin to pty master input,     | True                      | 
+ 154 |    * copy pty master output to stdout an | True                      | 
+ 155 |   /* TODO: don't use full_write's, use p | True                      | 
+ 156 |   while (fd_count && !bb_got_signal) {   | True                      | 
+ 157 |    /* not safe_poll! we want SIGCHLD to  | True                      | 
+ 158 |    if (poll(pfd, fd_count, -1) < 0 && er | True                      | 
+ 159 |     /* If child exits too quickly, we ma | True                      | 
+ 160 |      * for example, try "script -c true" | True                      | 
+ 161 |     break;                               | True                      | 
+ 162 |    }                                     | True                      | 
+ 163 |    if (pfd[0].revents) {                 | True                      | 
+ 164 |     errno = 0;                           | True                      | 
+ 165 |     count = safe_read(pty, buf, COMMON_B | True                      | 
+ 166 |     if (count <= 0 && errno != EAGAIN) { | True                      | 
+ 167 |      /* err/eof from pty: exit */        | True                      | 
+ 168 |      goto restore;                       | True                      | 
+ 169 |     }                                    | True                      | 
+ 170 |     if (count > 0) {                     | True                      | 
+ 171 |      if (opt & OPT_t) {                  | True                      | 
+ 172 |       struct timeval tv;                 | True                      | 
+ 173 |       double newtime;                    | True                      | 
+ 174 |                                          | True                      | 
+ 175 |       xgettimeofday(&tv);                | True                      | 
+ 176 |       newtime = tv.tv_sec + (double) tv. | True                      | 
+ 177 |       fprintf(timing_fp, "%f %u\n", newt | True                      | 
+ 178 |       oldtime = newtime;                 | True                      | 
+ 179 |      }                                   | True                      | 
+ 180 |      full_write(STDOUT_FILENO, buf, coun | True                      | 
+ 181 |      full_write(outfd, buf, count);      | True                      | 
+ 182 |      // If we'd be using (buffered) FILE | True                      | 
+ 183 |      //if (opt & OPT_f) {                | True                      | 
+ 184 |      // fflush(outfd);                   | True                      | 
+ 185 |      //}                                 | True                      | 
+ 186 |     }                                    | True                      | 
+ 187 |    }                                     | True                      | 
+ 188 |    if (pfd[1].revents) {                 | True                      | 
+ 189 |     count = safe_read(STDIN_FILENO, buf, | True                      | 
+ 190 |     if (count <= 0) {                    | True                      | 
+ 191 |      /* err/eof from stdin: don't read s | True                      | 
+ 192 |      pfd[1].revents = 0;                 | True                      | 
+ 193 |      fd_count--;                         | True                      | 
+ 194 |     } else {                             | True                      | 
+ 195 |      full_write(pty, buf, count);        | True                      | 
+ 196 |     }                                    | True                      | 
+ 197 |    }                                     | True                      | 
+ 198 |   }                                      | True                      | 
+ 199 |   /* If loop was exited because SIGCHLD  | True                      | 
+ 200 |    * there still can be some buffered ou | True                      | 
+ 201 |    * we won't pump orphaned grandchildre | True                      | 
+ 202 |    * Testcase: running this in script:   | True                      | 
+ 203 |    *      exec dd if=/dev/zero bs=1M cou | True                      | 
+ 204 |    * must have "1+0 records in, 1+0 reco | True                      | 
+ 205 |    * (util-linux's script doesn't do thi | True                      | 
+ 206 |   loop = 999;                            | True                      | 
+ 207 |   /* pty is in O_NONBLOCK mode, we exit  | True                      | 
+ 208 |   while (--loop && (count = safe_read(pt | True                      | 
+ 209 |    full_write(STDOUT_FILENO, buf, count) | True                      | 
+ 210 |    full_write(outfd, buf, count);        | True                      | 
+ 211 |   }                                      | True                      | 
+ 212 |  restore:                                | True                      | 
+ 213 |   if (attr_ok == 0)                      | True                      | 
+ 214 |    tcsetattr(0, TCSAFLUSH, &tt);         | True                      | 
+ 215 |   if (!(opt & OPT_q))                    | True                      | 
+ 216 |    printf("Script done, file is %s\n", f | True                      | 
+ 217 |   return EXIT_SUCCESS;                   | True                      | 
+ 218 |  }                                       | True                      | 
+ 219 |                                          | True                      | 
+ 220 |  /* child: make pty slave to be input, o | True                      | 
+ 221 |  close(pty); /* close pty master */      | True                      | 
+ 222 |  /* open pty slave to fd 0,1,2 */        | True                      | 
+ 223 |  close(0);                               | True                      | 
+ 224 |  xopen(pty_line, O_RDWR); /* uses fd 0 * | True                      | 
+ 225 |  xdup2(0, 1);                            | True                      | 
+ 226 |  xdup2(0, 2);                            | True                      | 
+ 227 |  /* copy our original stdin tty's parame | True                      | 
+ 228 |  if (attr_ok == 0)                       | True                      | 
+ 229 |   tcsetattr(0, TCSAFLUSH, &tt);          | True                      | 
+ 230 |  if (winsz_ok == 0)                      | True                      | 
+ 231 |   ioctl(0, TIOCSWINSZ, (char *)&win);    | True                      | 
+ 232 |  /* set pty as a controlling tty */      | True                      | 
+ 233 |  setsid();                               | True                      | 
+ 234 |  ioctl(0, TIOCSCTTY, 0 /* 0: don't forci | True                      | 
+ 235 |                                          | True                      | 
+ 236 |  /* Non-ignored signals revert to SIG_DF | True                      | 
+ 237 |  /*signal(SIGCHLD, SIG_DFL);*/           | True                      | 
+ 238 |  execl(shell, shell, shell_opt, shell_ar | True                      | 
+ 239 |  bb_simple_perror_msg_and_die(shell);    | True                      | 
+ 240 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +108MB, 250ms             | 

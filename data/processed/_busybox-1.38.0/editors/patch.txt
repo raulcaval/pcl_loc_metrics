@@ -1,0 +1,622 @@
+FILE: data/raw/busybox-1.38.0/editors/patch.c
+Resultado PCLocator:
+   # | line of code                             | Merge                            | 
+-----+------------------------------------------+----------------------------------+
+   1 | /* vi: set sw=4 ts=4:                    | True                             | 
+   2 |  *                                       | True                             | 
+   3 |  * Apply a "universal" diff.             | True                             | 
+   4 |  * Adapted from toybox's patch implement | True                             | 
+   5 |  *                                       | True                             | 
+   6 |  * Copyright 2007 Rob Landley <rob@landl | True                             | 
+   7 |  *                                       | True                             | 
+   8 |  * see http://www.opengroup.org/onlinepu | True                             | 
+   9 |  * (But only does -u, because who still  | True                             | 
+  10 |  *                                       | True                             | 
+  11 |  * TODO:                                 | True                             | 
+  12 |  * -b backup                             | True                             | 
+  13 |  * -l treat all whitespace as a single s | True                             | 
+  14 |  * -d chdir first                        | True                             | 
+  15 |  * -D define wrap #ifdef and #ifndef aro | True                             | 
+  16 |  * -o outfile output here instead of in  | True                             | 
+  17 |  * -r rejectfile write rejected hunks to | True                             | 
+  18 |  *                                       | True                             | 
+  19 |  * -f force (no questions asked)         | True                             | 
+  20 |  * -F fuzz (number, default 2)           | True                             | 
+  21 |  * [file] which file to patch            | True                             | 
+  22 |  */                                      | True                             | 
+  23 | //config:config PATCH                    | True                             | 
+  24 | //config: bool "patch (9.6 kb)"          | True                             | 
+  25 | //config: default y                      | True                             | 
+  26 | //config: help                           | True                             | 
+  27 | //config: Apply a unified diff formatted | True                             | 
+  28 |                                          | True                             | 
+  29 | //applet:IF_PATCH(APPLET(patch, BB_DIR_U | True                             | 
+  30 |                                          | True                             | 
+  31 | //kbuild:lib-$(CONFIG_PATCH) += patch.o  | True                             | 
+  32 |                                          | True                             | 
+  33 | //usage:#define patch_trivial_usage      | True                             | 
+  34 | //usage:       "[-RNE] [-p N] [-i DIFF]  | True                             | 
+  35 | //usage:#define patch_full_usage "\n\n"  | True                             | 
+  36 | //usage:       " -p N Strip N leading co | True                             | 
+  37 | //usage:     "\n -i DIFF Read DIFF inste | True                             | 
+  38 | //usage:     "\n -R Reverse patch"       | True                             | 
+  39 | //usage:     "\n -N Ignore already appli | True                             | 
+  40 | //usage:     "\n -E Remove output files  | True                             | 
+  41 | //usage: IF_LONG_OPTS(                   | True                             | 
+  42 | //usage:     "\n --dry-run Don't actuall | True                             | 
+  43 | //usage: )                               | True                             | 
+  44 | /* -u "interpret as unified diff" is sup | True                             | 
+  45 | //usage:                                 | True                             | 
+  46 | //usage:#define patch_example_usage      | True                             | 
+  47 | //usage:       "$ patch -p1 < example.di | True                             | 
+  48 | //usage:       "$ patch -p0 -i example.d | True                             | 
+  49 |                                          | True                             | 
+  50 | #include "libbb.h"                       | True                             | 
+  51 |                                          | True                             | 
+  52 | #define PATCH_DEBUG  0                   | True                             | 
+  53 |                                          | True                             | 
+  54 | // libbb candidate?                      | True                             | 
+  55 |                                          | True                             | 
+  56 | struct double_list {                     | True                             | 
+  57 |  struct double_list *next;               | True                             | 
+  58 |  struct double_list *prev;               | True                             | 
+  59 |  char *data;                             | True                             | 
+  60 | };                                       | True                             | 
+  61 |                                          | True                             | 
+  62 | // Free all the elements of a linked lis | True                             | 
+  63 | // Call freeit() on each element before  | True                             | 
+  64 | static void dlist_free(struct double_lis | True                             | 
+  65 | {                                        | True                             | 
+  66 |  while (list) {                          | True                             | 
+  67 |   void *pop = list;                      | True                             | 
+  68 |   list = list->next;                     | True                             | 
+  69 |   freeit(pop);                           | True                             | 
+  70 |   // Bail out also if list is circular.  | True                             | 
+  71 |   if (list == pop) break;                | True                             | 
+  72 |  }                                       | True                             | 
+  73 | }                                        | True                             | 
+  74 |                                          | True                             | 
+  75 | // Add an entry before "list" element in | True                             | 
+  76 | static struct double_list *dlist_add(str | True                             | 
+  77 | {                                        | True                             | 
+  78 |  struct double_list *llist;              | True                             | 
+  79 |  struct double_list *line = xmalloc(size | True                             | 
+  80 |                                          | True                             | 
+  81 |  line->data = data;                      | True                             | 
+  82 |  llist = *list;                          | True                             | 
+  83 |  if (llist) {                            | True                             | 
+  84 |   struct double_list *p;                 | True                             | 
+  85 |   line->next = llist;                    | True                             | 
+  86 |   p = line->prev = llist->prev;          | True                             | 
+  87 |   // (list is circular, we assume p is n | True                             | 
+  88 |   p->next = line;                        | True                             | 
+  89 |   llist->prev = line;                    | True                             | 
+  90 |  } else                                  | True                             | 
+  91 |   *list = line->next = line->prev = line | True                             | 
+  92 |                                          | True                             | 
+  93 |  return line;                            | True                             | 
+  94 | }                                        | True                             | 
+  95 |                                          | True                             | 
+  96 |                                          | True                             | 
+  97 | struct globals {                         | True                             | 
+  98 |  char *infile;                           | True                             | 
+  99 |  long prefix;                            | True                             | 
+ 100 |                                          | True                             | 
+ 101 |  struct double_list *current_hunk;       | True                             | 
+ 102 |                                          | True                             | 
+ 103 |  long oldline, oldlen, newline, newlen;  | True                             | 
+ 104 |  long linenum;                           | True                             | 
+ 105 |  int context, state, hunknum;            | True                             | 
+ 106 |  int filein, fileout;                    | True                             | 
+ 107 |  char *tempname;                         | True                             | 
+ 108 |                                          | True                             | 
+ 109 |  int exitval;                            | True                             | 
+ 110 | };                                       | True                             | 
+ 111 | #define TT (*ptr_to_globals)             | True                             | 
+ 112 | #define INIT_TT() do { \                 | True                             | 
+ 113 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(TT))) | True                             | 
+ 114 | } while (0)                              | True                             | 
+ 115 |                                          | True                             | 
+ 116 |                                          | True                             | 
+ 117 | #define FLAG_STR "Rup:i:NEfg"            | True                             | 
+ 118 | /* FLAG_REVERSE must be == 1! Code uses  | True                             | 
+ 119 | #define FLAG_REVERSE  (1 << 0)           | True                             | 
+ 120 | #define FLAG_u        (1 << 1)           | True                             | 
+ 121 | #define FLAG_PATHLEN  (1 << 2)           | True                             | 
+ 122 | #define FLAG_INPUT    (1 << 3)           | True                             | 
+ 123 | #define FLAG_IGNORE   (1 << 4)           | True                             | 
+ 124 | #define FLAG_RMEMPTY  (1 << 5)           | True                             | 
+ 125 | #define FLAG_f_unused (1 << 6)           | True                             | 
+ 126 | #define FLAG_g_unused (1 << 7)           | True                             | 
+ 127 | #define FLAG_dry_run  ((1 << 8) * ENABLE | True                             | 
+ 128 |                                          | True                             | 
+ 129 |                                          | True                             | 
+ 130 | // Dispose of a line of input, either by | True                             | 
+ 131 |                                          | True                             | 
+ 132 | // state < 2: just free                  | True                             | 
+ 133 | // state = 2: write whole line to stderr | True                             | 
+ 134 | // state = 3: write whole line to fileou | True                             | 
+ 135 | // state > 3: write line+1 to fileout wh | True                             | 
+ 136 |                                          | True                             | 
+ 137 | static void do_line(void *data)          | True                             | 
+ 138 | {                                        | True                             | 
+ 139 |  struct double_list *dlist = data;       | True                             | 
+ 140 |                                          | True                             | 
+ 141 |  if (TT.state > 1 && *dlist->data != TT. | True                             | 
+ 142 |   fdprintf(TT.state == 2 ? 2 : TT.fileou | True                             | 
+ 143 |    "%s\n", dlist->data + (TT.state > 3 ? | True                             | 
+ 144 |                                          | True                             | 
+ 145 |  if (PATCH_DEBUG) fdprintf(2, "DO %d: %s | True                             | 
+ 146 |                                          | True                             | 
+ 147 |  free(dlist->data);                      | True                             | 
+ 148 |  free(dlist);                            | True                             | 
+ 149 | }                                        | True                             | 
+ 150 |                                          | True                             | 
+ 151 | static void finish_oldfile(void)         | True                             | 
+ 152 | {                                        | True                             | 
+ 153 |  if (TT.tempname) {                      | True                             | 
+ 154 |   // Copy the rest of the data and repla | True                             | 
+ 155 |   char *temp;                            | True                             | 
+ 156 |                                          | True                             | 
+ 157 |   if (TT.filein != -1) {                 | True                             | 
+ 158 |    bb_copyfd_eof(TT.filein, TT.fileout); | True                             | 
+ 159 |    xclose(TT.filein);                    | True                             | 
+ 160 |   }                                      | True                             | 
+ 161 |   xclose(TT.fileout);                    | True                             | 
+ 162 |                                          | True                             | 
+ 163 |   if (!ENABLE_LONG_OPTS || TT.tempname[0 | True                             | 
+ 164 |    temp = xstrdup(TT.tempname);          | True                             | 
+ 165 |    temp[strlen(temp) - 6] = '\0';        | True                             | 
+ 166 |    rename(TT.tempname, temp);            | True                             | 
+ 167 |    free(temp);                           | True                             | 
+ 168 |    free(TT.tempname);                    | True                             | 
+ 169 |   }                                      | True                             | 
+ 170 |                                          | True                             | 
+ 171 |   TT.tempname = NULL;                    | True                             | 
+ 172 |  }                                       | True                             | 
+ 173 |  TT.fileout = TT.filein = -1;            | True                             | 
+ 174 | }                                        | True                             | 
+ 175 |                                          | True                             | 
+ 176 | static void fail_hunk(void)              | True                             | 
+ 177 | {                                        | True                             | 
+ 178 |  if (!TT.current_hunk) return;           | True                             | 
+ 179 |                                          | True                             | 
+ 180 |  fdprintf(2, "Hunk %d FAILED %ld/%ld.\n" | True                             | 
+ 181 |  TT.exitval = 1;                         | True                             | 
+ 182 |                                          | True                             | 
+ 183 |  // If we got to this point, we've seeke | True                             | 
+ 184 |  // this file and advance to next file.  | True                             | 
+ 185 |                                          | True                             | 
+ 186 |  TT.state = 2;                           | True                             | 
+ 187 |  TT.current_hunk->prev->next = NULL;     | True                             | 
+ 188 |  dlist_free(TT.current_hunk, do_line);   | True                             | 
+ 189 |  TT.current_hunk = NULL;                 | True                             | 
+ 190 |                                          | True                             | 
+ 191 |  // Abort the copy and delete the tempor | True                             | 
+ 192 |  close(TT.filein);                       | True                             | 
+ 193 |  close(TT.fileout);                      | True                             | 
+ 194 |  if (!ENABLE_LONG_OPTS || TT.tempname[0] | True                             | 
+ 195 |   unlink(TT.tempname);                   | True                             | 
+ 196 |   free(TT.tempname);                     | True                             | 
+ 197 |  }                                       | True                             | 
+ 198 |  TT.tempname = NULL;                     | True                             | 
+ 199 |                                          | True                             | 
+ 200 |  TT.state = 0;                           | True                             | 
+ 201 | }                                        | True                             | 
+ 202 |                                          | True                             | 
+ 203 | // Given a hunk of a unified diff, make  | True                             | 
+ 204 | // This does not use the location inform | True                             | 
+ 205 | // as a sort of regex.  Copies data from | True                             | 
+ 206 | // the change to be made, then outputs t | True                             | 
+ 207 | // (Finding EOF first is an error.)  Thi | True                             | 
+ 208 | // multiple hunks must occur in order in | True                             | 
+ 209 |                                          | True                             | 
+ 210 | static int apply_one_hunk(void)          | True                             | 
+ 211 | {                                        | True                             | 
+ 212 |  struct double_list *plist, *buf = NULL, | True                             | 
+ 213 |  int matcheof = 0, reverse = option_mask | True                             | 
+ 214 |  /* Do we try "dummy" revert to check wh | True                             | 
+ 215 |   * to silently skip this hunk? Used to  | True                             | 
+ 216 |   */                                     | True                             | 
+ 217 |  int dummy_revert = 0;                   | True                             | 
+ 218 |                                          | True                             | 
+ 219 |  // Break doubly linked list so we can u | True                             | 
+ 220 |  TT.current_hunk->prev->next = NULL;     | True                             | 
+ 221 |                                          | True                             | 
+ 222 |  // Match EOF if there aren't as many en | True                             | 
+ 223 |  for (plist = TT.current_hunk; plist; pl | True                             | 
+ 224 |   if (plist->data[0] == ' ') matcheof++; | True                             | 
+ 225 |   else matcheof = 0;                     | True                             | 
+ 226 |   if (PATCH_DEBUG) fdprintf(2, "HUNK:%s\ | True                             | 
+ 227 |  }                                       | True                             | 
+ 228 |  matcheof = !matcheof || matcheof < TT.c | True                             | 
+ 229 |                                          | True                             | 
+ 230 |  if (PATCH_DEBUG) fdprintf(2,"MATCHEOF=% | True                             | 
+ 231 |                                          | True                             | 
+ 232 |  // Loop through input data searching fo | True                             | 
+ 233 |  // lines and all lines to be removed un | True                             | 
+ 234 |  // complete hunk.                       | True                             | 
+ 235 |  plist = TT.current_hunk;                | True                             | 
+ 236 |  buf = NULL;                             | True                             | 
+ 237 |  if (reverse ? TT.oldlen : TT.newlen) fo | True                             | 
+ 238 | //FIXME: this performs 1-byte reads:     | True                             | 
+ 239 |   char *data = xmalloc_reads(TT.filein,  | True                             | 
+ 240 |                                          | True                             | 
+ 241 |   TT.linenum++;                          | True                             | 
+ 242 |                                          | True                             | 
+ 243 |   // Figure out which line of hunk to co | True                             | 
+ 244 |   // of the hunk we'd be adding.)        | True                             | 
+ 245 |   while (plist && *plist->data == "+-"[r | True                             | 
+ 246 |    if (data && strcmp(data, plist->data+ | True                             | 
+ 247 |     if (!backwarn) {                     | True                             | 
+ 248 |      backwarn = TT.linenum;              | True                             | 
+ 249 |      if (option_mask32 & FLAG_IGNORE) {  | True                             | 
+ 250 |       dummy_revert = 1;                  | True                             | 
+ 251 |       reverse ^= 1;                      | True                             | 
+ 252 |       continue;                          | True                             | 
+ 253 |      }                                   | True                             | 
+ 254 |     }                                    | True                             | 
+ 255 |    }                                     | True                             | 
+ 256 |    plist = plist->next;                  | True                             | 
+ 257 |   }                                      | True                             | 
+ 258 |                                          | True                             | 
+ 259 |   // Is this EOF?                        | True                             | 
+ 260 |   if (!data) {                           | True                             | 
+ 261 |    if (PATCH_DEBUG) fdprintf(2, "INEOF\n | True                             | 
+ 262 |                                          | True                             | 
+ 263 |    // Does this hunk need to match EOF?  | True                             | 
+ 264 |    if (!plist && matcheof) break;        | True                             | 
+ 265 |                                          | True                             | 
+ 266 |    if (backwarn)                         | True                             | 
+ 267 |     fdprintf(2, "Possibly reversed hunk  | True                             | 
+ 268 |      TT.hunknum, TT.linenum);            | True                             | 
+ 269 |                                          | True                             | 
+ 270 |    // File ended before we found a place | True                             | 
+ 271 |    fail_hunk();                          | True                             | 
+ 272 |    goto done;                            | True                             | 
+ 273 |   }                                      | True                             | 
+ 274 |                                          | True                             | 
+ 275 |   if (PATCH_DEBUG) fdprintf(2, "IN: %s\n | True                             | 
+ 276 |   check = dlist_add(&buf, data);         | True                             | 
+ 277 |                                          | True                             | 
+ 278 |   // Compare this line with next expecte | True                             | 
+ 279 |   // todo: teach the strcmp() to ignore  | True                             | 
+ 280 |                                          | True                             | 
+ 281 |   // A match can fail because the next l | True                             | 
+ 282 |   // we hit the end of a hunk that neede | True                             | 
+ 283 |                                          | True                             | 
+ 284 |   // If match failed, flush first line o | True                             | 
+ 285 |   // recheck buffered data for a new mat | True                             | 
+ 286 |   // out of buffer.                      | True                             | 
+ 287 |                                          | True                             | 
+ 288 |   for (;;) {                             | True                             | 
+ 289 |    while (plist && *plist->data == "+-"[ | True                             | 
+ 290 |     if (strcmp(check->data, plist->data+ | True                             | 
+ 291 |      && !backwarn                        | True                             | 
+ 292 |     ) {                                  | True                             | 
+ 293 |      backwarn = TT.linenum;              | True                             | 
+ 294 |      if (option_mask32 & FLAG_IGNORE) {  | True                             | 
+ 295 |       dummy_revert = 1;                  | True                             | 
+ 296 |       reverse ^= 1;                      | True                             | 
+ 297 |      }                                   | True                             | 
+ 298 |     }                                    | True                             | 
+ 299 |     plist = plist->next;                 | True                             | 
+ 300 |    }                                     | True                             | 
+ 301 |    if (!plist || strcmp(check->data, pli | True                             | 
+ 302 |     // Match failed.  Write out first li | True                             | 
+ 303 |     // recheck remaining buffered data f | True                             | 
+ 304 |                                          | True                             | 
+ 305 |     if (PATCH_DEBUG)                     | True                             | 
+ 306 |      fdprintf(2, "NOT: %s\n", plist ? pl | True                             | 
+ 307 |                                          | True                             | 
+ 308 |     TT.state = 3;                        | True                             | 
+ 309 |     check = buf;                         | True                             | 
+ 310 |     buf = buf->next;                     | True                             | 
+ 311 |     check->prev->next = buf;             | True                             | 
+ 312 |     buf->prev = check->prev;             | True                             | 
+ 313 |     do_line(check);                      | True                             | 
+ 314 |     plist = TT.current_hunk;             | True                             | 
+ 315 |                                          | True                             | 
+ 316 |     // If we've reached the end of the b | True                             | 
+ 317 |     // match, read more lines.           | True                             | 
+ 318 |     if (check == buf) {                  | True                             | 
+ 319 |      buf = NULL;                         | True                             | 
+ 320 |      break;                              | True                             | 
+ 321 |     }                                    | True                             | 
+ 322 |     check = buf;                         | True                             | 
+ 323 |    } else {                              | True                             | 
+ 324 |     if (PATCH_DEBUG)                     | True                             | 
+ 325 |      fdprintf(2, "MAYBE: %s\n", plist->d | True                             | 
+ 326 |     // This line matches.  Advance plist | True                             | 
+ 327 |     plist = plist->next;                 | True                             | 
+ 328 |     if (!plist && !matcheof) goto out;   | True                             | 
+ 329 |     check = check->next;                 | True                             | 
+ 330 |     if (check == buf) break;             | True                             | 
+ 331 |    }                                     | True                             | 
+ 332 |   }                                      | True                             | 
+ 333 |  }                                       | True                             | 
+ 334 | out:                                     | True                             | 
+ 335 |  // We have a match.  Emit changed data. | True                             | 
+ 336 |  TT.state = "-+"[reverse ^ dummy_revert] | True                             | 
+ 337 |  dlist_free(TT.current_hunk, do_line);   | True                             | 
+ 338 |  TT.current_hunk = NULL;                 | True                             | 
+ 339 |  TT.state = 1;                           | True                             | 
+ 340 | done:                                    | True                             | 
+ 341 |  if (buf) {                              | True                             | 
+ 342 |   buf->prev->next = NULL;                | True                             | 
+ 343 |   dlist_free(buf, do_line);              | True                             | 
+ 344 |  }                                       | True                             | 
+ 345 |                                          | True                             | 
+ 346 |  return TT.state;                        | True                             | 
+ 347 | }                                        | True                             | 
+ 348 |                                          | True                             | 
+ 349 | // Read a patch file and find hunks, ope | True                             | 
+ 350 | // Call apply_one_hunk() on each hunk.   | True                             | 
+ 351 |                                          | True                             | 
+ 352 | // state 0: Not in a hunk, look for +++. | True                             | 
+ 353 | // state 1: Found +++ file indicator, lo | True                             | 
+ 354 | // state 2: In hunk: counting initial co | True                             | 
+ 355 | // state 3: In hunk: getting body        | True                             | 
+ 356 | // Like GNU patch, we don't require a -- | True                             | 
+ 357 | // also allow the --- after the +++ line | True                             | 
+ 358 |                                          | True                             | 
+ 359 | int patch_main(int argc, char **argv) MA | True                             | 
+ 360 | int patch_main(int argc UNUSED_PARAM, ch | True                             | 
+ 361 | {                                        | True                             | 
+ 362 |  int opts;                               | True                             | 
+ 363 |  int reverse, state = 0;                 | True                             | 
+ 364 |  char *oldname = NULL, *newname = NULL;  | True                             | 
+ 365 |  char *opt_p, *opt_i;                    | True                             | 
+ 366 |  long oldlen = oldlen; /* for compiler * | True                             | 
+ 367 |  long newlen = newlen; /* for compiler * | True                             | 
+ 368 |                                          | True                             | 
+ 369 | #if ENABLE_LONG_OPTS                     | True                             | 
+ 370 |  static const char patch_longopts[] ALIG | ENABLE_LONG_OPTS                 | 
+ 371 |   "reverse\0"               No_argument  | ENABLE_LONG_OPTS                 | 
+ 372 |   "unified\0"               No_argument  | ENABLE_LONG_OPTS                 | 
+ 373 |   "strip\0"                 Required_arg | ENABLE_LONG_OPTS                 | 
+ 374 |   "input\0"                 Required_arg | ENABLE_LONG_OPTS                 | 
+ 375 |   "forward\0"               No_argument  | ENABLE_LONG_OPTS                 | 
+ 376 | # if ENABLE_DESKTOP                      | ENABLE_LONG_OPTS                 | 
+ 377 |   "remove-empty-files\0"    No_argument  | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 378 |   /* "debug"                Required_arg | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 379 | # endif                                  | ENABLE_LONG_OPTS                 | 
+ 380 |   /* "Assume user knows what [s]he is do | ENABLE_LONG_OPTS                 | 
+ 381 |   "force\0"                 No_argument  | ENABLE_LONG_OPTS                 | 
+ 382 | # if ENABLE_DESKTOP                      | ENABLE_LONG_OPTS                 | 
+ 383 |   /* "Controls actions when a file is un | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 384 |    * and does not exist or is read-only  | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 385 |    * or when a file is under ClearCase c | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 386 |    * IOW: rather obscure option.         | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 387 |    * But Gentoo's portage does use -g0   | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 388 |    */                                    | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 389 |   "get\0"                   Required_arg | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 390 | # endif                                  | ENABLE_LONG_OPTS                 | 
+ 391 |   "dry-run\0"               No_argument  | ENABLE_LONG_OPTS                 | 
+ 392 | # if ENABLE_DESKTOP                      | ENABLE_LONG_OPTS                 | 
+ 393 |   "backup-if-mismatch\0"    No_argument  | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 394 |   "no-backup-if-mismatch\0" No_argument  | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 395 | # endif                                  | ENABLE_LONG_OPTS                 | 
+ 396 |   ;                                      | ENABLE_LONG_OPTS                 | 
+ 397 | #endif                                   | True                             | 
+ 398 |                                          | True                             | 
+ 399 |  INIT_TT();                              | True                             | 
+ 400 |                                          | True                             | 
+ 401 | #if ENABLE_LONG_OPTS                     | True                             | 
+ 402 |  opts = getopt32long(argv, FLAG_STR, pat | ENABLE_LONG_OPTS                 | 
+ 403 | #else                                    | True                             | 
+ 404 |  opts = getopt32(argv, FLAG_STR, &opt_p, | !ENABLE_LONG_OPTS                | 
+ 405 | #endif                                   | True                             | 
+ 406 |  //bb_error_msg_and_die("opts:%x", opts) | True                             | 
+ 407 |                                          | True                             | 
+ 408 |  argv += optind;                         | True                             | 
+ 409 |  reverse = opts & FLAG_REVERSE;          | True                             | 
+ 410 |  TT.prefix = (opts & FLAG_PATHLEN) ? xat | True                             | 
+ 411 |  TT.filein = TT.fileout = -1;            | True                             | 
+ 412 |  if (opts & FLAG_INPUT) {                | True                             | 
+ 413 |   xmove_fd(xopen_stdin(opt_i), STDIN_FIL | True                             | 
+ 414 |  } else {                                | True                             | 
+ 415 |   if (argv[0] && argv[1]) {              | True                             | 
+ 416 |    xmove_fd(xopen_stdin(argv[1]), STDIN_ | True                             | 
+ 417 |   }                                      | True                             | 
+ 418 |  }                                       | True                             | 
+ 419 |                                          | True                             | 
+ 420 |  // Loop through the lines in the patch  | True                             | 
+ 421 |  for (;;) {                              | True                             | 
+ 422 |   char *patchline;                       | True                             | 
+ 423 |                                          | True                             | 
+ 424 |   patchline = xmalloc_fgetline(stdin);   | True                             | 
+ 425 |   if (!patchline) break;                 | True                             | 
+ 426 |                                          | True                             | 
+ 427 |   // Other versions of patch accept dama | True                             | 
+ 428 |   // so we need to also.                 | True                             | 
+ 429 |   if (!*patchline) {                     | True                             | 
+ 430 |    free(patchline);                      | True                             | 
+ 431 |    patchline = xstrdup(" ");             | True                             | 
+ 432 |   }                                      | True                             | 
+ 433 |                                          | True                             | 
+ 434 |   // Are we assembling a hunk?           | True                             | 
+ 435 |   if (state >= 2) {                      | True                             | 
+ 436 |    if (*patchline == ' ' || *patchline = | True                             | 
+ 437 |     dlist_add(&TT.current_hunk, patchlin | True                             | 
+ 438 |                                          | True                             | 
+ 439 |     if (*patchline != '+') oldlen--;     | True                             | 
+ 440 |     if (*patchline != '-') newlen--;     | True                             | 
+ 441 |                                          | True                             | 
+ 442 |     // Context line?                     | True                             | 
+ 443 |     if (*patchline == ' ' && state == 2) | True                             | 
+ 444 |     else state = 3;                      | True                             | 
+ 445 |                                          | True                             | 
+ 446 |     // If we've consumed all expected hu | True                             | 
+ 447 |                                          | True                             | 
+ 448 |     if (!oldlen && !newlen) state = appl | True                             | 
+ 449 |     continue;                            | True                             | 
+ 450 |    }                                     | True                             | 
+ 451 |    fail_hunk();                          | True                             | 
+ 452 |    state = 0;                            | True                             | 
+ 453 |    continue;                             | True                             | 
+ 454 |   }                                      | True                             | 
+ 455 |                                          | True                             | 
+ 456 |   // Open a new file?                    | True                             | 
+ 457 |   if (is_prefixed_with(patchline, "--- " | True                             | 
+ 458 |    char *s, **name = reverse ? &newname  | True                             | 
+ 459 |    int i;                                | True                             | 
+ 460 |                                          | True                             | 
+ 461 |    if (*patchline == '+') {              | True                             | 
+ 462 |     name = reverse ? &oldname : &newname | True                             | 
+ 463 |     state = 1;                           | True                             | 
+ 464 |    }                                     | True                             | 
+ 465 |                                          | True                             | 
+ 466 |    finish_oldfile();                     | True                             | 
+ 467 |                                          | True                             | 
+ 468 |    if (!argv[0]) {                       | True                             | 
+ 469 |     free(*name);                         | True                             | 
+ 470 |     // Trim date from end of filename (i | True                             | 
+ 471 |     for (s = patchline+4; *s && *s!='\t' | True                             | 
+ 472 |      if (*s == '\\' && s[1]) s++;        | True                             | 
+ 473 |     i = atoi(s);                         | True                             | 
+ 474 |     if (i > 1900 && i <= 1970)           | True                             | 
+ 475 |      *name = xstrdup("/dev/null");       | True                             | 
+ 476 |     else {                               | True                             | 
+ 477 |      *s = 0;                             | True                             | 
+ 478 |      *name = xstrdup(patchline+4);       | True                             | 
+ 479 |     }                                    | True                             | 
+ 480 |    }                                     | True                             | 
+ 481 |                                          | True                             | 
+ 482 |    // We defer actually opening the file | True                             | 
+ 483 |    // patches that don't signal they wan | True                             | 
+ 484 |    // way the patch man page says, so yo | True                             | 
+ 485 |    // and _guess_.                       | True                             | 
+ 486 |                                          | True                             | 
+ 487 |   // Start a new hunk?  Usually @@ -oldl | True                             | 
+ 488 |   // but a missing ,value means the valu | True                             | 
+ 489 |   } else if (state == 1 && is_prefixed_w | True                             | 
+ 490 |    int i;                                | True                             | 
+ 491 |    char *s = patchline+4;                | True                             | 
+ 492 |                                          | True                             | 
+ 493 |    // Read oldline[,oldlen] +newline[,ne | True                             | 
+ 494 |                                          | True                             | 
+ 495 |    TT.oldlen = oldlen = TT.newlen = newl | True                             | 
+ 496 |    TT.oldline = strtol(s, &s, 10);       | True                             | 
+ 497 |    if (*s == ',') TT.oldlen = oldlen = s | True                             | 
+ 498 |    TT.newline = strtol(s+2, &s, 10);     | True                             | 
+ 499 |    if (*s == ',') TT.newlen = newlen = s | True                             | 
+ 500 |                                          | True                             | 
+ 501 |    if (oldlen < 1 && newlen < 1)         | True                             | 
+ 502 |     bb_error_msg_and_die("Really? %s", p | True                             | 
+ 503 |                                          | True                             | 
+ 504 |    TT.context = 0;                       | True                             | 
+ 505 |    state = 2;                            | True                             | 
+ 506 |                                          | True                             | 
+ 507 |    // If the --- line is missing or malf | True                             | 
+ 508 |    // or (for -R) newname could be NULL  | True                             | 
+ 509 |    // GNU patch, proceed based on the ++ | True                             | 
+ 510 |    if (!oldname)                         | True                             | 
+ 511 |     oldname = xstrdup("MISSING_FILENAME" | True                             | 
+ 512 |    if (!newname)                         | True                             | 
+ 513 |     newname = xstrdup("MISSING_FILENAME" | True                             | 
+ 514 |                                          | True                             | 
+ 515 |    // If this is the first hunk, open th | True                             | 
+ 516 |    if (TT.filein == -1) {                | True                             | 
+ 517 |     int oldsum, newsum, empty = 0;       | True                             | 
+ 518 |     char *name;                          | True                             | 
+ 519 |                                          | True                             | 
+ 520 |     oldsum = TT.oldline + oldlen;        | True                             | 
+ 521 |     newsum = TT.newline + newlen;        | True                             | 
+ 522 |                                          | True                             | 
+ 523 |     name = reverse ? oldname : newname;  | True                             | 
+ 524 |                                          | True                             | 
+ 525 |     // We're deleting oldname if new fil | True                             | 
+ 526 |     // or if new hunk is empty (zero con | True                             | 
+ 527 |     if (strcmp(name, "/dev/null") == 0 | | True                             | 
+ 528 |      name = reverse ? newname : oldname; | True                             | 
+ 529 |      empty = 1;                          | True                             | 
+ 530 |     }                                    | True                             | 
+ 531 |                                          | True                             | 
+ 532 |     // Handle -p path truncation.        | True                             | 
+ 533 |     for (i = 0, s = name; *s;) {         | True                             | 
+ 534 |      if ((option_mask32 & FLAG_PATHLEN)  | True                             | 
+ 535 |       break;                             | True                             | 
+ 536 |      if (*s++ != '/')                    | True                             | 
+ 537 |       continue;                          | True                             | 
+ 538 |      while (*s == '/')                   | True                             | 
+ 539 |       s++;                               | True                             | 
+ 540 |      i++;                                | True                             | 
+ 541 |      name = s;                           | True                             | 
+ 542 |     }                                    | True                             | 
+ 543 |     // If "patch FILE_TO_PATCH", complet | True                             | 
+ 544 |     if (argv[0])                         | True                             | 
+ 545 |      name = argv[0];                     | True                             | 
+ 546 |                                          | True                             | 
+ 547 |     if (empty) {                         | True                             | 
+ 548 |      // File is empty after the patches  | True                             | 
+ 549 |      state = 0;                          | True                             | 
+ 550 |      if (option_mask32 & FLAG_RMEMPTY) { | True                             | 
+ 551 |       // If flag -E or --remove-empty-fi | True                             | 
+ 552 |       printf("removing %s\n", name);     | True                             | 
+ 553 |       if (!(opts & FLAG_dry_run))        | True                             | 
+ 554 |        xunlink(name);                    | True                             | 
+ 555 |      } else {                            | True                             | 
+ 556 |       printf("patching file %s\n", name) | True                             | 
+ 557 |       if (!(opts & FLAG_dry_run))        | True                             | 
+ 558 |        xclose(xopen(name, O_WRONLY | O_T | True                             | 
+ 559 |      }                                   | True                             | 
+ 560 |     // If we've got a file to open, do s | True                             | 
+ 561 |     } else if (!(option_mask32 & FLAG_PA | True                             | 
+ 562 |      struct stat statbuf;                | True                             | 
+ 563 |                                          | True                             | 
+ 564 |      // If the old file was null, we're  | True                             | 
+ 565 |      if (strcmp(oldname, "/dev/null") == | True                             | 
+ 566 |       printf("creating %s\n", name);     | True                             | 
+ 567 |       if (!(opts & FLAG_dry_run)) {      | True                             | 
+ 568 |        s = strrchr(name, '/');           | True                             | 
+ 569 |        if (s) {                          | True                             | 
+ 570 |         *s = '\0';                       | True                             | 
+ 571 |         bb_make_directory(name, -1, FILE | True                             | 
+ 572 |         *s = '/';                        | True                             | 
+ 573 |        }                                 | True                             | 
+ 574 |        TT.filein = xopen(name, O_CREAT|O | True                             | 
+ 575 |       } else {                           | True                             | 
+ 576 |        TT.filein = xopen("/dev/null", O_ | True                             | 
+ 577 |       }                                  | True                             | 
+ 578 |      } else {                            | True                             | 
+ 579 |       printf("patching file %s\n", name) | True                             | 
+ 580 |       TT.filein = xopen(name, O_RDONLY); | True                             | 
+ 581 |      }                                   | True                             | 
+ 582 |                                          | True                             | 
+ 583 |      if (!(opts & FLAG_dry_run)) {       | True                             | 
+ 584 |       TT.tempname = xasprintf("%sXXXXXX" | True                             | 
+ 585 |       TT.fileout = xmkstemp(TT.tempname) | True                             | 
+ 586 |       // Set permissions of output file  | True                             | 
+ 587 |       fstat(TT.filein, &statbuf);        | True                             | 
+ 588 |       fchmod(TT.fileout, statbuf.st_mode | True                             | 
+ 589 |      } else {                            | True                             | 
+ 590 |       TT.tempname = (char*)"";           | True                             | 
+ 591 |       TT.fileout = xopen("/dev/null", O_ | True                             | 
+ 592 |      }                                   | True                             | 
+ 593 |      TT.linenum = 0;                     | True                             | 
+ 594 |      TT.hunknum = 0;                     | True                             | 
+ 595 |     }                                    | True                             | 
+ 596 |     fflush_all(); // make "patching file | True                             | 
+ 597 |    }                                     | True                             | 
+ 598 |                                          | True                             | 
+ 599 |    TT.hunknum++;                         | True                             | 
+ 600 |                                          | True                             | 
+ 601 |    continue;                             | True                             | 
+ 602 |   }                                      | True                             | 
+ 603 |                                          | True                             | 
+ 604 |   // If we didn't continue above, discar | True                             | 
+ 605 |   free(patchline);                       | True                             | 
+ 606 |  }                                       | True                             | 
+ 607 |                                          | True                             | 
+ 608 |  finish_oldfile();                       | True                             | 
+ 609 |                                          | True                             | 
+ 610 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                             | 
+ 611 |   free(oldname);                         | True                             | 
+ 612 |   free(newname);                         | True                             | 
+ 613 |  }                                       | True                             | 
+ 614 |                                          | True                             | 
+ 615 |  return TT.exitval;                      | True                             | 
+ 616 | }                                        | True                             | 
+-----+------------------------------------------+----------------------------------+
+     |                                          | +114MB, 277ms                    | 

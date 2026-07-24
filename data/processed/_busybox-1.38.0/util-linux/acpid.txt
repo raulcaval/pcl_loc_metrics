@@ -1,0 +1,393 @@
+FILE: data/raw/busybox-1.38.0/util-linux/acpid.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * simple ACPI events listener           | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2008 by Vladimir Dronni | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config ACPID                    | True                      | 
+  10 | //config: bool "acpid (9.3 kb)"          | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: acpid listens to ACPI events c | True                      | 
+  14 | //config: /proc/acpi/event (though it is | True                      | 
+  15 | //config: used and _is_ a standard) or i | True                      | 
+  16 | //config: (just use /dev/input/event*).  | True                      | 
+  17 | //config:                                | True                      | 
+  18 | //config: It parses the event to retriev | True                      | 
+  19 | //config: It then spawns /etc/acpi/<ACTI | True                      | 
+  20 | //config: (if the resulting path is a di | True                      | 
+  21 | //config:                                | True                      | 
+  22 | //config: N.B. acpid relies on run-parts | True                      | 
+  23 | //config:                                | True                      | 
+  24 | //config:config FEATURE_ACPID_COMPAT     | True                      | 
+  25 | //config: bool "Accept and ignore redund | True                      | 
+  26 | //config: default y                      | True                      | 
+  27 | //config: depends on ACPID               | True                      | 
+  28 | //config: help                           | True                      | 
+  29 | //config: Accept and ignore compatibilit | True                      | 
+  30 |                                          | True                      | 
+  31 | //applet:IF_ACPID(APPLET(acpid, BB_DIR_S | True                      | 
+  32 |                                          | True                      | 
+  33 | //kbuild:lib-$(CONFIG_ACPID) += acpid.o  | True                      | 
+  34 |                                          | True                      | 
+  35 | //usage:#define acpid_trivial_usage      | True                      | 
+  36 | //usage:       "[-df] [-c CONFDIR] [-l L | True                      | 
+  37 | //usage:#define acpid_full_usage "\n\n"  | True                      | 
+  38 | //usage:       "Listen to ACPI events an | True                      | 
+  39 | //usage:     "\n -d Log to stderr, not l | True                      | 
+  40 | //usage:     "\n -f Run in foreground"   | True                      | 
+  41 | //usage:     "\n -c DIR Config directory | True                      | 
+  42 | //usage:     "\n -e FILE /proc event fil | True                      | 
+  43 | //usage:     "\n -l FILE Log file [/var/ | True                      | 
+  44 | //usage: IF_FEATURE_PIDFILE(             | True                      | 
+  45 | //usage:     "\n -p FILE Pid file [" CON | True                      | 
+  46 | //usage: )                               | True                      | 
+  47 | //usage:     "\n -a FILE Action file [/e | True                      | 
+  48 | //usage:     "\n -M FILE Map file [/etc/ | True                      | 
+  49 | //usage: IF_FEATURE_ACPID_COMPAT(        | True                      | 
+  50 | //usage:     "\n\nAccept and ignore comp | True                      | 
+  51 | //usage: )                               | True                      | 
+  52 | //usage:                                 | True                      | 
+  53 | //usage:#define acpid_example_usage      | True                      | 
+  54 | //usage:       "Without -e option, acpid | True                      | 
+  55 | //usage:       "# acpid\n"               | True                      | 
+  56 | //usage:       "# acpid -l /var/log/my-a | True                      | 
+  57 | //usage:       "# acpid -e /proc/acpi/ev | True                      | 
+  58 |                                          | True                      | 
+  59 | #include "libbb.h"                       | True                      | 
+  60 | #include <syslog.h>                      | True                      | 
+  61 | #include <linux/input.h>                 | True                      | 
+  62 |                                          | True                      | 
+  63 | #ifndef EV_SW                            | True                      | 
+  64 | # define EV_SW         0x05              | !(EV_SW)                  | 
+  65 | #endif                                   | True                      | 
+  66 | #ifndef EV_KEY                           | True                      | 
+  67 | # define EV_KEY        0x01              | !(EV_KEY)                 | 
+  68 | #endif                                   | True                      | 
+  69 | #ifndef SW_LID                           | True                      | 
+  70 | # define SW_LID        0x00              | !(SW_LID)                 | 
+  71 | #endif                                   | True                      | 
+  72 | #ifndef SW_RFKILL_ALL                    | True                      | 
+  73 | # define SW_RFKILL_ALL 0x03              | !(SW_RFKILL_ALL)          | 
+  74 | #endif                                   | True                      | 
+  75 | #ifndef KEY_POWER                        | True                      | 
+  76 | # define KEY_POWER      116     /* SC Sy | !(KEY_POWER)              | 
+  77 | #endif                                   | True                      | 
+  78 | #ifndef KEY_SLEEP                        | True                      | 
+  79 | # define KEY_SLEEP      142     /* SC Sy | !(KEY_SLEEP)              | 
+  80 | #endif                                   | True                      | 
+  81 |                                          | True                      | 
+  82 | enum {                                   | True                      | 
+  83 |  OPT_c = (1 << 0),                       | True                      | 
+  84 |  OPT_d = (1 << 1),                       | True                      | 
+  85 |  OPT_e = (1 << 2),                       | True                      | 
+  86 |  OPT_f = (1 << 3),                       | True                      | 
+  87 |  OPT_l = (1 << 4),                       | True                      | 
+  88 |  OPT_a = (1 << 5),                       | True                      | 
+  89 |  OPT_M = (1 << 6),                       | True                      | 
+  90 |  OPT_p = (1 << 7) * ENABLE_FEATURE_PIDFI | True                      | 
+  91 | };                                       | True                      | 
+  92 |                                          | True                      | 
+  93 | struct acpi_event {                      | True                      | 
+  94 |  const char *s_type;                     | True                      | 
+  95 |  uint16_t n_type;                        | True                      | 
+  96 |  const char *s_code;                     | True                      | 
+  97 |  uint16_t n_code;                        | True                      | 
+  98 |  uint32_t value;                         | True                      | 
+  99 |  const char *desc;                       | True                      | 
+ 100 | };                                       | True                      | 
+ 101 |                                          | True                      | 
+ 102 | static const struct acpi_event f_evt_tab | True                      | 
+ 103 |  { "EV_KEY", 0x01, "KEY_POWER", 116, 1,  | True                      | 
+ 104 |  { "EV_KEY", 0x01, "KEY_POWER", 116, 1,  | True                      | 
+ 105 |  { "EV_SW", 0x05, "SW_LID", 0x00, 1, "bu | True                      | 
+ 106 | };                                       | True                      | 
+ 107 |                                          | True                      | 
+ 108 | struct acpi_action {                     | True                      | 
+ 109 |  const char *key;                        | True                      | 
+ 110 |  const char *action;                     | True                      | 
+ 111 | };                                       | True                      | 
+ 112 |                                          | True                      | 
+ 113 | static const struct acpi_action f_act_ta | True                      | 
+ 114 |  { "PWRF", "PWRF/00000080" },            | True                      | 
+ 115 |  { "LID0", "LID/00000080" },             | True                      | 
+ 116 | };                                       | True                      | 
+ 117 |                                          | True                      | 
+ 118 | struct globals {                         | True                      | 
+ 119 |  struct acpi_action *act_tab;            | True                      | 
+ 120 |  int n_act;                              | True                      | 
+ 121 |  struct acpi_event *evt_tab;             | True                      | 
+ 122 |  int n_evt;                              | True                      | 
+ 123 | } FIX_ALIASING;                          | True                      | 
+ 124 | #define G (*ptr_to_globals)              | True                      | 
+ 125 | #define act_tab         (G.act_tab)      | True                      | 
+ 126 | #define n_act           (G.n_act  )      | True                      | 
+ 127 | #define evt_tab         (G.evt_tab)      | True                      | 
+ 128 | #define n_evt           (G.n_evt  )      | True                      | 
+ 129 | #define INIT_G() do { \                  | True                      | 
+ 130 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+ 131 | } while (0)                              | True                      | 
+ 132 |                                          | True                      | 
+ 133 | /*                                       | True                      | 
+ 134 |  * acpid listens to ACPI events coming e | True                      | 
+ 135 |  * from /proc/acpi/event (though it is m | True                      | 
+ 136 |  * it is still widely used and _is_ a st | True                      | 
+ 137 |  * from specified evdevs (just use /dev/ | True                      | 
+ 138 |  * It parses the event to retrieve ACTIO | True                      | 
+ 139 |  * It then spawns /etc/acpi/<ACTION>[/<P | True                      | 
+ 140 |  * (if the resulting path is a directory | True                      | 
+ 141 |  * If the resulting path does not exist  | True                      | 
+ 142 |  * and continues listening.              | True                      | 
+ 143 |  */                                      | True                      | 
+ 144 |                                          | True                      | 
+ 145 | static void process_event(const char *ev | True                      | 
+ 146 | {                                        | True                      | 
+ 147 |  struct stat st;                         | True                      | 
+ 148 |  char *handler = concat_path_file(".", e | True                      | 
+ 149 |  const char *args[] = { "run-parts", han | True                      | 
+ 150 |                                          | True                      | 
+ 151 |  // log the event                        | True                      | 
+ 152 |  bb_simple_error_msg(event);             | True                      | 
+ 153 |                                          | True                      | 
+ 154 |  // spawn handler                        | True                      | 
+ 155 |  // N.B. run-parts would require scripts | True                      | 
+ 156 |  // handler is directory? -> use run-par | True                      | 
+ 157 |  // handler is file? -> run it directly  | True                      | 
+ 158 |  if (0 == stat(event, &st))              | True                      | 
+ 159 |   spawn((char **)args + (0==(st.st_mode  | True                      | 
+ 160 |  else                                    | True                      | 
+ 161 |   bb_simple_perror_msg(event);           | True                      | 
+ 162 |                                          | True                      | 
+ 163 |  free(handler);                          | True                      | 
+ 164 | }                                        | True                      | 
+ 165 |                                          | True                      | 
+ 166 | static const char *find_action(struct in | True                      | 
+ 167 | {                                        | True                      | 
+ 168 |  const char *action = NULL;              | True                      | 
+ 169 |  int i;                                  | True                      | 
+ 170 |                                          | True                      | 
+ 171 |  // map event                            | True                      | 
+ 172 |  for (i = 0; i < n_evt; i++) {           | True                      | 
+ 173 |   if (ev) {                              | True                      | 
+ 174 |    if (ev->type == evt_tab[i].n_type &&  | True                      | 
+ 175 |     action = evt_tab[i].desc;            | True                      | 
+ 176 |     break;                               | True                      | 
+ 177 |    }                                     | True                      | 
+ 178 |   }                                      | True                      | 
+ 179 |                                          | True                      | 
+ 180 |   if (buf) {                             | True                      | 
+ 181 |    if (is_prefixed_with(evt_tab[i].desc, | True                      | 
+ 182 |     action = evt_tab[i].desc;            | True                      | 
+ 183 |     break;                               | True                      | 
+ 184 |    }                                     | True                      | 
+ 185 |   }                                      | True                      | 
+ 186 |  }                                       | True                      | 
+ 187 |                                          | True                      | 
+ 188 |  // get action                           | True                      | 
+ 189 |  if (action) {                           | True                      | 
+ 190 |   for (i = 0; i < n_act; i++) {          | True                      | 
+ 191 |    if (strstr(action, act_tab[i].key)) { | True                      | 
+ 192 |     action = act_tab[i].action;          | True                      | 
+ 193 |     break;                               | True                      | 
+ 194 |    }                                     | True                      | 
+ 195 |   }                                      | True                      | 
+ 196 |  }                                       | True                      | 
+ 197 |                                          | True                      | 
+ 198 |  return action;                          | True                      | 
+ 199 | }                                        | True                      | 
+ 200 |                                          | True                      | 
+ 201 | static void parse_conf_file(const char * | True                      | 
+ 202 | {                                        | True                      | 
+ 203 |  parser_t *parser;                       | True                      | 
+ 204 |  char *tokens[2];                        | True                      | 
+ 205 |                                          | True                      | 
+ 206 |  parser = config_open2(filename, fopen_f | True                      | 
+ 207 |                                          | True                      | 
+ 208 |  if (parser) {                           | True                      | 
+ 209 |   while (config_read(parser, tokens, 2,  | True                      | 
+ 210 |    act_tab = xrealloc_vector(act_tab, 1, | True                      | 
+ 211 |    act_tab[n_act].key = xstrdup(tokens[0 | True                      | 
+ 212 |    act_tab[n_act].action = xstrdup(token | True                      | 
+ 213 |    n_act++;                              | True                      | 
+ 214 |   }                                      | True                      | 
+ 215 |   config_close(parser);                  | True                      | 
+ 216 |  } else {                                | True                      | 
+ 217 |   act_tab = (void*)f_act_tab;            | True                      | 
+ 218 |   n_act = ARRAY_SIZE(f_act_tab);         | True                      | 
+ 219 |  }                                       | True                      | 
+ 220 | }                                        | True                      | 
+ 221 |                                          | True                      | 
+ 222 | static void parse_map_file(const char *f | True                      | 
+ 223 | {                                        | True                      | 
+ 224 |  parser_t *parser;                       | True                      | 
+ 225 |  char *tokens[6];                        | True                      | 
+ 226 |                                          | True                      | 
+ 227 |  parser = config_open2(filename, fopen_f | True                      | 
+ 228 |                                          | True                      | 
+ 229 |  if (parser) {                           | True                      | 
+ 230 |   while (config_read(parser, tokens, 6,  | True                      | 
+ 231 |    evt_tab = xrealloc_vector(evt_tab, 1, | True                      | 
+ 232 |    evt_tab[n_evt].s_type = xstrdup(token | True                      | 
+ 233 |    evt_tab[n_evt].n_type = xstrtou(token | True                      | 
+ 234 |    evt_tab[n_evt].s_code = xstrdup(token | True                      | 
+ 235 |    evt_tab[n_evt].n_code = xatou16(token | True                      | 
+ 236 |    evt_tab[n_evt].value = xatoi_positive | True                      | 
+ 237 |    evt_tab[n_evt].desc = xstrdup(tokens[ | True                      | 
+ 238 |    n_evt++;                              | True                      | 
+ 239 |   }                                      | True                      | 
+ 240 |   config_close(parser);                  | True                      | 
+ 241 |  } else {                                | True                      | 
+ 242 |   evt_tab = (void*)f_evt_tab;            | True                      | 
+ 243 |   n_evt = ARRAY_SIZE(f_evt_tab);         | True                      | 
+ 244 |  }                                       | True                      | 
+ 245 | }                                        | True                      | 
+ 246 |                                          | True                      | 
+ 247 | /*                                       | True                      | 
+ 248 |  * acpid [-c conf_dir] [-r conf_file ] [ | True                      | 
+ 249 |  */                                      | True                      | 
+ 250 |                                          | True                      | 
+ 251 | int acpid_main(int argc, char **argv) MA | True                      | 
+ 252 | int acpid_main(int argc UNUSED_PARAM, ch | True                      | 
+ 253 | {                                        | True                      | 
+ 254 |  int nfd;                                | True                      | 
+ 255 |  int opts;                               | True                      | 
+ 256 |  struct pollfd *pfd;                     | True                      | 
+ 257 |  const char *opt_dir = "/etc/acpi";      | True                      | 
+ 258 |  const char *opt_input = "/dev/input/eve | True                      | 
+ 259 |  const char *opt_logfile = "/var/log/acp | True                      | 
+ 260 |  const char *opt_action = "/etc/acpid.co | True                      | 
+ 261 |  const char *opt_map = "/etc/acpi.map";  | True                      | 
+ 262 | #if ENABLE_FEATURE_PIDFILE               | True                      | 
+ 263 |  const char *opt_pidfile = CONFIG_PID_FI | ENABLE_FEATURE_PIDFILE    | 
+ 264 | #endif                                   | True                      | 
+ 265 |                                          | True                      | 
+ 266 |  INIT_G();                               | True                      | 
+ 267 |                                          | True                      | 
+ 268 |  opts = getopt32(argv, "^"               | True                      | 
+ 269 |   "c:de:fl:a:M:"                         | True                      | 
+ 270 |   IF_FEATURE_PIDFILE("p:")               | True                      | 
+ 271 |   IF_FEATURE_ACPID_COMPAT("g:m:s:S:v")   | True                      | 
+ 272 |   "\0"                                   | True                      | 
+ 273 |   "df:e--e",                             | True                      | 
+ 274 |   &opt_dir, &opt_input, &opt_logfile, &o | True                      | 
+ 275 |   IF_FEATURE_PIDFILE(, &opt_pidfile)     | True                      | 
+ 276 |   IF_FEATURE_ACPID_COMPAT(, NULL, NULL,  | True                      | 
+ 277 |  );                                      | True                      | 
+ 278 |                                          | True                      | 
+ 279 |  if (!(opts & OPT_f)) {                  | True                      | 
+ 280 |   /* No -f "Foreground", we go to backgr | True                      | 
+ 281 |   bb_daemonize_or_rexec(DAEMON_CLOSE_EXT | True                      | 
+ 282 |  }                                       | True                      | 
+ 283 |                                          | True                      | 
+ 284 |  if (!(opts & OPT_d)) {                  | True                      | 
+ 285 |   /* No -d "Debug", we log to log file.  | True                      | 
+ 286 |    * This includes any output from child | True                      | 
+ 287 |    */                                    | True                      | 
+ 288 |   xmove_fd(xopen(opt_logfile, O_WRONLY | | True                      | 
+ 289 |   xdup2(STDOUT_FILENO, STDERR_FILENO);   | True                      | 
+ 290 |   /* Also, acpid's messages (but not chi | True                      | 
+ 291 |   openlog(applet_name, LOG_PID, LOG_DAEM | True                      | 
+ 292 |   logmode = LOGMODE_SYSLOG | LOGMODE_STD | True                      | 
+ 293 |  }                                       | True                      | 
+ 294 |  /* else: -d "Debug", log is not redirec | True                      | 
+ 295 |                                          | True                      | 
+ 296 |  parse_conf_file(opt_action);            | True                      | 
+ 297 |  parse_map_file(opt_map);                | True                      | 
+ 298 |                                          | True                      | 
+ 299 |  xchdir(opt_dir);                        | True                      | 
+ 300 |                                          | True                      | 
+ 301 |  /* We spawn children but don't wait for | True                      | 
+ 302 |  bb_signals((1 << SIGCHLD), SIG_IGN);    | True                      | 
+ 303 |  // If you enable this, (1) explain why, | True                      | 
+ 304 |  // make sure while(poll) loop below is  | True                      | 
+ 305 |  // by SIGTERM et al:                    | True                      | 
+ 306 |  //bb_signals(BB_FATAL_SIGS, record_sign | True                      | 
+ 307 |                                          | True                      | 
+ 308 |  pfd = NULL;                             | True                      | 
+ 309 |  nfd = 0;                                | True                      | 
+ 310 |  while (1) {                             | True                      | 
+ 311 |   int fd;                                | True                      | 
+ 312 |   char *dev_event;                       | True                      | 
+ 313 |                                          | True                      | 
+ 314 |   dev_event = xasprintf((opts & OPT_e) ? | True                      | 
+ 315 |   fd = open(dev_event, O_RDONLY | O_NONB | True                      | 
+ 316 |   if (fd < 0) {                          | True                      | 
+ 317 |    if (nfd == 0)                         | True                      | 
+ 318 |     bb_simple_perror_msg_and_die(dev_eve | True                      | 
+ 319 |    break;                                | True                      | 
+ 320 |   }                                      | True                      | 
+ 321 |   free(dev_event);                       | True                      | 
+ 322 |   pfd = xrealloc_vector(pfd, 1, nfd);    | True                      | 
+ 323 |   pfd[nfd].fd = fd;                      | True                      | 
+ 324 |   pfd[nfd].events = POLLIN;              | True                      | 
+ 325 |   nfd++;                                 | True                      | 
+ 326 |  }                                       | True                      | 
+ 327 |                                          | True                      | 
+ 328 |  write_pidfile(opt_pidfile);             | True                      | 
+ 329 |                                          | True                      | 
+ 330 |  while (safe_poll(pfd, nfd, -1) > 0) {   | True                      | 
+ 331 |   int i;                                 | True                      | 
+ 332 |   for (i = 0; i < nfd; i++) {            | True                      | 
+ 333 |    const char *event;                    | True                      | 
+ 334 |                                          | True                      | 
+ 335 |    if (!(pfd[i].revents & POLLIN)) {     | True                      | 
+ 336 |     if (pfd[i].revents == 0)             | True                      | 
+ 337 |      continue; /* this fd has nothing */ | True                      | 
+ 338 |                                          | True                      | 
+ 339 |     /* Likely POLLERR, POLLHUP, POLLNVAL | True                      | 
+ 340 |      * Do not listen on this fd anymore. | True                      | 
+ 341 |      */                                  | True                      | 
+ 342 |     close(pfd[i].fd);                    | True                      | 
+ 343 |     nfd--;                               | True                      | 
+ 344 |     for (; i < nfd; i++)                 | True                      | 
+ 345 |      pfd[i].fd = pfd[i + 1].fd;          | True                      | 
+ 346 |     break; /* do poll() again */         | True                      | 
+ 347 |    }                                     | True                      | 
+ 348 |                                          | True                      | 
+ 349 |    event = NULL;                         | True                      | 
+ 350 |    if (option_mask32 & OPT_e) {          | True                      | 
+ 351 |     char *buf;                           | True                      | 
+ 352 |     int len;                             | True                      | 
+ 353 |                                          | True                      | 
+ 354 |     buf = xmalloc_reads(pfd[i].fd, NULL) | True                      | 
+ 355 |     /* buf = "button/power PWRB 00000080 | True                      | 
+ 356 |     len = strlen(buf) - 9;               | True                      | 
+ 357 |     if (len >= 0)                        | True                      | 
+ 358 |      buf[len] = '\0';                    | True                      | 
+ 359 |     event = find_action(NULL, buf);      | True                      | 
+ 360 |     free(buf);                           | True                      | 
+ 361 |    } else {                              | True                      | 
+ 362 |     struct input_event ev;               | True                      | 
+ 363 |                                          | True                      | 
+ 364 |     if (sizeof(ev) != full_read(pfd[i].f | True                      | 
+ 365 |      continue;                           | True                      | 
+ 366 |                                          | True                      | 
+ 367 |     if (ev.value != 1 && ev.value != 0)  | True                      | 
+ 368 |      continue;                           | True                      | 
+ 369 |                                          | True                      | 
+ 370 |     event = find_action(&ev, NULL);      | True                      | 
+ 371 |    }                                     | True                      | 
+ 372 |    if (!event)                           | True                      | 
+ 373 |     continue;                            | True                      | 
+ 374 |    /* spawn event handler */             | True                      | 
+ 375 |    process_event(event);                 | True                      | 
+ 376 |   }                                      | True                      | 
+ 377 |  }                                       | True                      | 
+ 378 |                                          | True                      | 
+ 379 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 380 |   while (nfd--)                          | True                      | 
+ 381 |    close(pfd[nfd].fd);                   | True                      | 
+ 382 |   free(pfd);                             | True                      | 
+ 383 |  }                                       | True                      | 
+ 384 |  remove_pidfile(opt_pidfile);            | True                      | 
+ 385 |                                          | True                      | 
+ 386 |  return EXIT_SUCCESS;                    | True                      | 
+ 387 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +111MB, 313ms             | 

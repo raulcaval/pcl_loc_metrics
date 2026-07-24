@@ -1,0 +1,546 @@
+FILE: data/raw/busybox-1.38.0/networking/arp.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * arp.c - Manipulate the system ARP cac | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * This program is free software; you ca | True                      | 
+   6 |  * modify it under the terms of the GNU  | True                      | 
+   7 |  * as published by the Free Software Fou | True                      | 
+   8 |  * 2 of the License, or (at your option) | True                      | 
+   9 |  *                                       | True                      | 
+  10 |  * Author: Fred N. van Kempen, <waltje a | True                      | 
+  11 |  * Busybox port: Paul van Gool <pvangool | True                      | 
+  12 |  *                                       | True                      | 
+  13 |  * modified for getopt32 by Arne Bernin  | True                      | 
+  14 |  */                                      | True                      | 
+  15 | //config:config ARP                      | True                      | 
+  16 | //config: bool "arp (10 kb)"             | True                      | 
+  17 | //config: default y                      | True                      | 
+  18 | //config: help                           | True                      | 
+  19 | //config: Manipulate the system ARP cach | True                      | 
+  20 |                                          | True                      | 
+  21 | //applet:IF_ARP(APPLET(arp, BB_DIR_SBIN, | True                      | 
+  22 |                                          | True                      | 
+  23 | //kbuild:lib-$(CONFIG_ARP) += arp.o inte | True                      | 
+  24 |                                          | True                      | 
+  25 | //usage:#define arp_trivial_usage        | True                      | 
+  26 | //usage:     "\n[-vn] [-H HWTYPE] [-i IF | True                      | 
+  27 | //usage:     "\n[-v]      [-i IF] -d HOS | True                      | 
+  28 | //usage:     "\n[-v] [-H HWTYPE] [-i IF] | True                      | 
+  29 | //usage:     "\n[-v] [-H HWTYPE] [-i IF] | True                      | 
+  30 | //usage:     "\n[-v] [-H HWTYPE] [-i IF] | True                      | 
+  31 | //usage:#define arp_full_usage "\n\n"    | True                      | 
+  32 | //usage:       "Manipulate ARP cache\n"  | True                      | 
+  33 | //usage:       "\n -a  Display (all) hos | True                      | 
+  34 | //usage:       "\n -d  Delete ARP entry" | True                      | 
+  35 | //usage:       "\n -s  Set new entry"    | True                      | 
+  36 | //usage:       "\n -v  Verbose"          | True                      | 
+  37 | //usage:       "\n -n  Don't resolve nam | True                      | 
+  38 | //usage:       "\n -i IF  Network interf | True                      | 
+  39 | //usage:       "\n -D  Read HWADDR from  | True                      | 
+  40 | //usage:       "\n -A,-p AF Protocol fam | True                      | 
+  41 | //usage:       "\n -H HWTYPE Hardware ad | True                      | 
+  42 |                                          | True                      | 
+  43 | #include "libbb.h"                       | True                      | 
+  44 | #include "common_bufsiz.h"               | True                      | 
+  45 | #include "inet_common.h"                 | True                      | 
+  46 |                                          | True                      | 
+  47 | #include <arpa/inet.h>                   | True                      | 
+  48 | #include <net/if.h>                      | True                      | 
+  49 | #include <net/if_arp.h>                  | True                      | 
+  50 | #include <netinet/ether.h>               | True                      | 
+  51 | #include <netpacket/packet.h>            | True                      | 
+  52 |                                          | True                      | 
+  53 | #define DEBUG 0                          | True                      | 
+  54 |                                          | True                      | 
+  55 | #define DFLT_AF "inet"                   | True                      | 
+  56 | #define DFLT_HW "ether"                  | True                      | 
+  57 |                                          | True                      | 
+  58 | enum {                                   | True                      | 
+  59 |  ARP_OPT_A = (1 << 0),                   | True                      | 
+  60 |  ARP_OPT_p = (1 << 1),                   | True                      | 
+  61 |  ARP_OPT_H = (1 << 2),                   | True                      | 
+  62 |  ARP_OPT_t = (1 << 3),                   | True                      | 
+  63 |  ARP_OPT_i = (1 << 4),                   | True                      | 
+  64 |  ARP_OPT_a = (1 << 5),                   | True                      | 
+  65 |  ARP_OPT_d = (1 << 6),                   | True                      | 
+  66 |  ARP_OPT_n = (1 << 7), /* do not resolve | True                      | 
+  67 |  ARP_OPT_D = (1 << 8), /* HW-address is  | True                      | 
+  68 |  ARP_OPT_s = (1 << 9),                   | True                      | 
+  69 |  ARP_OPT_v = (1 << 10) * DEBUG, /* debug | True                      | 
+  70 | };                                       | True                      | 
+  71 |                                          | True                      | 
+  72 | enum {                                   | True                      | 
+  73 |  sockfd = 3, /* active socket descriptor | True                      | 
+  74 | };                                       | True                      | 
+  75 |                                          | True                      | 
+  76 | struct globals {                         | True                      | 
+  77 |  const struct aftype *ap; /* current add | True                      | 
+  78 |  const struct hwtype *hw; /* current har | True                      | 
+  79 |  const char *device;      /* current dev | True                      | 
+  80 |  smallint hw_set;         /* flag if hw- | True                      | 
+  81 | } FIX_ALIASING;                          | True                      | 
+  82 | #define G (*(struct globals*)bb_common_b | True                      | 
+  83 | #define ap         (G.ap        )        | True                      | 
+  84 | #define hw         (G.hw        )        | True                      | 
+  85 | #define device     (G.device    )        | True                      | 
+  86 | #define hw_set     (G.hw_set    )        | True                      | 
+  87 | #define INIT_G() do { \                  | True                      | 
+  88 |  setup_common_bufsiz(); \                | True                      | 
+  89 |  device = ""; \                          | True                      | 
+  90 | } while (0)                              | True                      | 
+  91 |                                          | True                      | 
+  92 |                                          | True                      | 
+  93 | static const char options[] ALIGN1 =     | True                      | 
+  94 |  "pub\0"                                 | True                      | 
+  95 |  "priv\0"                                | True                      | 
+  96 |  "temp\0"                                | True                      | 
+  97 |  "trail\0"                               | True                      | 
+  98 |  "dontpub\0"                             | True                      | 
+  99 |  "auto\0"                                | True                      | 
+ 100 |  "dev\0"                                 | True                      | 
+ 101 |  "netmask\0";                            | True                      | 
+ 102 |                                          | True                      | 
+ 103 | /* Delete an entry from the ARP cache. * | True                      | 
+ 104 | /* Called only from main, once */        | True                      | 
+ 105 | static int arp_del(char **args)          | True                      | 
+ 106 | {                                        | True                      | 
+ 107 |  char *host;                             | True                      | 
+ 108 |  struct arpreq req;                      | True                      | 
+ 109 |  struct sockaddr sa;                     | True                      | 
+ 110 |  int flags = 0;                          | True                      | 
+ 111 |  int err;                                | True                      | 
+ 112 |                                          | True                      | 
+ 113 |  memset(&req, 0, sizeof(req));           | True                      | 
+ 114 |                                          | True                      | 
+ 115 |  /* Resolve the host name. */            | True                      | 
+ 116 |  host = *args;                           | True                      | 
+ 117 |  if (ap->input(host, &sa) < 0) {         | True                      | 
+ 118 |   bb_simple_herror_msg_and_die(host);    | True                      | 
+ 119 |  }                                       | True                      | 
+ 120 |                                          | True                      | 
+ 121 |  /* If a host has more than one address, | True                      | 
+ 122 |  memcpy(&req.arp_pa, &sa, sizeof(struct  | True                      | 
+ 123 |                                          | True                      | 
+ 124 |  if (hw_set)                             | True                      | 
+ 125 |   req.arp_ha.sa_family = hw->type;       | True                      | 
+ 126 |                                          | True                      | 
+ 127 |  req.arp_flags = ATF_PERM;               | True                      | 
+ 128 |  args++;                                 | True                      | 
+ 129 |  while (*args != NULL) {                 | True                      | 
+ 130 |   switch (index_in_strings(options, *arg | True                      | 
+ 131 |   case 0: /* "pub" */                    | True                      | 
+ 132 |    flags |= 1;                           | True                      | 
+ 133 |    args++;                               | True                      | 
+ 134 |    break;                                | True                      | 
+ 135 |   case 1: /* "priv" */                   | True                      | 
+ 136 |    flags |= 2;                           | True                      | 
+ 137 |    args++;                               | True                      | 
+ 138 |    break;                                | True                      | 
+ 139 |   case 2: /* "temp" */                   | True                      | 
+ 140 |    req.arp_flags &= ~ATF_PERM;           | True                      | 
+ 141 |    args++;                               | True                      | 
+ 142 |    break;                                | True                      | 
+ 143 |   case 3: /* "trail" */                  | True                      | 
+ 144 |    req.arp_flags |= ATF_USETRAILERS;     | True                      | 
+ 145 |    args++;                               | True                      | 
+ 146 |    break;                                | True                      | 
+ 147 |   case 4: /* "dontpub" */                | True                      | 
+ 148 | #ifdef HAVE_ATF_DONTPUB                  | True                      | 
+ 149 |    req.arp_flags |= ATF_DONTPUB;         | (HAVE_ATF_DONTPUB)        | 
+ 150 | #else                                    | True                      | 
+ 151 |    bb_simple_error_msg("feature ATF_DONT | !(HAVE_ATF_DONTPUB)       | 
+ 152 | #endif                                   | True                      | 
+ 153 |    args++;                               | True                      | 
+ 154 |    break;                                | True                      | 
+ 155 |   case 5: /* "auto" */                   | True                      | 
+ 156 | #ifdef HAVE_ATF_MAGIC                    | True                      | 
+ 157 |    req.arp_flags |= ATF_MAGIC;           | (HAVE_ATF_MAGIC)          | 
+ 158 | #else                                    | True                      | 
+ 159 |    bb_simple_error_msg("feature ATF_MAGI | !(HAVE_ATF_MAGIC)         | 
+ 160 | #endif                                   | True                      | 
+ 161 |    args++;                               | True                      | 
+ 162 |    break;                                | True                      | 
+ 163 |   case 6: /* "dev" */                    | True                      | 
+ 164 |    if (*++args == NULL)                  | True                      | 
+ 165 |     bb_show_usage();                     | True                      | 
+ 166 |    device = *args;                       | True                      | 
+ 167 |    args++;                               | True                      | 
+ 168 |    break;                                | True                      | 
+ 169 |   case 7: /* "netmask" */                | True                      | 
+ 170 |    if (*++args == NULL)                  | True                      | 
+ 171 |     bb_show_usage();                     | True                      | 
+ 172 |    if (strcmp(*args, "255.255.255.255")  | True                      | 
+ 173 |     host = *args;                        | True                      | 
+ 174 |     if (ap->input(host, &sa) < 0) {      | True                      | 
+ 175 |      bb_simple_herror_msg_and_die(host); | True                      | 
+ 176 |     }                                    | True                      | 
+ 177 |     memcpy(&req.arp_netmask, &sa, sizeof | True                      | 
+ 178 |     req.arp_flags |= ATF_NETMASK;        | True                      | 
+ 179 |    }                                     | True                      | 
+ 180 |    args++;                               | True                      | 
+ 181 |    break;                                | True                      | 
+ 182 |   default:                               | True                      | 
+ 183 |    bb_show_usage();                      | True                      | 
+ 184 |    break;                                | True                      | 
+ 185 |   }                                      | True                      | 
+ 186 |  }                                       | True                      | 
+ 187 |  if (flags == 0)                         | True                      | 
+ 188 |   flags = 3;                             | True                      | 
+ 189 |                                          | True                      | 
+ 190 |  strncpy_IFNAMSIZ(req.arp_dev, device);  | True                      | 
+ 191 |                                          | True                      | 
+ 192 |  err = -1;                               | True                      | 
+ 193 |                                          | True                      | 
+ 194 |  /* Call the kernel. */                  | True                      | 
+ 195 |  if (flags & 2) {                        | True                      | 
+ 196 |   if (option_mask32 & ARP_OPT_v)         | True                      | 
+ 197 |    bb_simple_error_msg("SIOCDARP(nopub)" | True                      | 
+ 198 |   err = ioctl(sockfd, SIOCDARP, &req);   | True                      | 
+ 199 |   if (err < 0) {                         | True                      | 
+ 200 |    if (errno == ENXIO) {                 | True                      | 
+ 201 |     if (flags & 1)                       | True                      | 
+ 202 |      goto nopub;                         | True                      | 
+ 203 |     printf("No ARP entry for %s\n", host | True                      | 
+ 204 |     return -1;                           | True                      | 
+ 205 |    }                                     | True                      | 
+ 206 |    bb_simple_perror_msg_and_die("SIOCDAR | True                      | 
+ 207 |   }                                      | True                      | 
+ 208 |  }                                       | True                      | 
+ 209 |  if ((flags & 1) && err) {               | True                      | 
+ 210 |  nopub:                                  | True                      | 
+ 211 |   req.arp_flags |= ATF_PUBL;             | True                      | 
+ 212 |   if (option_mask32 & ARP_OPT_v)         | True                      | 
+ 213 |    bb_simple_error_msg("SIOCDARP(pub)"); | True                      | 
+ 214 |   if (ioctl(sockfd, SIOCDARP, &req) < 0) | True                      | 
+ 215 |    if (errno == ENXIO) {                 | True                      | 
+ 216 |     printf("No ARP entry for %s\n", host | True                      | 
+ 217 |     return -1;                           | True                      | 
+ 218 |    }                                     | True                      | 
+ 219 |    bb_simple_perror_msg_and_die("SIOCDAR | True                      | 
+ 220 |   }                                      | True                      | 
+ 221 |  }                                       | True                      | 
+ 222 |  return 0;                               | True                      | 
+ 223 | }                                        | True                      | 
+ 224 |                                          | True                      | 
+ 225 | /* Get the hardware address to a specifi | True                      | 
+ 226 | static void arp_getdevhw(char *ifname, s | True                      | 
+ 227 | {                                        | True                      | 
+ 228 |  struct ifreq ifr;                       | True                      | 
+ 229 |  const struct hwtype *xhw;               | True                      | 
+ 230 |                                          | True                      | 
+ 231 |  strncpy_IFNAMSIZ(ifr.ifr_name, ifname); | True                      | 
+ 232 |  ioctl_or_perror_and_die(sockfd, SIOCGIF | True                      | 
+ 233 |      "can't get HW-Address for '%s'", if | True                      | 
+ 234 |  if (hw_set && (ifr.ifr_hwaddr.sa_family | True                      | 
+ 235 |   bb_simple_error_msg_and_die("protocol  | True                      | 
+ 236 |  }                                       | True                      | 
+ 237 |  memcpy(sa, &(ifr.ifr_hwaddr), sizeof(st | True                      | 
+ 238 |                                          | True                      | 
+ 239 |  if (option_mask32 & ARP_OPT_v) {        | True                      | 
+ 240 |   xhw = get_hwntype(ifr.ifr_hwaddr.sa_fa | True                      | 
+ 241 |   if (!xhw || !xhw->print) {             | True                      | 
+ 242 |    xhw = get_hwntype(-1);                | True                      | 
+ 243 |   }                                      | True                      | 
+ 244 |   bb_error_msg("device '%s' has HW addre | True                      | 
+ 245 |     ifname, xhw->name,                   | True                      | 
+ 246 |     xhw->print((unsigned char *) &ifr.if | True                      | 
+ 247 |  }                                       | True                      | 
+ 248 | }                                        | True                      | 
+ 249 |                                          | True                      | 
+ 250 | /* Set an entry in the ARP cache. */     | True                      | 
+ 251 | /* Called only from main, once */        | True                      | 
+ 252 | static int arp_set(char **args)          | True                      | 
+ 253 | {                                        | True                      | 
+ 254 |  char *host;                             | True                      | 
+ 255 |  struct arpreq req;                      | True                      | 
+ 256 |  struct sockaddr sa;                     | True                      | 
+ 257 |  int flags;                              | True                      | 
+ 258 |                                          | True                      | 
+ 259 |  memset(&req, 0, sizeof(req));           | True                      | 
+ 260 |                                          | True                      | 
+ 261 |  host = *args++;                         | True                      | 
+ 262 |  if (ap->input(host, &sa) < 0) {         | True                      | 
+ 263 |   bb_simple_herror_msg_and_die(host);    | True                      | 
+ 264 |  }                                       | True                      | 
+ 265 |  /* If a host has more than one address, | True                      | 
+ 266 |  memcpy(&req.arp_pa, &sa, sizeof(struct  | True                      | 
+ 267 |                                          | True                      | 
+ 268 |  /* Fetch the hardware address. */       | True                      | 
+ 269 |  if (*args == NULL) {                    | True                      | 
+ 270 |   bb_simple_error_msg_and_die("need hard | True                      | 
+ 271 |  }                                       | True                      | 
+ 272 |  if (option_mask32 & ARP_OPT_D) {        | True                      | 
+ 273 |   arp_getdevhw(*args++, &req.arp_ha);    | True                      | 
+ 274 |  } else {                                | True                      | 
+ 275 |   if (hw->input(*args++, &req.arp_ha) <  | True                      | 
+ 276 |    bb_simple_error_msg_and_die("invalid  | True                      | 
+ 277 |   }                                      | True                      | 
+ 278 |  }                                       | True                      | 
+ 279 |                                          | True                      | 
+ 280 |  /* Check out any modifiers. */          | True                      | 
+ 281 |  flags = ATF_PERM | ATF_COM;             | True                      | 
+ 282 |  while (*args != NULL) {                 | True                      | 
+ 283 |   switch (index_in_strings(options, *arg | True                      | 
+ 284 |   case 0: /* "pub" */                    | True                      | 
+ 285 |    flags |= ATF_PUBL;                    | True                      | 
+ 286 |    args++;                               | True                      | 
+ 287 |    break;                                | True                      | 
+ 288 |   case 1: /* "priv" */                   | True                      | 
+ 289 |    flags &= ~ATF_PUBL;                   | True                      | 
+ 290 |    args++;                               | True                      | 
+ 291 |    break;                                | True                      | 
+ 292 |   case 2: /* "temp" */                   | True                      | 
+ 293 |    flags &= ~ATF_PERM;                   | True                      | 
+ 294 |    args++;                               | True                      | 
+ 295 |    break;                                | True                      | 
+ 296 |   case 3: /* "trail" */                  | True                      | 
+ 297 |    flags |= ATF_USETRAILERS;             | True                      | 
+ 298 |    args++;                               | True                      | 
+ 299 |    break;                                | True                      | 
+ 300 |   case 4: /* "dontpub" */                | True                      | 
+ 301 | #ifdef HAVE_ATF_DONTPUB                  | True                      | 
+ 302 |    flags |= ATF_DONTPUB;                 | (HAVE_ATF_DONTPUB)        | 
+ 303 | #else                                    | True                      | 
+ 304 |    bb_simple_error_msg("feature ATF_DONT | !(HAVE_ATF_DONTPUB)       | 
+ 305 | #endif                                   | True                      | 
+ 306 |    args++;                               | True                      | 
+ 307 |    break;                                | True                      | 
+ 308 |   case 5: /* "auto" */                   | True                      | 
+ 309 | #ifdef HAVE_ATF_MAGIC                    | True                      | 
+ 310 |    flags |= ATF_MAGIC;                   | (HAVE_ATF_MAGIC)          | 
+ 311 | #else                                    | True                      | 
+ 312 |    bb_simple_error_msg("feature ATF_MAGI | !(HAVE_ATF_MAGIC)         | 
+ 313 | #endif                                   | True                      | 
+ 314 |    args++;                               | True                      | 
+ 315 |    break;                                | True                      | 
+ 316 |   case 6: /* "dev" */                    | True                      | 
+ 317 |    if (*++args == NULL)                  | True                      | 
+ 318 |     bb_show_usage();                     | True                      | 
+ 319 |    device = *args;                       | True                      | 
+ 320 |    args++;                               | True                      | 
+ 321 |    break;                                | True                      | 
+ 322 |   case 7: /* "netmask" */                | True                      | 
+ 323 |    if (*++args == NULL)                  | True                      | 
+ 324 |     bb_show_usage();                     | True                      | 
+ 325 |    if (strcmp(*args, "255.255.255.255")  | True                      | 
+ 326 |     host = *args;                        | True                      | 
+ 327 |     if (ap->input(host, &sa) < 0) {      | True                      | 
+ 328 |      bb_simple_herror_msg_and_die(host); | True                      | 
+ 329 |     }                                    | True                      | 
+ 330 |     memcpy(&req.arp_netmask, &sa, sizeof | True                      | 
+ 331 |     flags |= ATF_NETMASK;                | True                      | 
+ 332 |    }                                     | True                      | 
+ 333 |    args++;                               | True                      | 
+ 334 |    break;                                | True                      | 
+ 335 |   default:                               | True                      | 
+ 336 |    bb_show_usage();                      | True                      | 
+ 337 |    break;                                | True                      | 
+ 338 |   }                                      | True                      | 
+ 339 |  }                                       | True                      | 
+ 340 |                                          | True                      | 
+ 341 |  /* Fill in the remainder of the request | True                      | 
+ 342 |  req.arp_flags = flags;                  | True                      | 
+ 343 |                                          | True                      | 
+ 344 |  strncpy_IFNAMSIZ(req.arp_dev, device);  | True                      | 
+ 345 |                                          | True                      | 
+ 346 |  /* Call the kernel. */                  | True                      | 
+ 347 |  if (option_mask32 & ARP_OPT_v)          | True                      | 
+ 348 |   bb_simple_error_msg("SIOCSARP()");     | True                      | 
+ 349 |  xioctl(sockfd, SIOCSARP, &req);         | True                      | 
+ 350 |  return 0;                               | True                      | 
+ 351 | }                                        | True                      | 
+ 352 |                                          | True                      | 
+ 353 |                                          | True                      | 
+ 354 | /* Print the contents of an ARP request  | True                      | 
+ 355 | static void                              | True                      | 
+ 356 | arp_disp(const char *name, char *ip, int | True                      | 
+ 357 |   char *hwa, char *mask, char *dev)      | True                      | 
+ 358 | {                                        | True                      | 
+ 359 |  static const int arp_masks[] = {        | True                      | 
+ 360 |   ATF_PERM, ATF_PUBL,                    | True                      | 
+ 361 | #ifdef HAVE_ATF_MAGIC                    | True                      | 
+ 362 |   ATF_MAGIC,                             | (HAVE_ATF_MAGIC)          | 
+ 363 | #endif                                   | True                      | 
+ 364 | #ifdef HAVE_ATF_DONTPUB                  | True                      | 
+ 365 |   ATF_DONTPUB,                           | (HAVE_ATF_DONTPUB)        | 
+ 366 | #endif                                   | True                      | 
+ 367 |   ATF_USETRAILERS,                       | True                      | 
+ 368 |  };                                      | True                      | 
+ 369 |  static const char arp_labels[] ALIGN1 = | True                      | 
+ 370 | #ifdef HAVE_ATF_MAGIC                    | True                      | 
+ 371 |   "AUTO\0"                               | (HAVE_ATF_MAGIC)          | 
+ 372 | #endif                                   | True                      | 
+ 373 | #ifdef HAVE_ATF_DONTPUB                  | True                      | 
+ 374 |   "DONTPUB\0"                            | (HAVE_ATF_DONTPUB)        | 
+ 375 | #endif                                   | True                      | 
+ 376 |   "TRAIL\0"                              | True                      | 
+ 377 |  ;                                       | True                      | 
+ 378 |                                          | True                      | 
+ 379 |  const struct hwtype *xhw;               | True                      | 
+ 380 |                                          | True                      | 
+ 381 |  xhw = get_hwntype(type);                | True                      | 
+ 382 |  if (xhw == NULL)                        | True                      | 
+ 383 |   xhw = get_hwtype(DFLT_HW);             | True                      | 
+ 384 |                                          | True                      | 
+ 385 |  printf("%s (%s) at ", name, ip);        | True                      | 
+ 386 |                                          | True                      | 
+ 387 |  if (!(arp_flags & ATF_COM)) {           | True                      | 
+ 388 |   if (arp_flags & ATF_PUBL)              | True                      | 
+ 389 |    printf("* ");                         | True                      | 
+ 390 |   else                                   | True                      | 
+ 391 |    printf("<incomplete> ");              | True                      | 
+ 392 |  } else {                                | True                      | 
+ 393 |   printf("%s [%s] ", hwa, xhw->name);    | True                      | 
+ 394 |  }                                       | True                      | 
+ 395 |                                          | True                      | 
+ 396 |  if (arp_flags & ATF_NETMASK)            | True                      | 
+ 397 |   printf("netmask %s ", mask);           | True                      | 
+ 398 |                                          | True                      | 
+ 399 |  print_flags_separated(arp_masks, arp_la | True                      | 
+ 400 |  printf(" on %s\n", dev);                | True                      | 
+ 401 | }                                        | True                      | 
+ 402 |                                          | True                      | 
+ 403 | /* Display the contents of the ARP cache | True                      | 
+ 404 | /* Called only from main, once */        | True                      | 
+ 405 | static int arp_show(char *name)          | True                      | 
+ 406 | {                                        | True                      | 
+ 407 |  const char *host;                       | True                      | 
+ 408 |  const char *hostname;                   | True                      | 
+ 409 |  FILE *fp;                               | True                      | 
+ 410 |  struct sockaddr sa;                     | True                      | 
+ 411 |  int type, flags;                        | True                      | 
+ 412 |  int num;                                | True                      | 
+ 413 |  unsigned entries = 0, shown = 0;        | True                      | 
+ 414 |  char ip[128];                           | True                      | 
+ 415 |  char hwa[128];                          | True                      | 
+ 416 |  char mask[128];                         | True                      | 
+ 417 |  char line[128];                         | True                      | 
+ 418 |  char dev[128];                          | True                      | 
+ 419 |                                          | True                      | 
+ 420 |  host = NULL;                            | True                      | 
+ 421 |  if (name != NULL) {                     | True                      | 
+ 422 |   /* Resolve the host name. */           | True                      | 
+ 423 |   if (ap->input(name, &sa) < 0) {        | True                      | 
+ 424 |    bb_simple_herror_msg_and_die(name);   | True                      | 
+ 425 |   }                                      | True                      | 
+ 426 |   host = xstrdup(ap->sprint(&sa, 1));    | True                      | 
+ 427 |  }                                       | True                      | 
+ 428 |  fp = xfopen_for_read("/proc/net/arp");  | True                      | 
+ 429 |  /* Bypass header -- read one line */    | True                      | 
+ 430 |  fgets(line, sizeof(line), fp);          | True                      | 
+ 431 |                                          | True                      | 
+ 432 |  /* Read the ARP cache entries. */       | True                      | 
+ 433 |  while (fgets(line, sizeof(line), fp)) { | True                      | 
+ 434 |                                          | True                      | 
+ 435 |   mask[0] = '-'; mask[1] = '\0';         | True                      | 
+ 436 |   dev[0] = '-'; dev[1] = '\0';           | True                      | 
+ 437 |   /* All these strings can't overflow    | True                      | 
+ 438 |    * because fgets above reads limited a | True                      | 
+ 439 |   num = sscanf(line, "%s 0x%x 0x%x %s %s | True                      | 
+ 440 |      ip, &type, &flags, hwa, mask, dev); | True                      | 
+ 441 |   if (num < 4)                           | True                      | 
+ 442 |    break;                                | True                      | 
+ 443 |                                          | True                      | 
+ 444 |   entries++;                             | True                      | 
+ 445 |   /* if the user specified hw-type diffe | True                      | 
+ 446 |   if (hw_set && (type != hw->type))      | True                      | 
+ 447 |    continue;                             | True                      | 
+ 448 |                                          | True                      | 
+ 449 |   /* if the user specified address diffe | True                      | 
+ 450 |   if (host && strcmp(ip, host) != 0)     | True                      | 
+ 451 |    continue;                             | True                      | 
+ 452 |                                          | True                      | 
+ 453 |   /* if the user specified device differ | True                      | 
+ 454 |   if (device[0] && strcmp(dev, device) ! | True                      | 
+ 455 |    continue;                             | True                      | 
+ 456 |                                          | True                      | 
+ 457 |   shown++;                               | True                      | 
+ 458 |   /* This IS ugly but it works -be */    | True                      | 
+ 459 |   hostname = "?";                        | True                      | 
+ 460 |   if (!(option_mask32 & ARP_OPT_n)) {    | True                      | 
+ 461 |    if (ap->input(ip, &sa) < 0)           | True                      | 
+ 462 |     hostname = ip;                       | True                      | 
+ 463 |    else                                  | True                      | 
+ 464 |     hostname = ap->sprint(&sa, (option_m | True                      | 
+ 465 |    if (strcmp(hostname, ip) == 0)        | True                      | 
+ 466 |     hostname = "?";                      | True                      | 
+ 467 |   }                                      | True                      | 
+ 468 |                                          | True                      | 
+ 469 |   arp_disp(hostname, ip, type, flags, hw | True                      | 
+ 470 |  }                                       | True                      | 
+ 471 |  if (option_mask32 & ARP_OPT_v)          | True                      | 
+ 472 |   printf("Entries: %u\tSkipped: %u\tFoun | True                      | 
+ 473 |     entries, entries - shown, shown);    | True                      | 
+ 474 |                                          | True                      | 
+ 475 |  if (!shown) {                           | True                      | 
+ 476 |   if (hw_set || host || device[0])       | True                      | 
+ 477 |    printf("No match found in %u entries\ | True                      | 
+ 478 |  }                                       | True                      | 
+ 479 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 480 |   free((char*)host);                     | True                      | 
+ 481 |   fclose(fp);                            | True                      | 
+ 482 |  }                                       | True                      | 
+ 483 |  return 0;                               | True                      | 
+ 484 | }                                        | True                      | 
+ 485 |                                          | True                      | 
+ 486 | int arp_main(int argc, char **argv) MAIN | True                      | 
+ 487 | int arp_main(int argc UNUSED_PARAM, char | True                      | 
+ 488 | {                                        | True                      | 
+ 489 |  const char *hw_type;                    | True                      | 
+ 490 |  const char *protocol;                   | True                      | 
+ 491 |  unsigned opts;                          | True                      | 
+ 492 |                                          | True                      | 
+ 493 |  INIT_G();                               | True                      | 
+ 494 |                                          | True                      | 
+ 495 |  xmove_fd(xsocket(AF_INET, SOCK_DGRAM, 0 | True                      | 
+ 496 |                                          | True                      | 
+ 497 |  ap = get_aftype(DFLT_AF);               | True                      | 
+ 498 |  /* Defaults are always supported */     | True                      | 
+ 499 |  //if (!ap)                              | True                      | 
+ 500 |  // bb_error_msg_and_die("%s: %s not sup | True                      | 
+ 501 |  hw = get_hwtype(DFLT_HW);               | True                      | 
+ 502 |  //if (!hw)                              | True                      | 
+ 503 |  // bb_error_msg_and_die("%s: %s not sup | True                      | 
+ 504 |                                          | True                      | 
+ 505 |  opts = getopt32(argv, "A:p:H:t:i:adnDsv | True                      | 
+ 506 |      &hw_type, &hw_type, &device);       | True                      | 
+ 507 |  argv += optind;                         | True                      | 
+ 508 |  if (opts & (ARP_OPT_A | ARP_OPT_p)) {   | True                      | 
+ 509 |   ap = get_aftype(protocol);             | True                      | 
+ 510 |   if (!ap)                               | True                      | 
+ 511 |    bb_error_msg_and_die("%s: unknown %s" | True                      | 
+ 512 |  }                                       | True                      | 
+ 513 |  if (opts & (ARP_OPT_H | ARP_OPT_t)) {   | True                      | 
+ 514 |   hw = get_hwtype(hw_type);              | True                      | 
+ 515 |   if (!hw)                               | True                      | 
+ 516 |    bb_error_msg_and_die("%s: unknown %s" | True                      | 
+ 517 |   hw_set = 1;                            | True                      | 
+ 518 |  }                                       | True                      | 
+ 519 |  //if (opts & ARP_OPT_i)... -i           | True                      | 
+ 520 |                                          | True                      | 
+ 521 |  if (ap->af != AF_INET) {                | True                      | 
+ 522 |   bb_error_msg_and_die("%s: kernel only  | True                      | 
+ 523 |  }                                       | True                      | 
+ 524 |  if (hw->alen <= 0) {                    | True                      | 
+ 525 |   bb_error_msg_and_die("%s: %s without A | True                      | 
+ 526 |     hw->name, "hardware type");          | True                      | 
+ 527 |  }                                       | True                      | 
+ 528 |                                          | True                      | 
+ 529 |  /* Now see what we have to do here... * | True                      | 
+ 530 |  if (opts & (ARP_OPT_d | ARP_OPT_s)) {   | True                      | 
+ 531 |   if (argv[0] == NULL)                   | True                      | 
+ 532 |    bb_simple_error_msg_and_die("need hos | True                      | 
+ 533 |   if (opts & ARP_OPT_s)                  | True                      | 
+ 534 |    return arp_set(argv);                 | True                      | 
+ 535 |   return arp_del(argv);                  | True                      | 
+ 536 |  }                                       | True                      | 
+ 537 |                                          | True                      | 
+ 538 |  //if (opts & ARP_OPT_a) - default       | True                      | 
+ 539 |  return arp_show(argv[0]);               | True                      | 
+ 540 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +115MB, 286ms             | 

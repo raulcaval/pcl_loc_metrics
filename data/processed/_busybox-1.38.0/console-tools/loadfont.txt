@@ -1,0 +1,539 @@
+FILE: data/raw/busybox-1.38.0/console-tools/loadfont.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                              | 
+-----+------------------------------------------+----------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                               | 
+   2 | /*                                       | True                                               | 
+   3 |  * loadfont.c - Eugene Crosser & Andries | True                                               | 
+   4 |  *                                       | True                                               | 
+   5 |  * Version 0.96bb                        | True                                               | 
+   6 |  *                                       | True                                               | 
+   7 |  * Loads the console font, and possibly  | True                                               | 
+   8 |  * (Adapted for busybox by Matej Vela.)  | True                                               | 
+   9 |  *                                       | True                                               | 
+  10 |  * Licensed under GPLv2, see file LICENS | True                                               | 
+  11 |  */                                      | True                                               | 
+  12 | //config:config LOADFONT                 | True                                               | 
+  13 | //config: bool "loadfont (5.4 kb)"       | True                                               | 
+  14 | //config: default y                      | True                                               | 
+  15 | //config: help                           | True                                               | 
+  16 | //config: This program loads a console f | True                                               | 
+  17 | //config:                                | True                                               | 
+  18 | //config:config SETFONT                  | True                                               | 
+  19 | //config: bool "setfont (24 kb)"         | True                                               | 
+  20 | //config: default y                      | True                                               | 
+  21 | //config: help                           | True                                               | 
+  22 | //config: Allows to load console screen  | True                                               | 
+  23 | //config:                                | True                                               | 
+  24 | //config:config FEATURE_SETFONT_TEXTUAL_ | True                                               | 
+  25 | //config: bool "Support reading textual  | True                                               | 
+  26 | //config: default y                      | True                                               | 
+  27 | //config: depends on SETFONT             | True                                               | 
+  28 | //config: help                           | True                                               | 
+  29 | //config: Support reading textual screen | True                                               | 
+  30 | //config:                                | True                                               | 
+  31 | //config:config DEFAULT_SETFONT_DIR      | True                                               | 
+  32 | //config: string "Default directory for  | True                                               | 
+  33 | //config: default ""                     | True                                               | 
+  34 | //config: depends on SETFONT             | True                                               | 
+  35 | //config: help                           | True                                               | 
+  36 | //config: Directory to use if setfont's  | True                                               | 
+  37 | //config: (not /path/to/file or ./file). | True                                               | 
+  38 | //config:                                | True                                               | 
+  39 | //config:comment "Common options for loa | True                                               | 
+  40 | //config: depends on LOADFONT || SETFONT | True                                               | 
+  41 | //config:                                | True                                               | 
+  42 | //config:config FEATURE_LOADFONT_PSF2    | True                                               | 
+  43 | //config: bool "Support PSF2 console fon | True                                               | 
+  44 | //config: default y                      | True                                               | 
+  45 | //config: depends on LOADFONT || SETFONT | True                                               | 
+  46 | //config:                                | True                                               | 
+  47 | //config:config FEATURE_LOADFONT_RAW     | True                                               | 
+  48 | //config: bool "Support old (raw) consol | True                                               | 
+  49 | //config: default y                      | True                                               | 
+  50 | //config: depends on LOADFONT || SETFONT | True                                               | 
+  51 |                                          | True                                               | 
+  52 | //applet:IF_LOADFONT(APPLET_NOEXEC(loadf | True                                               | 
+  53 | //applet:IF_SETFONT(APPLET_NOEXEC(setfon | True                                               | 
+  54 |                                          | True                                               | 
+  55 | //kbuild:lib-$(CONFIG_LOADFONT) += loadf | True                                               | 
+  56 | //kbuild:lib-$(CONFIG_SETFONT) += loadfo | True                                               | 
+  57 |                                          | True                                               | 
+  58 | #include "libbb.h"                       | True                                               | 
+  59 | #include <sys/kd.h>                      | True                                               | 
+  60 |                                          | True                                               | 
+  61 | #ifndef KDFONTOP                         | True                                               | 
+  62 | # define KDFONTOP 0x4B72                 | !(KDFONTOP)                                        | 
+  63 | struct console_font_op {                 | !(KDFONTOP)                                        | 
+  64 |  unsigned op;            /* KD_FONT_OP_* | !(KDFONTOP)                                        | 
+  65 |  unsigned flags;         /* KD_FONT_FLAG | !(KDFONTOP)                                        | 
+  66 |  unsigned width, height;                 | !(KDFONTOP)                                        | 
+  67 |  unsigned charcount;                     | !(KDFONTOP)                                        | 
+  68 |  unsigned char *data;    /* font data wi | !(KDFONTOP)                                        | 
+  69 | };                                       | !(KDFONTOP)                                        | 
+  70 | # define KD_FONT_OP_SET          0  /* S | !(KDFONTOP)                                        | 
+  71 | # define KD_FONT_OP_GET          1  /* G | !(KDFONTOP)                                        | 
+  72 | # define KD_FONT_OP_SET_DEFAULT  2  /* S | !(KDFONTOP)                                        | 
+  73 | # define KD_FONT_OP_COPY         3  /* C | !(KDFONTOP)                                        | 
+  74 | # define KD_FONT_FLAG_OLD        0x80000 | !(KDFONTOP)                                        | 
+  75 | # define KD_FONT_FLAG_DONT_RECALC 1 /* D | !(KDFONTOP)                                        | 
+  76 |                                    /* (U | !(KDFONTOP)                                        | 
+  77 | #endif /* KDFONTOP */                    | True                                               | 
+  78 |                                          | True                                               | 
+  79 |                                          | True                                               | 
+  80 | enum {                                   | True                                               | 
+  81 |  PSF1_MAGIC0 = 0x36,                     | True                                               | 
+  82 |  PSF1_MAGIC1 = 0x04,                     | True                                               | 
+  83 |  PSF1_MODE512 = 0x01,                    | True                                               | 
+  84 |  PSF1_MODEHASTAB = 0x02,                 | True                                               | 
+  85 |  PSF1_MODEHASSEQ = 0x04,                 | True                                               | 
+  86 |  PSF1_MAXMODE = 0x05,                    | True                                               | 
+  87 |  PSF1_STARTSEQ = 0xfffe,                 | True                                               | 
+  88 |  PSF1_SEPARATOR = 0xffff,                | True                                               | 
+  89 | };                                       | True                                               | 
+  90 |                                          | True                                               | 
+  91 | struct psf1_header {                     | True                                               | 
+  92 |  unsigned char magic[2];         /* Magi | True                                               | 
+  93 |  unsigned char mode;             /* PSF  | True                                               | 
+  94 |  unsigned char charsize;         /* Char | True                                               | 
+  95 | };                                       | True                                               | 
+  96 |                                          | True                                               | 
+  97 | #define psf1h(x) ((struct psf1_header*)( | True                                               | 
+  98 |                                          | True                                               | 
+  99 | #define PSF1_MAGIC_OK(x) ( \             | True                                               | 
+ 100 |      (x)->magic[0] == PSF1_MAGIC0 \      | True                                               | 
+ 101 |   && (x)->magic[1] == PSF1_MAGIC1 \      | True                                               | 
+ 102 | )                                        | True                                               | 
+ 103 |                                          | True                                               | 
+ 104 | #if ENABLE_FEATURE_LOADFONT_PSF2         | True                                               | 
+ 105 | enum {                                   | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 106 |  PSF2_MAGIC0 = 0x72,                     | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 107 |  PSF2_MAGIC1 = 0xb5,                     | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 108 |  PSF2_MAGIC2 = 0x4a,                     | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 109 |  PSF2_MAGIC3 = 0x86,                     | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 110 |  PSF2_HAS_UNICODE_TABLE = 0x01,          | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 111 |  PSF2_MAXVERSION = 0,                    | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 112 |  PSF2_STARTSEQ = 0xfe,                   | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 113 |  PSF2_SEPARATOR = 0xff                   | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 114 | };                                       | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 115 |                                          | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 116 | struct psf2_header {                     | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 117 |  unsigned char magic[4];                 | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 118 |  unsigned int version;                   | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 119 |  unsigned int headersize;    /* offset o | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 120 |  unsigned int flags;                     | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 121 |  unsigned int length;        /* number o | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 122 |  unsigned int charsize;      /* number o | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 123 |  unsigned int height;        /* max dime | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 124 |  unsigned int width;         /* charsize | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 125 | };                                       | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 126 |                                          | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 127 | #define psf2h(x) ((struct psf2_header*)( | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 128 |                                          | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 129 | #define PSF2_MAGIC_OK(x) ( \             | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 130 |      (x)->magic[0] == PSF2_MAGIC0 \      | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 131 |   && (x)->magic[1] == PSF2_MAGIC1 \      | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 132 |   && (x)->magic[2] == PSF2_MAGIC2 \      | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 133 |   && (x)->magic[3] == PSF2_MAGIC3 \      | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 134 | )                                        | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 135 | #endif /* ENABLE_FEATURE_LOADFONT_PSF2 * | True                                               | 
+ 136 |                                          | True                                               | 
+ 137 |                                          | True                                               | 
+ 138 | static void do_loadfont(int fd, unsigned | True                                               | 
+ 139 | {                                        | True                                               | 
+ 140 |  unsigned char *buf;                     | True                                               | 
+ 141 |  int charwidth = 32 * ((width+7)/8);     | True                                               | 
+ 142 |  int i;                                  | True                                               | 
+ 143 |                                          | True                                               | 
+ 144 |  if (height < 1 || height > 32 || width  | True                                               | 
+ 145 |   bb_error_msg_and_die("bad character si | True                                               | 
+ 146 |                                          | True                                               | 
+ 147 |  buf = xzalloc(charwidth * ((fontsize <  | True                                               | 
+ 148 |  for (i = 0; i < fontsize; i++)          | True                                               | 
+ 149 |   memcpy(buf + (i*charwidth), inbuf + (i | True                                               | 
+ 150 |                                          | True                                               | 
+ 151 |  { /* KDFONTOP */                        | True                                               | 
+ 152 |   struct console_font_op cfo;            | True                                               | 
+ 153 |   cfo.op = KD_FONT_OP_SET;               | True                                               | 
+ 154 |   cfo.flags = 0;                         | True                                               | 
+ 155 |   cfo.width = width;                     | True                                               | 
+ 156 |   cfo.height = height;                   | True                                               | 
+ 157 |   cfo.charcount = fontsize;              | True                                               | 
+ 158 |   cfo.data = buf;                        | True                                               | 
+ 159 |   xioctl(fd, KDFONTOP, &cfo);            | True                                               | 
+ 160 |  }                                       | True                                               | 
+ 161 |                                          | True                                               | 
+ 162 |  free(buf);                              | True                                               | 
+ 163 | }                                        | True                                               | 
+ 164 |                                          | True                                               | 
+ 165 | /*                                       | True                                               | 
+ 166 |  * Format of the Unicode information:    | True                                               | 
+ 167 |  *                                       | True                                               | 
+ 168 |  * For each font position <uc>*<seq>*<te | True                                               | 
+ 169 |  * where <uc> is a 2-byte little endian  | True                                               | 
+ 170 |  * or an UTF-8 coded value (PSF2),       | True                                               | 
+ 171 |  * <seq> = <ss><uc><uc>*, <ss> = psf1 ?  | True                                               | 
+ 172 |  * <term> = psf1 ? 0xFFFF : 0xFF.        | True                                               | 
+ 173 |  * and * denotes zero or more occurrence | True                                               | 
+ 174 |  *                                       | True                                               | 
+ 175 |  * Semantics:                            | True                                               | 
+ 176 |  * The leading <uc>* part gives Unicode  | True                                               | 
+ 177 |  * represented by this font position. Th | True                                               | 
+ 178 |  * are sequences of Unicode symbols - pr | True                                               | 
+ 179 |  * together with combining accents - als | True                                               | 
+ 180 |  * this font position.                   | True                                               | 
+ 181 |  *                                       | True                                               | 
+ 182 |  * Example:                              | True                                               | 
+ 183 |  * At the font position for a capital A- | True                                               | 
+ 184 |  * may have:                             | True                                               | 
+ 185 |  *   00C5,212B,FFFE,0041,030A,FFFF       | True                                               | 
+ 186 |  * Some font positions may be described  | True                                               | 
+ 187 |  * namely when there is no precomposed U | True                                               | 
+ 188 |  */                                      | True                                               | 
+ 189 | #if !ENABLE_FEATURE_LOADFONT_PSF2        | True                                               | 
+ 190 | #define do_loadtable(fd, inbuf, tailsz,  | !ENABLE_FEATURE_LOADFONT_PSF2                      | 
+ 191 |  do_loadtable(fd, inbuf, tailsz, fontsiz | !ENABLE_FEATURE_LOADFONT_PSF2                      | 
+ 192 | #endif                                   | True                                               | 
+ 193 | static void do_loadtable(int fd, unsigne | True                                               | 
+ 194 | {                                        | True                                               | 
+ 195 | #if !ENABLE_FEATURE_LOADFONT_PSF2        | True                                               | 
+ 196 | /* gcc 4.3.1 code size: */               | !ENABLE_FEATURE_LOADFONT_PSF2                      | 
+ 197 | # define psf2 0 /* +0 bytes */           | !ENABLE_FEATURE_LOADFONT_PSF2                      | 
+ 198 | // const int psf2 = 0; /* +8 bytes */    | !ENABLE_FEATURE_LOADFONT_PSF2                      | 
+ 199 | // enum { psf2 = 0 }; /* +13 bytes */    | !ENABLE_FEATURE_LOADFONT_PSF2                      | 
+ 200 | #endif                                   | True                                               | 
+ 201 |  struct unimapinit advice;               | True                                               | 
+ 202 |  struct unimapdesc ud;                   | True                                               | 
+ 203 |  struct unipair *up;                     | True                                               | 
+ 204 |  int ct = 0, maxct;                      | True                                               | 
+ 205 |  int glyph;                              | True                                               | 
+ 206 |  uint16_t unicode;                       | True                                               | 
+ 207 |                                          | True                                               | 
+ 208 |  maxct = tailsz; /* more than enough */  | True                                               | 
+ 209 |  up = xmalloc(maxct * sizeof(*up));      | True                                               | 
+ 210 |                                          | True                                               | 
+ 211 |  for (glyph = 0; glyph < fontsize; glyph | True                                               | 
+ 212 |   while (tailsz > 0) {                   | True                                               | 
+ 213 |    if (!psf2) { /* PSF1 */               | True                                               | 
+ 214 |     unicode = (((uint16_t) inbuf[1]) <<  | True                                               | 
+ 215 |     tailsz -= 2;                         | True                                               | 
+ 216 |     inbuf += 2;                          | True                                               | 
+ 217 |     if (unicode == PSF1_SEPARATOR)       | True                                               | 
+ 218 |      break;                              | True                                               | 
+ 219 |    } else { /* PSF2 */                   | True                                               | 
+ 220 | #if ENABLE_FEATURE_LOADFONT_PSF2         | True                                               | 
+ 221 |     --tailsz;                            | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 222 |     unicode = *inbuf++;                  | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 223 |     if (unicode == PSF2_SEPARATOR) {     | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 224 |      break;                              | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 225 |     } else if (unicode == PSF2_STARTSEQ) | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 226 |      bb_simple_error_msg_and_die("unicod | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 227 |     } else if (unicode >= 0xC0) {        | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 228 |      if (unicode >= 0xFC)                | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 229 |       unicode &= 0x01, maxct = 5;        | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 230 |      else if (unicode >= 0xF8)           | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 231 |       unicode &= 0x03, maxct = 4;        | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 232 |      else if (unicode >= 0xF0)           | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 233 |       unicode &= 0x07, maxct = 3;        | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 234 |      else if (unicode >= 0xE0)           | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 235 |       unicode &= 0x0F, maxct = 2;        | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 236 |      else                                | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 237 |       unicode &= 0x1F, maxct = 1;        | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 238 |      do {                                | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 239 |       if (tailsz <= 0 || *inbuf < 0x80 | | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 240 |        bb_simple_error_msg_and_die("ille | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 241 |       --tailsz;                          | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 242 |       unicode = (unicode << 6) + (*inbuf | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 243 |      } while (--maxct > 0);              | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 244 |     } else if (unicode >= 0x80) {        | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 245 |      bb_simple_error_msg_and_die("illega | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 246 |     }                                    | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 247 | #else                                    | True                                               | 
+ 248 |     return;                              | !ENABLE_FEATURE_LOADFONT_PSF2                      | 
+ 249 | #endif                                   | True                                               | 
+ 250 |    }                                     | True                                               | 
+ 251 |    up[ct].unicode = unicode;             | True                                               | 
+ 252 |    up[ct].fontpos = glyph;               | True                                               | 
+ 253 |    ct++;                                 | True                                               | 
+ 254 |   }                                      | True                                               | 
+ 255 |  }                                       | True                                               | 
+ 256 |                                          | True                                               | 
+ 257 |  /* Note: after PIO_UNIMAPCLR and before | True                                               | 
+ 258 |   * this printf did not work on many ker | True                                               | 
+ 259 |                                          | True                                               | 
+ 260 |  advice.advised_hashsize = 0;            | True                                               | 
+ 261 |  advice.advised_hashstep = 0;            | True                                               | 
+ 262 |  advice.advised_hashlevel = 0;           | True                                               | 
+ 263 |  xioctl(fd, PIO_UNIMAPCLR, &advice);     | True                                               | 
+ 264 |  ud.entry_ct = ct;                       | True                                               | 
+ 265 |  ud.entries = up;                        | True                                               | 
+ 266 |  xioctl(fd, PIO_UNIMAP, &ud);            | True                                               | 
+ 267 | #undef psf2                              | True                                               | 
+ 268 | }                                        | True                                               | 
+ 269 |                                          | True                                               | 
+ 270 | static void do_load(int fd, unsigned cha | True                                               | 
+ 271 | {                                        | True                                               | 
+ 272 |  int height;                             | True                                               | 
+ 273 |  int width = 8;                          | True                                               | 
+ 274 |  int charsize;                           | True                                               | 
+ 275 |  int fontsize = 256;                     | True                                               | 
+ 276 |  int has_table = 0;                      | True                                               | 
+ 277 |  unsigned char *font = buffer;           | True                                               | 
+ 278 |  unsigned char *table;                   | True                                               | 
+ 279 |                                          | True                                               | 
+ 280 |  if (len >= sizeof(struct psf1_header) & | True                                               | 
+ 281 |   if (psf1h(buffer)->mode > PSF1_MAXMODE | True                                               | 
+ 282 |    bb_simple_error_msg_and_die("unsuppor | True                                               | 
+ 283 |   if (psf1h(buffer)->mode & PSF1_MODE512 | True                                               | 
+ 284 |    fontsize = 512;                       | True                                               | 
+ 285 |   if (psf1h(buffer)->mode & PSF1_MODEHAS | True                                               | 
+ 286 |    has_table = 1;                        | True                                               | 
+ 287 |   height = charsize = psf1h(buffer)->cha | True                                               | 
+ 288 |   font += sizeof(struct psf1_header);    | True                                               | 
+ 289 |  } else                                  | True                                               | 
+ 290 | #if ENABLE_FEATURE_LOADFONT_PSF2         | True                                               | 
+ 291 |  if (len >= sizeof(struct psf2_header) & | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 292 |   if (psf2h(buffer)->version > PSF2_MAXV | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 293 |    bb_simple_error_msg_and_die("unsuppor | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 294 |   fontsize = psf2h(buffer)->length;      | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 295 |   if (psf2h(buffer)->flags & PSF2_HAS_UN | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 296 |    has_table = 2;                        | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 297 |   charsize = psf2h(buffer)->charsize;    | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 298 |   height = psf2h(buffer)->height;        | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 299 |   width = psf2h(buffer)->width;          | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 300 |   font += psf2h(buffer)->headersize;     | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 301 |  } else                                  | ENABLE_FEATURE_LOADFONT_PSF2                       | 
+ 302 | #endif                                   | True                                               | 
+ 303 | #if ENABLE_FEATURE_LOADFONT_RAW          | True                                               | 
+ 304 |  if (len == 9780) {  /* file with three  | ENABLE_FEATURE_LOADFONT_RAW                        | 
+ 305 |   charsize = height = 16;                | ENABLE_FEATURE_LOADFONT_RAW                        | 
+ 306 |   font += 40;                            | ENABLE_FEATURE_LOADFONT_RAW                        | 
+ 307 |  } else if ((len & 0377) == 0) {  /* bar | ENABLE_FEATURE_LOADFONT_RAW                        | 
+ 308 |   charsize = height = len / 256;         | ENABLE_FEATURE_LOADFONT_RAW                        | 
+ 309 |  } else                                  | ENABLE_FEATURE_LOADFONT_RAW                        | 
+ 310 | #endif                                   | True                                               | 
+ 311 |  {                                       | True                                               | 
+ 312 |   bb_simple_error_msg_and_die("input fil | True                                               | 
+ 313 |  }                                       | True                                               | 
+ 314 |                                          | True                                               | 
+ 315 | #if !defined(PIO_FONTX) || defined(__spa | True                                               | 
+ 316 |  if (fontsize != 256)                    | !(PIO_FONTX)||(PIO_FONTX)&&(__sparc__)             | 
+ 317 |   bb_simple_error_msg_and_die("only font | !(PIO_FONTX)||(PIO_FONTX)&&(__sparc__)             | 
+ 318 | #endif                                   | True                                               | 
+ 319 |                                          | True                                               | 
+ 320 |  table = font + fontsize * charsize;     | True                                               | 
+ 321 |  buffer += len;                          | True                                               | 
+ 322 |                                          | True                                               | 
+ 323 |  if (table > buffer || (!has_table && ta | True                                               | 
+ 324 |   bb_simple_error_msg_and_die("input fil | True                                               | 
+ 325 |                                          | True                                               | 
+ 326 |  do_loadfont(fd, font, height, width, ch | True                                               | 
+ 327 |                                          | True                                               | 
+ 328 |  if (has_table)                          | True                                               | 
+ 329 |   do_loadtable(fd, table, buffer - table | !ENABLE_FEATURE_LOADFONT_PSF2                      | 
+ 330 | }                                        | True                                               | 
+ 331 |                                          | True                                               | 
+ 332 |                                          | True                                               | 
+ 333 | #if ENABLE_LOADFONT                      | True                                               | 
+ 334 | //usage:#define loadfont_trivial_usage   | ENABLE_LOADFONT                                    | 
+ 335 | //usage:       "< font"                  | ENABLE_LOADFONT                                    | 
+ 336 | //usage:#define loadfont_full_usage "\n\ | ENABLE_LOADFONT                                    | 
+ 337 | //usage:       "Load a console font from | ENABLE_LOADFONT                                    | 
+ 338 | /* //usage:     "\n -C TTY Affect TTY in | ENABLE_LOADFONT                                    | 
+ 339 | //usage:                                 | ENABLE_LOADFONT                                    | 
+ 340 | //usage:#define loadfont_example_usage   | ENABLE_LOADFONT                                    | 
+ 341 | //usage:       "$ loadfont < /etc/i18n/f | ENABLE_LOADFONT                                    | 
+ 342 | int loadfont_main(int argc, char **argv) | ENABLE_LOADFONT                                    | 
+ 343 | int loadfont_main(int argc UNUSED_PARAM, | ENABLE_LOADFONT                                    | 
+ 344 | {                                        | ENABLE_LOADFONT                                    | 
+ 345 |  size_t len;                             | ENABLE_LOADFONT                                    | 
+ 346 |  unsigned char *buffer;                  | ENABLE_LOADFONT                                    | 
+ 347 |                                          | ENABLE_LOADFONT                                    | 
+ 348 |  // no arguments allowed!                | ENABLE_LOADFONT                                    | 
+ 349 |  getopt32(argv, "^" "" "\0" "=0");       | ENABLE_LOADFONT                                    | 
+ 350 |                                          | ENABLE_LOADFONT                                    | 
+ 351 |  /*                                      | ENABLE_LOADFONT                                    | 
+ 352 |   * We used to look at the length of the | ENABLE_LOADFONT                                    | 
+ 353 |   * with stat(); now that we accept comp | ENABLE_LOADFONT                                    | 
+ 354 |   * just read the entire file.           | ENABLE_LOADFONT                                    | 
+ 355 |   * Len was 32k, but latarcyrheb-sun32.p | ENABLE_LOADFONT                                    | 
+ 356 |   * (it has largish Unicode map).        | ENABLE_LOADFONT                                    | 
+ 357 |   */                                     | ENABLE_LOADFONT                                    | 
+ 358 |  len = 128*1024;                         | ENABLE_LOADFONT                                    | 
+ 359 |  buffer = xmalloc_read(STDIN_FILENO, &le | ENABLE_LOADFONT                                    | 
+ 360 |  // xmalloc_open_zipped_read_close(filen | ENABLE_LOADFONT                                    | 
+ 361 |  if (!buffer)                            | ENABLE_LOADFONT                                    | 
+ 362 |   bb_simple_perror_msg_and_die("error re | ENABLE_LOADFONT                                    | 
+ 363 |  do_load(get_console_fd_or_die(), buffer | ENABLE_LOADFONT                                    | 
+ 364 |                                          | ENABLE_LOADFONT                                    | 
+ 365 |  return EXIT_SUCCESS;                    | ENABLE_LOADFONT                                    | 
+ 366 | }                                        | ENABLE_LOADFONT                                    | 
+ 367 | #endif                                   | True                                               | 
+ 368 |                                          | True                                               | 
+ 369 |                                          | True                                               | 
+ 370 | #if ENABLE_SETFONT                       | True                                               | 
+ 371 | /* kbd-1.12:                             | ENABLE_SETFONT                                     | 
+ 372 | setfont [-O font+umap.orig] [-o font.ori | ENABLE_SETFONT                                     | 
+ 373 | [-ou umap.orig] [-N] [font.new ...] [-m  | ENABLE_SETFONT                                     | 
+ 374 | [-hNN] [-v] [-V]                         | ENABLE_SETFONT                                     | 
+ 375 |                                          | ENABLE_SETFONT                                     | 
+ 376 | -h NN  Override font height              | ENABLE_SETFONT                                     | 
+ 377 | -o file                                  | ENABLE_SETFONT                                     | 
+ 378 |        Save previous font in file        | ENABLE_SETFONT                                     | 
+ 379 | -O file                                  | ENABLE_SETFONT                                     | 
+ 380 |        Save previous font and Unicode ma | ENABLE_SETFONT                                     | 
+ 381 | -om file                                 | ENABLE_SETFONT                                     | 
+ 382 |        Store console map in file         | ENABLE_SETFONT                                     | 
+ 383 | -ou file                                 | ENABLE_SETFONT                                     | 
+ 384 |        Save previous Unicode map in file | ENABLE_SETFONT                                     | 
+ 385 | -m file                                  | ENABLE_SETFONT                                     | 
+ 386 |        Load console map or Unicode conso | ENABLE_SETFONT                                     | 
+ 387 | -u file                                  | ENABLE_SETFONT                                     | 
+ 388 |        Load Unicode table describing the | ENABLE_SETFONT                                     | 
+ 389 |        Example:                          | ENABLE_SETFONT                                     | 
+ 390 |        # cp866                           | ENABLE_SETFONT                                     | 
+ 391 |        0x00-0x7f       idem              | ENABLE_SETFONT                                     | 
+ 392 |        #                                 | ENABLE_SETFONT                                     | 
+ 393 |        0x80    U+0410  # CYRILLIC CAPITA | ENABLE_SETFONT                                     | 
+ 394 |        0x81    U+0411  # CYRILLIC CAPITA | ENABLE_SETFONT                                     | 
+ 395 |        0x82    U+0412  # CYRILLIC CAPITA | ENABLE_SETFONT                                     | 
+ 396 | -C console                               | ENABLE_SETFONT                                     | 
+ 397 |        Set the font for the indicated co | ENABLE_SETFONT                                     | 
+ 398 | -v     Verbose                           | ENABLE_SETFONT                                     | 
+ 399 | -V     Version                           | ENABLE_SETFONT                                     | 
+ 400 | */                                       | ENABLE_SETFONT                                     | 
+ 401 | //usage:#define setfont_trivial_usage    | ENABLE_SETFONT                                     | 
+ 402 | //usage:       "[-m MAPFILE] [-C TTY] FI | ENABLE_SETFONT                                     | 
+ 403 | //usage:#define setfont_full_usage "\n\n | ENABLE_SETFONT                                     | 
+ 404 | //usage:       "Load a console font\n"   | ENABLE_SETFONT                                     | 
+ 405 | //usage:     "\n -m MAPFILE Load console | ENABLE_SETFONT                                     | 
+ 406 | //usage:     "\n -C TTY  Affect TTY inst | ENABLE_SETFONT                                     | 
+ 407 | //usage:                                 | ENABLE_SETFONT                                     | 
+ 408 | //usage:#define setfont_example_usage    | ENABLE_SETFONT                                     | 
+ 409 | //usage:       "$ setfont -m koi8-r /etc | ENABLE_SETFONT                                     | 
+ 410 |                                          | ENABLE_SETFONT                                     | 
+ 411 | # if ENABLE_FEATURE_SETFONT_TEXTUAL_MAP  | ENABLE_SETFONT                                     | 
+ 412 | static int ctoi(char *s)                 | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 413 | {                                        | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 414 |  if (s[0] == '\'' && s[1] != '\0' && s[2 | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 415 |   return s[1];                           | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 416 |  // U+ means 0x                          | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 417 |  if (s[0] == 'U' && s[1] == '+') {       | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 418 |   s[0] = '0';                            | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 419 |   s[1] = 'x';                            | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 420 |  }                                       | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 421 |  if (!isdigit(s[0]))                     | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 422 |   return -1;                             | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 423 |  return xstrtoul(s, 0);                  | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 424 | }                                        | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 425 | # endif                                  | ENABLE_SETFONT                                     | 
+ 426 |                                          | ENABLE_SETFONT                                     | 
+ 427 | int setfont_main(int argc, char **argv)  | ENABLE_SETFONT                                     | 
+ 428 | int setfont_main(int argc UNUSED_PARAM,  | ENABLE_SETFONT                                     | 
+ 429 | {                                        | ENABLE_SETFONT                                     | 
+ 430 |  size_t len;                             | ENABLE_SETFONT                                     | 
+ 431 |  unsigned opts;                          | ENABLE_SETFONT                                     | 
+ 432 |  int fd;                                 | ENABLE_SETFONT                                     | 
+ 433 |  unsigned char *buffer;                  | ENABLE_SETFONT                                     | 
+ 434 |  char *mapfilename;                      | ENABLE_SETFONT                                     | 
+ 435 |  const char *tty_name = CURRENT_TTY;     | ENABLE_SETFONT                                     | 
+ 436 |                                          | ENABLE_SETFONT                                     | 
+ 437 |  opts = getopt32(argv, "^" "m:C:" "\0" " | ENABLE_SETFONT                                     | 
+ 438 |  argv += optind;                         | ENABLE_SETFONT                                     | 
+ 439 |                                          | ENABLE_SETFONT                                     | 
+ 440 |  fd = xopen_nonblocking(tty_name);       | ENABLE_SETFONT                                     | 
+ 441 |                                          | ENABLE_SETFONT                                     | 
+ 442 |  if (sizeof(CONFIG_DEFAULT_SETFONT_DIR)  | ENABLE_SETFONT                                     | 
+ 443 |   if (*argv[0] != '/') {                 | ENABLE_SETFONT                                     | 
+ 444 |    // goto default fonts location. don't | ENABLE_SETFONT                                     | 
+ 445 |    chdir(CONFIG_DEFAULT_SETFONT_DIR "/co | ENABLE_SETFONT                                     | 
+ 446 |   }                                      | ENABLE_SETFONT                                     | 
+ 447 |  }                                       | ENABLE_SETFONT                                     | 
+ 448 |  // load font                            | ENABLE_SETFONT                                     | 
+ 449 |  len = 128*1024;                         | ENABLE_SETFONT                                     | 
+ 450 |  buffer = xmalloc_open_zipped_read_close | ENABLE_SETFONT                                     | 
+ 451 |  if (!buffer)                            | ENABLE_SETFONT                                     | 
+ 452 |   bb_simple_perror_msg_and_die(*argv);   | ENABLE_SETFONT                                     | 
+ 453 |  do_load(fd, buffer, len);               | ENABLE_SETFONT                                     | 
+ 454 |                                          | ENABLE_SETFONT                                     | 
+ 455 |  // load the screen map, if any          | ENABLE_SETFONT                                     | 
+ 456 |  if (opts & 1) { // -m                   | ENABLE_SETFONT                                     | 
+ 457 |   unsigned mode = PIO_SCRNMAP;           | ENABLE_SETFONT                                     | 
+ 458 |   void *map;                             | ENABLE_SETFONT                                     | 
+ 459 |                                          | ENABLE_SETFONT                                     | 
+ 460 |   if (sizeof(CONFIG_DEFAULT_SETFONT_DIR) | ENABLE_SETFONT                                     | 
+ 461 |    if (mapfilename[0] != '/') {          | ENABLE_SETFONT                                     | 
+ 462 |     // goto default keymaps location     | ENABLE_SETFONT                                     | 
+ 463 |     chdir(CONFIG_DEFAULT_SETFONT_DIR "/c | ENABLE_SETFONT                                     | 
+ 464 |    }                                     | ENABLE_SETFONT                                     | 
+ 465 |   }                                      | ENABLE_SETFONT                                     | 
+ 466 |   // fetch keymap                        | ENABLE_SETFONT                                     | 
+ 467 |   map = xmalloc_open_zipped_read_close(m | ENABLE_SETFONT                                     | 
+ 468 |   if (!map)                              | ENABLE_SETFONT                                     | 
+ 469 |    bb_simple_perror_msg_and_die(mapfilen | ENABLE_SETFONT                                     | 
+ 470 |   // file size is 256 or 512 bytes? -> a | ENABLE_SETFONT                                     | 
+ 471 |   if (len == E_TABSZ || len == 2*E_TABSZ | ENABLE_SETFONT                                     | 
+ 472 |    if (len == 2*E_TABSZ)                 | ENABLE_SETFONT                                     | 
+ 473 |     mode = PIO_UNISCRNMAP;               | ENABLE_SETFONT                                     | 
+ 474 |   }                                      | ENABLE_SETFONT                                     | 
+ 475 | # if ENABLE_FEATURE_SETFONT_TEXTUAL_MAP  | ENABLE_SETFONT                                     | 
+ 476 |   // assume textual Unicode console maps | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 477 |   // 0x00 U+0000  #  NULL (NUL)          | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 478 |   // 0x01 U+0001  #  START OF HEADING (S | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 479 |   // 0x02 U+0002  #  START OF TEXT (STX) | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 480 |   // 0x03 U+0003  #  END OF TEXT (ETX)   | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 481 |   else {                                 | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 482 |    int i;                                | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 483 |    char *token[2];                       | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 484 |    parser_t *parser;                     | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 485 |                                          | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 486 |    if (ENABLE_FEATURE_CLEAN_UP)          | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 487 |     free(map);                           | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 488 |    map = xmalloc(E_TABSZ * sizeof(unsign | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 489 |                                          | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 490 | #define unicodes ((unsigned short *)map) | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 491 |    // fill vanilla map                   | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 492 |    for (i = 0; i < E_TABSZ; i++)         | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 493 |     unicodes[i] = 0xf000 + i;            | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 494 |                                          | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 495 |    parser = config_open(mapfilename);    | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 496 |    while (config_read(parser, token, 2,  | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 497 |     // parse code/value pair             | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 498 |     int a = ctoi(token[0]);              | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 499 |     int b = ctoi(token[1]);              | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 500 |     if (a < 0 || a >= E_TABSZ            | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 501 |      || b < 0 || b > 65535               | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 502 |     ) {                                  | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 503 |      bb_simple_error_msg_and_die("map fo | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 504 |     }                                    | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 505 |     // patch map                         | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 506 |     unicodes[a] = b;                     | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 507 |     // unicode character is met?         | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 508 |     if (b > 255)                         | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 509 |      mode = PIO_UNISCRNMAP;              | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 510 |    }                                     | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 511 |    if (ENABLE_FEATURE_CLEAN_UP)          | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 512 |     config_close(parser);                | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 513 |                                          | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 514 |    if (mode != PIO_UNISCRNMAP) {         | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 515 | #define asciis ((unsigned char *)map)    | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 516 |     for (i = 0; i < E_TABSZ; i++)        | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 517 |      asciis[i] = unicodes[i];            | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 518 | #undef asciis                            | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 519 |    }                                     | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 520 | #undef unicodes                          | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 521 |   }                                      | ENABLE_SETFONT&&ENABLE_FEATURE_SETFONT_TEXTUAL_MAP | 
+ 522 | # endif // ENABLE_FEATURE_SETFONT_TEXTUA | ENABLE_SETFONT                                     | 
+ 523 |                                          | ENABLE_SETFONT                                     | 
+ 524 |   // do set screen map                   | ENABLE_SETFONT                                     | 
+ 525 |   xioctl(fd, mode, map);                 | ENABLE_SETFONT                                     | 
+ 526 |                                          | ENABLE_SETFONT                                     | 
+ 527 |   if (ENABLE_FEATURE_CLEAN_UP)           | ENABLE_SETFONT                                     | 
+ 528 |    free(map);                            | ENABLE_SETFONT                                     | 
+ 529 |  }                                       | ENABLE_SETFONT                                     | 
+ 530 |                                          | ENABLE_SETFONT                                     | 
+ 531 |  return EXIT_SUCCESS;                    | ENABLE_SETFONT                                     | 
+ 532 | }                                        | ENABLE_SETFONT                                     | 
+ 533 | #endif                                   | True                                               | 
+-----+------------------------------------------+----------------------------------------------------+
+     |                                          | +112MB, 277ms                                      | 

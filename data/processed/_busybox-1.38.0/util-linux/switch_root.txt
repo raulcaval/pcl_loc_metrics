@@ -1,0 +1,382 @@
+FILE: data/raw/busybox-1.38.0/util-linux/switch_root.c
+Resultado PCLocator:
+   # | line of code                             | Merge                               | 
+-----+------------------------------------------+-------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                | 
+   2 | /*                                       | True                                | 
+   3 |  * Copyright 2005 Rob Landley <rob@landl | True                                | 
+   4 |  *                                       | True                                | 
+   5 |  * Switch from rootfs to another filesys | True                                | 
+   6 |  *                                       | True                                | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                                | 
+   8 |  */                                      | True                                | 
+   9 | //config:config SWITCH_ROOT              | True                                | 
+  10 | //config: bool "switch_root (5.7 kb)"    | True                                | 
+  11 | //config: default y                      | True                                | 
+  12 | //config: help                           | True                                | 
+  13 | //config: The switch_root utility is use | True                                | 
+  14 | //config: root device. Under initramfs,  | True                                | 
+  15 | //config: pivot_root. (Stop reading here | True                                | 
+  16 | //config:                                | True                                | 
+  17 | //config: Booting with initramfs extract | True                                | 
+  18 | //config: (which is a variant of ramfs/t | True                                | 
+  19 | //config: or unmounted*, pivot_root will | True                                | 
+  20 | //config: switch_root deletes everything | True                                | 
+  21 | //config: does a mount --move that overm | True                                | 
+  22 | //config: then execs the specified init  | True                                | 
+  23 | //config:                                | True                                | 
+  24 | //config: * Because the Linux kernel use | True                                | 
+  25 | //config: and ending point for searching | True                                | 
+  26 | //config: list of active mount points. T | True                                | 
+  27 | //config:                                | True                                | 
+  28 | // RUN_INIT config item is in klibc-util | True                                | 
+  29 |                                          | True                                | 
+  30 | //applet:IF_SWITCH_ROOT(APPLET(switch_ro | True                                | 
+  31 | //                      APPLET_ODDNAME:n | True                                | 
+  32 | //applet:IF_RUN_INIT(   APPLET_ODDNAME(r | True                                | 
+  33 |                                          | True                                | 
+  34 | //kbuild:lib-$(CONFIG_SWITCH_ROOT) += sw | True                                | 
+  35 | //kbuild:lib-$(CONFIG_RUN_INIT)    += sw | True                                | 
+  36 |                                          | True                                | 
+  37 | #include <sys/vfs.h>                     | True                                | 
+  38 | #include <sys/mount.h>                   | True                                | 
+  39 | #if ENABLE_RUN_INIT                      | True                                | 
+  40 | # include <sys/prctl.h>                  | ENABLE_RUN_INIT                     | 
+  41 | # ifndef PR_CAPBSET_READ                 | ENABLE_RUN_INIT                     | 
+  42 | # define PR_CAPBSET_READ 23              | ENABLE_RUN_INIT&&!(PR_CAPBSET_READ) | 
+  43 | # endif                                  | ENABLE_RUN_INIT                     | 
+  44 | # ifndef PR_CAPBSET_DROP                 | ENABLE_RUN_INIT                     | 
+  45 | # define PR_CAPBSET_DROP 24              | ENABLE_RUN_INIT&&!(PR_CAPBSET_DROP) | 
+  46 | # endif                                  | ENABLE_RUN_INIT                     | 
+  47 | # include <linux/capability.h>           | ENABLE_RUN_INIT                     | 
+  48 | // #include <sys/capability.h>           | ENABLE_RUN_INIT                     | 
+  49 | // This header is in libcap, but the fun | ENABLE_RUN_INIT                     | 
+  50 | // Comment in the header says this above | ENABLE_RUN_INIT                     | 
+  51 | /* system calls - look to libc for funct | ENABLE_RUN_INIT                     | 
+  52 | extern int capset(cap_user_header_t head | ENABLE_RUN_INIT                     | 
+  53 | extern int capget(cap_user_header_t head | ENABLE_RUN_INIT                     | 
+  54 | // so for bbox, let's just repeat the de | ENABLE_RUN_INIT                     | 
+  55 | // This way, libcap needs not be install | ENABLE_RUN_INIT                     | 
+  56 | #endif                                   | True                                | 
+  57 |                                          | True                                | 
+  58 | #include "libbb.h"                       | True                                | 
+  59 |                                          | True                                | 
+  60 | // Make up for header deficiencies       | True                                | 
+  61 | #ifndef RAMFS_MAGIC                      | True                                | 
+  62 | # define RAMFS_MAGIC ((unsigned)0x858458 | !(RAMFS_MAGIC)                      | 
+  63 | #endif                                   | True                                | 
+  64 | #ifndef TMPFS_MAGIC                      | True                                | 
+  65 | # define TMPFS_MAGIC ((unsigned)0x010219 | !(TMPFS_MAGIC)                      | 
+  66 | #endif                                   | True                                | 
+  67 | #ifndef MS_MOVE                          | True                                | 
+  68 | # define MS_MOVE     8192                | !(MS_MOVE)                          | 
+  69 | #endif                                   | True                                | 
+  70 |                                          | True                                | 
+  71 | static void delete_contents(const char * | True                                | 
+  72 |                                          | True                                | 
+  73 | static int FAST_FUNC rmrf(const char *di | True                                | 
+  74 | {                                        | True                                | 
+  75 |  char *newdir = concat_subpath_file(dire | True                                | 
+  76 |  if (newdir) { // not . or ..            | True                                | 
+  77 |   // Recurse to delete contents          | True                                | 
+  78 |   delete_contents(newdir, *(dev_t*)rootd | True                                | 
+  79 |   free(newdir);                          | True                                | 
+  80 |  }                                       | True                                | 
+  81 |  return 0;                               | True                                | 
+  82 | }                                        | True                                | 
+  83 |                                          | True                                | 
+  84 | // Recursively delete contents of rootfs | True                                | 
+  85 | static void delete_contents(const char * | True                                | 
+  86 | {                                        | True                                | 
+  87 |  struct stat st;                         | True                                | 
+  88 |                                          | True                                | 
+  89 |  // Don't descend into other filesystems | True                                | 
+  90 |  if (lstat(directory, &st) || st.st_dev  | True                                | 
+  91 |   return;                                | True                                | 
+  92 |                                          | True                                | 
+  93 |  // Recursively delete the contents of d | True                                | 
+  94 |  if (S_ISDIR(st.st_mode)) {              | True                                | 
+  95 |   iterate_on_dir(directory, rmrf, &rootd | True                                | 
+  96 |  } else {                                | True                                | 
+  97 |   // It wasn't a directory, zap it       | True                                | 
+  98 |   unlink(directory);                     | True                                | 
+  99 |  }                                       | True                                | 
+ 100 | }                                        | True                                | 
+ 101 |                                          | True                                | 
+ 102 | #if ENABLE_RUN_INIT                      | True                                | 
+ 103 | DEFINE_STRUCT_CAPS;                      | ENABLE_RUN_INIT                     | 
+ 104 |                                          | ENABLE_RUN_INIT                     | 
+ 105 | static void drop_capset(int cap_idx)     | ENABLE_RUN_INIT                     | 
+ 106 | {                                        | ENABLE_RUN_INIT                     | 
+ 107 |  struct caps caps;                       | ENABLE_RUN_INIT                     | 
+ 108 |                                          | ENABLE_RUN_INIT                     | 
+ 109 |  getcaps(&caps);                         | ENABLE_RUN_INIT                     | 
+ 110 |  caps.data[CAP_TO_INDEX(cap_idx)].inheri | ENABLE_RUN_INIT                     | 
+ 111 |  if (capset(&caps.header, caps.data) !=  | ENABLE_RUN_INIT                     | 
+ 112 |   bb_simple_perror_msg_and_die("capset") | ENABLE_RUN_INIT                     | 
+ 113 | }                                        | ENABLE_RUN_INIT                     | 
+ 114 |                                          | ENABLE_RUN_INIT                     | 
+ 115 | static void drop_bounding_set(int cap_id | ENABLE_RUN_INIT                     | 
+ 116 | {                                        | ENABLE_RUN_INIT                     | 
+ 117 |  int ret;                                | ENABLE_RUN_INIT                     | 
+ 118 |                                          | ENABLE_RUN_INIT                     | 
+ 119 |  ret = prctl(PR_CAPBSET_READ, cap_idx, 0 | ENABLE_RUN_INIT                     | 
+ 120 |  if (ret < 0)                            | ENABLE_RUN_INIT                     | 
+ 121 |   bb_perror_msg_and_die("prctl: %s", "PR | ENABLE_RUN_INIT                     | 
+ 122 |                                          | ENABLE_RUN_INIT                     | 
+ 123 |  if (ret == 1) {                         | ENABLE_RUN_INIT                     | 
+ 124 |   ret = prctl(PR_CAPBSET_DROP, cap_idx,  | ENABLE_RUN_INIT                     | 
+ 125 |   if (ret != 0)                          | ENABLE_RUN_INIT                     | 
+ 126 |    bb_perror_msg_and_die("prctl: %s", "P | ENABLE_RUN_INIT                     | 
+ 127 |  }                                       | ENABLE_RUN_INIT                     | 
+ 128 | }                                        | ENABLE_RUN_INIT                     | 
+ 129 |                                          | ENABLE_RUN_INIT                     | 
+ 130 | static void drop_usermodehelper(const ch | ENABLE_RUN_INIT                     | 
+ 131 | {                                        | ENABLE_RUN_INIT                     | 
+ 132 |  unsigned lo, hi;                        | ENABLE_RUN_INIT                     | 
+ 133 |  char buf[sizeof(int)*3 * 2 + 8];        | ENABLE_RUN_INIT                     | 
+ 134 |  int fd;                                 | ENABLE_RUN_INIT                     | 
+ 135 |  int ret;                                | ENABLE_RUN_INIT                     | 
+ 136 |                                          | ENABLE_RUN_INIT                     | 
+ 137 |  ret = open_read_close(filename, buf, si | ENABLE_RUN_INIT                     | 
+ 138 |  if (ret < 0)                            | ENABLE_RUN_INIT                     | 
+ 139 |   return; /* assuming files do not exist | ENABLE_RUN_INIT                     | 
+ 140 |                                          | ENABLE_RUN_INIT                     | 
+ 141 |  buf[ret] = '\0';                        | ENABLE_RUN_INIT                     | 
+ 142 |  ret = sscanf(buf, "%u %u", &lo, &hi);   | ENABLE_RUN_INIT                     | 
+ 143 |  if (ret != 2)                           | ENABLE_RUN_INIT                     | 
+ 144 |   bb_perror_msg_and_die("can't parse fil | ENABLE_RUN_INIT                     | 
+ 145 |                                          | ENABLE_RUN_INIT                     | 
+ 146 |  if (cap_idx < 32)                       | ENABLE_RUN_INIT                     | 
+ 147 |   lo &= ~(1 << cap_idx);                 | ENABLE_RUN_INIT                     | 
+ 148 |  else                                    | ENABLE_RUN_INIT                     | 
+ 149 |   hi &= ~(1 << (cap_idx - 32));          | ENABLE_RUN_INIT                     | 
+ 150 |                                          | ENABLE_RUN_INIT                     | 
+ 151 |  fd = xopen(filename, O_WRONLY);         | ENABLE_RUN_INIT                     | 
+ 152 |  fdprintf(fd, "%u %u", lo, hi);          | ENABLE_RUN_INIT                     | 
+ 153 |  close(fd);                              | ENABLE_RUN_INIT                     | 
+ 154 | }                                        | ENABLE_RUN_INIT                     | 
+ 155 |                                          | ENABLE_RUN_INIT                     | 
+ 156 | static void drop_capabilities(char *stri | ENABLE_RUN_INIT                     | 
+ 157 | {                                        | ENABLE_RUN_INIT                     | 
+ 158 |  char *cap;                              | ENABLE_RUN_INIT                     | 
+ 159 |                                          | ENABLE_RUN_INIT                     | 
+ 160 |  cap = strtok_r(string, ",", &string);   | ENABLE_RUN_INIT                     | 
+ 161 |  while (cap) {                           | ENABLE_RUN_INIT                     | 
+ 162 |   unsigned cap_idx;                      | ENABLE_RUN_INIT                     | 
+ 163 |                                          | ENABLE_RUN_INIT                     | 
+ 164 |   cap_idx = cap_name_to_number(cap);     | ENABLE_RUN_INIT                     | 
+ 165 |   drop_usermodehelper("/proc/sys/kernel/ | ENABLE_RUN_INIT                     | 
+ 166 |   drop_usermodehelper("/proc/sys/kernel/ | ENABLE_RUN_INIT                     | 
+ 167 |   drop_bounding_set(cap_idx);            | ENABLE_RUN_INIT                     | 
+ 168 |   drop_capset(cap_idx);                  | ENABLE_RUN_INIT                     | 
+ 169 |   bb_error_msg("dropped capability: %s", | ENABLE_RUN_INIT                     | 
+ 170 |   cap = strtok_r(NULL, ",", &string);    | ENABLE_RUN_INIT                     | 
+ 171 |  }                                       | ENABLE_RUN_INIT                     | 
+ 172 | }                                        | ENABLE_RUN_INIT                     | 
+ 173 | #endif                                   | True                                | 
+ 174 |                                          | True                                | 
+ 175 | int switch_root_main(int argc, char **ar | True                                | 
+ 176 | int switch_root_main(int argc UNUSED_PAR | True                                | 
+ 177 | {                                        | True                                | 
+ 178 |  char *newroot, *console = NULL;         | True                                | 
+ 179 |  struct stat st;                         | True                                | 
+ 180 |  struct statfs stfs;                     | True                                | 
+ 181 |  unsigned dry_run = 0;                   | True                                | 
+ 182 |  dev_t rootdev;                          | True                                | 
+ 183 |                                          | True                                | 
+ 184 |  // Parse args. '+': stop at first non-o | True                                | 
+ 185 |  if (ENABLE_SWITCH_ROOT && (!ENABLE_RUN_ | True                                | 
+ 186 | //usage:#define switch_root_trivial_usag | True                                | 
+ 187 | //usage:       "[-c CONSOLE_DEV] NEW_ROO | True                                | 
+ 188 | //usage:#define switch_root_full_usage " | True                                | 
+ 189 | //usage:       "Free initramfs and switc | True                                | 
+ 190 | //usage:       "chroot to NEW_ROOT, dele | True                                | 
+ 191 | //usage:       "execute NEW_INIT. PID mu | True                                | 
+ 192 | //usage:     "\n -c DEV Reopen stdio to  | True                                | 
+ 193 |   getopt32(argv, "^+"                    | True                                | 
+ 194 |    "c:"                                  | True                                | 
+ 195 |    "\0" "-2" /* minimum 2 args */,       | True                                | 
+ 196 |    &console                              | True                                | 
+ 197 |   );                                     | True                                | 
+ 198 |  } else {                                | True                                | 
+ 199 | #if ENABLE_RUN_INIT                      | True                                | 
+ 200 | //usage:#define run_init_trivial_usage   | ENABLE_RUN_INIT                     | 
+ 201 | //usage:       "[-d CAP,CAP...] [-n] [-c | ENABLE_RUN_INIT                     | 
+ 202 | //usage:#define run_init_full_usage "\n\ | ENABLE_RUN_INIT                     | 
+ 203 | //usage:       "Free initramfs and switc | ENABLE_RUN_INIT                     | 
+ 204 | //usage:       "chroot to NEW_ROOT, dele | ENABLE_RUN_INIT                     | 
+ 205 | //usage:       "execute NEW_INIT. PID mu | ENABLE_RUN_INIT                     | 
+ 206 | //usage:     "\n -c DEV Reopen stdio to  | ENABLE_RUN_INIT                     | 
+ 207 | //usage:     "\n -d CAPS Drop capabiliti | ENABLE_RUN_INIT                     | 
+ 208 | //usage:     "\n -n Dry run"             | ENABLE_RUN_INIT                     | 
+ 209 |   char *cap_list = NULL;                 | ENABLE_RUN_INIT                     | 
+ 210 |   dry_run = getopt32(argv, "^+"          | ENABLE_RUN_INIT                     | 
+ 211 |    "c:d:n"                               | ENABLE_RUN_INIT                     | 
+ 212 |    "\0" "-2" /* minimum 2 args */,       | ENABLE_RUN_INIT                     | 
+ 213 |    &console,                             | ENABLE_RUN_INIT                     | 
+ 214 |    &cap_list                             | ENABLE_RUN_INIT                     | 
+ 215 |   );                                     | ENABLE_RUN_INIT                     | 
+ 216 |   dry_run >>= 2; // -n                   | ENABLE_RUN_INIT                     | 
+ 217 |   if (cap_list)                          | ENABLE_RUN_INIT                     | 
+ 218 |    drop_capabilities(cap_list);          | ENABLE_RUN_INIT                     | 
+ 219 | #endif                                   | True                                | 
+ 220 |  }                                       | True                                | 
+ 221 |  argv += optind;                         | True                                | 
+ 222 |  newroot = *argv++;                      | True                                | 
+ 223 |                                          | True                                | 
+ 224 |  // Change to new root directory and ver | True                                | 
+ 225 |  xchdir(newroot);                        | True                                | 
+ 226 |  xstat("/", &st);                        | True                                | 
+ 227 |  rootdev = st.st_dev;                    | True                                | 
+ 228 |  xstat(".", &st);                        | True                                | 
+ 229 |  if (st.st_dev == rootdev) {             | True                                | 
+ 230 |   // Show usage, it says new root must b | True                                | 
+ 231 |   bb_show_usage();                       | True                                | 
+ 232 |  }                                       | True                                | 
+ 233 |  if (!dry_run && getpid() != 1) {        | True                                | 
+ 234 |   // Show usage, it says we must be PID  | True                                | 
+ 235 |   bb_show_usage();                       | True                                | 
+ 236 |  }                                       | True                                | 
+ 237 |                                          | True                                | 
+ 238 |  // Additional sanity checks: we're abou | True                                | 
+ 239 |  // we mean it. I could make this a CONF | True                                | 
+ 240 |  // from all the people who WILL destroy | True                                | 
+ 241 |  if (stat("/init", &st) != 0 || !S_ISREG | True                                | 
+ 242 |   bb_error_msg_and_die("'%s' is not a re | True                                | 
+ 243 |  }                                       | True                                | 
+ 244 |  statfs("/", &stfs); // this never fails | True                                | 
+ 245 |  if ((unsigned)stfs.f_type != RAMFS_MAGI | True                                | 
+ 246 |   && (unsigned)stfs.f_type != TMPFS_MAGI | True                                | 
+ 247 |  ) {                                     | True                                | 
+ 248 |   bb_simple_error_msg_and_die("root file | True                                | 
+ 249 |  }                                       | True                                | 
+ 250 |                                          | True                                | 
+ 251 |  if (!dry_run) {                         | True                                | 
+ 252 |   // Zap everything out of rootdev       | True                                | 
+ 253 |   delete_contents("/", rootdev);         | True                                | 
+ 254 |                                          | True                                | 
+ 255 |   // Overmount / with newdir and chroot  | True                                | 
+ 256 |   if (mount(".", "/", NULL, MS_MOVE, NUL | True                                | 
+ 257 |    // For example, fails when newroot is | True                                | 
+ 258 |    bb_simple_perror_msg_and_die("error m | True                                | 
+ 259 |   }                                      | True                                | 
+ 260 |  }                                       | True                                | 
+ 261 |  xchroot(".");                           | True                                | 
+ 262 |  // The chdir is needed to recalculate " | True                                | 
+ 263 |  /*xchdir("/"); - done in xchroot */     | True                                | 
+ 264 |                                          | True                                | 
+ 265 |  // If a new console specified, redirect | True                                | 
+ 266 |  if (console) {                          | True                                | 
+ 267 |   int fd = open_or_warn(console, O_RDWR) | True                                | 
+ 268 |   if (fd >= 0) {                         | True                                | 
+ 269 |    xmove_fd(fd, 0);                      | True                                | 
+ 270 |    xdup2(0, 1);                          | True                                | 
+ 271 |    xdup2(0, 2);                          | True                                | 
+ 272 |   }                                      | True                                | 
+ 273 |  }                                       | True                                | 
+ 274 |                                          | True                                | 
+ 275 |  if (dry_run) {                          | True                                | 
+ 276 |   // Does NEW_INIT look like it can be e | True                                | 
+ 277 |   //xstat(argv[0], &st);                 | True                                | 
+ 278 |   //if (!S_ISREG(st.st_mode))            | True                                | 
+ 279 |   // bb_perror_msg_and_die("'%s' is not  | True                                | 
+ 280 |   if (access(argv[0], X_OK) == 0)        | True                                | 
+ 281 |    return 0;                             | True                                | 
+ 282 |  } else {                                | True                                | 
+ 283 |   // Exec NEW_INIT                       | True                                | 
+ 284 |   execv(argv[0], argv);                  | True                                | 
+ 285 |  }                                       | True                                | 
+ 286 |  bb_perror_msg_and_die("can't execute '% | True                                | 
+ 287 | }                                        | True                                | 
+ 288 |                                          | True                                | 
+ 289 | /*                                       | True                                | 
+ 290 | From: Rob Landley <rob@landley.net>      | True                                | 
+ 291 | Date: Tue, Jun 16, 2009 at 7:47 PM       | True                                | 
+ 292 | Subject: Re: switch_root...              | True                                | 
+ 293 |                                          | True                                | 
+ 294 | ...                                      | True                                | 
+ 295 | ...                                      | True                                | 
+ 296 | ...                                      | True                                | 
+ 297 |                                          | True                                | 
+ 298 | If you're _not_ running out of init_ramf | True                                | 
+ 299 | instead), you probably shouldn't use swi | True                                | 
+ 300 |                                          | True                                | 
+ 301 | Basically what the sucker does is someth | True                                | 
+ 302 |                                          | True                                | 
+ 303 |  find / -xdev | xargs rm -rf             | True                                | 
+ 304 |  cd "$1"                                 | True                                | 
+ 305 |  shift                                   | True                                | 
+ 306 |  mount --move . /                        | True                                | 
+ 307 |  exec chroot . "$@"                      | True                                | 
+ 308 |                                          | True                                | 
+ 309 | There are a couple reasons that won't wo | True                                | 
+ 310 |                                          | True                                | 
+ 311 | 1) If you delete the commands out of you | True                                | 
+ 312 | more commands, but you can't start using | True                                | 
+ 313 | until after you do the chroot because th | True                                | 
+ 314 | So there's a step that needs to be sort  | True                                | 
+ 315 | script.  (You can work around this with  | True                                | 
+ 316 | out paths and sequencing, but it's britt | True                                | 
+ 317 |                                          | True                                | 
+ 318 | 2) The "find | rm" bit will actually del | True                                | 
+ 319 | still show up (even if their contents do | True                                | 
+ 320 | that.  So the first line is an oversimpl | True                                | 
+ 321 | to descend into other filesystems and de | True                                | 
+ 322 |                                          | True                                | 
+ 323 | The reason we do this is to free up memo | True                                | 
+ 324 | ramfs, deleting its contents frees up th | True                                | 
+ 325 | one remaining dentry for the new mount p | True                                | 
+ 326 |                                          | True                                | 
+ 327 | Note that you cannot ever umount rootfs, | True                                | 
+ 328 | can't kill PID 1.  The kernel tracks mou | True                                | 
+ 329 | the pointer to the start/end of that lis | True                                | 
+ 330 | known to be there (rootfs), so it never  | True                                | 
+ 331 | and it never has to worry about the list | True                                | 
+ 332 | there _was_ a bug that let you umount ro | True                                | 
+ 333 | instant you did so endlessly looping to  | True                                | 
+ 334 | never stopping.  They fixed it.)         | True                                | 
+ 335 |                                          | True                                | 
+ 336 | Oh, and the reason we mount --move _and_ | True                                | 
+ 337 | works.  Each process has two special sym | True                                | 
+ 338 | points to the dentry of a directory, and | True                                | 
+ 339 | from.  (Historically ".." was also speci | True                                | 
+ 340 | directory via a symlink so backing out t | True                                | 
+ 341 | necessarily mean the one physically abov | True                                | 
+ 342 | think it's just handed off to the filesy | True                                | 
+ 343 |                                          | True                                | 
+ 344 | Anyway, path resolution starts with "."  | True                                | 
+ 345 | of the path may be implicit), meaning it | True                                | 
+ 346 | directories.  Your current directory, an | True                                | 
+ 347 | chdir() syscall changes where "." points | True                                | 
+ 348 | where "/" points to.  (Again, both are p | True                                | 
+ 349 | affects your current process and its chi | True                                | 
+ 350 |                                          | True                                | 
+ 351 | Note that chroot() does _not_ change whe | True                                | 
+ 352 | put crazy security checks into the kerne | True                                | 
+ 353 | somewhere you could no longer access aft | True                                | 
+ 354 | chroot does a cd as well, the chroot _sy | True                                | 
+ 355 |                                          | True                                | 
+ 356 | The reason mounting something new over / | True                                | 
+ 357 | reason mounting something over your curr | True                                | 
+ 358 | the . and / links aren't recalculated af | True                                | 
+ 359 | the same dentry they did before, even if | True                                | 
+ 360 | by other means.  Note that "cd ." is a N | True                                | 
+ 361 | up the cached dentry and set it right ba | True                                | 
+ 362 | because they're what all paths your proc | True                                | 
+ 363 |                                          | True                                | 
+ 364 | That's why the careful sequencing above: | True                                | 
+ 365 | we do the mount --move.  Moving the moun | True                                | 
+ 366 | totally inaccessible to us because cd-in | True                                | 
+ 367 | us anymore, and cd "/" just gives us the | True                                | 
+ 368 | was created (in this case the old initra | True                                | 
+ 369 | us the dentry of the filesystem we just  | True                                | 
+ 370 | copy that dentry to "/" and get the new  | True                                | 
+ 371 | dentry in "." we couldn't get it back af | True                                | 
+ 372 |                                          | True                                | 
+ 373 | (Yes, this is all screwy and I had to em | True                                | 
+ 374 | it straight myself.  I keep meaning to w | True                                | 
+ 375 | document someday...)                     | True                                | 
+ 376 | */                                       | True                                | 
+-----+------------------------------------------+-------------------------------------+
+     |                                          | +113MB, 294ms                       | 

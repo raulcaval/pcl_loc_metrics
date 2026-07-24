@@ -1,0 +1,360 @@
+FILE: data/raw/busybox-1.38.0/coreutils/df.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                   | 
+-----+------------------------------------------+---------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                    | 
+   2 | /*                                       | True                                                    | 
+   3 |  * Mini df implementation for busybox    | True                                                    | 
+   4 |  *                                       | True                                                    | 
+   5 |  * Copyright (C) 1999-2004 by Erik Ander | True                                                    | 
+   6 |  * based on original code by (I think) B | True                                                    | 
+   7 |  *                                       | True                                                    | 
+   8 |  * Licensed under GPLv2 or later, see fi | True                                                    | 
+   9 |  */                                      | True                                                    | 
+  10 | /* Mar 16, 2003      Manuel Novoa III    | True                                                    | 
+  11 |  *                                       | True                                                    | 
+  12 |  * Size reduction.  Removed floating poi | True                                                    | 
+  13 |  * on output.  Output stats on 0-sized f | True                                                    | 
+  14 |  * the command line.  Properly round *-b | True                                                    | 
+  15 |  *                                       | True                                                    | 
+  16 |  * Aug 28, 2008      Bernhard Reutner-Fi | True                                                    | 
+  17 |  *                                       | True                                                    | 
+  18 |  * Implement -P and -B; better coreutils | True                                                    | 
+  19 |  */                                      | True                                                    | 
+  20 | //config:config DF                       | True                                                    | 
+  21 | //config: bool "df (7.1 kb)"             | True                                                    | 
+  22 | //config: default y                      | True                                                    | 
+  23 | //config: help                           | True                                                    | 
+  24 | //config: df reports the amount of disk  | True                                                    | 
+  25 | //config: on filesystems.                | True                                                    | 
+  26 | //config:                                | True                                                    | 
+  27 | //config:config FEATURE_DF_FANCY         | True                                                    | 
+  28 | //config: bool "Enable -a, -i, -B"       | True                                                    | 
+  29 | //config: default y                      | True                                                    | 
+  30 | //config: depends on DF                  | True                                                    | 
+  31 | //config: help                           | True                                                    | 
+  32 | //config: -a Show all filesystems        | True                                                    | 
+  33 | //config: -i Inodes                      | True                                                    | 
+  34 | //config: -B <SIZE> Blocksize            | True                                                    | 
+  35 | //config:                                | True                                                    | 
+  36 | //config:config FEATURE_SKIP_ROOTFS      | True                                                    | 
+  37 | //config: bool "Skip rootfs in mount tab | True                                                    | 
+  38 | //config: default y                      | True                                                    | 
+  39 | //config: depends on DF                  | True                                                    | 
+  40 | //config: help                           | True                                                    | 
+  41 | //config: Ignore rootfs entry in mount t | True                                                    | 
+  42 | //config:                                | True                                                    | 
+  43 | //config: In Linux, kernel has a special | True                                                    | 
+  44 | //config: mounted on /. It contains init | True                                                    | 
+  45 | //config: to have one. Usually, another  | True                                                    | 
+  46 | //config: in boot process, and therefore | True                                                    | 
+  47 | //config: mount table, such as df, will  | True                                                    | 
+  48 | //config:                                | True                                                    | 
+  49 | //config: However, some systems do not m | True                                                    | 
+  50 | //config: If you need to configure busyb | True                                                    | 
+  51 | //config: you may find it useful to turn | True                                                    | 
+  52 | //config: initramfs statistics.          | True                                                    | 
+  53 | //config:                                | True                                                    | 
+  54 | //config: Otherwise, choose Y.           | True                                                    | 
+  55 |                                          | True                                                    | 
+  56 | //applet:IF_DF(APPLET_NOEXEC(df, df, BB_ | True                                                    | 
+  57 |                                          | True                                                    | 
+  58 | //kbuild:lib-$(CONFIG_DF) += df.o        | True                                                    | 
+  59 |                                          | True                                                    | 
+  60 | /* BB_AUDIT SUSv3 _NOT_ compliant -- opt | True                                                    | 
+  61 | /* http://www.opengroup.org/onlinepubs/0 | True                                                    | 
+  62 |                                          | True                                                    | 
+  63 | //usage:#define df_trivial_usage         | True                                                    | 
+  64 | //usage: "[-Pk"                          | True                                                    | 
+  65 | //usage: IF_FEATURE_HUMAN_READABLE("mh") | True                                                    | 
+  66 | //usage: "T"                             | True                                                    | 
+  67 | //usage: IF_FEATURE_DF_FANCY("ai] [-B SI | True                                                    | 
+  68 | //usage: "] [-t TYPE] [FILESYSTEM]..."   | True                                                    | 
+  69 | //usage:#define df_full_usage "\n\n"     | True                                                    | 
+  70 | //usage:       "Print filesystem usage s | True                                                    | 
+  71 | //usage:     "\n -P POSIX output format" | True                                                    | 
+  72 | //usage:     "\n -k 1024-byte blocks (de | True                                                    | 
+  73 | //usage: IF_FEATURE_HUMAN_READABLE(      | True                                                    | 
+  74 | //usage:     "\n -m 1M-byte blocks"      | True                                                    | 
+  75 | //usage:     "\n -h Human readable (e.g. | True                                                    | 
+  76 | //usage: )                               | True                                                    | 
+  77 | //usage:     "\n -T Print filesystem typ | True                                                    | 
+  78 | //usage:     "\n -t TYPE Print only moun | True                                                    | 
+  79 | //usage: IF_FEATURE_DF_FANCY(            | True                                                    | 
+  80 | //usage:     "\n -a Show all filesystems | True                                                    | 
+  81 | //usage:     "\n -i Inodes"              | True                                                    | 
+  82 | //usage:     "\n -B SIZE Blocksize"      | True                                                    | 
+  83 | //usage: )                               | True                                                    | 
+  84 | //usage:                                 | True                                                    | 
+  85 | //usage:#define df_example_usage         | True                                                    | 
+  86 | //usage:       "$ df\n"                  | True                                                    | 
+  87 | //usage:       "Filesystem           1K- | True                                                    | 
+  88 | //usage:       "/dev/sda3              8 | True                                                    | 
+  89 | //usage:       "/dev/sda1                | True                                                    | 
+  90 | //usage:       "$ df /dev/sda3\n"        | True                                                    | 
+  91 | //usage:       "Filesystem           1K- | True                                                    | 
+  92 | //usage:       "/dev/sda3              8 | True                                                    | 
+  93 | //usage:       "$ POSIXLY_CORRECT=sure d | True                                                    | 
+  94 | //usage:       "Filesystem         512B- | True                                                    | 
+  95 | //usage:       "/dev/sda3             17 | True                                                    | 
+  96 | //usage:       "$ POSIXLY_CORRECT=yep df | True                                                    | 
+  97 | //usage:       "Filesystem          512- | True                                                    | 
+  98 | //usage:       "/dev/sda3             17 | True                                                    | 
+  99 |                                          | True                                                    | 
+ 100 | #include <mntent.h>                      | True                                                    | 
+ 101 | #include <sys/statvfs.h>                 | True                                                    | 
+ 102 | #include "libbb.h"                       | True                                                    | 
+ 103 | #include "unicode.h"                     | True                                                    | 
+ 104 |                                          | True                                                    | 
+ 105 | #if !ENABLE_FEATURE_HUMAN_READABLE       | True                                                    | 
+ 106 | static unsigned long kscale(unsigned lon | !ENABLE_FEATURE_HUMAN_READABLE                          | 
+ 107 | {                                        | !ENABLE_FEATURE_HUMAN_READABLE                          | 
+ 108 |  return (b * (unsigned long long) bs + 1 | !ENABLE_FEATURE_HUMAN_READABLE                          | 
+ 109 | }                                        | !ENABLE_FEATURE_HUMAN_READABLE                          | 
+ 110 | #endif                                   | True                                                    | 
+ 111 |                                          | True                                                    | 
+ 112 | int df_main(int argc, char **argv) MAIN_ | True                                                    | 
+ 113 | int df_main(int argc UNUSED_PARAM, char  | True                                                    | 
+ 114 | {                                        | True                                                    | 
+ 115 |  unsigned long df_disp_hr = 1024;        | True                                                    | 
+ 116 |  exitcode_t status = EXIT_SUCCESS;       | True                                                    | 
+ 117 |  unsigned opt;                           | True                                                    | 
+ 118 |  FILE *mount_table;                      | True                                                    | 
+ 119 |  struct mntent *mount_entry;             | True                                                    | 
+ 120 |  struct statvfs s;                       | True                                                    | 
+ 121 |  enum {                                  | True                                                    | 
+ 122 |   OPT_KILO     = (1 << 0),               | True                                                    | 
+ 123 |   OPT_POSIX    = (1 << 1),               | True                                                    | 
+ 124 |   OPT_FSTYPE   = (1 << 2),               | True                                                    | 
+ 125 |   OPT_t        = (1 << 3),               | True                                                    | 
+ 126 |   OPT_ALL      = (1 << 4) * ENABLE_FEATU | True                                                    | 
+ 127 |   OPT_INODE    = (1 << 5) * ENABLE_FEATU | True                                                    | 
+ 128 |   OPT_BSIZE    = (1 << 6) * ENABLE_FEATU | True                                                    | 
+ 129 |   OPT_HUMAN    = (1 << (4 + 3*ENABLE_FEA | True                                                    | 
+ 130 |   OPT_HUMANDEC = (1 << (5 + 3*ENABLE_FEA | True                                                    | 
+ 131 |   OPT_MEGA     = (1 << (6 + 3*ENABLE_FEA | True                                                    | 
+ 132 |  };                                      | True                                                    | 
+ 133 |  const char *disp_units_hdr = NULL;      | True                                                    | 
+ 134 |  char *chp, *opt_t;                      | True                                                    | 
+ 135 |                                          | True                                                    | 
+ 136 |  init_unicode();                         | True                                                    | 
+ 137 |                                          | True                                                    | 
+ 138 |  /* From the manpage of df from coreutil | True                                                    | 
+ 139 |   * Disk space is shown in 1K blocks by  | True                                                    | 
+ 140 |   * variable POSIXLY_CORRECT is set, in  | True                                                    | 
+ 141 |   */                                     | True                                                    | 
+ 142 |  if (getenv("POSIXLY_CORRECT")) /* TODO  | True                                                    | 
+ 143 |   df_disp_hr = 512;                      | True                                                    | 
+ 144 |                                          | True                                                    | 
+ 145 |  opt = getopt32(argv, "^"                | True                                                    | 
+ 146 |    "kPTt:"                               | True                                                    | 
+ 147 |    IF_FEATURE_DF_FANCY("aiB:")           | True                                                    | 
+ 148 |    IF_FEATURE_HUMAN_READABLE("hHm")      | True                                                    | 
+ 149 |    "\0"                                  | True                                                    | 
+ 150 | #if ENABLE_FEATURE_HUMAN_READABLE && ENA | True                                                    | 
+ 151 |    "k-mB:m-Bk:B-km"                      | ENABLE_FEATURE_HUMAN_READABLE&&ENABLE_FEATURE_DF_FANCY  | 
+ 152 | #elif ENABLE_FEATURE_HUMAN_READABLE      | True                                                    | 
+ 153 |    "k-m:m-k"                             | ENABLE_FEATURE_HUMAN_READABLE&&!ENABLE_FEATURE_DF_FANCY | 
+ 154 | #endif                                   | True                                                    | 
+ 155 |    , &opt_t                              | True                                                    | 
+ 156 |    IF_FEATURE_DF_FANCY(, &chp)           | True                                                    | 
+ 157 |  );                                      | True                                                    | 
+ 158 |  /* -k overrides $POSIXLY_CORRECT: */    | True                                                    | 
+ 159 |  if (opt & OPT_KILO)                     | True                                                    | 
+ 160 |   df_disp_hr = 1024;                     | True                                                    | 
+ 161 |  if (opt & OPT_MEGA)                     | True                                                    | 
+ 162 |   df_disp_hr = 1024*1024;                | True                                                    | 
+ 163 |                                          | True                                                    | 
+ 164 |  if (opt & OPT_BSIZE) {                  | True                                                    | 
+ 165 |   /* GNU coreutils 8.25 accepts "-BMiB"  | True                                                    | 
+ 166 |   int i;                                 | True                                                    | 
+ 167 |   for (i = 0; kmg_i_suffixes[i].suffix[0 | True                                                    | 
+ 168 |    if (strcmp(kmg_i_suffixes[i].suffix,  | True                                                    | 
+ 169 |     df_disp_hr = kmg_i_suffixes[i].mult; | True                                                    | 
+ 170 |     goto got_it;                         | True                                                    | 
+ 171 |    }                                     | True                                                    | 
+ 172 |   }                                      | True                                                    | 
+ 173 |   /* Range used to disallow 0 */         | True                                                    | 
+ 174 |   df_disp_hr = xatoul_range_sfx(chp, 1,  | True                                                    | 
+ 175 |  got_it: ;                               | True                                                    | 
+ 176 |  }                                       | True                                                    | 
+ 177 |                                          | True                                                    | 
+ 178 |  if (opt & (OPT_HUMAN|OPT_HUMANDEC)) {   | True                                                    | 
+ 179 |   df_disp_hr = 0;                        | True                                                    | 
+ 180 | //TODO: need to add support in make_huma | True                                                    | 
+ 181 |   //if (opt & OPT_HUMANDEC)              | True                                                    | 
+ 182 |   // df_disp_hr--;                       | True                                                    | 
+ 183 |   disp_units_hdr = "     Size";          | True                                                    | 
+ 184 |  }                                       | True                                                    | 
+ 185 |  if (opt & OPT_INODE)                    | True                                                    | 
+ 186 |   disp_units_hdr = "   Inodes";          | True                                                    | 
+ 187 |                                          | True                                                    | 
+ 188 |  if (disp_units_hdr == NULL) {           | True                                                    | 
+ 189 | #if ENABLE_FEATURE_HUMAN_READABLE        | True                                                    | 
+ 190 |   disp_units_hdr = xasprintf("%s-blocks" | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 191 |    /* print df_disp_hr; show no fraction | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 192 |     * if -P, unit=1 (print it in full, n | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 193 |    make_human_readable_str(df_disp_hr, 0 | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 194 |   );                                     | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 195 | #else                                    | True                                                    | 
+ 196 |   disp_units_hdr = xasprintf("%lu-blocks | !ENABLE_FEATURE_HUMAN_READABLE                          | 
+ 197 | #endif                                   | True                                                    | 
+ 198 |  }                                       | True                                                    | 
+ 199 |                                          | True                                                    | 
+ 200 |  printf("Filesystem           %s%-15sUse | True                                                    | 
+ 201 |    (opt & OPT_FSTYPE) ? "Type       " :  | True                                                    | 
+ 202 |    disp_units_hdr,                       | True                                                    | 
+ 203 |    (opt & OPT_POSIX) ? "Capacity" : "Use | True                                                    | 
+ 204 |                                          | True                                                    | 
+ 205 |  mount_table = NULL;                     | True                                                    | 
+ 206 |  argv += optind;                         | True                                                    | 
+ 207 |  if (!argv[0]) {                         | True                                                    | 
+ 208 |   mount_table = setmntent(bb_path_mtab_f | True                                                    | 
+ 209 |   if (!mount_table)                      | True                                                    | 
+ 210 |    bb_simple_perror_msg_and_die(bb_path_ | True                                                    | 
+ 211 |  }                                       | True                                                    | 
+ 212 |                                          | True                                                    | 
+ 213 |  while (1) {                             | True                                                    | 
+ 214 |   const char *device;                    | True                                                    | 
+ 215 |   const char *mount_point;               | True                                                    | 
+ 216 |   const char *fs_type;                   | True                                                    | 
+ 217 |                                          | True                                                    | 
+ 218 |   if (mount_table) {                     | True                                                    | 
+ 219 |    mount_entry = getmntent(mount_table); | True                                                    | 
+ 220 |    if (!mount_entry) {                   | True                                                    | 
+ 221 |     endmntent(mount_table);              | True                                                    | 
+ 222 |     break;                               | True                                                    | 
+ 223 |    }                                     | True                                                    | 
+ 224 |   } else {                               | True                                                    | 
+ 225 |    mount_point = *argv++;                | True                                                    | 
+ 226 |    if (!mount_point)                     | True                                                    | 
+ 227 |     break;                               | True                                                    | 
+ 228 |    mount_entry = find_mount_point(mount_ | True                                                    | 
+ 229 |    if (!mount_entry) {                   | True                                                    | 
+ 230 |     bb_error_msg("%s: can't find mount p | True                                                    | 
+ 231 |  set_error:                              | True                                                    | 
+ 232 |     status = EXIT_FAILURE;               | True                                                    | 
+ 233 |     continue;                            | True                                                    | 
+ 234 |    }                                     | True                                                    | 
+ 235 |   }                                      | True                                                    | 
+ 236 |                                          | True                                                    | 
+ 237 |   device = mount_entry->mnt_fsname;      | True                                                    | 
+ 238 |                                          | True                                                    | 
+ 239 |   /* GNU coreutils 6.10 skips certain mo | True                                                    | 
+ 240 |   if (ENABLE_FEATURE_SKIP_ROOTFS && strc | True                                                    | 
+ 241 |    continue;                             | True                                                    | 
+ 242 |                                          | True                                                    | 
+ 243 |   mount_point = mount_entry->mnt_dir;    | True                                                    | 
+ 244 |   fs_type = mount_entry->mnt_type;       | True                                                    | 
+ 245 |                                          | True                                                    | 
+ 246 |   if (opt & OPT_t) {                     | True                                                    | 
+ 247 |    if (strcmp(fs_type, opt_t) != 0)      | True                                                    | 
+ 248 |     continue;                            | True                                                    | 
+ 249 |   }                                      | True                                                    | 
+ 250 |                                          | True                                                    | 
+ 251 |   if (statvfs(mount_point, &s) != 0) {   | True                                                    | 
+ 252 |    bb_simple_perror_msg(mount_point);    | True                                                    | 
+ 253 |    goto set_error;                       | True                                                    | 
+ 254 |   }                                      | True                                                    | 
+ 255 |   /* Some uclibc versions were seen to l | True                                                    | 
+ 256 |    * (kernel does return it, but then uc | True                                                    | 
+ 257 |    */                                    | True                                                    | 
+ 258 |   if (s.f_frsize == 0)                   | True                                                    | 
+ 259 |    s.f_frsize = s.f_bsize;               | True                                                    | 
+ 260 |                                          | True                                                    | 
+ 261 |   if ((s.f_blocks > 0) || !mount_table | | True                                                    | 
+ 262 |    unsigned long long blocks_used;       | True                                                    | 
+ 263 |    unsigned long long blocks_total;      | True                                                    | 
+ 264 |    unsigned blocks_percent_used;         | True                                                    | 
+ 265 |                                          | True                                                    | 
+ 266 |    if (opt & OPT_INODE) {                | True                                                    | 
+ 267 |     s.f_blocks = s.f_files;              | True                                                    | 
+ 268 |     s.f_bavail = s.f_bfree = s.f_ffree;  | True                                                    | 
+ 269 |     s.f_frsize = 1;                      | True                                                    | 
+ 270 |     if (df_disp_hr)                      | True                                                    | 
+ 271 |      df_disp_hr = 1;                     | True                                                    | 
+ 272 |    }                                     | True                                                    | 
+ 273 |    blocks_used = s.f_blocks - s.f_bfree; | True                                                    | 
+ 274 |    blocks_total = blocks_used + s.f_bava | True                                                    | 
+ 275 |    blocks_percent_used = blocks_total; / | True                                                    | 
+ 276 |    if (blocks_total != 0) {              | True                                                    | 
+ 277 |     /* Downscale sizes for narrower divi | True                                                    | 
+ 278 |     unsigned u;                          | True                                                    | 
+ 279 |     while (blocks_total >= INT_MAX / 101 | True                                                    | 
+ 280 |      blocks_total >>= 1;                 | True                                                    | 
+ 281 |      blocks_used >>= 1;                  | True                                                    | 
+ 282 |     }                                    | True                                                    | 
+ 283 |     u = (unsigned)blocks_used * 100u + ( | True                                                    | 
+ 284 |     blocks_percent_used = u / (unsigned) | True                                                    | 
+ 285 |    }                                     | True                                                    | 
+ 286 |                                          | True                                                    | 
+ 287 | #ifdef WHY_WE_DO_IT_FOR_DEV_ROOT_ONLY    | True                                                    | 
+ 288 |    if (strcmp(device, "/dev/root") == 0) | (WHY_WE_DO_IT_FOR_DEV_ROOT_ONLY)                        | 
+ 289 |     /* Adjusts device to be the real roo | (WHY_WE_DO_IT_FOR_DEV_ROOT_ONLY)                        | 
+ 290 |      * or leaves device alone if it can' | (WHY_WE_DO_IT_FOR_DEV_ROOT_ONLY)                        | 
+ 291 |     device = find_block_device("/");     | (WHY_WE_DO_IT_FOR_DEV_ROOT_ONLY)                        | 
+ 292 |     if (!device) {                       | (WHY_WE_DO_IT_FOR_DEV_ROOT_ONLY)                        | 
+ 293 |      goto set_error;                     | (WHY_WE_DO_IT_FOR_DEV_ROOT_ONLY)                        | 
+ 294 |     }                                    | (WHY_WE_DO_IT_FOR_DEV_ROOT_ONLY)                        | 
+ 295 |    }                                     | (WHY_WE_DO_IT_FOR_DEV_ROOT_ONLY)                        | 
+ 296 | #endif                                   | True                                                    | 
+ 297 |                                          | True                                                    | 
+ 298 | #if ENABLE_UNICODE_SUPPORT               | True                                                    | 
+ 299 |    {                                     | ENABLE_UNICODE_SUPPORT                                  | 
+ 300 |     uni_stat_t uni_stat;                 | ENABLE_UNICODE_SUPPORT                                  | 
+ 301 |     char *uni_dev = unicode_conv_to_prin | ENABLE_UNICODE_SUPPORT                                  | 
+ 302 |     if (uni_stat.unicode_width > 20 && ! | ENABLE_UNICODE_SUPPORT                                  | 
+ 303 |      printf("%s\n%20s", uni_dev, "");    | ENABLE_UNICODE_SUPPORT                                  | 
+ 304 |     } else {                             | ENABLE_UNICODE_SUPPORT                                  | 
+ 305 |      printf("%s%*s", uni_dev, 20 - (int) | ENABLE_UNICODE_SUPPORT                                  | 
+ 306 |     }                                    | ENABLE_UNICODE_SUPPORT                                  | 
+ 307 |     free(uni_dev);                       | ENABLE_UNICODE_SUPPORT                                  | 
+ 308 |     if (opt & OPT_FSTYPE) {              | ENABLE_UNICODE_SUPPORT                                  | 
+ 309 |      char *uni_type = unicode_conv_to_pr | ENABLE_UNICODE_SUPPORT                                  | 
+ 310 |      if (uni_stat.unicode_width > 10 &&  | ENABLE_UNICODE_SUPPORT                                  | 
+ 311 |       printf(" %s\n%31s", uni_type, ""); | ENABLE_UNICODE_SUPPORT                                  | 
+ 312 |      else                                | ENABLE_UNICODE_SUPPORT                                  | 
+ 313 |       printf(" %s%*s", uni_type, 10 - (i | ENABLE_UNICODE_SUPPORT                                  | 
+ 314 |      free(uni_type);                     | ENABLE_UNICODE_SUPPORT                                  | 
+ 315 |     }                                    | ENABLE_UNICODE_SUPPORT                                  | 
+ 316 |    }                                     | ENABLE_UNICODE_SUPPORT                                  | 
+ 317 | #else                                    | True                                                    | 
+ 318 |    if (printf("\n%-20s" + 1, device) > 2 | !ENABLE_UNICODE_SUPPORT                                 | 
+ 319 |     printf("\n%-20s", "");               | !ENABLE_UNICODE_SUPPORT                                 | 
+ 320 |    if (opt & OPT_FSTYPE) {               | !ENABLE_UNICODE_SUPPORT                                 | 
+ 321 |     if (printf(" %-10s", fs_type) > 11 & | !ENABLE_UNICODE_SUPPORT                                 | 
+ 322 |      printf("\n%-30s", "");              | !ENABLE_UNICODE_SUPPORT                                 | 
+ 323 |    }                                     | !ENABLE_UNICODE_SUPPORT                                 | 
+ 324 | #endif                                   | True                                                    | 
+ 325 |                                          | True                                                    | 
+ 326 | #if ENABLE_FEATURE_HUMAN_READABLE        | True                                                    | 
+ 327 |    printf(" %9s ",                       | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 328 |     /* f_blocks x f_frsize / df_disp_hr, | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 329 |      * use suffixes if df_disp_hr == 0 * | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 330 |     make_human_readable_str(s.f_blocks,  | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 331 |                                          | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 332 |    printf(" %9s " + 1,                   | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 333 |     /* EXPR x f_frsize / df_disp_hr, sho | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 334 |      * use suffixes if df_disp_hr == 0 * | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 335 |     make_human_readable_str((s.f_blocks  | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 336 |       s.f_frsize, df_disp_hr));          | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 337 |                                          | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 338 |    printf("%9s %3u%% %s\n",              | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 339 |     /* f_bavail x f_frsize / df_disp_hr, | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 340 |      * use suffixes if df_disp_hr == 0 * | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 341 |     make_human_readable_str(s.f_bavail,  | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 342 |     blocks_percent_used, mount_point);   | ENABLE_FEATURE_HUMAN_READABLE                           | 
+ 343 | #else                                    | True                                                    | 
+ 344 |    printf(" %9lu %9lu %9lu %3u%% %s\n",  | !ENABLE_FEATURE_HUMAN_READABLE                          | 
+ 345 |     kscale(s.f_blocks, s.f_frsize),      | !ENABLE_FEATURE_HUMAN_READABLE                          | 
+ 346 |     kscale(s.f_blocks - s.f_bfree, s.f_f | !ENABLE_FEATURE_HUMAN_READABLE                          | 
+ 347 |     kscale(s.f_bavail, s.f_frsize),      | !ENABLE_FEATURE_HUMAN_READABLE                          | 
+ 348 |     blocks_percent_used, mount_point);   | !ENABLE_FEATURE_HUMAN_READABLE                          | 
+ 349 | #endif                                   | True                                                    | 
+ 350 |   }                                      | True                                                    | 
+ 351 |  }                                       | True                                                    | 
+ 352 |                                          | True                                                    | 
+ 353 |  return status;                          | True                                                    | 
+ 354 | }                                        | True                                                    | 
+-----+------------------------------------------+---------------------------------------------------------+
+     |                                          | +111MB, 288ms                                           | 

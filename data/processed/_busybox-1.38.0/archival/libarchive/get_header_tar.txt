@@ -1,0 +1,504 @@
+FILE: data/raw/busybox-1.38.0/archival/libarchive/get_header_tar.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                                                             | 
+-----+------------------------------------------+---------------------------------------------------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                                                              | 
+   2 | /*                                       | True                                                                                              | 
+   3 |  * Licensed under GPLv2 or later, see fi | True                                                                                              | 
+   4 |  *                                       | True                                                                                              | 
+   5 |  * FIXME:                                | True                                                                                              | 
+   6 |  *    In privileged mode if uname and gn | True                                                                                              | 
+   7 |  *    mapped value instead of the uid/gi | True                                                                                              | 
+   8 |  *                                       | True                                                                                              | 
+   9 |  * References:                           | True                                                                                              | 
+  10 |  *    GNU tar and star man pages,        | True                                                                                              | 
+  11 |  *    Opengroup's ustar interchange form | True                                                                                              | 
+  12 |  *    http://www.opengroup.org/onlinepub | True                                                                                              | 
+  13 |  */                                      | True                                                                                              | 
+  14 | #include "libbb.h"                       | True                                                                                              | 
+  15 | #include "bb_archive.h"                  | True                                                                                              | 
+  16 |                                          | True                                                                                              | 
+  17 | typedef uint32_t aliased_uint32_t FIX_AL | True                                                                                              | 
+  18 | typedef off_t    aliased_off_t    FIX_AL | True                                                                                              | 
+  19 |                                          | True                                                                                              | 
+  20 | /* NB: _DESTROYS_ str[len] character! */ | True                                                                                              | 
+  21 | static unsigned long long getOctal(char  | True                                                                                              | 
+  22 | {                                        | True                                                                                              | 
+  23 |  unsigned long long v;                   | True                                                                                              | 
+  24 |  char *end;                              | True                                                                                              | 
+  25 |  /* NB: leading spaces are allowed. Usin | True                                                                                              | 
+  26 |   * The downside is that we accept e.g.  | True                                                                                              | 
+  27 |   */                                     | True                                                                                              | 
+  28 |  str[len] = '\0';                        | True                                                                                              | 
+  29 |  v = strtoull(str, &end, 8);             | True                                                                                              | 
+  30 |  /* std: "Each numeric field is terminat | True                                                                                              | 
+  31 |   * <space> or NUL characters". We must  | True                                                                                              | 
+  32 |  if (*end != '\0' && *end != ' ') {      | True                                                                                              | 
+  33 |   int8_t first = str[0];                 | True                                                                                              | 
+  34 |   if (!(first & 0x80))                   | True                                                                                              | 
+  35 |    bb_simple_error_msg_and_die("corrupte | True                                                                                              | 
+  36 |   /*                                     | True                                                                                              | 
+  37 |    * GNU tar uses "base-256 encoding" fo | True                                                                                              | 
+  38 |    * Encoding is binary, with highest bi | True                                                                                              | 
+  39 |    * and sign in next-highest bit:       | True                                                                                              | 
+  40 |    * 80 00 .. 00 - zero                  | True                                                                                              | 
+  41 |    * bf ff .. ff - largest positive numb | True                                                                                              | 
+  42 |    * ff ff .. ff - minus 1               | True                                                                                              | 
+  43 |    * c0 00 .. 00 - smallest negative num | True                                                                                              | 
+  44 |    *                                     | True                                                                                              | 
+  45 |    * Example of tar file with 8914993153 | True                                                                                              | 
+  46 |    * Field starts at offset 7c:          | True                                                                                              | 
+  47 |    * 00070  30 30 30 00 30 30 30 30  30  | True                                                                                              | 
+  48 |    * 00080  00 00 00 02 13 60 00 01  31  | True                                                                                              | 
+  49 |    *                                     | True                                                                                              | 
+  50 |    * NB: tarballs with NEGATIVE unix tim | True                                                                                              | 
+  51 |    */                                    | True                                                                                              | 
+  52 |   /* Sign-extend 7bit 'first' to 64bit ' | True                                                                                              | 
+  53 |   first <<= 1;                           | True                                                                                              | 
+  54 |   first >>= 1; /* now 7th bit = 6th bit  | True                                                                                              | 
+  55 |   v = first;   /* sign-extend 8 bits to  | True                                                                                              | 
+  56 |   while (--len != 0)                     | True                                                                                              | 
+  57 |    v = (v << 8) + (uint8_t) *++str;      | True                                                                                              | 
+  58 |  }                                       | True                                                                                              | 
+  59 |  return v;                               | True                                                                                              | 
+  60 | }                                        | True                                                                                              | 
+  61 | #define GET_OCTAL(a) getOctal((a), sizeo | True                                                                                              | 
+  62 |                                          | True                                                                                              | 
+  63 | #define TAR_EXTD (ENABLE_FEATURE_TAR_GNU | True                                                                                              | 
+  64 | #if !TAR_EXTD                            | True                                                                                              | 
+  65 | #define process_pax_hdr(archive_handle,  | !TAR_EXTD                                                                                         | 
+  66 |  process_pax_hdr(archive_handle, sz)     | !TAR_EXTD                                                                                         | 
+  67 | #endif                                   | True                                                                                              | 
+  68 | /* "global" is 0 or 1 */                 | True                                                                                              | 
+  69 | static void process_pax_hdr(archive_hand | True                                                                                              | 
+  70 | {                                        | True                                                                                              | 
+  71 | #if !TAR_EXTD                            | True                                                                                              | 
+  72 |  unsigned blk_sz = (sz + 511) & (~511);  | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&!ENABLE_FEATURE_TAR_SELINUX                                   | 
+  73 |  seek_by_read(archive_handle->src_fd, bl | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&!ENABLE_FEATURE_TAR_SELINUX                                   | 
+  74 | #else                                    | True                                                                                              | 
+  75 |  unsigned blk_sz = (sz + 511) & (~511);  | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  76 |  char *buf, *p;                          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  77 |                                          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  78 |  p = buf = xmalloc(blk_sz + 1);          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  79 |  xread(archive_handle->src_fd, buf, blk_ | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  80 |  archive_handle->offset += blk_sz;       | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  81 |                                          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  82 |  /* prevent bb_strtou from running off t | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  83 |  buf[sz] = '\0';                         | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  84 |                                          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  85 |  while (sz != 0) {                       | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  86 |   char *end, *value;                     | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  87 |   unsigned len;                          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  88 |                                          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  89 |   /* Every record has this format: "LEN  | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  90 |   len = bb_strtou(p, &end, 10);          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  91 |   /* expect errno to be EINVAL, because  | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  92 |    * following the digits should be a sp | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  93 |    */                                    | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  94 |   p += len;                              | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  95 |   sz -= len;                             | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  96 |   if (                                   | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  97 |   /** (int)sz < 0 - not good enough for  | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  98 |       (int)(sz|len) < 0 /* this works */ | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+  99 |    || len == 0                           | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 100 |    || errno != EINVAL                    | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 101 |    || *end != ' '                        | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 102 |   ) {                                    | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 103 |    bb_simple_error_msg("malformed extend | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 104 |    // More verbose version:              | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 105 |    //bb_error_msg("malformed extended he | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 106 |    //  archive_handle->offset - (sz + le | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 107 |    break;                                | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 108 |   }                                      | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 109 |   /* overwrite the terminating newline w | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 110 |    * (we do not bother to check that it  | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 111 |    */                                    | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 112 |   p[-1] = '\0';                          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 113 |   value = end + 1;                       | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 114 |                                          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 115 | # if ENABLE_FEATURE_TAR_GNU_EXTENSIONS   | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 116 |   if (!global) {                         | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 117 |    if (is_prefixed_with(value, "path=")) | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 118 |     value += sizeof("path=") - 1;        | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 119 |     free(archive_handle->tar__longname); | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 120 |     archive_handle->tar__longname = xstr | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 121 |     continue;                            | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 122 |    }                                     | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 123 |    if (is_prefixed_with(value, "linkpath | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 124 |     value += sizeof("linkpath=") - 1;    | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 125 |     free(archive_handle->tar__linkname); | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 126 |     archive_handle->tar__linkname = xstr | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 127 |     continue;                            | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 128 |    }                                     | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 129 |   }                                      | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 130 | # endif                                  | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 131 |                                          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 132 | # if ENABLE_FEATURE_TAR_SELINUX          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 133 |   /* Scan for SELinux contexts, via "RHT | ENABLE_FEATURE_TAR_SELINUX                                                                        | 
+ 134 |    * This is what Red Hat's patched vers | ENABLE_FEATURE_TAR_SELINUX                                                                        | 
+ 135 |    */                                    | ENABLE_FEATURE_TAR_SELINUX                                                                        | 
+ 136 | #  define SELINUX_CONTEXT_KEYWORD "RHT.s | ENABLE_FEATURE_TAR_SELINUX                                                                        | 
+ 137 |   if (is_prefixed_with(value, SELINUX_CO | ENABLE_FEATURE_TAR_SELINUX                                                                        | 
+ 138 |    value += sizeof(SELINUX_CONTEXT_KEYWO | ENABLE_FEATURE_TAR_SELINUX                                                                        | 
+ 139 |    free(archive_handle->tar__sctx[global | ENABLE_FEATURE_TAR_SELINUX                                                                        | 
+ 140 |    archive_handle->tar__sctx[global] = x | ENABLE_FEATURE_TAR_SELINUX                                                                        | 
+ 141 |    continue;                             | ENABLE_FEATURE_TAR_SELINUX                                                                        | 
+ 142 |   }                                      | ENABLE_FEATURE_TAR_SELINUX                                                                        | 
+ 143 | # endif                                  | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 144 |  }                                       | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 145 |                                          | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 146 |  free(buf);                              | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 147 | #endif                                   | True                                                                                              | 
+ 148 | }                                        | True                                                                                              | 
+ 149 |                                          | True                                                                                              | 
+ 150 | #if ENABLE_FEATURE_TAR_GNU_EXTENSIONS    | True                                                                                              | 
+ 151 | static void die_if_bad_fnamesize(off_t s | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 152 | {                                        | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 153 |  if ((uoff_t)sz > 0xfff) /* more than 4k | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 154 |   bb_simple_error_msg_and_die("bad archi | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 155 | }                                        | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 156 | #endif                                   | True                                                                                              | 
+ 157 |                                          | True                                                                                              | 
+ 158 | char FAST_FUNC get_header_tar(archive_ha | True                                                                                              | 
+ 159 | {                                        | True                                                                                              | 
+ 160 |  file_header_t *file_header = archive_ha | True                                                                                              | 
+ 161 |  struct tar_header_t tar;                | True                                                                                              | 
+ 162 |  char *cp;                               | True                                                                                              | 
+ 163 |  int tar_typeflag; /* can be "char", "in | True                                                                                              | 
+ 164 |  int i, sum_u, sum;                      | True                                                                                              | 
+ 165 | #if ENABLE_FEATURE_TAR_OLDSUN_COMPATIBIL | True                                                                                              | 
+ 166 |  int sum_s;                              | ENABLE_FEATURE_TAR_OLDSUN_COMPATIBILITY                                                           | 
+ 167 | #endif                                   | True                                                                                              | 
+ 168 |  int parse_names;                        | True                                                                                              | 
+ 169 |                                          | True                                                                                              | 
+ 170 |  /* Our "private data" */                | True                                                                                              | 
+ 171 | #if ENABLE_FEATURE_TAR_GNU_EXTENSIONS    | True                                                                                              | 
+ 172 | # define p_longname (archive_handle->tar | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 173 | # define p_linkname (archive_handle->tar | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 174 | #else                                    | True                                                                                              | 
+ 175 | # define p_longname 0                    | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                | 
+ 176 | # define p_linkname 0                    | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                | 
+ 177 | #endif                                   | True                                                                                              | 
+ 178 |                                          | True                                                                                              | 
+ 179 | #if ENABLE_FEATURE_TAR_GNU_EXTENSIONS || | True                                                                                              | 
+ 180 |  again:                                  | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&ENABLE_FEATURE_TAR_SELINUX||ENABLE_FEATURE_TAR_GNU_EXTENSIONS | 
+ 181 | #endif                                   | True                                                                                              | 
+ 182 |  /* Align header */                      | True                                                                                              | 
+ 183 |  data_align(archive_handle, 512);        | True                                                                                              | 
+ 184 |                                          | True                                                                                              | 
+ 185 |  again_after_align:                      | True                                                                                              | 
+ 186 |                                          | True                                                                                              | 
+ 187 | #if ENABLE_DESKTOP || ENABLE_FEATURE_TAR | True                                                                                              | 
+ 188 |  /* to prevent misdetection of bz2 sig * | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 189 |  *(aliased_uint32_t*)&tar = 0;           | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 190 |  i = full_read(archive_handle->src_fd, & | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 191 |  /* If GNU tar sees EOF in above read, i | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 192 |   * "tar: A lone zero block at N", where | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 193 |   * where EOF was met (not EOF block, ac | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 194 |   * and exits with EXIT_SUCCESS.         | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 195 |   * We will mimic exit(EXIT_SUCCESS), al | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 196 |   * the message and we don't check wheth | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 197 |   * saw zero block directly before this. | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 198 |  if (i == 0) {                           | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 199 |   /* GNU tar 1.29 will be silent if tar  | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 200 |    * (if there are no zero blocks at all | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 201 |    * not short read 0 < len < 512). Comp | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 202 |    * the very first read fails. Grrr.    | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 203 |    */                                    | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 204 |   if (archive_handle->offset == 0)       | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 205 |    bb_simple_error_msg("short read");    | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 206 |   /* this merely signals end of archive, | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 207 |   return EXIT_FAILURE;                   | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 208 |  }                                       | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 209 |  if (i != 512) {                         | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 210 |   IF_FEATURE_TAR_AUTODETECT(goto autodet | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 211 |   bb_simple_error_msg_and_die("short rea | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 212 |  }                                       | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 213 |                                          | !ENABLE_DESKTOP&&ENABLE_FEATURE_TAR_AUTODETECT||ENABLE_DESKTOP                                    | 
+ 214 | #else                                    | True                                                                                              | 
+ 215 |  i = 512;                                | !ENABLE_DESKTOP&&!ENABLE_FEATURE_TAR_AUTODETECT                                                   | 
+ 216 |  xread(archive_handle->src_fd, &tar, i); | !ENABLE_DESKTOP&&!ENABLE_FEATURE_TAR_AUTODETECT                                                   | 
+ 217 | #endif                                   | True                                                                                              | 
+ 218 |  archive_handle->offset += i;            | True                                                                                              | 
+ 219 |                                          | True                                                                                              | 
+ 220 |  /* If there is no filename its an empty | True                                                                                              | 
+ 221 |  if (tar.name[0] == 0 && tar.prefix[0] = | True                                                                                              | 
+ 222 |  /* Have seen a tar archive with pax 'x' | True                                                                                              | 
+ 223 |   * with actual file having all name fie | True                                                                                              | 
+ 224 |   && !p_longname                         | True                                                                                              | 
+ 225 |  ) {                                     | True                                                                                              | 
+ 226 |   if (archive_handle->tar__end) {        | True                                                                                              | 
+ 227 |    /* Second consecutive empty header -  | True                                                                                              | 
+ 228 |     * Read until the end to empty the pi | True                                                                                              | 
+ 229 |     */                                   | True                                                                                              | 
+ 230 |    while (full_read(archive_handle->src_ | True                                                                                              | 
+ 231 |     continue;                            | True                                                                                              | 
+ 232 |    return EXIT_FAILURE; /* "end of archi | True                                                                                              | 
+ 233 |   }                                      | True                                                                                              | 
+ 234 |   archive_handle->tar__end = 1;          | True                                                                                              | 
+ 235 |   return EXIT_SUCCESS; /* "decoded one h | True                                                                                              | 
+ 236 |  }                                       | True                                                                                              | 
+ 237 |  archive_handle->tar__end = 0;           | True                                                                                              | 
+ 238 |                                          | True                                                                                              | 
+ 239 |  /* Check header has valid magic, "ustar | True                                                                                              | 
+ 240 |   * five NULs are for the old tar format | True                                                                                              | 
+ 241 |  if (!is_prefixed_with(tar.magic, "ustar | True                                                                                              | 
+ 242 |   && (!ENABLE_FEATURE_TAR_OLDGNU_COMPATI | True                                                                                              | 
+ 243 |       || memcmp(tar.magic, "\0\0\0\0", 5 | True                                                                                              | 
+ 244 |  ) {                                     | True                                                                                              | 
+ 245 | #if ENABLE_FEATURE_TAR_AUTODETECT        | True                                                                                              | 
+ 246 |  autodetect:                             | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 247 |   /* Two different causes for lseek() != | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 248 |    * unseekable fd (would like to suppor | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 249 |    * or not first block (false positive, | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 250 |   if (lseek(archive_handle->src_fd, -i,  | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 251 |    goto err;                             | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 252 |   if (setup_unzip_on_fd(archive_handle-> | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 253 |  err:                                    | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 254 |    bb_simple_error_msg_and_die("invalid  | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 255 |   archive_handle->offset = 0;            | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 256 |   goto again_after_align;                | ENABLE_FEATURE_TAR_AUTODETECT                                                                     | 
+ 257 | #endif                                   | True                                                                                              | 
+ 258 |   bb_simple_error_msg_and_die("invalid t | True                                                                                              | 
+ 259 |  }                                       | True                                                                                              | 
+ 260 |                                          | True                                                                                              | 
+ 261 |  /* Do checksum on headers.              | True                                                                                              | 
+ 262 |   * POSIX says that checksum is done on  | True                                                                                              | 
+ 263 |   * Sun and HP-UX gets it wrong... more  | True                                                                                              | 
+ 264 |   * GNU tar source. */                   | True                                                                                              | 
+ 265 |  sum_u = ' ' * sizeof(tar.chksum);       | True                                                                                              | 
+ 266 | #if ENABLE_FEATURE_TAR_OLDSUN_COMPATIBIL | True                                                                                              | 
+ 267 |  sum_s = sum_u;                          | ENABLE_FEATURE_TAR_OLDSUN_COMPATIBILITY                                                           | 
+ 268 | #endif                                   | True                                                                                              | 
+ 269 |  for (i = 0; i < 148; i++) {             | True                                                                                              | 
+ 270 |   sum_u += ((unsigned char*)&tar)[i];    | True                                                                                              | 
+ 271 | #if ENABLE_FEATURE_TAR_OLDSUN_COMPATIBIL | True                                                                                              | 
+ 272 |   sum_s += ((signed char*)&tar)[i];      | ENABLE_FEATURE_TAR_OLDSUN_COMPATIBILITY                                                           | 
+ 273 | #endif                                   | True                                                                                              | 
+ 274 |  }                                       | True                                                                                              | 
+ 275 |  for (i = 156; i < 512; i++) {           | True                                                                                              | 
+ 276 |   sum_u += ((unsigned char*)&tar)[i];    | True                                                                                              | 
+ 277 | #if ENABLE_FEATURE_TAR_OLDSUN_COMPATIBIL | True                                                                                              | 
+ 278 |   sum_s += ((signed char*)&tar)[i];      | ENABLE_FEATURE_TAR_OLDSUN_COMPATIBILITY                                                           | 
+ 279 | #endif                                   | True                                                                                              | 
+ 280 |  }                                       | True                                                                                              | 
+ 281 |  /* Most tarfiles have tar.chksum NUL or | True                                                                                              | 
+ 282 |   * github.com decided to be "special" a | True                                                                                              | 
+ 283 |   * 0090: 30343300 30303031 33323731 300 | True                                                                                              | 
+ 284 |   *                                      | True                                                                                              | 
+ 285 |   * Need to use GET_OCTAL. This overwrit | True                                                                                              | 
+ 286 |   * (the '0' char immediately after chks | True                                                                                              | 
+ 287 |   */                                     | True                                                                                              | 
+ 288 |  tar_typeflag = (uint8_t)tar.typeflag; / | True                                                                                              | 
+ 289 |  sum = GET_OCTAL(tar.chksum);            | True                                                                                              | 
+ 290 |  if (sum_u != sum                        | True                                                                                              | 
+ 291 |      IF_FEATURE_TAR_OLDSUN_COMPATIBILITY | True                                                                                              | 
+ 292 |  ) {                                     | True                                                                                              | 
+ 293 |   bb_simple_error_msg_and_die("invalid t | True                                                                                              | 
+ 294 |  }                                       | True                                                                                              | 
+ 295 |                                          | True                                                                                              | 
+ 296 |  /* GET_OCTAL trashes subsequent field,  | True                                                                                              | 
+ 297 |   * on fields in reverse order */        | True                                                                                              | 
+ 298 |  if (tar.devmajor[0]) {                  | True                                                                                              | 
+ 299 |   char t = tar.prefix[0];                | True                                                                                              | 
+ 300 |   /* we trash prefix[0] here, but we DO  | True                                                                                              | 
+ 301 |   unsigned minor = GET_OCTAL(tar.devmino | True                                                                                              | 
+ 302 |   unsigned major = GET_OCTAL(tar.devmajo | True                                                                                              | 
+ 303 |   file_header->device = makedev(major, m | True                                                                                              | 
+ 304 |   tar.prefix[0] = t;                     | True                                                                                              | 
+ 305 |  }                                       | True                                                                                              | 
+ 306 |                                          | True                                                                                              | 
+ 307 |  /* 0 is reserved for high perf file, tr | True                                                                                              | 
+ 308 |  if (tar_typeflag == '\0') tar_typeflag  | True                                                                                              | 
+ 309 |  parse_names = (tar_typeflag >= '0' && t | True                                                                                              | 
+ 310 |                                          | True                                                                                              | 
+ 311 |  file_header->link_target = NULL;        | True                                                                                              | 
+ 312 |  if (!p_linkname && parse_names && tar.l | True                                                                                              | 
+ 313 |   file_header->link_target = xstrndup(ta | True                                                                                              | 
+ 314 |   /* FIXME: what if we have non-link obj | True                                                                                              | 
+ 315 |   /* Will link_target be free()ed? */    | True                                                                                              | 
+ 316 |  }                                       | True                                                                                              | 
+ 317 | #if ENABLE_FEATURE_TAR_UNAME_GNAME       | True                                                                                              | 
+ 318 |  file_header->tar__uname = tar.uname[0]  | ENABLE_FEATURE_TAR_UNAME_GNAME                                                                    | 
+ 319 |  file_header->tar__gname = tar.gname[0]  | ENABLE_FEATURE_TAR_UNAME_GNAME                                                                    | 
+ 320 | #endif                                   | True                                                                                              | 
+ 321 |  file_header->mtime = GET_OCTAL(tar.mtim | True                                                                                              | 
+ 322 |  file_header->size = GET_OCTAL(tar.size) | True                                                                                              | 
+ 323 |  file_header->gid = GET_OCTAL(tar.gid);  | True                                                                                              | 
+ 324 |  file_header->uid = GET_OCTAL(tar.uid);  | True                                                                                              | 
+ 325 |  /* Set bits 0-11 of the files mode */   | True                                                                                              | 
+ 326 |  file_header->mode = 07777 & GET_OCTAL(t | True                                                                                              | 
+ 327 |                                          | True                                                                                              | 
+ 328 |  file_header->name = NULL;               | True                                                                                              | 
+ 329 |  if (!p_longname && parse_names) {       | True                                                                                              | 
+ 330 |   /* we trash mode[0] here, it's ok */   | True                                                                                              | 
+ 331 |   //tar.name[sizeof(tar.name)] = '\0'; - | True                                                                                              | 
+ 332 |   tar.mode[0] = '\0';                    | True                                                                                              | 
+ 333 |   if (tar.prefix[0]) {                   | True                                                                                              | 
+ 334 |    /* and padding[0] */                  | True                                                                                              | 
+ 335 |    //tar.prefix[sizeof(tar.prefix)] = '\ | True                                                                                              | 
+ 336 |    tar.padding[0] = '\0';                | True                                                                                              | 
+ 337 |    file_header->name = concat_path_file( | True                                                                                              | 
+ 338 |   } else                                 | True                                                                                              | 
+ 339 |    file_header->name = xstrdup(tar.name) | True                                                                                              | 
+ 340 |  }                                       | True                                                                                              | 
+ 341 |                                          | True                                                                                              | 
+ 342 |  switch (tar_typeflag) {                 | True                                                                                              | 
+ 343 |  case '1': /* hardlink */                | True                                                                                              | 
+ 344 |   /* we mark hardlinks as regular files  | True                                                                                              | 
+ 345 |   file_header->mode |= S_IFREG;          | True                                                                                              | 
+ 346 |   /* on size of link fields from star(4) | True                                                                                              | 
+ 347 |    * ... For tar archives written by pre | True                                                                                              | 
+ 348 |    * implementations, the size field usu | True                                                                                              | 
+ 349 |    * the file and needs to be ignored as | True                                                                                              | 
+ 350 |    * header type.  For POSIX.1-1988 comp | True                                                                                              | 
+ 351 |    * field needs to be 0.  For POSIX.1-2 | True                                                                                              | 
+ 352 |    * the size field may be non zero, ind | True                                                                                              | 
+ 353 |    * included in the archive.            | True                                                                                              | 
+ 354 |    * i.e; always assume this is zero for | True                                                                                              | 
+ 355 |    */                                    | True                                                                                              | 
+ 356 |   goto size0;                            | True                                                                                              | 
+ 357 |  case '7':                               | True                                                                                              | 
+ 358 |  /* case 0: */                           | True                                                                                              | 
+ 359 |  case '0':                               | True                                                                                              | 
+ 360 | #if ENABLE_FEATURE_TAR_OLDGNU_COMPATIBIL | True                                                                                              | 
+ 361 |   if (file_header->name && last_char_is( | ENABLE_FEATURE_TAR_OLDGNU_COMPATIBILITY                                                           | 
+ 362 |    goto set_dir;                         | ENABLE_FEATURE_TAR_OLDGNU_COMPATIBILITY                                                           | 
+ 363 |   }                                      | ENABLE_FEATURE_TAR_OLDGNU_COMPATIBILITY                                                           | 
+ 364 | #endif                                   | True                                                                                              | 
+ 365 |   file_header->mode |= S_IFREG;          | True                                                                                              | 
+ 366 |   break;                                 | True                                                                                              | 
+ 367 |  case '2':                               | True                                                                                              | 
+ 368 |   file_header->mode |= S_IFLNK;          | True                                                                                              | 
+ 369 |   /* have seen tarballs with size field  | True                                                                                              | 
+ 370 |    * the size of the link target's name  | True                                                                                              | 
+ 371 |  size0:                                  | True                                                                                              | 
+ 372 |   file_header->size = 0;                 | True                                                                                              | 
+ 373 |   break;                                 | True                                                                                              | 
+ 374 |  case '3':                               | True                                                                                              | 
+ 375 |   file_header->mode |= S_IFCHR;          | True                                                                                              | 
+ 376 |   goto size0; /* paranoia */             | True                                                                                              | 
+ 377 |  case '4':                               | True                                                                                              | 
+ 378 |   file_header->mode |= S_IFBLK;          | True                                                                                              | 
+ 379 |   goto size0;                            | True                                                                                              | 
+ 380 |  case '5':                               | True                                                                                              | 
+ 381 |  IF_FEATURE_TAR_OLDGNU_COMPATIBILITY(set | True                                                                                              | 
+ 382 |   file_header->mode |= S_IFDIR;          | True                                                                                              | 
+ 383 |   goto size0;                            | True                                                                                              | 
+ 384 |  case '6':                               | True                                                                                              | 
+ 385 |   file_header->mode |= S_IFIFO;          | True                                                                                              | 
+ 386 |   goto size0;                            | True                                                                                              | 
+ 387 |  case 'g': /* pax global header */       | True                                                                                              | 
+ 388 |  case 'x': { /* pax extended header */   | True                                                                                              | 
+ 389 |   if ((uoff_t)file_header->size > 0xffff | True                                                                                              | 
+ 390 |    goto skip_ext_hdr;                    | True                                                                                              | 
+ 391 |   process_pax_hdr(archive_handle, file_h | !ENABLE_FEATURE_TAR_GNU_EXTENSIONS&&!ENABLE_FEATURE_TAR_SELINUX                                   | 
+ 392 |   goto again_after_align;                | True                                                                                              | 
+ 393 | #if ENABLE_FEATURE_TAR_GNU_EXTENSIONS    | True                                                                                              | 
+ 394 | /* See http://www.gnu.org/software/tar/m | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 395 |  case 'L':                               | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 396 |   /* free: paranoia: tar with several co | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 397 |   free(p_longname);                      | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 398 |   /* For paranoia reasons we allocate ex | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 399 |   die_if_bad_fnamesize(file_header->size | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 400 |   p_longname = xzalloc(file_header->size | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 401 |   /* We read ASCIZ string, including NUL | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 402 |   xread(archive_handle->src_fd, p_longna | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 403 |   archive_handle->offset += file_header- | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 404 |   /* return get_header_tar(archive_handl | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 405 |   /* gcc 4.1.1 didn't optimize it into j | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 406 |   /* so we will do it ourself, this also | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 407 |   goto again;                            | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 408 |  case 'K':                               | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 409 |   free(p_linkname);                      | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 410 |   die_if_bad_fnamesize(file_header->size | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 411 |   p_linkname = xzalloc(file_header->size | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 412 |   xread(archive_handle->src_fd, p_linkna | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 413 |   archive_handle->offset += file_header- | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 414 |   /* return get_header_tar(archive_handl | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 415 |   goto again;                            | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 416 | /*                                       | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 417 |  * case 'S': // Sparse file              | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 418 |  * Was seen in the wild. Not supported ( | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 419 |  * See https://www.gnu.org/software/tar/ | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 420 |  * for the format. (An "Old GNU Format"  | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 421 |  */                                      | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 422 | // case 'D': /* GNU dump dir */          | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 423 | // case 'M': /* Continuation of multi vo | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 424 | // case 'N': /* Old GNU for names > 100  | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 425 |  case 'V': /* Volume header */           | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 426 |   ; /* Fall through to skip it */        | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 427 | #endif                                   | True                                                                                              | 
+ 428 |  }                                       | True                                                                                              | 
+ 429 |  skip_ext_hdr:                           | True                                                                                              | 
+ 430 |  {                                       | True                                                                                              | 
+ 431 |   off_t sz;                              | True                                                                                              | 
+ 432 |   bb_error_msg("warning: skipping header | True                                                                                              | 
+ 433 |   sz = (file_header->size + 511) & ~(off | True                                                                                              | 
+ 434 |   archive_handle->offset += sz;          | True                                                                                              | 
+ 435 |   sz >>= 9; /* sz /= 512 but w/o contort | True                                                                                              | 
+ 436 |   while (sz--)                           | True                                                                                              | 
+ 437 |    xread(archive_handle->src_fd, &tar, 5 | True                                                                                              | 
+ 438 |   /* return get_header_tar(archive_handl | True                                                                                              | 
+ 439 |   goto again_after_align;                | True                                                                                              | 
+ 440 |  }                                       | True                                                                                              | 
+ 441 |  default:                                | True                                                                                              | 
+ 442 |   bb_error_msg_and_die("unknown typeflag | True                                                                                              | 
+ 443 |  }                                       | True                                                                                              | 
+ 444 |                                          | True                                                                                              | 
+ 445 | #if ENABLE_FEATURE_TAR_GNU_EXTENSIONS    | True                                                                                              | 
+ 446 |  if (p_longname) {                       | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 447 |   file_header->name = p_longname;        | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 448 |   p_longname = NULL;                     | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 449 |  }                                       | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 450 |  if (p_linkname) {                       | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 451 |   file_header->link_target = p_linkname; | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 452 |   p_linkname = NULL;                     | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 453 |  }                                       | ENABLE_FEATURE_TAR_GNU_EXTENSIONS                                                                 | 
+ 454 | #endif                                   | True                                                                                              | 
+ 455 |                                          | True                                                                                              | 
+ 456 |  /* Everything up to and including last  | True                                                                                              | 
+ 457 |  strip_unsafe_prefix(file_header->name); | True                                                                                              | 
+ 458 |  if (file_header->link_target && !S_ISLN | True                                                                                              | 
+ 459 |   /* GNU tar 1.34 examples:              | True                                                                                              | 
+ 460 |    * tar: Removing leading '/' from hard | True                                                                                              | 
+ 461 |    * tar: Removing leading '../' from ha | True                                                                                              | 
+ 462 |    * tar: Removing leading 'etc/../' fro | True                                                                                              | 
+ 463 |    */                                    | True                                                                                              | 
+ 464 |   strip_unsafe_prefix(file_header->link_ | True                                                                                              | 
+ 465 |  }                                       | True                                                                                              | 
+ 466 |                                          | True                                                                                              | 
+ 467 |  /* Strip trailing '/' in directories */ | True                                                                                              | 
+ 468 |  /* Must be done after mode is set as '/ | True                                                                                              | 
+ 469 |  cp = last_char_is(file_header->name, '/ | True                                                                                              | 
+ 470 |                                          | True                                                                                              | 
+ 471 |  if (archive_handle->filter(archive_hand | True                                                                                              | 
+ 472 |   archive_handle->action_header(/*archiv | True                                                                                              | 
+ 473 |   /* Note that we kill the '/' only afte | True                                                                                              | 
+ 474 |   /* (like GNU tar 1.15.1: verbose mode  | True                                                                                              | 
+ 475 |   if (cp)                                | True                                                                                              | 
+ 476 |    *cp = '\0';                           | True                                                                                              | 
+ 477 |   archive_handle->action_data(archive_ha | True                                                                                              | 
+ 478 |   if (archive_handle->accept || archive_ | True                                                                                              | 
+ 479 |    || (archive_handle->ah_flags & ARCHIV | True                                                                                              | 
+ 480 |   ) {                                    | True                                                                                              | 
+ 481 |    llist_add_to(&archive_handle->passed, | True                                                                                              | 
+ 482 |   } else /* Caller isn't interested in l | True                                                                                              | 
+ 483 |    free(file_header->name);              | True                                                                                              | 
+ 484 |  } else {                                | True                                                                                              | 
+ 485 |   data_skip(archive_handle);             | True                                                                                              | 
+ 486 |   free(file_header->name);               | True                                                                                              | 
+ 487 |  }                                       | True                                                                                              | 
+ 488 |  archive_handle->offset += file_header-> | True                                                                                              | 
+ 489 |                                          | True                                                                                              | 
+ 490 |  free(file_header->link_target);         | True                                                                                              | 
+ 491 |  /* Do not free(file_header->name)!      | True                                                                                              | 
+ 492 |   * It might be inserted in archive_hand | True                                                                                              | 
+ 493 | #if ENABLE_FEATURE_TAR_UNAME_GNAME       | True                                                                                              | 
+ 494 |  free(file_header->tar__uname);          | ENABLE_FEATURE_TAR_UNAME_GNAME                                                                    | 
+ 495 |  free(file_header->tar__gname);          | ENABLE_FEATURE_TAR_UNAME_GNAME                                                                    | 
+ 496 | #endif                                   | True                                                                                              | 
+ 497 |  return EXIT_SUCCESS; /* "decoded one he | True                                                                                              | 
+ 498 | }                                        | True                                                                                              | 
+-----+------------------------------------------+---------------------------------------------------------------------------------------------------+
+     |                                          | +112MB, 288ms                                                                                     | 

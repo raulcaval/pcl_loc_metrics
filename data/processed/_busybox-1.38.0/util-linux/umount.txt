@@ -1,0 +1,251 @@
+FILE: data/raw/busybox-1.38.0/util-linux/umount.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Mini umount implementation for busybo | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 1999-2004 by Erik Ander | True                      | 
+   6 |  * Copyright (C) 2005 by Rob Landley <ro | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   9 |  */                                      | True                      | 
+  10 | //config:config UMOUNT                   | True                      | 
+  11 | //config: bool "umount (5.1 kb)"         | True                      | 
+  12 | //config: default y                      | True                      | 
+  13 | //config: help                           | True                      | 
+  14 | //config: When you want to remove a moun | True                      | 
+  15 | //config: point, for example when you ar | True                      | 
+  16 | //config: 'umount' utility is the tool t | True                      | 
+  17 | //config: utility, you almost certainly  | True                      | 
+  18 | //config:                                | True                      | 
+  19 | //config:config FEATURE_UMOUNT_ALL       | True                      | 
+  20 | //config: bool "Support -a (unmount all) | True                      | 
+  21 | //config: default y                      | True                      | 
+  22 | //config: depends on UMOUNT              | True                      | 
+  23 | //config: help                           | True                      | 
+  24 | //config: Support -a option to unmount a | True                      | 
+  25 |                                          | True                      | 
+  26 | //applet:IF_UMOUNT(APPLET_NOEXEC(umount, | True                      | 
+  27 | /*                                       | True                      | 
+  28 |  * On one hand, in some weird situations | True                      | 
+  29 |  * to not do anything surprising, to beh | True                      | 
+  30 |  *                                       | True                      | 
+  31 |  * OTOH, there can be situations where e | True                      | 
+  32 |  * (say, if executable is on a filesyste | True                      | 
+  33 |  * block in kernel).                     | True                      | 
+  34 |  * In this case, you might be actually h | True                      | 
+  35 |  * does not fork+exec, but only forks an | True                      | 
+  36 |  * Let's go with NOEXEC.                 | True                      | 
+  37 |  *                                       | True                      | 
+  38 |  * bb_common_bufsiz1 usage here is safe  | True                      | 
+  39 |  */                                      | True                      | 
+  40 |                                          | True                      | 
+  41 | //kbuild:lib-$(CONFIG_UMOUNT) += umount. | True                      | 
+  42 |                                          | True                      | 
+  43 | //usage:#define umount_trivial_usage     | True                      | 
+  44 | //usage:       "[-rlf"IF_FEATURE_MTAB_SU | True                      | 
+  45 | //usage:#define umount_full_usage "\n\n" | True                      | 
+  46 | //usage:       "Unmount filesystems\n"   | True                      | 
+  47 | //usage: IF_FEATURE_UMOUNT_ALL(          | True                      | 
+  48 | //usage:     "\n -a Unmount all filesyst | True                      | 
+  49 | //usage: )                               | True                      | 
+  50 | //usage: IF_FEATURE_MTAB_SUPPORT(        | True                      | 
+  51 | //usage:     "\n -n Don't erase /etc/mta | True                      | 
+  52 | //usage: )                               | True                      | 
+  53 | //usage:     "\n -r Remount devices read | True                      | 
+  54 | //usage:     "\n -l Lazy umount (detach  | True                      | 
+  55 | //usage:     "\n -f Force umount (i.e.,  | True                      | 
+  56 | //usage: IF_FEATURE_MOUNT_LOOP(          | True                      | 
+  57 | //usage:     "\n -d Free loop device if  | True                      | 
+  58 | //usage: )                               | True                      | 
+  59 | //usage:     "\n -t FSTYPE[,...] Unmount | True                      | 
+  60 | //usage:                                 | True                      | 
+  61 | //usage:#define umount_example_usage     | True                      | 
+  62 | //usage:       "$ umount /dev/hdc1\n"    | True                      | 
+  63 |                                          | True                      | 
+  64 | #include <mntent.h>                      | True                      | 
+  65 | #include <sys/mount.h>                   | True                      | 
+  66 | #ifndef MNT_DETACH                       | True                      | 
+  67 | # define MNT_DETACH 0x00000002           | !(MNT_DETACH)             | 
+  68 | #endif                                   | True                      | 
+  69 | #include "libbb.h"                       | True                      | 
+  70 | #include "common_bufsiz.h"               | True                      | 
+  71 |                                          | True                      | 
+  72 | #if defined(__dietlibc__)                | True                      | 
+  73 | // TODO: This does not belong here.      | (__dietlibc__)            | 
+  74 | /* 16.12.2006, Sampo Kellomaki (sampo@ik | (__dietlibc__)            | 
+  75 |  * dietlibc-0.30 does not have implement | (__dietlibc__)            | 
+  76 | static struct mntent *getmntent_r(FILE*  | (__dietlibc__)            | 
+  77 |   char* buffer UNUSED_PARAM, int bufsize | (__dietlibc__)            | 
+  78 | {                                        | (__dietlibc__)            | 
+  79 |  struct mntent* ment = getmntent(stream) | (__dietlibc__)            | 
+  80 |  return memcpy(result, ment, sizeof(*men | (__dietlibc__)            | 
+  81 | }                                        | (__dietlibc__)            | 
+  82 | #endif                                   | True                      | 
+  83 |                                          | True                      | 
+  84 | /* ignored: -c -v -i */                  | True                      | 
+  85 | #define OPTION_STRING           "fldnrat | True                      | 
+  86 | #define OPT_FORCE               (1 << 0) | True                      | 
+  87 | #define OPT_LAZY                (1 << 1) | True                      | 
+  88 | #define OPT_FREELOOP            (1 << 2) | True                      | 
+  89 | #define OPT_NO_MTAB             (1 << 3) | True                      | 
+  90 | #define OPT_REMOUNT             (1 << 4) | True                      | 
+  91 | #define OPT_ALL                 (ENABLE_ | True                      | 
+  92 |                                          | True                      | 
+  93 | int umount_main(int argc, char **argv) M | True                      | 
+  94 | int umount_main(int argc UNUSED_PARAM, c | True                      | 
+  95 | {                                        | True                      | 
+  96 |  int doForce;                            | True                      | 
+  97 |  struct mntent me;                       | True                      | 
+  98 |  FILE *fp;                               | True                      | 
+  99 |  char *fstype = NULL;                    | True                      | 
+ 100 |  exitcode_t status = EXIT_SUCCESS;       | True                      | 
+ 101 |  unsigned opt;                           | True                      | 
+ 102 |  struct mtab_list {                      | True                      | 
+ 103 |   char *dir;                             | True                      | 
+ 104 |   char *device;                          | True                      | 
+ 105 |   struct mtab_list *next;                | True                      | 
+ 106 |  } *mtl, *m;                             | True                      | 
+ 107 |                                          | True                      | 
+ 108 |  opt = getopt32(argv, OPTION_STRING, &fs | True                      | 
+ 109 |  //argc -= optind;                       | True                      | 
+ 110 |  argv += optind;                         | True                      | 
+ 111 |                                          | True                      | 
+ 112 |  // MNT_FORCE and MNT_DETACH (from linux | True                      | 
+ 113 |  // OPT_FORCE and OPT_LAZY.              | True                      | 
+ 114 |  BUILD_BUG_ON(OPT_FORCE != MNT_FORCE ||  | True                      | 
+ 115 |  doForce = opt & (OPT_FORCE|OPT_LAZY);   | True                      | 
+ 116 |                                          | True                      | 
+ 117 |  /* Get a list of mount points from mtab | True                      | 
+ 118 |   * for umount -a (so we don't have to w | True                      | 
+ 119 |   * we iterate over it, or about getting | True                      | 
+ 120 |   * entry.  Notice that this also natura | True                      | 
+ 121 |   * umounts the most recent entries firs | True                      | 
+ 122 |  m = mtl = NULL;                         | True                      | 
+ 123 |                                          | True                      | 
+ 124 |  // If we're umounting all, then m point | True                      | 
+ 125 |  // the argument list should be empty (w | True                      | 
+ 126 |  fp = setmntent(bb_path_mtab_file, "r"); | True                      | 
+ 127 |  if (!fp) {                              | True                      | 
+ 128 |   if (opt & OPT_ALL)                     | True                      | 
+ 129 |    bb_error_msg_and_die("can't open '%s' | True                      | 
+ 130 |  } else {                                | True                      | 
+ 131 |   setup_common_bufsiz();                 | True                      | 
+ 132 |   while (getmntent_r(fp, &me, bb_common_ | True                      | 
+ 133 |    /* Match fstype (fstype==NULL matches | True                      | 
+ 134 |    if (!fstype_matches(me.mnt_type, fsty | True                      | 
+ 135 |     continue;                            | True                      | 
+ 136 |    m = xzalloc(sizeof(*m));              | True                      | 
+ 137 |    m->next = mtl;                        | True                      | 
+ 138 |    m->device = xstrdup(me.mnt_fsname);   | True                      | 
+ 139 |    m->dir = xstrdup(me.mnt_dir);         | True                      | 
+ 140 |    mtl = m;                              | True                      | 
+ 141 |   }                                      | True                      | 
+ 142 |   endmntent(fp);                         | True                      | 
+ 143 |  }                                       | True                      | 
+ 144 |                                          | True                      | 
+ 145 |  // If we're not umounting all, we need  | True                      | 
+ 146 |  // Note: "-t FSTYPE" does not imply -a. | True                      | 
+ 147 |  if (!(opt & OPT_ALL)) {                 | True                      | 
+ 148 |   if (!argv[0])                          | True                      | 
+ 149 |    bb_show_usage();                      | True                      | 
+ 150 |   m = NULL;                              | True                      | 
+ 151 |  }                                       | True                      | 
+ 152 |                                          | True                      | 
+ 153 |  // Loop through everything we're suppos | True                      | 
+ 154 |  for (;;) {                              | True                      | 
+ 155 |   int curstat;                           | True                      | 
+ 156 |   char *zapit = *argv;                   | True                      | 
+ 157 |   char *path;                            | True                      | 
+ 158 |                                          | True                      | 
+ 159 |   // Do we already know what to umount t | True                      | 
+ 160 |   if (m)                                 | True                      | 
+ 161 |    path = xstrdup(m->dir);               | True                      | 
+ 162 |   // For umount -a, end of mtab means ti | True                      | 
+ 163 |   else if (opt & OPT_ALL)                | True                      | 
+ 164 |    break;                                | True                      | 
+ 165 |   // Use command line argument (and look | True                      | 
+ 166 |   else {                                 | True                      | 
+ 167 |    if (!zapit)                           | True                      | 
+ 168 |     break;                               | True                      | 
+ 169 |    argv++;                               | True                      | 
+ 170 |    path = xmalloc_realpath(zapit);       | True                      | 
+ 171 |    if (path) {                           | True                      | 
+ 172 |     for (m = mtl; m; m = m->next)        | True                      | 
+ 173 |      if (strcmp(path, m->dir) == 0 || st | True                      | 
+ 174 |       break;                             | True                      | 
+ 175 |    }                                     | True                      | 
+ 176 |   }                                      | True                      | 
+ 177 |   // If we couldn't find this sucker in  | True                      | 
+ 178 |   // command line argument straight to t | True                      | 
+ 179 |   // umount the directory even if we wer | True                      | 
+ 180 |   if (m) zapit = m->dir;                 | True                      | 
+ 181 |                                          | True                      | 
+ 182 | // umount from util-linux 2.22.2 does no | True                      | 
+ 183 | // umount -f uses umount2(MNT_FORCE) imm | True                      | 
+ 184 | // not trying umount() first.            | True                      | 
+ 185 | // (Strangely, umount -fl ignores -f: it | True                      | 
+ 186 | // We do pass both flags in this case)   | True                      | 
+ 187 | #if 0                                    | True                      | 
+ 188 |   // Let's ask the thing nicely to unmou | 0                         | 
+ 189 |   curstat = umount(zapit);               | 0                         | 
+ 190 |                                          | 0                         | 
+ 191 |   // Unmount with force and/or lazy flag | 0                         | 
+ 192 |   if (curstat && doForce)                | 0                         | 
+ 193 | #endif                                   | True                      | 
+ 194 |    curstat = umount2(zapit, doForce);    | True                      | 
+ 195 |                                          | True                      | 
+ 196 |   // If still can't umount, maybe remoun | True                      | 
+ 197 |   if (curstat) {                         | True                      | 
+ 198 |    if ((opt & OPT_REMOUNT) && errno == E | True                      | 
+ 199 |     // Note! Even if we succeed here, la | True                      | 
+ 200 |     // free loop device or erase mtab en | True                      | 
+ 201 |     const char *msg = "%s busy - remount | True                      | 
+ 202 |     curstat = mount(m->device, zapit, NU | True                      | 
+ 203 |     if (curstat) {                       | True                      | 
+ 204 |      msg = "can't remount %s read-only"; | True                      | 
+ 205 |      status = EXIT_FAILURE;              | True                      | 
+ 206 |     }                                    | True                      | 
+ 207 |     bb_error_msg(msg, m->device);        | True                      | 
+ 208 |    } else {                              | True                      | 
+ 209 |     status = EXIT_FAILURE;               | True                      | 
+ 210 |     bb_perror_msg("can't unmount %s", za | True                      | 
+ 211 |    }                                     | True                      | 
+ 212 |   } else {                               | True                      | 
+ 213 |    // De-allocate the loop device.  This | True                      | 
+ 214 |    // any non-loop block devices.        | True                      | 
+ 215 |    if (ENABLE_FEATURE_MOUNT_LOOP && (opt | True                      | 
+ 216 |     del_loop(m->device);                 | True                      | 
+ 217 |    if (ENABLE_FEATURE_MTAB_SUPPORT && !( | True                      | 
+ 218 |     erase_mtab(m->dir);                  | True                      | 
+ 219 |   }                                      | True                      | 
+ 220 |                                          | True                      | 
+ 221 |   // Find next matching mtab entry for - | True                      | 
+ 222 |   // Note this means that "umount /dev/b | True                      | 
+ 223 |   // of /dev/blah, not just the most rec | True                      | 
+ 224 |   if (m) {                               | True                      | 
+ 225 |    while ((m = m->next) != NULL)         | True                      | 
+ 226 |     // NB: if m is non-NULL, path is non | True                      | 
+ 227 |     if ((opt & OPT_ALL) || strcmp(path,  | True                      | 
+ 228 |      break;                              | True                      | 
+ 229 |   }                                      | True                      | 
+ 230 |   free(path);                            | True                      | 
+ 231 |  }                                       | True                      | 
+ 232 |                                          | True                      | 
+ 233 |  // Free mtab list if necessary          | True                      | 
+ 234 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 235 |   while (mtl) {                          | True                      | 
+ 236 |    m = mtl->next;                        | True                      | 
+ 237 |    free(mtl->device);                    | True                      | 
+ 238 |    free(mtl->dir);                       | True                      | 
+ 239 |    free(mtl);                            | True                      | 
+ 240 |    mtl = m;                              | True                      | 
+ 241 |   }                                      | True                      | 
+ 242 |  }                                       | True                      | 
+ 243 |                                          | True                      | 
+ 244 |  return status;                          | True                      | 
+ 245 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +114MB, 309ms             | 

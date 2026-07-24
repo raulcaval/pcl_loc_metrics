@@ -1,0 +1,259 @@
+FILE: data/raw/busybox-1.38.0/procps/pgrep.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Mini pgrep/pkill implementation for b | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2007 Loic Grenie <loic. | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config PGREP                    | True                      | 
+  10 | //config: bool "pgrep (6.8 kb)"          | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Look for processes by name.    | True                      | 
+  14 | //config:                                | True                      | 
+  15 | //config:config PKILL                    | True                      | 
+  16 | //config: bool "pkill (7.8 kb)"          | True                      | 
+  17 | //config: default y                      | True                      | 
+  18 | //config: help                           | True                      | 
+  19 | //config: Send signals to processes by n | True                      | 
+  20 |                                          | True                      | 
+  21 | //applet:IF_PGREP(APPLET_ODDNAME(pgrep,  | True                      | 
+  22 | //                APPLET_ODDNAME:name    | True                      | 
+  23 | //applet:IF_PKILL(APPLET_ODDNAME(pkill,  | True                      | 
+  24 | /* can't be noexec: can find _itself_ un | True                      | 
+  25 |  * /proc/PID/cmdline and comm are wrong! | True                      | 
+  26 |  * but cmdline?                          | True                      | 
+  27 |  */                                      | True                      | 
+  28 |                                          | True                      | 
+  29 | //kbuild:lib-$(CONFIG_PGREP) += pgrep.o  | True                      | 
+  30 | //kbuild:lib-$(CONFIG_PKILL) += pgrep.o  | True                      | 
+  31 |                                          | True                      | 
+  32 | //usage:#define pgrep_trivial_usage      | True                      | 
+  33 | //usage:       "[-flanovx] [-s SID|-P PP | True                      | 
+  34 | //usage:#define pgrep_full_usage "\n\n"  | True                      | 
+  35 | //usage:       "Display process(es) sele | True                      | 
+  36 | //usage:     "\n -l Show command name to | True                      | 
+  37 | //usage:     "\n -a Show command line to | True                      | 
+  38 | //usage:     "\n -f Match against entire | True                      | 
+  39 | //usage:     "\n -n Show the newest proc | True                      | 
+  40 | //usage:     "\n -o Show the oldest proc | True                      | 
+  41 | //usage:     "\n -v Negate the match"    | True                      | 
+  42 | //usage:     "\n -x Match whole name (no | True                      | 
+  43 | //usage:     "\n -s Match session ID (0  | True                      | 
+  44 | //usage:     "\n -P Match parent process | True                      | 
+  45 | //usage:                                 | True                      | 
+  46 | //usage:#define pkill_trivial_usage      | True                      | 
+  47 | //usage:       "[-l|-SIGNAL] [-xfvnoe] [ | True                      | 
+  48 | //usage:#define pkill_full_usage "\n\n"  | True                      | 
+  49 | //usage:       "Send signal to processes | True                      | 
+  50 | //usage:     "\n -l List all signals"    | True                      | 
+  51 | //usage:     "\n -x Match whole name (no | True                      | 
+  52 | //usage:     "\n -f Match against entire | True                      | 
+  53 | //usage:     "\n -s SID Match session ID | True                      | 
+  54 | //usage:     "\n -P PPID Match parent pr | True                      | 
+  55 | //usage:     "\n -v Negate the match"    | True                      | 
+  56 | //usage:     "\n -n Signal the newest pr | True                      | 
+  57 | //usage:     "\n -o Signal the oldest pr | True                      | 
+  58 | //usage:     "\n -e Display name and PID | True                      | 
+  59 |                                          | True                      | 
+  60 | #include "libbb.h"                       | True                      | 
+  61 | #include "xregex.h"                      | True                      | 
+  62 |                                          | True                      | 
+  63 | /* Idea taken from kill.c */             | True                      | 
+  64 | #define pgrep (ENABLE_PGREP && (!ENABLE_ | True                      | 
+  65 | #define pkill (ENABLE_PKILL && (!ENABLE_ | True                      | 
+  66 |                                          | True                      | 
+  67 | enum {                                   | True                      | 
+  68 |  /* "vlafxones:+P:+" */                  | True                      | 
+  69 |  OPTBIT_V = 0, /* must be first, we need | True                      | 
+  70 |  OPTBIT_L,                               | True                      | 
+  71 |  OPTBIT_A,                               | True                      | 
+  72 |  OPTBIT_F,                               | True                      | 
+  73 |  OPTBIT_X,                               | True                      | 
+  74 |  OPTBIT_O,                               | True                      | 
+  75 |  OPTBIT_N,                               | True                      | 
+  76 |  OPTBIT_E, /* should be pkill-only, do w | True                      | 
+  77 |  OPTBIT_S,                               | True                      | 
+  78 |  OPTBIT_P,                               | True                      | 
+  79 | };                                       | True                      | 
+  80 |                                          | True                      | 
+  81 | #define OPT_INVERT (opt & (1 << OPTBIT_V | True                      | 
+  82 | #define OPT_LIST (opt & (1 << OPTBIT_L)) | True                      | 
+  83 | #define OPT_LISTFULL (opt & (1 << OPTBIT | True                      | 
+  84 | #define OPT_FULL (opt & (1 << OPTBIT_F)) | True                      | 
+  85 | #define OPT_ANCHOR (opt & (1 << OPTBIT_X | True                      | 
+  86 | #define OPT_FIRST (opt & (1 << OPTBIT_O) | True                      | 
+  87 | #define OPT_LAST (opt & (1 << OPTBIT_N)) | True                      | 
+  88 | #define OPT_ECHO (opt & (1 << OPTBIT_E)) | True                      | 
+  89 | #define OPT_SID  (opt & (1 << OPTBIT_S)) | True                      | 
+  90 | #define OPT_PPID (opt & (1 << OPTBIT_P)) | True                      | 
+  91 |                                          | True                      | 
+  92 | static void act(unsigned pid, char *cmd, | True                      | 
+  93 | {                                        | True                      | 
+  94 |  if (pgrep) {                            | True                      | 
+  95 |   if (option_mask32 & ((1 << OPTBIT_L)|( | True                      | 
+  96 |    printf("%u %s\n", pid, cmd);          | True                      | 
+  97 |   else                                   | True                      | 
+  98 |    printf("%u\n", pid);                  | True                      | 
+  99 |  } else {                                | True                      | 
+ 100 |   kill(pid, signo);                      | True                      | 
+ 101 |   if (option_mask32 & (1 << OPTBIT_E)) { | True                      | 
+ 102 |    printf("%s killed (pid %u)\n", cmd, p | True                      | 
+ 103 |   }                                      | True                      | 
+ 104 |  }                                       | True                      | 
+ 105 | }                                        | True                      | 
+ 106 |                                          | True                      | 
+ 107 | int pgrep_main(int argc, char **argv) MA | True                      | 
+ 108 | int pgrep_main(int argc UNUSED_PARAM, ch | True                      | 
+ 109 | {                                        | True                      | 
+ 110 |  unsigned pid;                           | True                      | 
+ 111 |  int signo;                              | True                      | 
+ 112 |  unsigned opt;                           | True                      | 
+ 113 |  int scan_mask;                          | True                      | 
+ 114 |  int matched_pid;                        | True                      | 
+ 115 |  int sid2match, ppid2match;              | True                      | 
+ 116 |  char *cmd_last;                         | True                      | 
+ 117 |  procps_status_t *proc;                  | True                      | 
+ 118 |  /* These are initialized to 0 */        | True                      | 
+ 119 |  struct {                                | True                      | 
+ 120 |   regex_t re_buffer;                     | True                      | 
+ 121 |   regmatch_t re_match[1];                | True                      | 
+ 122 |  } Z;                                    | True                      | 
+ 123 | #define re_buffer (Z.re_buffer)          | True                      | 
+ 124 | #define re_match  (Z.re_match )          | True                      | 
+ 125 |                                          | True                      | 
+ 126 |  memset(&Z, 0, sizeof(Z));               | True                      | 
+ 127 |                                          | True                      | 
+ 128 |  /* Parse -SIGNAL for pkill. Must be fir | True                      | 
+ 129 |  signo = SIGTERM;                        | True                      | 
+ 130 |  if (pkill && argv[1] && argv[1][0] == ' | True                      | 
+ 131 |   int temp = get_signum(argv[1]+1);      | True                      | 
+ 132 |   if (temp != -1) {                      | True                      | 
+ 133 |    signo = temp;                         | True                      | 
+ 134 |    argv++;                               | True                      | 
+ 135 |   }                                      | True                      | 
+ 136 |  }                                       | True                      | 
+ 137 |                                          | True                      | 
+ 138 |  /* Parse remaining options */           | True                      | 
+ 139 |  ppid2match = -1;                        | True                      | 
+ 140 |  sid2match = -1;                         | True                      | 
+ 141 |  opt = getopt32(argv, "vlafxones:+P:+",  | True                      | 
+ 142 |  argv += optind;                         | True                      | 
+ 143 |                                          | True                      | 
+ 144 |  if (pkill && OPT_LIST) { /* -l: print t | True                      | 
+ 145 |   print_signames();                      | True                      | 
+ 146 |   return 0;                              | True                      | 
+ 147 |  }                                       | True                      | 
+ 148 |                                          | True                      | 
+ 149 |  pid = getpid();                         | True                      | 
+ 150 |  if (sid2match == 0)                     | True                      | 
+ 151 |   sid2match = getsid(pid);               | True                      | 
+ 152 |                                          | True                      | 
+ 153 |  scan_mask = PSSCAN_COMM | PSSCAN_ARGV0; | True                      | 
+ 154 |  if (OPT_FULL)                           | True                      | 
+ 155 |   scan_mask |= PSSCAN_ARGVN;             | True                      | 
+ 156 |                                          | True                      | 
+ 157 |  /* One pattern is required, if no -s an | True                      | 
+ 158 |  if ((sid2match & ppid2match) < 0 && (!a | True                      | 
+ 159 |   bb_show_usage();                       | True                      | 
+ 160 |                                          | True                      | 
+ 161 |  if (argv[0])                            | True                      | 
+ 162 |   xregcomp(&re_buffer, argv[0], OPT_ANCH | True                      | 
+ 163 |                                          | True                      | 
+ 164 |  matched_pid = 0;                        | True                      | 
+ 165 |  cmd_last = NULL;                        | True                      | 
+ 166 |  proc = NULL;                            | True                      | 
+ 167 |  while ((proc = procps_scan(proc, scan_m | True                      | 
+ 168 |   char *cmd;                             | True                      | 
+ 169 |   int cmdlen, match;                     | True                      | 
+ 170 |                                          | True                      | 
+ 171 |   if (proc->pid == pid)                  | True                      | 
+ 172 |    continue;                             | True                      | 
+ 173 |                                          | True                      | 
+ 174 |   if (!OPT_INVERT) {                     | True                      | 
+ 175 |    /* Quickly reject -sN -PN mismatches. | True                      | 
+ 176 |    if (ppid2match >= 0 && ppid2match !=  | True                      | 
+ 177 |     continue;                            | True                      | 
+ 178 |    if (sid2match >= 0 && sid2match != pr | True                      | 
+ 179 |     continue;                            | True                      | 
+ 180 |   }                                      | True                      | 
+ 181 |                                          | True                      | 
+ 182 |   cmdlen = -1;                           | True                      | 
+ 183 |   cmd = proc->argv0;                     | True                      | 
+ 184 |   if (!cmd) {                            | True                      | 
+ 185 |    cmd = proc->comm;                     | True                      | 
+ 186 |   } else {                               | True                      | 
+ 187 |    int i = proc->argv_len;               | True                      | 
+ 188 |                                          | True                      | 
+ 189 |    if (!OPT_LISTFULL)                    | True                      | 
+ 190 |     cmdlen = strlen(cmd); /* not -a: fin | True                      | 
+ 191 |    /*                                    | True                      | 
+ 192 |     * "sleep 11" looks like "sleep""\0"" | True                      | 
+ 193 |     * Make sure last "\0" does not get c | True                      | 
+ 194 |     */                                   | True                      | 
+ 195 |    if (i && cmd[i-1] == '\0')            | True                      | 
+ 196 |     i--;                                 | True                      | 
+ 197 |    while (--i >= 0) {                    | True                      | 
+ 198 |     if ((unsigned char)cmd[i] < ' ')     | True                      | 
+ 199 |      cmd[i] = ' ';                       | True                      | 
+ 200 |    }                                     | True                      | 
+ 201 |   }                                      | True                      | 
+ 202 |                                          | True                      | 
+ 203 |   if (OPT_INVERT) {                      | True                      | 
+ 204 |    /* "pgrep -v -P1 firefox" means "not  | True                      | 
+ 205 |     * or equivalently "ppid!=1 OR name!= | True                      | 
+ 206 |     * Check the first condition and if t | True                      | 
+ 207 |     */                                   | True                      | 
+ 208 |    if (ppid2match >= 0 && ppid2match !=  | True                      | 
+ 209 |     goto got_it;                         | True                      | 
+ 210 |    if (sid2match >= 0 && sid2match != pr | True                      | 
+ 211 |     goto got_it;                         | True                      | 
+ 212 |   }                                      | True                      | 
+ 213 |                                          | True                      | 
+ 214 |   match = !argv[0]; /* if no PATTERN, th | True                      | 
+ 215 |   if (!match) {                          | True                      | 
+ 216 |  again:                                  | True                      | 
+ 217 |    match = (regexec(&re_buffer, cmd, 1,  | True                      | 
+ 218 |    if (match && OPT_ANCHOR) {            | True                      | 
+ 219 |     /* -x requires full string match */  | True                      | 
+ 220 |     match = (re_match[0].rm_so == 0 && c | True                      | 
+ 221 |    }                                     | True                      | 
+ 222 |    if (!match && cmd != proc->comm) {    | True                      | 
+ 223 |     /* if argv[] did not match, try comm | True                      | 
+ 224 |     cmdlen = -1;                         | True                      | 
+ 225 |     cmd = proc->comm;                    | True                      | 
+ 226 |     goto again;                          | True                      | 
+ 227 |    }                                     | True                      | 
+ 228 |   }                                      | True                      | 
+ 229 |                                          | True                      | 
+ 230 |   /* NB: OPT_INVERT is always 0 or 1 */  | True                      | 
+ 231 |   if (match ^ OPT_INVERT) {              | True                      | 
+ 232 |  got_it:                                 | True                      | 
+ 233 |    matched_pid = proc->pid;              | True                      | 
+ 234 |    if (OPT_LAST) {                       | True                      | 
+ 235 |     free(cmd_last);                      | True                      | 
+ 236 |     cmd_last = xstrdup(cmd);             | True                      | 
+ 237 |     continue;                            | True                      | 
+ 238 |    }                                     | True                      | 
+ 239 |    if (cmdlen >= 0)                      | True                      | 
+ 240 |     cmd[cmdlen] = '\0';                  | True                      | 
+ 241 |    act(proc->pid, cmd, signo);           | True                      | 
+ 242 |    if (OPT_FIRST)                        | True                      | 
+ 243 |     break;                               | True                      | 
+ 244 |   }                                      | True                      | 
+ 245 |  }                                       | True                      | 
+ 246 |                                          | True                      | 
+ 247 |  if (cmd_last) {                         | True                      | 
+ 248 |   act(matched_pid, cmd_last, signo);     | True                      | 
+ 249 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                      | 
+ 250 |    free(cmd_last);                       | True                      | 
+ 251 |  }                                       | True                      | 
+ 252 |  return matched_pid == 0; /* return 1 if | True                      | 
+ 253 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +108MB, 239ms             | 

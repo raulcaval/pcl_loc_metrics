@@ -1,0 +1,357 @@
+FILE: data/raw/busybox-1.38.0/coreutils/echo.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                             | 
+-----+------------------------------------------+---------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                              | 
+   2 | /*                                       | True                                              | 
+   3 |  * echo implementation for busybox       | True                                              | 
+   4 |  *                                       | True                                              | 
+   5 |  * Copyright (c) 1991, 1993              | True                                              | 
+   6 |  * The Regents of the University of Cali | True                                              | 
+   7 |  *                                       | True                                              | 
+   8 |  * Licensed under GPLv2 or later, see fi | True                                              | 
+   9 |  *                                       | True                                              | 
+  10 |  * Original copyright notice is retained | True                                              | 
+  11 |  */                                      | True                                              | 
+  12 | /* Mar 16, 2003      Manuel Novoa III    | True                                              | 
+  13 |  *                                       | True                                              | 
+  14 |  * Because of behavioral differences, im | True                                              | 
+  15 |  * or 'fancy' gnu-ish behaviors.  Also,  | True                                              | 
+  16 |  * 1) In handling '\c' escape, the previ | True                                              | 
+  17 |  *     trailing newline.  SUSv3 specifie | True                                              | 
+  18 |  * 2) SUSv3 specifies that octal escapes | True                                              | 
+  19 |  *    The previous version did not allow | True                                              | 
+  20 |  */                                      | True                                              | 
+  21 | //config:config ECHO                     | True                                              | 
+  22 | //config: bool "echo (2 kb)"             | True                                              | 
+  23 | //config: default y                      | True                                              | 
+  24 | //config: help                           | True                                              | 
+  25 | //config: echo prints a specified string | True                                              | 
+  26 | //config:                                | True                                              | 
+  27 | //config:# this entry also appears in sh | True                                              | 
+  28 | //config:config FEATURE_FANCY_ECHO       | True                                              | 
+  29 | //config: bool "Enable -n and -e options | True                                              | 
+  30 | //config: default y                      | True                                              | 
+  31 | //config: depends on ECHO || ASH_ECHO || | True                                              | 
+  32 |                                          | True                                              | 
+  33 | //applet:IF_ECHO(APPLET_NOFORK(echo, ech | True                                              | 
+  34 |                                          | True                                              | 
+  35 | //kbuild:lib-$(CONFIG_ECHO) += echo.o    | True                                              | 
+  36 |                                          | True                                              | 
+  37 | //kbuild:lib-$(CONFIG_ASH_ECHO)  += echo | True                                              | 
+  38 | //kbuild:lib-$(CONFIG_HUSH_ECHO) += echo | True                                              | 
+  39 |                                          | True                                              | 
+  40 | /* BB_AUDIT SUSv3 compliant -- unless co | True                                              | 
+  41 | /* http://www.opengroup.org/onlinepubs/0 | True                                              | 
+  42 |                                          | True                                              | 
+  43 | //usage:#define echo_trivial_usage       | True                                              | 
+  44 | //usage: IF_FEATURE_FANCY_ECHO("[-neE] " | True                                              | 
+  45 | //usage:#define echo_full_usage "\n\n"   | True                                              | 
+  46 | //usage:       "Print ARGs to stdout"    | True                                              | 
+  47 | //usage: IF_FEATURE_FANCY_ECHO( "\n"     | True                                              | 
+  48 | //usage:     "\n -n No trailing newline" | True                                              | 
+  49 | //usage:     "\n -e Interpret backslash  | True                                              | 
+  50 | //usage:     "\n -E Don't interpret back | True                                              | 
+  51 | //usage: )                               | True                                              | 
+  52 | //usage:                                 | True                                              | 
+  53 | //usage:#define echo_example_usage       | True                                              | 
+  54 | //usage:       "$ echo \"Erik is cool\"\ | True                                              | 
+  55 | //usage:       "Erik is cool\n"          | True                                              | 
+  56 | //usage: IF_FEATURE_FANCY_ECHO("$ echo - | True                                              | 
+  57 | //usage:       "Erik\n"                  | True                                              | 
+  58 | //usage:       "is\n"                    | True                                              | 
+  59 | //usage:       "cool\n"                  | True                                              | 
+  60 | //usage:       "$ echo \"Erik\\nis\\ncoo | True                                              | 
+  61 | //usage:       "Erik\\nis\\ncool\n")     | True                                              | 
+  62 |                                          | True                                              | 
+  63 | #include "libbb.h"                       | True                                              | 
+  64 |                                          | True                                              | 
+  65 | /* This is a NOFORK applet. Be very care | True                                              | 
+  66 |                                          | True                                              | 
+  67 | /* NB: can be used by shell even if not  | True                                              | 
+  68 |                                          | True                                              | 
+  69 | /*                                       | True                                              | 
+  70 |  * NB2: we don't use stdio, we need bett | True                                              | 
+  71 |  * Examples include writing into non-ope | True                                              | 
+  72 |  *                                       | True                                              | 
+  73 |  * With stdio, output gets shoveled into | True                                              | 
+  74 |  * fflush cannot clear it out. It seems  | True                                              | 
+  75 |  * EBADF on write attempts, it feels det | True                                              | 
+  76 |  * If echo is called by shell, it will t | True                                              | 
+  77 |  * will clobber future output. Not good. | True                                              | 
+  78 |  *                                       | True                                              | 
+  79 |  * Solaris has fpurge which discards buf | True                                              | 
+  80 |  * But this function is not standard.    | True                                              | 
+  81 |  */                                      | True                                              | 
+  82 |                                          | True                                              | 
+  83 | int echo_main(int argc UNUSED_PARAM, cha | True                                              | 
+  84 | {                                        | True                                              | 
+  85 |  char **pp;                              | True                                              | 
+  86 |  const char *arg;                        | True                                              | 
+  87 |  char *out;                              | True                                              | 
+  88 |  char *buffer;                           | True                                              | 
+  89 |  unsigned buflen;                        | True                                              | 
+  90 |  int err;                                | True                                              | 
+  91 | #if !ENABLE_FEATURE_FANCY_ECHO           | True                                              | 
+  92 |  enum {                                  | !ENABLE_FEATURE_FANCY_ECHO                        | 
+  93 |   eflag = 0,  /* 0 -- disable escape seq | !ENABLE_FEATURE_FANCY_ECHO                        | 
+  94 |   nflag = 1,  /* 1 -- print '\n' */      | !ENABLE_FEATURE_FANCY_ECHO                        | 
+  95 |  };                                      | !ENABLE_FEATURE_FANCY_ECHO                        | 
+  96 |                                          | !ENABLE_FEATURE_FANCY_ECHO                        | 
+  97 |  argv++;                                 | !ENABLE_FEATURE_FANCY_ECHO                        | 
+  98 | #else                                    | True                                              | 
+  99 |  char nflag = 1;                         | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 100 |  char eflag = 0;                         | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 101 |                                          | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 102 |  while ((arg = *++argv) != NULL) {       | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 103 |   char n, e;                             | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 104 |                                          | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 105 |   if (arg[0] != '-')                     | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 106 |    break; /* not an option arg, echo it  | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 107 |                                          | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 108 |   /* If it appears that we are handling  | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 109 |    * that all of the options specified a | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 110 |    * Otherwise, the string should just b | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 111 |    */                                    | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 112 |   arg++;                                 | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 113 |   n = nflag;                             | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 114 |   e = eflag;                             | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 115 |   do {                                   | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 116 |    if (*arg == 'n')                      | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 117 |     n = 0;                               | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 118 |    else if (*arg == 'e')                 | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 119 |     e = '\\';                            | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 120 |    else if (*arg != 'E') {               | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 121 |     /* "-ccc" arg with one of c's invali | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 122 |     /* arg consisting from just "-" also | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 123 |     goto just_echo;                      | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 124 |    }                                     | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 125 |   } while (*++arg);                      | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 126 |   nflag = n;                             | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 127 |   eflag = e;                             | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 128 |  }                                       | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 129 |  just_echo:                              | ENABLE_FEATURE_FANCY_ECHO                         | 
+ 130 | #endif                                   | True                                              | 
+ 131 |                                          | True                                              | 
+ 132 |  buflen = 0;                             | True                                              | 
+ 133 |  pp = argv;                              | True                                              | 
+ 134 |  while ((arg = *pp) != NULL) {           | True                                              | 
+ 135 |   buflen += strlen(arg) + 1;             | True                                              | 
+ 136 |   pp++;                                  | True                                              | 
+ 137 |  }                                       | True                                              | 
+ 138 |  out = buffer = xmalloc(buflen + 1); /*  | True                                              | 
+ 139 |                                          | True                                              | 
+ 140 |  while ((arg = *argv) != NULL) {         | True                                              | 
+ 141 |   int c;                                 | True                                              | 
+ 142 |                                          | True                                              | 
+ 143 |   if (!eflag) {                          | True                                              | 
+ 144 |    /* optimization for very common case  | True                                              | 
+ 145 |    out = stpcpy(out, arg);               | True                                              | 
+ 146 |   } else                                 | True                                              | 
+ 147 |   while ((c = *arg++) != '\0') {         | True                                              | 
+ 148 |    if (c == eflag) {                     | True                                              | 
+ 149 |     /* This is an "\x" sequence */       | True                                              | 
+ 150 |                                          | True                                              | 
+ 151 |     if (*arg == 'c') {                   | True                                              | 
+ 152 |      /* "\c" means cancel newline and    | True                                              | 
+ 153 |       * ignore all subsequent chars. */  | True                                              | 
+ 154 |      goto do_write;                      | True                                              | 
+ 155 |     }                                    | True                                              | 
+ 156 |     /* Since SUSv3 mandates a first digi | True                                              | 
+ 157 |     * of the form \0### are accepted. */ | True                                              | 
+ 158 |     if (*arg == '0') {                   | True                                              | 
+ 159 |      if ((unsigned char)(arg[1] - '0') < | True                                              | 
+ 160 |       /* 2nd char is 0..7: skip leading  | True                                              | 
+ 161 |       arg++;                             | True                                              | 
+ 162 |      }                                   | True                                              | 
+ 163 |     }                                    | True                                              | 
+ 164 |     /* bb_process_escape_sequence handle | True                                              | 
+ 165 |      * ("...\" case). */                 | True                                              | 
+ 166 |     {                                    | True                                              | 
+ 167 |      /* optimization: don't force arg to | True                                              | 
+ 168 |       * use another variable for that. ~ | True                                              | 
+ 169 |      const char *z = arg;                | True                                              | 
+ 170 |      c = bb_process_escape_sequence(&z); | True                                              | 
+ 171 |      arg = z;                            | True                                              | 
+ 172 |     }                                    | True                                              | 
+ 173 |    }                                     | True                                              | 
+ 174 |    *out++ = c;                           | True                                              | 
+ 175 |   }                                      | True                                              | 
+ 176 |                                          | True                                              | 
+ 177 |   if (!*++argv)                          | True                                              | 
+ 178 |    break;                                | True                                              | 
+ 179 |   *out++ = ' ';                          | True                                              | 
+ 180 |  }                                       | True                                              | 
+ 181 |                                          | True                                              | 
+ 182 |  if (nflag) {                            | True                                              | 
+ 183 |   *out++ = '\n';                         | True                                              | 
+ 184 |  }                                       | True                                              | 
+ 185 |                                          | True                                              | 
+ 186 |  do_write:                               | True                                              | 
+ 187 |  /* Careful to error out on partial writ | True                                              | 
+ 188 |  errno = 0;                              | True                                              | 
+ 189 |  err = full_write(STDOUT_FILENO, buffer, | True                                              | 
+ 190 |  if (err) {                              | True                                              | 
+ 191 |   bb_simple_perror_msg(bb_msg_write_erro | True                                              | 
+ 192 |  }                                       | True                                              | 
+ 193 |  free(buffer);                           | True                                              | 
+ 194 |  return err;                             | True                                              | 
+ 195 | }                                        | True                                              | 
+ 196 |                                          | True                                              | 
+ 197 | /*                                       | True                                              | 
+ 198 |  * Copyright (c) 1991, 1993              | True                                              | 
+ 199 |  * The Regents of the University of Cali | True                                              | 
+ 200 |  *                                       | True                                              | 
+ 201 |  * This code is derived from software co | True                                              | 
+ 202 |  * Kenneth Almquist.                     | True                                              | 
+ 203 |  *                                       | True                                              | 
+ 204 |  * Redistribution and use in source and  | True                                              | 
+ 205 |  * modification, are permitted provided  | True                                              | 
+ 206 |  * are met:                              | True                                              | 
+ 207 |  * 1. Redistributions of source code mus | True                                              | 
+ 208 |  *    notice, this list of conditions an | True                                              | 
+ 209 |  * 2. Redistributions in binary form mus | True                                              | 
+ 210 |  *    notice, this list of conditions an | True                                              | 
+ 211 |  *    documentation and/or other materia | True                                              | 
+ 212 |  *                                       | True                                              | 
+ 213 |  * 3. <BSD Advertising Clause omitted pe | True                                              | 
+ 214 |  *  ftp://ftp.cs.berkeley.edu/pub/4bsd/R | True                                              | 
+ 215 |  *                                       | True                                              | 
+ 216 |  * California, Berkeley and its contribu | True                                              | 
+ 217 |  * 4. Neither the name of the University | True                                              | 
+ 218 |  *    may be used to endorse or promote  | True                                              | 
+ 219 |  *    without specific prior written per | True                                              | 
+ 220 |  *                                       | True                                              | 
+ 221 |  * THIS SOFTWARE IS PROVIDED BY THE REGE | True                                              | 
+ 222 |  * ANY EXPRESS OR IMPLIED WARRANTIES, IN | True                                              | 
+ 223 |  * IMPLIED WARRANTIES OF MERCHANTABILITY | True                                              | 
+ 224 |  * ARE DISCLAIMED.  IN NO EVENT SHALL TH | True                                              | 
+ 225 |  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, | True                                              | 
+ 226 |  * DAMAGES (INCLUDING, BUT NOT LIMITED T | True                                              | 
+ 227 |  * OR SERVICES; LOSS OF USE, DATA, OR PR | True                                              | 
+ 228 |  * HOWEVER CAUSED AND ON ANY THEORY OF L | True                                              | 
+ 229 |  * LIABILITY, OR TORT (INCLUDING NEGLIGE | True                                              | 
+ 230 |  * OUT OF THE USE OF THIS SOFTWARE, EVEN | True                                              | 
+ 231 |  * SUCH DAMAGE.                          | True                                              | 
+ 232 |  *                                       | True                                              | 
+ 233 |  * @(#)echo.c 8.1 (Berkeley) 5/31/93     | True                                              | 
+ 234 |  */                                      | True                                              | 
+ 235 |                                          | True                                              | 
+ 236 | #ifdef VERSION_WITH_WRITEV               | True                                              | 
+ 237 | /* We can't use stdio.                   | (VERSION_WITH_WRITEV)                             | 
+ 238 |  * The reason for this is highly non-obv | (VERSION_WITH_WRITEV)                             | 
+ 239 |  * echo_main is used from shell. Shell m | (VERSION_WITH_WRITEV)                             | 
+ 240 |  * if stdout is closed. With stdio, outp | (VERSION_WITH_WRITEV)                             | 
+ 241 |  * stdout buffer, and even fflush cannot | (VERSION_WITH_WRITEV)                             | 
+ 242 |  * even if libc receives EBADF on write  | (VERSION_WITH_WRITEV)                             | 
+ 243 |  * to output data no matter what. So it  | (VERSION_WITH_WRITEV)                             | 
+ 244 |  * and possibly will clobber future outp | (VERSION_WITH_WRITEV)                             | 
+ 245 |  *                                       | (VERSION_WITH_WRITEV)                             | 
+ 246 |  * Using writev instead, with 'direct' c | (VERSION_WITH_WRITEV)                             | 
+ 247 |  */                                      | (VERSION_WITH_WRITEV)                             | 
+ 248 |                                          | (VERSION_WITH_WRITEV)                             | 
+ 249 | int echo_main(int argc, char **argv)     | (VERSION_WITH_WRITEV)                             | 
+ 250 | {                                        | (VERSION_WITH_WRITEV)                             | 
+ 251 |  struct iovec io[argc];                  | (VERSION_WITH_WRITEV)                             | 
+ 252 |  struct iovec *cur_io = io;              | (VERSION_WITH_WRITEV)                             | 
+ 253 |  char *arg;                              | (VERSION_WITH_WRITEV)                             | 
+ 254 |  char *p;                                | (VERSION_WITH_WRITEV)                             | 
+ 255 | #if !ENABLE_FEATURE_FANCY_ECHO           | (VERSION_WITH_WRITEV)                             | 
+ 256 |  enum {                                  | !ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV) | 
+ 257 |   eflag = '\\',                          | !ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV) | 
+ 258 |   nflag = 1,  /* 1 -- print '\n' */      | !ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV) | 
+ 259 |  };                                      | !ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV) | 
+ 260 |  arg = *++argv;                          | !ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV) | 
+ 261 |  if (!arg)                               | !ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV) | 
+ 262 |   goto newline_ret;                      | !ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV) | 
+ 263 | #else                                    | (VERSION_WITH_WRITEV)                             | 
+ 264 |  char nflag = 1;                         | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 265 |  char eflag = 0;                         | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 266 |                                          | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 267 |  while (1) {                             | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 268 |   arg = *++argv;                         | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 269 |   if (!arg)                              | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 270 |    goto newline_ret;                     | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 271 |   if (*arg != '-')                       | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 272 |    break;                                | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 273 |                                          | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 274 |   /* If it appears that we are handling  | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 275 |    * that all of the options specified a | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 276 |    * Otherwise, the string should just b | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 277 |    */                                    | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 278 |   p = arg + 1;                           | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 279 |   if (!*p) /* A single '-', so echo it.  | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 280 |    goto just_echo;                       | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 281 |                                          | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 282 |   do {                                   | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 283 |    if (!strchr("neE", *p))               | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 284 |     goto just_echo;                      | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 285 |   } while (*++p);                        | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 286 |                                          | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 287 |   /* All of the options in this arg are  | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 288 |   p = arg + 1;                           | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 289 |   do {                                   | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 290 |    if (*p == 'n')                        | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 291 |     nflag = 0;                           | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 292 |    if (*p == 'e')                        | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 293 |     eflag = '\\';                        | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 294 |   } while (*++p);                        | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 295 |  }                                       | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 296 |  just_echo:                              | ENABLE_FEATURE_FANCY_ECHO&&(VERSION_WITH_WRITEV)  | 
+ 297 | #endif                                   | (VERSION_WITH_WRITEV)                             | 
+ 298 |                                          | (VERSION_WITH_WRITEV)                             | 
+ 299 |  while (1) {                             | (VERSION_WITH_WRITEV)                             | 
+ 300 |   /* arg is already == *argv and isn't N | (VERSION_WITH_WRITEV)                             | 
+ 301 |   int c;                                 | (VERSION_WITH_WRITEV)                             | 
+ 302 |                                          | (VERSION_WITH_WRITEV)                             | 
+ 303 |   cur_io->iov_base = p = arg;            | (VERSION_WITH_WRITEV)                             | 
+ 304 |                                          | (VERSION_WITH_WRITEV)                             | 
+ 305 |   if (!eflag) {                          | (VERSION_WITH_WRITEV)                             | 
+ 306 |    /* optimization for very common case  | (VERSION_WITH_WRITEV)                             | 
+ 307 |    p += strlen(arg);                     | (VERSION_WITH_WRITEV)                             | 
+ 308 |   } else while ((c = *arg++)) {          | (VERSION_WITH_WRITEV)                             | 
+ 309 |    if (c == eflag) {                     | (VERSION_WITH_WRITEV)                             | 
+ 310 |     /* This is an "\x" sequence */       | (VERSION_WITH_WRITEV)                             | 
+ 311 |                                          | (VERSION_WITH_WRITEV)                             | 
+ 312 |     if (*arg == 'c') {                   | (VERSION_WITH_WRITEV)                             | 
+ 313 |      /* "\c" means cancel newline and    | (VERSION_WITH_WRITEV)                             | 
+ 314 |       * ignore all subsequent chars. */  | (VERSION_WITH_WRITEV)                             | 
+ 315 |      cur_io->iov_len = p - (char*)cur_io | (VERSION_WITH_WRITEV)                             | 
+ 316 |      cur_io++;                           | (VERSION_WITH_WRITEV)                             | 
+ 317 |      goto ret;                           | (VERSION_WITH_WRITEV)                             | 
+ 318 |     }                                    | (VERSION_WITH_WRITEV)                             | 
+ 319 |     /* Since SUSv3 mandates a first digi | (VERSION_WITH_WRITEV)                             | 
+ 320 |     * of the form \0### are accepted. */ | (VERSION_WITH_WRITEV)                             | 
+ 321 |     if (*arg == '0' && (unsigned char)(a | (VERSION_WITH_WRITEV)                             | 
+ 322 |      arg++;                              | (VERSION_WITH_WRITEV)                             | 
+ 323 |     }                                    | (VERSION_WITH_WRITEV)                             | 
+ 324 | //FIXME? we also accept non-0 starting s | (VERSION_WITH_WRITEV)                             | 
+ 325 | // echo -ne '-\41-' prints "-!-". bash 5 | (VERSION_WITH_WRITEV)                             | 
+ 326 |     /* bb_process_escape_sequence can ha | (VERSION_WITH_WRITEV)                             | 
+ 327 |     c = bb_process_escape_sequence( (voi | (VERSION_WITH_WRITEV)                             | 
+ 328 |    }                                     | (VERSION_WITH_WRITEV)                             | 
+ 329 |    *p++ = c;                             | (VERSION_WITH_WRITEV)                             | 
+ 330 |   }                                      | (VERSION_WITH_WRITEV)                             | 
+ 331 |                                          | (VERSION_WITH_WRITEV)                             | 
+ 332 |   arg = *++argv;                         | (VERSION_WITH_WRITEV)                             | 
+ 333 |   if (arg)                               | (VERSION_WITH_WRITEV)                             | 
+ 334 |    *p++ = ' ';                           | (VERSION_WITH_WRITEV)                             | 
+ 335 |   cur_io->iov_len = p - (char*)cur_io->i | (VERSION_WITH_WRITEV)                             | 
+ 336 |   cur_io++;                              | (VERSION_WITH_WRITEV)                             | 
+ 337 |   if (!arg)                              | (VERSION_WITH_WRITEV)                             | 
+ 338 |    break;                                | (VERSION_WITH_WRITEV)                             | 
+ 339 |  }                                       | (VERSION_WITH_WRITEV)                             | 
+ 340 |                                          | (VERSION_WITH_WRITEV)                             | 
+ 341 |  newline_ret:                            | (VERSION_WITH_WRITEV)                             | 
+ 342 |  if (nflag) {                            | (VERSION_WITH_WRITEV)                             | 
+ 343 |   cur_io->iov_base = (char*)"\n";        | (VERSION_WITH_WRITEV)                             | 
+ 344 |   cur_io->iov_len = 1;                   | (VERSION_WITH_WRITEV)                             | 
+ 345 |   cur_io++;                              | (VERSION_WITH_WRITEV)                             | 
+ 346 |  }                                       | (VERSION_WITH_WRITEV)                             | 
+ 347 |  ret:                                    | (VERSION_WITH_WRITEV)                             | 
+ 348 |  /* TODO: implement and use full_writev? | (VERSION_WITH_WRITEV)                             | 
+ 349 |  return writev(1, io, (cur_io - io)) >=  | (VERSION_WITH_WRITEV)                             | 
+ 350 | }                                        | (VERSION_WITH_WRITEV)                             | 
+ 351 | #endif                                   | True                                              | 
+-----+------------------------------------------+---------------------------------------------------+
+     |                                          | +109MB, 246ms                                     | 

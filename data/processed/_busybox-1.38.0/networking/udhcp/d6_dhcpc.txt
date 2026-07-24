@@ -1,0 +1,1951 @@
+FILE: data/raw/busybox-1.38.0/networking/udhcp/d6_dhcpc.c
+Resultado PCLocator:
+   # | line of code                             | Merge                          | 
+-----+------------------------------------------+--------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                           | 
+   2 | /*                                       | True                           | 
+   3 |  * DHCPv6 client.                        | True                           | 
+   4 |  *                                       | True                           | 
+   5 |  * Copyright (C) 2011-2017 Denys Vlasenk | True                           | 
+   6 |  *                                       | True                           | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                           | 
+   8 |  */                                      | True                           | 
+   9 | //config:config UDHCPC6                  | True                           | 
+  10 | //config: bool "udhcpc6 (21 kb)"         | True                           | 
+  11 | //config: default y                      | True                           | 
+  12 | //config: depends on FEATURE_IPV6        | True                           | 
+  13 | //config: help                           | True                           | 
+  14 | //config: udhcpc6 is a DHCPv6 client     | True                           | 
+  15 | //config:                                | True                           | 
+  16 | //config:config FEATURE_UDHCPC6_RFC3646  | True                           | 
+  17 | //config: bool "Support RFC 3646 (DNS se | True                           | 
+  18 | //config: default y                      | True                           | 
+  19 | //config: depends on UDHCPC6             | True                           | 
+  20 | //config: help                           | True                           | 
+  21 | //config: List of DNS servers and domain | True                           | 
+  22 | //config: "-O dns" and "-O search". If s | True                           | 
+  23 | //config: they will be set in environmen | True                           | 
+  24 | //config:                                | True                           | 
+  25 | //config:config FEATURE_UDHCPC6_RFC4704  | True                           | 
+  26 | //config: bool "Support RFC 4704 (Client | True                           | 
+  27 | //config: default y                      | True                           | 
+  28 | //config: depends on UDHCPC6             | True                           | 
+  29 | //config: help                           | True                           | 
+  30 | //config: You can request FQDN to be giv | True                           | 
+  31 | //config:                                | True                           | 
+  32 | //config:config FEATURE_UDHCPC6_RFC4833  | True                           | 
+  33 | //config: bool "Support RFC 4833 (Timezo | True                           | 
+  34 | //config: default y                      | True                           | 
+  35 | //config: depends on UDHCPC6             | True                           | 
+  36 | //config: help                           | True                           | 
+  37 | //config: You can request POSIX timezone | True                           | 
+  38 | //config: with "-O timezone".            | True                           | 
+  39 | //config:                                | True                           | 
+  40 | //config:config FEATURE_UDHCPC6_RFC5970  | True                           | 
+  41 | //config: bool "Support RFC 5970 (Networ | True                           | 
+  42 | //config: default y                      | True                           | 
+  43 | //config: depends on UDHCPC6             | True                           | 
+  44 | //config: help                           | True                           | 
+  45 | //config: You can request bootfile-url w | True                           | 
+  46 | //config: bootfile-params with "-O bootf | True                           | 
+  47 |                                          | True                           | 
+  48 | //applet:IF_UDHCPC6(APPLET(udhcpc6, BB_D | True                           | 
+  49 |                                          | True                           | 
+  50 | //kbuild:lib-$(CONFIG_UDHCPC6) += d6_dhc | True                           | 
+  51 | //kbuild:lib-$(CONFIG_FEATURE_UDHCPC6_RF | True                           | 
+  52 | //kbuild:lib-$(CONFIG_FEATURE_UDHCPC6_RF | True                           | 
+  53 |                                          | True                           | 
+  54 | #include <syslog.h>                      | True                           | 
+  55 | /* Override ENABLE_FEATURE_PIDFILE - ifu | True                           | 
+  56 | #define WANT_PIDFILE 1                   | True                           | 
+  57 | #include "common.h"                      | True                           | 
+  58 | #include "dhcpd.h"                       | True                           | 
+  59 | #include "dhcpc.h"                       | True                           | 
+  60 | #include "d6_common.h"                   | True                           | 
+  61 |                                          | True                           | 
+  62 | #include <netinet/if_ether.h>            | True                           | 
+  63 | #include <netpacket/packet.h>            | True                           | 
+  64 | #include <linux/filter.h>                | True                           | 
+  65 |                                          | True                           | 
+  66 | /* "struct client_data_t client_data" is | True                           | 
+  67 |                                          | True                           | 
+  68 | static const struct dhcp_optflag d6_optf | True                           | 
+  69 | #if ENABLE_FEATURE_UDHCPC6_RFC3646       | True                           | 
+  70 |  { OPTION_6RD | OPTION_LIST        | OPT | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+  71 |  { OPTION_DNS_STRING | OPTION_LIST | OPT | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+  72 | #endif                                   | True                           | 
+  73 | #if ENABLE_FEATURE_UDHCPC6_RFC4704       | True                           | 
+  74 |  { OPTION_DNS_STRING,                    | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+  75 | #endif                                   | True                           | 
+  76 | #if ENABLE_FEATURE_UDHCPC6_RFC4833       | True                           | 
+  77 |  { OPTION_STRING,                        | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+  78 |  { OPTION_STRING,                        | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+  79 | #endif                                   | True                           | 
+  80 | #if ENABLE_FEATURE_UDHCPC6_RFC5970       | True                           | 
+  81 |  { OPTION_STRING,                        | ENABLE_FEATURE_UDHCPC6_RFC5970 | 
+  82 |  { OPTION_STRING,                        | ENABLE_FEATURE_UDHCPC6_RFC5970 | 
+  83 | #endif                                   | True                           | 
+  84 |  { OPTION_STRING,                        | True                           | 
+  85 |  { OPTION_STRING,                        | True                           | 
+  86 |  { 0, 0 }                                | True                           | 
+  87 | };                                       | True                           | 
+  88 | /* Must match d6_optflags[] order */     | True                           | 
+  89 | static const char d6_option_strings[] AL | True                           | 
+  90 | #if ENABLE_FEATURE_UDHCPC6_RFC3646       | True                           | 
+  91 |  "dns" "\0"      /* D6_OPT_DNS_SERVERS * | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+  92 |  "search" "\0"   /* D6_OPT_DOMAIN_LIST * | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+  93 | #endif                                   | True                           | 
+  94 | #if ENABLE_FEATURE_UDHCPC6_RFC4704       | True                           | 
+  95 |  "fqdn" "\0"     /* D6_OPT_CLIENT_FQDN * | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+  96 | #endif                                   | True                           | 
+  97 | #if ENABLE_FEATURE_UDHCPC6_RFC4833       | True                           | 
+  98 |  "tz" "\0"       /* D6_OPT_TZ_POSIX */   | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+  99 |  "timezone" "\0" /* D6_OPT_TZ_NAME */    | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+ 100 | #endif                                   | True                           | 
+ 101 | #if ENABLE_FEATURE_UDHCPC6_RFC5970       | True                           | 
+ 102 |  "bootfile_url" "\0" /* D6_OPT_BOOT_URL  | ENABLE_FEATURE_UDHCPC6_RFC5970 | 
+ 103 |  "bootfile_param" "\0" /* D6_OPT_BOOT_PA | ENABLE_FEATURE_UDHCPC6_RFC5970 | 
+ 104 | #endif                                   | True                           | 
+ 105 |  "pxeconffile" "\0" /* DHCP_PXE_CONF_FIL | True                           | 
+ 106 |  "pxepathprefix" "\0" /* DHCP_PXE_PATH_P | True                           | 
+ 107 |  "\0";                                   | True                           | 
+ 108 |                                          | True                           | 
+ 109 | #if ENABLE_LONG_OPTS                     | True                           | 
+ 110 | static const char udhcpc6_longopts[] ALI | ENABLE_LONG_OPTS               | 
+ 111 |  "interface\0"      Required_argument "i | ENABLE_LONG_OPTS               | 
+ 112 |  "now\0"            No_argument       "n | ENABLE_LONG_OPTS               | 
+ 113 |  "pidfile\0"        Required_argument "p | ENABLE_LONG_OPTS               | 
+ 114 |  "quit\0"           No_argument       "q | ENABLE_LONG_OPTS               | 
+ 115 |  "release\0"        No_argument       "R | ENABLE_LONG_OPTS               | 
+ 116 |  "request\0"        Required_argument "r | ENABLE_LONG_OPTS               | 
+ 117 |  "requestprefix\0"  No_argument       "d | ENABLE_LONG_OPTS               | 
+ 118 |  "script\0"         Required_argument "s | ENABLE_LONG_OPTS               | 
+ 119 |  "timeout\0"        Required_argument "T | ENABLE_LONG_OPTS               | 
+ 120 |  "retries\0"        Required_argument "t | ENABLE_LONG_OPTS               | 
+ 121 |  "tryagain\0"       Required_argument "A | ENABLE_LONG_OPTS               | 
+ 122 |  "syslog\0"         No_argument       "S | ENABLE_LONG_OPTS               | 
+ 123 |  "request-option\0" Required_argument "O | ENABLE_LONG_OPTS               | 
+ 124 |  "no-default-options\0" No_argument   "o | ENABLE_LONG_OPTS               | 
+ 125 |  "foreground\0"     No_argument       "f | ENABLE_LONG_OPTS               | 
+ 126 |  "stateless\0"      No_argument       "l | ENABLE_LONG_OPTS               | 
+ 127 |  USE_FOR_MMU(                            | ENABLE_LONG_OPTS               | 
+ 128 |  "background\0"     No_argument       "b | ENABLE_LONG_OPTS               | 
+ 129 |  )                                       | ENABLE_LONG_OPTS               | 
+ 130 | /// IF_FEATURE_UDHCPC_ARPING("arping\0"  | ENABLE_LONG_OPTS               | 
+ 131 |  IF_FEATURE_UDHCP_PORT("client-port\0" R | ENABLE_LONG_OPTS               | 
+ 132 |  ;                                       | ENABLE_LONG_OPTS               | 
+ 133 | #endif                                   | True                           | 
+ 134 | /* Must match getopt32 option string ord | True                           | 
+ 135 | enum {                                   | True                           | 
+ 136 |  OPT_i = 1 << 0,                         | True                           | 
+ 137 |  OPT_n = 1 << 1,                         | True                           | 
+ 138 |  OPT_p = 1 << 2,                         | True                           | 
+ 139 |  OPT_q = 1 << 3,                         | True                           | 
+ 140 |  OPT_R = 1 << 4,                         | True                           | 
+ 141 |  OPT_r = 1 << 5,                         | True                           | 
+ 142 |  OPT_s = 1 << 6,                         | True                           | 
+ 143 |  OPT_T = 1 << 7,                         | True                           | 
+ 144 |  OPT_t = 1 << 8,                         | True                           | 
+ 145 |  OPT_S = 1 << 9,                         | True                           | 
+ 146 |  OPT_A = 1 << 10,                        | True                           | 
+ 147 |  OPT_O = 1 << 11,                        | True                           | 
+ 148 |  OPT_o = 1 << 12,                        | True                           | 
+ 149 |  OPT_x = 1 << 13,                        | True                           | 
+ 150 |  OPT_f = 1 << 14,                        | True                           | 
+ 151 |  OPT_m = 1 << 15,                        | True                           | 
+ 152 |  OPT_l = 1 << 16,                        | True                           | 
+ 153 |  OPT_d = 1 << 17,                        | True                           | 
+ 154 | /* The rest has variable bit positions,  | True                           | 
+ 155 |  OPTBIT_d = 17,                          | True                           | 
+ 156 |  USE_FOR_MMU(             OPTBIT_b,)     | True                           | 
+ 157 |  ///IF_FEATURE_UDHCPC_ARPING(OPTBIT_a,)  | True                           | 
+ 158 |  IF_FEATURE_UDHCP_PORT(   OPTBIT_P,)     | True                           | 
+ 159 |  USE_FOR_MMU(             OPT_b = 1 << O | True                           | 
+ 160 |  ///IF_FEATURE_UDHCPC_ARPING(OPT_a = 1 < | True                           | 
+ 161 |  IF_FEATURE_UDHCP_PORT(   OPT_P = 1 << O | True                           | 
+ 162 | };                                       | True                           | 
+ 163 |                                          | True                           | 
+ 164 | #if ENABLE_FEATURE_UDHCPC6_RFC4704       | True                           | 
+ 165 | static const char opt_fqdn_req[] = {     | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 166 |  (D6_OPT_CLIENT_FQDN >> 8), (D6_OPT_CLIE | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 167 |  0, 2, /* optlen */                      | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 168 |  0, /* flags: */                         | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 169 |  /* S=0: server SHOULD NOT perform AAAA  | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 170 |  /* O=0: client MUST set this bit to 0 * | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 171 |  /* N=0: server SHOULD perform updates ( | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 172 |  0 /* empty DNS-encoded name */          | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 173 | };                                       | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 174 | #endif                                   | True                           | 
+ 175 |                                          | True                           | 
+ 176 | /*** Utility functions ***/              | True                           | 
+ 177 |                                          | True                           | 
+ 178 | static void *d6_find_option(uint8_t *opt | True                           | 
+ 179 | {                                        | True                           | 
+ 180 |  /* "length minus 4" */                  | True                           | 
+ 181 |  int len_m4 = option_end - option - 4;   | True                           | 
+ 182 |  while (len_m4 >= 0) {                   | True                           | 
+ 183 |   /* Next option's len is too big? */    | True                           | 
+ 184 |   if (option[3] > len_m4)                | True                           | 
+ 185 |    return NULL; /* yes. bogus packet! */ | True                           | 
+ 186 |   /* So far we treat any opts with code  | True                           | 
+ 187 |    * or len >255 as bogus, and stop at o | True                           | 
+ 188 |    * This simplifies big-endian handling | True                           | 
+ 189 |    */                                    | True                           | 
+ 190 |   if (option[0] != 0 || option[2] != 0)  | True                           | 
+ 191 |    return NULL;                          | True                           | 
+ 192 |   /* Option seems to be valid */         | True                           | 
+ 193 |   /* Does its code match? */             | True                           | 
+ 194 |   if (option[1] == code)                 | True                           | 
+ 195 |    return option; /* yes! */             | True                           | 
+ 196 |   len_m4 -= option[3] + 4;               | True                           | 
+ 197 |   option += option[3] + 4;               | True                           | 
+ 198 |  }                                       | True                           | 
+ 199 |  return NULL;                            | True                           | 
+ 200 | }                                        | True                           | 
+ 201 |                                          | True                           | 
+ 202 | static void *d6_copy_option(uint8_t *opt | True                           | 
+ 203 | {                                        | True                           | 
+ 204 |  uint8_t *opt = d6_find_option(option, o | True                           | 
+ 205 |  if (!opt)                               | True                           | 
+ 206 |   return opt;                            | True                           | 
+ 207 |  return xmemdup(opt, opt[3] + 4);        | True                           | 
+ 208 | }                                        | True                           | 
+ 209 |                                          | True                           | 
+ 210 | /*** Script execution code ***/          | True                           | 
+ 211 |                                          | True                           | 
+ 212 | static char** new_env(void)              | True                           | 
+ 213 | {                                        | True                           | 
+ 214 |  client6_data.env_ptr = xrealloc_vector( | True                           | 
+ 215 |  return &client6_data.env_ptr[client6_da | True                           | 
+ 216 | }                                        | True                           | 
+ 217 |                                          | True                           | 
+ 218 | static char *string_option_to_env(const  | True                           | 
+ 219 |   const uint8_t *option_end)             | True                           | 
+ 220 | {                                        | True                           | 
+ 221 |  const char *ptr, *name = NULL;          | True                           | 
+ 222 |  unsigned val_len;                       | True                           | 
+ 223 |  int i;                                  | True                           | 
+ 224 |                                          | True                           | 
+ 225 |  ptr = d6_option_strings;                | True                           | 
+ 226 |  i = 0;                                  | True                           | 
+ 227 |  while (*ptr) {                          | True                           | 
+ 228 |   if (d6_optflags[i].code == option[1])  | True                           | 
+ 229 |    name = ptr;                           | True                           | 
+ 230 |    goto found;                           | True                           | 
+ 231 |   }                                      | True                           | 
+ 232 |   ptr += strlen(ptr) + 1;                | True                           | 
+ 233 |   i++;                                   | True                           | 
+ 234 |  }                                       | True                           | 
+ 235 |  bb_error_msg("can't find option name fo | True                           | 
+ 236 |  return NULL;                            | True                           | 
+ 237 |                                          | True                           | 
+ 238 |  found:                                  | True                           | 
+ 239 |  val_len = (option[2] << 8) | option[3]; | True                           | 
+ 240 |  if (val_len + &option[D6_OPT_DATA] > op | True                           | 
+ 241 |   bb_simple_error_msg("option data excee | True                           | 
+ 242 |   return NULL;                           | True                           | 
+ 243 |  }                                       | True                           | 
+ 244 |  return xasprintf("%s=%.*s", name, val_l | True                           | 
+ 245 | }                                        | True                           | 
+ 246 |                                          | True                           | 
+ 247 | /* put all the parameters into the envir | True                           | 
+ 248 | static void option_to_env(const uint8_t  | True                           | 
+ 249 | {                                        | True                           | 
+ 250 | #if ENABLE_FEATURE_UDHCPC6_RFC3646       | True                           | 
+ 251 |  int addrs, option_offset;               | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 252 | #endif                                   | True                           | 
+ 253 |  /* "length minus 4" */                  | True                           | 
+ 254 |  int len_m4 = option_end - option - 4;   | True                           | 
+ 255 |                                          | True                           | 
+ 256 |  while (len_m4 >= 0) {                   | True                           | 
+ 257 |   uint32_t v32;                          | True                           | 
+ 258 |   char ipv6str[sizeof("ffff:ffff:ffff:ff | True                           | 
+ 259 |                                          | True                           | 
+ 260 |   if (option[0] != 0 || option[2] != 0)  | True                           | 
+ 261 |    break;                                | True                           | 
+ 262 |                                          | True                           | 
+ 263 |   /* Check if option-length exceeds size | True                           | 
+ 264 |   if (option[3] > len_m4)                | True                           | 
+ 265 |    break;                                | True                           | 
+ 266 |                                          | True                           | 
+ 267 |   switch (option[1]) {                   | True                           | 
+ 268 |   //case D6_OPT_CLIENTID:                | True                           | 
+ 269 |   //case D6_OPT_SERVERID:                | True                           | 
+ 270 |   case D6_OPT_IA_NA:                     | True                           | 
+ 271 |   case D6_OPT_IA_PD:                     | True                           | 
+ 272 | /*  0                   1                | True                           | 
+ 273 |  *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7  | True                           | 
+ 274 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 275 |  * |         OPTION_IA_PD          |     | True                           | 
+ 276 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 277 |  * |                         IAID (4 oct | True                           | 
+ 278 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 279 |  * |                              T1     | True                           | 
+ 280 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 281 |  * |                              T2     | True                           | 
+ 282 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 283 |  * .                                     | True                           | 
+ 284 |  * .                          IA_PD-opti | True                           | 
+ 285 |  * .                                     | True                           | 
+ 286 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 287 |  */                                      | True                           | 
+ 288 |    /* recurse to handle "IA_PD-options"  | True                           | 
+ 289 |    option_to_env(option + 16, option + 4 | True                           | 
+ 290 |    break;                                | True                           | 
+ 291 |   //case D6_OPT_IA_TA:                   | True                           | 
+ 292 |   case D6_OPT_IAADDR:                    | True                           | 
+ 293 | /*  0                   1                | True                           | 
+ 294 |  *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7  | True                           | 
+ 295 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 296 |  * |          OPTION_IAADDR        |     | True                           | 
+ 297 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 298 |  * |                                     | True                           | 
+ 299 |  * |                         IPv6 addres | True                           | 
+ 300 |  * |                                     | True                           | 
+ 301 |  * |                                     | True                           | 
+ 302 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 303 |  * |                      preferred-life | True                           | 
+ 304 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 305 |  * |                        valid-lifeti | True                           | 
+ 306 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 307 |  */                                      | True                           | 
+ 308 |    /* Make sure payload exists */        | True                           | 
+ 309 |    if (option[3] < (16 + 4 + 4))         | True                           | 
+ 310 |     break;                               | True                           | 
+ 311 |                                          | True                           | 
+ 312 |    sprint_nip6(ipv6str, option + 4);     | True                           | 
+ 313 |    *new_env() = xasprintf("ipv6=%s", ipv | True                           | 
+ 314 |                                          | True                           | 
+ 315 |    move_from_unaligned32(v32, option + 4 | True                           | 
+ 316 |    v32 = ntohl(v32);                     | True                           | 
+ 317 |    *new_env() = xasprintf("lease=%u", (u | True                           | 
+ 318 |    break;                                | True                           | 
+ 319 |                                          | True                           | 
+ 320 |   //case D6_OPT_ORO:                     | True                           | 
+ 321 |   //case D6_OPT_PREFERENCE:              | True                           | 
+ 322 |   //case D6_OPT_ELAPSED_TIME:            | True                           | 
+ 323 |   //case D6_OPT_RELAY_MSG:               | True                           | 
+ 324 |   //case D6_OPT_AUTH:                    | True                           | 
+ 325 |   //case D6_OPT_UNICAST:                 | True                           | 
+ 326 |   //case D6_OPT_STATUS_CODE:             | True                           | 
+ 327 |   //case D6_OPT_RAPID_COMMIT:            | True                           | 
+ 328 |   //case D6_OPT_USER_CLASS:              | True                           | 
+ 329 |   //case D6_OPT_VENDOR_CLASS:            | True                           | 
+ 330 |   //case D6_OPT_VENDOR_OPTS:             | True                           | 
+ 331 |   //case D6_OPT_INTERFACE_ID:            | True                           | 
+ 332 |   //case D6_OPT_RECONF_MSG:              | True                           | 
+ 333 |   //case D6_OPT_RECONF_ACCEPT:           | True                           | 
+ 334 |                                          | True                           | 
+ 335 |   case D6_OPT_IAPREFIX:                  | True                           | 
+ 336 | /*  0                   1                | True                           | 
+ 337 |  *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7  | True                           | 
+ 338 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 339 |  * |        OPTION_IAPREFIX        |     | True                           | 
+ 340 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 341 |  * |                      preferred-life | True                           | 
+ 342 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 343 |  * |                        valid-lifeti | True                           | 
+ 344 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 345 |  * | prefix-length |                     | True                           | 
+ 346 |  * +-+-+-+-+-+-+-+-+          IPv6 prefi | True                           | 
+ 347 |  * |                           (16 octet | True                           | 
+ 348 |  * |                                     | True                           | 
+ 349 |  * |               +-+-+-+-+-+-+-+-+-+-+ | True                           | 
+ 350 |  * |               |                     | True                           | 
+ 351 |  * +-+-+-+-+-+-+-+-+                     | True                           | 
+ 352 |  */                                      | True                           | 
+ 353 |    /* Make sure payload exists */        | True                           | 
+ 354 |    if (option[3] < (4 + 4 + 1 + 16))     | True                           | 
+ 355 |     break;                               | True                           | 
+ 356 |    move_from_unaligned32(v32, option + 4 | True                           | 
+ 357 |    v32 = ntohl(v32);                     | True                           | 
+ 358 |    *new_env() = xasprintf("ipv6prefix_le | True                           | 
+ 359 |                                          | True                           | 
+ 360 |    sprint_nip6(ipv6str, option + 4 + 4 + | True                           | 
+ 361 |    *new_env() = xasprintf("ipv6prefix=%s | True                           | 
+ 362 |    break;                                | True                           | 
+ 363 | #if ENABLE_FEATURE_UDHCPC6_RFC3646       | True                           | 
+ 364 |   case D6_OPT_DNS_SERVERS: {             | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 365 |    char *dlist;                          | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 366 |                                          | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 367 |    /* Make sure payload-size is a multip | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 368 |    if ((option[3] & 0x0f) != 0)          | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 369 |     break;                               | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 370 |                                          | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 371 |    /* Get the number of addresses on the | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 372 |    addrs = option[3] >> 4;               | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 373 |                                          | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 374 |    /* Setup environment variable */      | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 375 |    *new_env() = dlist = xmalloc(4 + addr | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 376 |    dlist = stpcpy(dlist, "dns=");        | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 377 |    option_offset = 0;                    | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 378 |                                          | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 379 |    while (addrs-- != 0) {                | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 380 |     sprint_nip6(dlist, option + 4 + opti | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 381 |     dlist += 39;                         | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 382 |     option_offset += 16;                 | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 383 |     if (addrs != 0)                      | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 384 |      *dlist++ = ' ';                     | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 385 |    }                                     | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 386 |                                          | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 387 |    break;                                | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 388 |   }                                      | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 389 |   case D6_OPT_DOMAIN_LIST: {             | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 390 |    char *dlist;                          | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 391 |                                          | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 392 |    dlist = dname_dec(option + 4, (option | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 393 |    if (!dlist)                           | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 394 |     break;                               | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 395 |    *new_env() = dlist;                   | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 396 |    break;                                | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 397 |   }                                      | ENABLE_FEATURE_UDHCPC6_RFC3646 | 
+ 398 | #endif                                   | True                           | 
+ 399 | #if ENABLE_FEATURE_UDHCPC6_RFC4704       | True                           | 
+ 400 |   case D6_OPT_CLIENT_FQDN: {             | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 401 |    char *dlist;                          | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 402 |                                          | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 403 |    if (option[3] == 0)                   | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 404 |     break;                               | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 405 |    /* Work around broken ISC DHCPD6.     | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 406 |     * ISC DHCPD6 does not implement RFC  | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 407 |     * byte of option-payload should cont | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 408 |     * reserved for future use and MUST b | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 409 |     * writes the entire FQDN as string t | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 410 |     * broken server here if any of the r | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 411 |     */                                   | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 412 |    if (option[4] & 0xf8) {               | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 413 |     *new_env() = xasprintf("fqdn=%.*s",  | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 414 |     break;                               | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 415 |    }                                     | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 416 |    dlist = dname_dec(option + 5, (/*(opt | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 417 |    if (!dlist)                           | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 418 |     break;                               | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 419 |    *new_env() = dlist;                   | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 420 |    break;                                | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 421 |   }                                      | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 422 | #endif                                   | True                           | 
+ 423 | #if ENABLE_FEATURE_UDHCPC6_RFC4833       | True                           | 
+ 424 |   /* RFC 4833 Timezones */               | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+ 425 |   case D6_OPT_TZ_POSIX:                  | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+ 426 |    *new_env() = xasprintf("tz=%.*s", (in | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+ 427 |    break;                                | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+ 428 |   case D6_OPT_TZ_NAME:                   | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+ 429 |    *new_env() = xasprintf("tz_name=%.*s" | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+ 430 |    break;                                | ENABLE_FEATURE_UDHCPC6_RFC4833 | 
+ 431 | #endif                                   | True                           | 
+ 432 |   case D6_OPT_BOOT_URL:                  | True                           | 
+ 433 |   case D6_OPT_BOOT_PARAM:                | True                           | 
+ 434 |   case 0xd1: /* DHCP_PXE_CONF_FILE */    | True                           | 
+ 435 |   case 0xd2: /* DHCP_PXE_PATH_PREFIX */  | True                           | 
+ 436 |    {                                     | True                           | 
+ 437 |    char *tmp = string_option_to_env(opti | True                           | 
+ 438 |    if (tmp)                              | True                           | 
+ 439 |     *new_env() = tmp;                    | True                           | 
+ 440 |    break;                                | True                           | 
+ 441 |    }                                     | True                           | 
+ 442 |   }                                      | True                           | 
+ 443 |   len_m4 -= 4 + option[3];               | True                           | 
+ 444 |   option += 4 + option[3];               | True                           | 
+ 445 |  }                                       | True                           | 
+ 446 | }                                        | True                           | 
+ 447 |                                          | True                           | 
+ 448 | static char **fill_envp(const uint8_t *o | True                           | 
+ 449 | {                                        | True                           | 
+ 450 |  char **envp, **curr;                    | True                           | 
+ 451 |                                          | True                           | 
+ 452 |  client6_data.env_ptr = NULL;            | True                           | 
+ 453 |  client6_data.env_idx = 0;               | True                           | 
+ 454 |                                          | True                           | 
+ 455 |  *new_env() = xasprintf("interface=%s",  | True                           | 
+ 456 |                                          | True                           | 
+ 457 |  if (option)                             | True                           | 
+ 458 |   option_to_env(option, option_end);     | True                           | 
+ 459 |                                          | True                           | 
+ 460 |  envp = curr = client6_data.env_ptr;     | True                           | 
+ 461 |  while (*curr)                           | True                           | 
+ 462 |   putenv(*curr++);                       | True                           | 
+ 463 |                                          | True                           | 
+ 464 |  return envp;                            | True                           | 
+ 465 | }                                        | True                           | 
+ 466 |                                          | True                           | 
+ 467 | /* Call a script with env vars */        | True                           | 
+ 468 | static void d6_run_script(const uint8_t  | True                           | 
+ 469 |   const char *name)                      | True                           | 
+ 470 | {                                        | True                           | 
+ 471 |  char **envp, **curr;                    | True                           | 
+ 472 |  char *argv[3];                          | True                           | 
+ 473 |                                          | True                           | 
+ 474 |  envp = fill_envp(option, option_end);   | True                           | 
+ 475 |                                          | True                           | 
+ 476 |  /* call script */                       | True                           | 
+ 477 |  log1("executing %s %s", client_data.scr | 1                              | 
+ 478 |  argv[0] = (char*) client_data.script;   | True                           | 
+ 479 |  argv[1] = (char*) name;                 | True                           | 
+ 480 |  argv[2] = NULL;                         | True                           | 
+ 481 |  spawn_and_wait(argv);                   | True                           | 
+ 482 |                                          | True                           | 
+ 483 |  for (curr = envp; *curr; curr++) {      | True                           | 
+ 484 |   log2(" %s", *curr);                    | 1                              | 
+ 485 |   bb_unsetenv_and_free(*curr);           | True                           | 
+ 486 |  }                                       | True                           | 
+ 487 |  free(envp);                             | True                           | 
+ 488 | }                                        | True                           | 
+ 489 |                                          | True                           | 
+ 490 | /* Call a script with no env var */      | True                           | 
+ 491 | static void d6_run_script_no_option(cons | True                           | 
+ 492 | {                                        | True                           | 
+ 493 |  d6_run_script(NULL, NULL, name);        | True                           | 
+ 494 | }                                        | True                           | 
+ 495 |                                          | True                           | 
+ 496 | /*** Sending/receiving packets ***/      | True                           | 
+ 497 |                                          | True                           | 
+ 498 | static ALWAYS_INLINE uint32_t random_xid | True                           | 
+ 499 | {                                        | True                           | 
+ 500 |  uint32_t t = rand() & htonl(0x00ffffff) | True                           | 
+ 501 |  return t;                               | True                           | 
+ 502 | }                                        | True                           | 
+ 503 |                                          | True                           | 
+ 504 | /* Initialize the packet with the proper | True                           | 
+ 505 | static uint8_t *init_d6_packet(struct d6 | True                           | 
+ 506 | {                                        | True                           | 
+ 507 |  uint8_t *ptr;                           | True                           | 
+ 508 |  unsigned secs;                          | True                           | 
+ 509 |                                          | True                           | 
+ 510 |  memset(packet, 0, sizeof(*packet));     | True                           | 
+ 511 |                                          | True                           | 
+ 512 |  packet->d6_xid32 = client_data.xid;     | True                           | 
+ 513 |  packet->d6_msg_type = type; /* union, o | True                           | 
+ 514 |                                          | True                           | 
+ 515 |  /* ELAPSED_TIME option is required to b | True                           | 
+ 516 |   * and some servers do check for its pr | True                           | 
+ 517 |   */                                     | True                           | 
+ 518 |  ptr = packet->d6_options; /* NB: it is  | True                           | 
+ 519 |  *((uint32_t*)ptr) = htonl((D6_OPT_ELAPS | True                           | 
+ 520 |  ptr += 4;                               | True                           | 
+ 521 |  client_data.last_secs = monotonic_sec() | True                           | 
+ 522 |  if (client_data.first_secs == 0)        | True                           | 
+ 523 |   client_data.first_secs = client_data.l | True                           | 
+ 524 |  secs = client_data.last_secs - client_d | True                           | 
+ 525 |  *((uint16_t*)ptr) = (secs < 0xffff) ? h | True                           | 
+ 526 |  ptr += 2;                               | True                           | 
+ 527 |                                          | True                           | 
+ 528 |  return ptr;                             | True                           | 
+ 529 | }                                        | True                           | 
+ 530 |                                          | True                           | 
+ 531 | static uint8_t *add_d6_client_options(ui | True                           | 
+ 532 | {                                        | True                           | 
+ 533 |  struct option_set *curr;                | True                           | 
+ 534 |  uint8_t *start = ptr;                   | True                           | 
+ 535 |  unsigned option;                        | True                           | 
+ 536 |  uint16_t len;                           | True                           | 
+ 537 |                                          | True                           | 
+ 538 |  ptr += 4;                               | True                           | 
+ 539 |  for (option = 1; option < 256; option++ | True                           | 
+ 540 |   if (client_data.opt_mask[option >> 3]  | True                           | 
+ 541 |    ptr[0] = (option >> 8);               | True                           | 
+ 542 |    ptr[1] = option;                      | True                           | 
+ 543 |    ptr += 2;                             | True                           | 
+ 544 |   }                                      | True                           | 
+ 545 |  }                                       | True                           | 
+ 546 |                                          | True                           | 
+ 547 |  if ((ptr - start - 4) != 0) {           | True                           | 
+ 548 |   start[0] = (D6_OPT_ORO >> 8);          | True                           | 
+ 549 |   start[1] = D6_OPT_ORO;                 | True                           | 
+ 550 |   start[2] = ((ptr - start - 4) >> 8);   | True                           | 
+ 551 |   start[3] = (ptr - start - 4);          | True                           | 
+ 552 |  } else                                  | True                           | 
+ 553 |   ptr = start;                           | True                           | 
+ 554 |                                          | True                           | 
+ 555 | #if ENABLE_FEATURE_UDHCPC6_RFC4704       | True                           | 
+ 556 |  ptr = mempcpy(ptr, &opt_fqdn_req, sizeo | ENABLE_FEATURE_UDHCPC6_RFC4704 | 
+ 557 | #endif                                   | True                           | 
+ 558 |  /* Add -x options if any */             | True                           | 
+ 559 |  curr = client_data.options;             | True                           | 
+ 560 |  while (curr) {                          | True                           | 
+ 561 |   len = (curr->data[D6_OPT_LEN] << 8) |  | True                           | 
+ 562 |   ptr = mempcpy(ptr, curr->data, D6_OPT_ | True                           | 
+ 563 |   curr = curr->next;                     | True                           | 
+ 564 |  }                                       | True                           | 
+ 565 |                                          | True                           | 
+ 566 |  return ptr;                             | True                           | 
+ 567 | }                                        | True                           | 
+ 568 |                                          | True                           | 
+ 569 | static int d6_mcast_from_client_data_ifi | True                           | 
+ 570 | {                                        | True                           | 
+ 571 |  /* FF02::1:2 is "All_DHCP_Relay_Agents_ | True                           | 
+ 572 |  static const uint8_t FF02__1_2[16] ALIG | True                           | 
+ 573 |   0xFF, 0x02, 0x00, 0x00, 0x00, 0x00, 0x | True                           | 
+ 574 |   0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x | True                           | 
+ 575 |  };                                      | True                           | 
+ 576 |  /* IPv6 requires different multicast co | True                           | 
+ 577 |  static const uint8_t MAC_DHCP6MCAST_ADD | True                           | 
+ 578 |   0x33, 0x33, 0x00, 0x01, 0x00, 0x02,    | True                           | 
+ 579 |  };                                      | True                           | 
+ 580 |                                          | True                           | 
+ 581 |  return d6_send_raw_packet_from_client_d | True                           | 
+ 582 |   packet, (end - (uint8_t*) packet),     | True                           | 
+ 583 |   /*src*/ &client6_data.ll_ip6, CLIENT_P | True                           | 
+ 584 |   /*dst*/ (struct in6_addr*)FF02__1_2, S | True                           | 
+ 585 |  );                                      | True                           | 
+ 586 | }                                        | True                           | 
+ 587 |                                          | True                           | 
+ 588 | /* RFC 3315 18.1.5. Creation and Transmi | True                           | 
+ 589 |  *                                       | True                           | 
+ 590 |  * The client uses an Information-reques | True                           | 
+ 591 |  * configuration information without hav | True                           | 
+ 592 |  *                                       | True                           | 
+ 593 |  * The client sets the "msg-type" field  | True                           | 
+ 594 |  * client generates a transaction ID and | True                           | 
+ 595 |  * "transaction-id" field.               | True                           | 
+ 596 |  *                                       | True                           | 
+ 597 |  * The client SHOULD include a Client Id | True                           | 
+ 598 |  * itself to the server.  If the client  | True                           | 
+ 599 |  * Identifier option, the server will no | True                           | 
+ 600 |  * specific options to the client, or th | True                           | 
+ 601 |  * respond to the message at all.  The c | True                           | 
+ 602 |  * Identifier option if the Information- | True                           | 
+ 603 |  * authenticated.                        | True                           | 
+ 604 |  *                                       | True                           | 
+ 605 |  * The client MUST include an Option Req | True                           | 
+ 606 |  * to indicate the options the client is | True                           | 
+ 607 |  * client MAY include options with data  | True                           | 
+ 608 |  * about parameter values the client wou | True                           | 
+ 609 |  */                                      | True                           | 
+ 610 | /* NOINLINE: limit stack usage in caller | True                           | 
+ 611 | static NOINLINE int send_d6_info_request | True                           | 
+ 612 | {                                        | True                           | 
+ 613 |  struct d6_packet packet;                | True                           | 
+ 614 |  uint8_t *opt_ptr;                       | True                           | 
+ 615 |                                          | True                           | 
+ 616 |  /* Fill in: msg type, xid, ELAPSED_TIME | True                           | 
+ 617 |  opt_ptr = init_d6_packet(&packet, D6_MS | True                           | 
+ 618 |                                          | True                           | 
+ 619 |  /* Add options: client-id,              | True                           | 
+ 620 |   * "param req" option according to -O,  | True                           | 
+ 621 |   */                                     | True                           | 
+ 622 |  opt_ptr = add_d6_client_options(opt_ptr | True                           | 
+ 623 |                                          | True                           | 
+ 624 |  bb_error_msg("sending %s", "info reques | True                           | 
+ 625 |  return d6_mcast_from_client_data_ifinde | True                           | 
+ 626 | }                                        | True                           | 
+ 627 |                                          | True                           | 
+ 628 | /*                                       | True                           | 
+ 629 |  * RFC 3315 10. Identity Association     | True                           | 
+ 630 |  *                                       | True                           | 
+ 631 |  * An "identity-association" (IA) is a c | True                           | 
+ 632 |  * and a client can identify, group, and | True                           | 
+ 633 |  * addresses.  Each IA consists of an IA | True                           | 
+ 634 |  * information.                          | True                           | 
+ 635 |  *                                       | True                           | 
+ 636 |  * A client must associate at least one  | True                           | 
+ 637 |  * network interfaces for which it is to | True                           | 
+ 638 |  * addresses from a DHCP server.  The cl | True                           | 
+ 639 |  * interface to obtain configuration inf | True                           | 
+ 640 |  * interface.  Each IA must be associate | True                           | 
+ 641 |  *                                       | True                           | 
+ 642 |  * The IAID uniquely identifies the IA a | True                           | 
+ 643 |  * among the IAIDs on the client.  The I | True                           | 
+ 644 |  * For any given use of an IA by the cli | True                           | 
+ 645 |  * be consistent across restarts of the  | True                           | 
+ 646 |  */                                      | True                           | 
+ 647 | /* Generate IAID. We base it on our MAC  | True                           | 
+ 648 | static void generate_iaid(uint8_t *iaid) | True                           | 
+ 649 | {                                        | True                           | 
+ 650 |  memcpy(iaid, &client_data.client_mac[2] | True                           | 
+ 651 | }                                        | True                           | 
+ 652 |                                          | True                           | 
+ 653 | /* Multicast a DHCPv6 Solicit packet to  | True                           | 
+ 654 |  *                                       | True                           | 
+ 655 |  * RFC 3315 17.1.1. Creation of Solicit  | True                           | 
+ 656 |  *                                       | True                           | 
+ 657 |  * The client MUST include a Client Iden | True                           | 
+ 658 |  * to the server.  The client includes I | True                           | 
+ 659 |  * it wants the server to assign address | True                           | 
+ 660 |  * addresses in the IAs as a hint to the | True                           | 
+ 661 |  * which the client has a preference. .. | True                           | 
+ 662 |  *                                       | True                           | 
+ 663 |  * The client uses IA_NA options to requ | True                           | 
+ 664 |  * temporary addresses and uses IA_TA op | True                           | 
+ 665 |  * of temporary addresses.  Either IA_NA | True                           | 
+ 666 |  * combination of both, can be included  | True                           | 
+ 667 |  *                                       | True                           | 
+ 668 |  * The client SHOULD include an Option R | True                           | 
+ 669 |  * to indicate the options the client is | True                           | 
+ 670 |  * client MAY additionally include insta | True                           | 
+ 671 |  * identified in the Option Request opti | True                           | 
+ 672 |  * the server about parameter values the | True                           | 
+ 673 |  * returned.                             | True                           | 
+ 674 |  *                                       | True                           | 
+ 675 |  * The client includes a Reconfigure Acc | True                           | 
+ 676 |  * if the client is willing to accept Re | True                           | 
+ 677 |  * server.                               | True                           | 
+ 678 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 679 |       |        OPTION_CLIENTID        |  | True                           | 
+ 680 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 681 |       .                                  | True                           | 
+ 682 |       .                              DUI | True                           | 
+ 683 |       .                        (variable | True                           | 
+ 684 |       .                                  | True                           | 
+ 685 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 686 |                                          | True                           | 
+ 687 |                                          | True                           | 
+ 688 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 689 |       |          OPTION_IA_NA         |  | True                           | 
+ 690 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 691 |       |                        IAID (4 o | True                           | 
+ 692 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 693 |       |                              T1  | True                           | 
+ 694 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 695 |       |                              T2  | True                           | 
+ 696 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 697 |       |                                  | True                           | 
+ 698 |       .                         IA_NA-op | True                           | 
+ 699 |       .                                  | True                           | 
+ 700 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 701 |                                          | True                           | 
+ 702 |                                          | True                           | 
+ 703 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 704 |       |          OPTION_IAADDR        |  | True                           | 
+ 705 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 706 |       |                                  | True                           | 
+ 707 |       |                         IPv6 add | True                           | 
+ 708 |       |                                  | True                           | 
+ 709 |       |                                  | True                           | 
+ 710 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 711 |       |                      preferred-l | True                           | 
+ 712 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 713 |       |                        valid-lif | True                           | 
+ 714 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 715 |       .                                  | True                           | 
+ 716 |       .                        IAaddr-op | True                           | 
+ 717 |       .                                  | True                           | 
+ 718 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 719 |                                          | True                           | 
+ 720 |                                          | True                           | 
+ 721 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 722 |       |           OPTION_ORO          |  | True                           | 
+ 723 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 724 |       |    requested-option-code-1    |  | True                           | 
+ 725 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 726 |       |                              ... | True                           | 
+ 727 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 728 |                                          | True                           | 
+ 729 |                                          | True                           | 
+ 730 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 731 |       |     OPTION_RECONF_ACCEPT      |  | True                           | 
+ 732 |       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+ 733 |  */                                      | True                           | 
+ 734 | /* NOINLINE: limit stack usage in caller | True                           | 
+ 735 | static NOINLINE int send_d6_discover(str | True                           | 
+ 736 | {                                        | True                           | 
+ 737 |  struct d6_packet packet;                | True                           | 
+ 738 |  uint8_t *opt_ptr;                       | True                           | 
+ 739 |  unsigned len;                           | True                           | 
+ 740 |                                          | True                           | 
+ 741 |  /* Fill in: msg type, xid, ELAPSED_TIME | True                           | 
+ 742 |  opt_ptr = init_d6_packet(&packet, D6_MS | True                           | 
+ 743 |                                          | True                           | 
+ 744 |  /* Create new IA_NA, optionally with in | True                           | 
+ 745 |  free(client6_data.ia_na);               | True                           | 
+ 746 |  client6_data.ia_na = NULL;              | True                           | 
+ 747 |  if (option_mask32 & OPT_r) {            | True                           | 
+ 748 |   len = requested_ipv6 ? 2+2+4+4+4 + 2+2 | True                           | 
+ 749 |   client6_data.ia_na = xzalloc(len);     | True                           | 
+ 750 |   client6_data.ia_na->code = D6_OPT_IA_N | True                           | 
+ 751 |   client6_data.ia_na->len = len - 4;     | True                           | 
+ 752 |   generate_iaid(client6_data.ia_na->data | True                           | 
+ 753 |   if (requested_ipv6) {                  | True                           | 
+ 754 |    struct d6_option *iaaddr = (void*)(cl | True                           | 
+ 755 |    iaaddr->code = D6_OPT_IAADDR;         | True                           | 
+ 756 |    iaaddr->len = 16+4+4;                 | True                           | 
+ 757 |    memcpy(iaaddr->data, requested_ipv6,  | True                           | 
+ 758 |   }                                      | True                           | 
+ 759 |   opt_ptr = mempcpy(opt_ptr, client6_dat | True                           | 
+ 760 |  }                                       | True                           | 
+ 761 |                                          | True                           | 
+ 762 |  /* IA_PD */                             | True                           | 
+ 763 |  free(client6_data.ia_pd);               | True                           | 
+ 764 |  client6_data.ia_pd = NULL;              | True                           | 
+ 765 |  if (option_mask32 & OPT_d) {            | True                           | 
+ 766 |   len = 2+2+4+4+4;                       | True                           | 
+ 767 |   client6_data.ia_pd = xzalloc(len);     | True                           | 
+ 768 |   client6_data.ia_pd->code = D6_OPT_IA_P | True                           | 
+ 769 |   client6_data.ia_pd->len = len - 4;     | True                           | 
+ 770 |   generate_iaid(client6_data.ia_pd->data | True                           | 
+ 771 |   opt_ptr = mempcpy(opt_ptr, client6_dat | True                           | 
+ 772 |  }                                       | True                           | 
+ 773 |                                          | True                           | 
+ 774 |  /* Add options: client-id,              | True                           | 
+ 775 |   * "param req" option according to -O,  | True                           | 
+ 776 |   */                                     | True                           | 
+ 777 |  opt_ptr = add_d6_client_options(opt_ptr | True                           | 
+ 778 |                                          | True                           | 
+ 779 |  bb_info_msg("sending %s", "discover");  | True                           | 
+ 780 |  return d6_mcast_from_client_data_ifinde | True                           | 
+ 781 | }                                        | True                           | 
+ 782 |                                          | True                           | 
+ 783 | /* Multicast a DHCPv6 request message    | True                           | 
+ 784 |  *                                       | True                           | 
+ 785 |  * RFC 3315 18.1.1. Creation and Transmi | True                           | 
+ 786 |  *                                       | True                           | 
+ 787 |  * The client uses a Request message to  | True                           | 
+ 788 |  * obtain other configuration informatio | True                           | 
+ 789 |  * more IA options in the Request messag | True                           | 
+ 790 |  * addresses and other information about | True                           | 
+ 791 |  * options in a Reply message.           | True                           | 
+ 792 |  *                                       | True                           | 
+ 793 |  * The client generates a transaction ID | True                           | 
+ 794 |  * "transaction-id" field.               | True                           | 
+ 795 |  *                                       | True                           | 
+ 796 |  * The client places the identifier of t | True                           | 
+ 797 |  * Server Identifier option.             | True                           | 
+ 798 |  *                                       | True                           | 
+ 799 |  * The client MUST include a Client Iden | True                           | 
+ 800 |  * to the server.  The client adds any o | True                           | 
+ 801 |  * including one or more IA options (if  | True                           | 
+ 802 |  * the server assign it some network add | True                           | 
+ 803 |  *                                       | True                           | 
+ 804 |  * The client MUST include an Option Req | True                           | 
+ 805 |  * to indicate the options the client is | True                           | 
+ 806 |  * client MAY include options with data  | True                           | 
+ 807 |  * about parameter values the client wou | True                           | 
+ 808 |  *                                       | True                           | 
+ 809 |  * The client includes a Reconfigure Acc | True                           | 
+ 810 |  * indicating whether or not the client  | True                           | 
+ 811 |  * messages from the server.             | True                           | 
+ 812 |  */                                      | True                           | 
+ 813 | /* NOINLINE: limit stack usage in caller | True                           | 
+ 814 | static NOINLINE int send_d6_select(void) | True                           | 
+ 815 | {                                        | True                           | 
+ 816 |  struct d6_packet packet;                | True                           | 
+ 817 |  uint8_t *opt_ptr;                       | True                           | 
+ 818 |                                          | True                           | 
+ 819 |  /* Fill in: msg type, xid, ELAPSED_TIME | True                           | 
+ 820 |  opt_ptr = init_d6_packet(&packet, D6_MS | True                           | 
+ 821 |                                          | True                           | 
+ 822 |  /* server id */                         | True                           | 
+ 823 |  opt_ptr = mempcpy(opt_ptr, client6_data | True                           | 
+ 824 |  /* IA NA (contains requested IP) */     | True                           | 
+ 825 |  if (client6_data.ia_na)                 | True                           | 
+ 826 |   opt_ptr = mempcpy(opt_ptr, client6_dat | True                           | 
+ 827 |  /* IA PD */                             | True                           | 
+ 828 |  if (client6_data.ia_pd)                 | True                           | 
+ 829 |   opt_ptr = mempcpy(opt_ptr, client6_dat | True                           | 
+ 830 |                                          | True                           | 
+ 831 |  /* Add options: client-id,              | True                           | 
+ 832 |   * "param req" option according to -O,  | True                           | 
+ 833 |   */                                     | True                           | 
+ 834 |  opt_ptr = add_d6_client_options(opt_ptr | True                           | 
+ 835 |                                          | True                           | 
+ 836 |  bb_info_msg("sending %s", "select");    | True                           | 
+ 837 |  return d6_mcast_from_client_data_ifinde | True                           | 
+ 838 | }                                        | True                           | 
+ 839 |                                          | True                           | 
+ 840 | /* Unicast or broadcast a DHCP renew mes | True                           | 
+ 841 |  *                                       | True                           | 
+ 842 |  * RFC 3315 18.1.3. Creation and Transmi | True                           | 
+ 843 |  *                                       | True                           | 
+ 844 |  * To extend the valid and preferred lif | True                           | 
+ 845 |  * associated with an IA, the client sen | True                           | 
+ 846 |  * from which the client obtained the ad | True                           | 
+ 847 |  * IA option for the IA.  The client inc | True                           | 
+ 848 |  * IA option for the addresses associate | True                           | 
+ 849 |  * determines new lifetimes for the addr | True                           | 
+ 850 |  * administrative configuration of the s | True                           | 
+ 851 |  * new addresses to the IA.  The server  | True                           | 
+ 852 |  * by setting the preferred and valid li | True                           | 
+ 853 |  * zero.                                 | True                           | 
+ 854 |  *                                       | True                           | 
+ 855 |  * The server controls the time at which | True                           | 
+ 856 |  * to extend the lifetimes on assigned a | True                           | 
+ 857 |  * parameters assigned to an IA.         | True                           | 
+ 858 |  *                                       | True                           | 
+ 859 |  * At time T1 for an IA, the client init | True                           | 
+ 860 |  * exchange to extend the lifetimes on a | True                           | 
+ 861 |  * client includes an IA option with all | True                           | 
+ 862 |  * the IA in its Renew message.          | True                           | 
+ 863 |  *                                       | True                           | 
+ 864 |  * If T1 or T2 is set to 0 by the server | True                           | 
+ 865 |  * T1 or T2 times (for an IA_TA), the cl | True                           | 
+ 866 |  * message, respectively, at the client' | True                           | 
+ 867 |  *                                       | True                           | 
+ 868 |  * The client sets the "msg-type" field  | True                           | 
+ 869 |  * a transaction ID and inserts this val | True                           | 
+ 870 |  * field.                                | True                           | 
+ 871 |  *                                       | True                           | 
+ 872 |  * The client places the identifier of t | True                           | 
+ 873 |  * Server Identifier option.             | True                           | 
+ 874 |  *                                       | True                           | 
+ 875 |  * The client MUST include a Client Iden | True                           | 
+ 876 |  * to the server.  The client adds any a | True                           | 
+ 877 |  * one or more IA options.  The client M | True                           | 
+ 878 |  * addresses the client currently has as | True                           | 
+ 879 |  * Renew message.                        | True                           | 
+ 880 |  *                                       | True                           | 
+ 881 |  * The client MUST include an Option Req | True                           | 
+ 882 |  * to indicate the options the client is | True                           | 
+ 883 |  * client MAY include options with data  | True                           | 
+ 884 |  * about parameter values the client wou | True                           | 
+ 885 |  */                                      | True                           | 
+ 886 | /* NOINLINE: limit stack usage in caller | True                           | 
+ 887 | static NOINLINE int send_d6_renew(struct | True                           | 
+ 888 | {                                        | True                           | 
+ 889 |  struct d6_packet packet;                | True                           | 
+ 890 |  uint8_t *opt_ptr;                       | True                           | 
+ 891 |                                          | True                           | 
+ 892 |  /* Fill in: msg type, xid, ELAPSED_TIME | True                           | 
+ 893 |  opt_ptr = init_d6_packet(&packet, D6_MS | True                           | 
+ 894 |                                          | True                           | 
+ 895 |  /* server id */                         | True                           | 
+ 896 |  opt_ptr = mempcpy(opt_ptr, client6_data | True                           | 
+ 897 |  /* IA NA (contains requested IP) */     | True                           | 
+ 898 |  if (client6_data.ia_na)                 | True                           | 
+ 899 |   opt_ptr = mempcpy(opt_ptr, client6_dat | True                           | 
+ 900 |  /* IA PD */                             | True                           | 
+ 901 |  if (client6_data.ia_pd)                 | True                           | 
+ 902 |   opt_ptr = mempcpy(opt_ptr, client6_dat | True                           | 
+ 903 |                                          | True                           | 
+ 904 |  /* Add options: client-id,              | True                           | 
+ 905 |   * "param req" option according to -O,  | True                           | 
+ 906 |   */                                     | True                           | 
+ 907 |  opt_ptr = add_d6_client_options(opt_ptr | True                           | 
+ 908 |                                          | True                           | 
+ 909 |  bb_info_msg("sending %s", "renew");     | True                           | 
+ 910 |  if (server_ipv6)                        | True                           | 
+ 911 |   return d6_send_kernel_packet_from_clie | True                           | 
+ 912 |    &packet, (opt_ptr - (uint8_t*) &packe | True                           | 
+ 913 |    our_cur_ipv6, CLIENT_PORT6,           | True                           | 
+ 914 |    server_ipv6, SERVER_PORT6             | True                           | 
+ 915 |   );                                     | True                           | 
+ 916 |  return d6_mcast_from_client_data_ifinde | True                           | 
+ 917 | }                                        | True                           | 
+ 918 |                                          | True                           | 
+ 919 | /* Unicast a DHCP release message */     | True                           | 
+ 920 | static                                   | True                           | 
+ 921 | ALWAYS_INLINE /* one caller, help compil | True                           | 
+ 922 | int send_d6_release(struct in6_addr *ser | True                           | 
+ 923 | {                                        | True                           | 
+ 924 |  struct d6_packet packet;                | True                           | 
+ 925 |  uint8_t *opt_ptr;                       | True                           | 
+ 926 |  struct option_set *ci;                  | True                           | 
+ 927 |                                          | True                           | 
+ 928 |  /* Fill in: msg type, xid, ELAPSED_TIME | True                           | 
+ 929 |  opt_ptr = init_d6_packet(&packet, D6_MS | True                           | 
+ 930 |  /* server id */                         | True                           | 
+ 931 |  opt_ptr = mempcpy(opt_ptr, client6_data | True                           | 
+ 932 |  /* IA NA (contains our current IP) */   | True                           | 
+ 933 |  if (client6_data.ia_na)                 | True                           | 
+ 934 |   opt_ptr = mempcpy(opt_ptr, client6_dat | True                           | 
+ 935 |  /* IA PD */                             | True                           | 
+ 936 |  if (client6_data.ia_pd)                 | True                           | 
+ 937 |   opt_ptr = mempcpy(opt_ptr, client6_dat | True                           | 
+ 938 |  /* Client-id */                         | True                           | 
+ 939 |  ci = udhcp_find_option(client_data.opti | True                           | 
+ 940 |  if (ci)                                 | True                           | 
+ 941 |   opt_ptr = mempcpy(opt_ptr, ci->data, D | True                           | 
+ 942 |                                          | True                           | 
+ 943 |  bb_info_msg("sending %s", "release");   | True                           | 
+ 944 |  return d6_send_kernel_packet_from_clien | True                           | 
+ 945 |   &packet, (opt_ptr - (uint8_t*) &packet | True                           | 
+ 946 |   our_cur_ipv6, CLIENT_PORT6,            | True                           | 
+ 947 |   server_ipv6, SERVER_PORT6              | True                           | 
+ 948 |  );                                      | True                           | 
+ 949 | }                                        | True                           | 
+ 950 |                                          | True                           | 
+ 951 | /* Returns -1 on errors that are fatal f | True                           | 
+ 952 | /* NOINLINE: limit stack usage in caller | True                           | 
+ 953 | static NOINLINE int d6_recv_raw_packet(s | True                           | 
+ 954 | {                                        | True                           | 
+ 955 |  int bytes;                              | True                           | 
+ 956 |  struct ip6_udp_d6_packet packet;        | True                           | 
+ 957 |                                          | True                           | 
+ 958 |  bytes = safe_read(fd, &packet, sizeof(p | True                           | 
+ 959 |  if (bytes < 0) {                        | True                           | 
+ 960 |   log1s("packet read error, ignoring");  | 1                              | 
+ 961 |   /* NB: possible down interface, etc. C | True                           | 
+ 962 |   return bytes; /* returns -1 */         | True                           | 
+ 963 |  }                                       | True                           | 
+ 964 |                                          | True                           | 
+ 965 |  if (bytes < (int) (sizeof(packet.ip6) + | True                           | 
+ 966 |   log1s("packet is too short, ignoring") | 1                              | 
+ 967 |   return -2;                             | True                           | 
+ 968 |  }                                       | True                           | 
+ 969 |                                          | True                           | 
+ 970 |  if (bytes < sizeof(packet.ip6) + ntohs( | True                           | 
+ 971 |   /* packet is bigger than sizeof(packet | True                           | 
+ 972 |   log1s("oversized packet, ignoring");   | 1                              | 
+ 973 |   return -2;                             | True                           | 
+ 974 |  }                                       | True                           | 
+ 975 |                                          | True                           | 
+ 976 |  /* ignore any extra garbage bytes */    | True                           | 
+ 977 |  bytes = sizeof(packet.ip6) + ntohs(pack | True                           | 
+ 978 |                                          | True                           | 
+ 979 |  /* make sure its the right packet for u | True                           | 
+ 980 |  if (packet.ip6.ip6_nxt != IPPROTO_UDP   | True                           | 
+ 981 |   || (packet.ip6.ip6_vfc >> 4) != 6      | True                           | 
+ 982 |   || packet.udp.dest != htons(CLIENT_POR | True                           | 
+ 983 |  /* || bytes > (int) sizeof(packet) - ca | True                           | 
+ 984 |   || packet.udp.len != packet.ip6.ip6_pl | True                           | 
+ 985 |  ) {                                     | True                           | 
+ 986 |   log1s("unrelated/bogus packet, ignorin | 1                              | 
+ 987 |   return -2;                             | True                           | 
+ 988 |  }                                       | True                           | 
+ 989 |                                          | True                           | 
+ 990 | //How to do this for ipv6?               | True                           | 
+ 991 | // /* verify UDP checksum. IP header has | True                           | 
+ 992 | // memset(&packet.ip, 0, offsetof(struct | True                           | 
+ 993 | // /* ip.xx fields which are not memset: | True                           | 
+ 994 | // packet.ip.tot_len = packet.udp.len; / | True                           | 
+ 995 | // check = packet.udp.check;             | True                           | 
+ 996 | // packet.udp.check = 0;                 | True                           | 
+ 997 | // if (check && check != inet_cksum(&pac | True                           | 
+ 998 | //  log1("packet with bad UDP checksum r | True                           | 
+ 999 | //  return -2;                           | True                           | 
+1000 | // }                                     | True                           | 
+1001 |                                          | True                           | 
+1002 |  if (peer_ipv6)                          | True                           | 
+1003 |   *peer_ipv6 = packet.ip6.ip6_src; /* st | True                           | 
+1004 |                                          | True                           | 
+1005 |  log2("received %s", "a packet");        | 1                              | 
+1006 |  /* log2 because more informative msg fo | True                           | 
+1007 |  d6_dump_packet(&packet.data);           | 1                              | 
+1008 |                                          | True                           | 
+1009 |  bytes -= sizeof(packet.ip6) + sizeof(pa | True                           | 
+1010 |  memset(d6_pkt, 0, sizeof(*d6_pkt));     | True                           | 
+1011 |  memcpy(d6_pkt, &packet.data, bytes);    | True                           | 
+1012 |  return bytes;                           | True                           | 
+1013 | }                                        | True                           | 
+1014 |                                          | True                           | 
+1015 | /*** Main ***/                           | True                           | 
+1016 |                                          | True                           | 
+1017 | /* Values for client_data.listen_mode */ | True                           | 
+1018 | #define LISTEN_NONE   0                  | True                           | 
+1019 | #define LISTEN_KERNEL 1                  | True                           | 
+1020 | #define LISTEN_RAW    2                  | True                           | 
+1021 |                                          | True                           | 
+1022 | /* Values for client_data.state */       | True                           | 
+1023 | /* initial state: (re)start DHCP negotia | True                           | 
+1024 | #define INIT_SELECTING  0                | True                           | 
+1025 | /* discover was sent, DHCPOFFER reply re | True                           | 
+1026 | #define REQUESTING      1                | True                           | 
+1027 | /* select/renew was sent, DHCPACK reply  | True                           | 
+1028 | #define BOUND           2                | True                           | 
+1029 | /* half of lease passed, want to renew i | True                           | 
+1030 | #define RENEWING        3                | True                           | 
+1031 | /* renew requests were not answered, lea | True                           | 
+1032 | #define REBINDING       4                | True                           | 
+1033 | /* manually requested renew (SIGUSR1) */ | True                           | 
+1034 | #define RENEW_REQUESTED 5                | True                           | 
+1035 | /* release, possibly manually requested  | True                           | 
+1036 | #define RELEASED        6                | True                           | 
+1037 |                                          | True                           | 
+1038 | static int d6_raw_socket(int ifindex)    | True                           | 
+1039 | {                                        | True                           | 
+1040 |  int fd;                                 | True                           | 
+1041 |  struct sockaddr_ll sock;                | True                           | 
+1042 |                                          | True                           | 
+1043 |  /*                                      | True                           | 
+1044 |   * Comment:                             | True                           | 
+1045 |   *                                      | True                           | 
+1046 |   * I've selected not to see LL header,  | True                           | 
+1047 |   * The filter may also pass non-IP and  | True                           | 
+1048 |   * a more complete check when receiving | True                           | 
+1049 |   *                                      | True                           | 
+1050 |   * and filter shamelessly stolen from:  | True                           | 
+1051 |   *                                      | True                           | 
+1052 |   * http://www.flamewarmaster.de/softwar | True                           | 
+1053 |   *                                      | True                           | 
+1054 |   * There are a few other interesting id | True                           | 
+1055 |   * "Motivation").  Use of netlink event | True                           | 
+1056 |   * of various network servers listening | True                           | 
+1057 |   * That would obsolete sending HUP sign | True                           | 
+1058 |   *                                      | True                           | 
+1059 |   * Copyright: 2006, 2007 Stefan Rompf < | True                           | 
+1060 |   * License: GPL v2.                     | True                           | 
+1061 |   *                                      | True                           | 
+1062 |   * TODO: make conditional?              | True                           | 
+1063 |   */                                     | True                           | 
+1064 | #if 0                                    | True                           | 
+1065 |  static const struct sock_filter filter_ | 0                              | 
+1066 |   /* load 9th byte (protocol) */         | 0                              | 
+1067 |   BPF_STMT(BPF_LD|BPF_B|BPF_ABS, 9),     | 0                              | 
+1068 |   /* jump to L1 if it is IPPROTO_UDP, el | 0                              | 
+1069 |   BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, IPPROT | 0                              | 
+1070 |   /* L1: load halfword from offset 6 (fl | 0                              | 
+1071 |   BPF_STMT(BPF_LD|BPF_H|BPF_ABS, 6),     | 0                              | 
+1072 |   /* jump to L4 if any bits in frag offs | 0                              | 
+1073 |   BPF_JUMP(BPF_JMP|BPF_JSET|BPF_K, 0x1ff | 0                              | 
+1074 |   /* L2: skip IP header (load index reg  | 0                              | 
+1075 |   BPF_STMT(BPF_LDX|BPF_B|BPF_MSH, 0),    | 0                              | 
+1076 |   /* load udp destination port from half | 0                              | 
+1077 |   BPF_STMT(BPF_LD|BPF_H|BPF_IND, 2),     | 0                              | 
+1078 |   /* jump to L3 if udp dport is CLIENT_P | 0                              | 
+1079 |   BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, 68, 0, | 0                              | 
+1080 |   /* L3: accept packet */                | 0                              | 
+1081 |   BPF_STMT(BPF_RET|BPF_K, 0x7fffffff),   | 0                              | 
+1082 |   /* L4: discard packet */               | 0                              | 
+1083 |   BPF_STMT(BPF_RET|BPF_K, 0),            | 0                              | 
+1084 |  };                                      | 0                              | 
+1085 |  static const struct sock_fprog filter_p | 0                              | 
+1086 |   .len = sizeof(filter_instr) / sizeof(f | 0                              | 
+1087 |   /* casting const away: */              | 0                              | 
+1088 |   .filter = (struct sock_filter *) filte | 0                              | 
+1089 |  };                                      | 0                              | 
+1090 | #endif                                   | True                           | 
+1091 |                                          | True                           | 
+1092 |  log2("opening raw socket on ifindex %d" | 1                              | 
+1093 |                                          | True                           | 
+1094 |  fd = xsocket(PF_PACKET, SOCK_DGRAM, hto | True                           | 
+1095 |                                          | True                           | 
+1096 |  memset(&sock, 0, sizeof(sock)); /* let' | True                           | 
+1097 |  sock.sll_family = AF_PACKET;            | True                           | 
+1098 |  sock.sll_protocol = htons(ETH_P_IPV6);  | True                           | 
+1099 |  sock.sll_ifindex = ifindex;             | True                           | 
+1100 |  /*sock.sll_hatype = ARPHRD_???;*/       | True                           | 
+1101 |  /*sock.sll_pkttype = PACKET_???;*/      | True                           | 
+1102 |  /*sock.sll_halen = ???;*/               | True                           | 
+1103 |  /*sock.sll_addr[8] = ???;*/             | True                           | 
+1104 |  xbind(fd, (struct sockaddr *) &sock, si | True                           | 
+1105 |                                          | True                           | 
+1106 | #if 0                                    | True                           | 
+1107 |  if (CLIENT_PORT6 == 546) {              | 0                              | 
+1108 |   /* Use only if standard port is in use | 0                              | 
+1109 |   /* Ignoring error (kernel may lack sup | 0                              | 
+1110 |   if (setsockopt(fd, SOL_SOCKET, SO_ATTA | 0                              | 
+1111 |     sizeof(filter_prog)) >= 0)           | 0                              | 
+1112 |    log1("attached filter to raw socket f | 0                              | 
+1113 |  }                                       | 0                              | 
+1114 | #endif                                   | True                           | 
+1115 |  return fd;                              | True                           | 
+1116 | }                                        | True                           | 
+1117 |                                          | True                           | 
+1118 | static void change_listen_mode(int new_m | True                           | 
+1119 | {                                        | True                           | 
+1120 |  log1("entering listen mode: %s",        | 1                              | 
+1121 |   new_mode != LISTEN_NONE                | 1                              | 
+1122 |    ? (new_mode == LISTEN_KERNEL ? "kerne | 1                              | 
+1123 |    : "none"                              | 1                              | 
+1124 |  );                                      | True                           | 
+1125 |                                          | True                           | 
+1126 |  client_data.listen_mode = new_mode;     | True                           | 
+1127 |  if (client_data.sockfd >= 0) {          | True                           | 
+1128 |   close(client_data.sockfd);             | True                           | 
+1129 |   client_data.sockfd = -1;               | True                           | 
+1130 |  }                                       | True                           | 
+1131 |  if (new_mode == LISTEN_KERNEL)          | True                           | 
+1132 |   client_data.sockfd = d6_listen_socket( | True                           | 
+1133 |  else if (new_mode != LISTEN_NONE)       | True                           | 
+1134 |   client_data.sockfd = d6_raw_socket(cli | True                           | 
+1135 |  /* else LISTEN_NONE: client_data.sockfd | True                           | 
+1136 | }                                        | True                           | 
+1137 |                                          | True                           | 
+1138 | static void perform_d6_release(struct in | True                           | 
+1139 | {                                        | True                           | 
+1140 |  change_listen_mode(LISTEN_NONE);        | True                           | 
+1141 |                                          | True                           | 
+1142 |  /* send release packet */               | True                           | 
+1143 |  if (client_data.state == BOUND          | True                           | 
+1144 |   || client_data.state == RENEWING       | True                           | 
+1145 |   || client_data.state == REBINDING      | True                           | 
+1146 |   || client_data.state == RENEW_REQUESTE | True                           | 
+1147 |  ) {                                     | True                           | 
+1148 |   bb_simple_info_msg("unicasting a relea | True                           | 
+1149 |   client_data.xid = random_xid(); //TODO | True                           | 
+1150 |   send_d6_release(server_ipv6, our_cur_i | True                           | 
+1151 |  }                                       | True                           | 
+1152 |  bb_simple_info_msg("entering released s | True                           | 
+1153 | /*                                       | True                           | 
+1154 |  * We can be here on: SIGUSR2,           | True                           | 
+1155 |  * or on exit (SIGTERM) and -R "release  | True                           | 
+1156 |  * Users requested to be notified in all | True                           | 
+1157 |  * of the states above.                  | True                           | 
+1158 |  */                                      | True                           | 
+1159 |  d6_run_script_no_option("deconfig");    | True                           | 
+1160 |  client_data.state = RELEASED;           | True                           | 
+1161 | }                                        | True                           | 
+1162 |                                          | True                           | 
+1163 | #if BB_MMU                               | True                           | 
+1164 | static void client_background(void)      | BB_MMU                         | 
+1165 | {                                        | BB_MMU                         | 
+1166 |  bb_daemonize(0);                        | BB_MMU                         | 
+1167 |  logmode &= ~LOGMODE_STDIO;              | BB_MMU                         | 
+1168 |  /* rewrite pidfile, as our pid is diffe | BB_MMU                         | 
+1169 |  write_pidfile(client_data.pidfile);     | BB_MMU                         | 
+1170 | }                                        | BB_MMU                         | 
+1171 | #endif                                   | True                           | 
+1172 |                                          | True                           | 
+1173 | //usage:#if defined CONFIG_UDHCP_DEBUG & | True                           | 
+1174 | //usage:# define IF_UDHCP_VERBOSE(...) _ | True                           | 
+1175 | //usage:#else                            | True                           | 
+1176 | //usage:# define IF_UDHCP_VERBOSE(...)   | True                           | 
+1177 | //usage:#endif                           | True                           | 
+1178 | //usage:#define udhcpc6_trivial_usage    | True                           | 
+1179 | //usage:       "[-fbq"IF_UDHCP_VERBOSE(" | True                           | 
+1180 | //usage:       " [-p PIDFILE]"IF_FEATURE | True                           | 
+1181 | //usage:#define udhcpc6_full_usage "\n"  | True                           | 
+1182 | //usage:     "\n -i IFACE Interface to u | True                           | 
+1183 | //usage:     "\n -p FILE  Create pidfile | True                           | 
+1184 | //usage:     "\n -s PROG  Run PROG at DH | True                           | 
+1185 | //usage:     "\n -t N  Send up to N disc | True                           | 
+1186 | //usage:     "\n -T SEC  Pause between p | True                           | 
+1187 | //usage:     "\n -A SEC  Wait if lease i | True                           | 
+1188 | //usage: USE_FOR_MMU(                    | True                           | 
+1189 | //usage:     "\n -b  Background if lease | True                           | 
+1190 | //usage: )                               | True                           | 
+1191 | //usage:     "\n -n  Exit if lease is no | True                           | 
+1192 | //usage:     "\n -q  Exit after obtainin | True                           | 
+1193 | //usage:     "\n -R  Release IP on exit" | True                           | 
+1194 | //usage:     "\n -f  Run in foreground"  | True                           | 
+1195 | //usage:     "\n -S  Log to syslog too"  | True                           | 
+1196 | //usage: IF_FEATURE_UDHCP_PORT(          | True                           | 
+1197 | //usage:     "\n -P PORT  Use PORT (defa | True                           | 
+1198 | //usage: )                               | True                           | 
+1199 | ////usage: IF_FEATURE_UDHCPC_ARPING(     | True                           | 
+1200 | ////usage:     "\n -a  Use arping to val | True                           | 
+1201 | ////usage: )                             | True                           | 
+1202 | //usage:     "\n -m  Send multicast rene | True                           | 
+1203 | //usage:     "\n -l  Send 'information r | True                           | 
+1204 | //usage:     "\n   (used for servers whi | True                           | 
+1205 | //usage:     "\n -r IPv6  Request this a | True                           | 
+1206 | //usage:     "\n -d  Request prefix"     | True                           | 
+1207 | //usage:     "\n -o  Don't request any o | True                           | 
+1208 | //usage:     "\n -O OPT  Request option  | True                           | 
+1209 | //usage:     "\n -x OPT:VAL Include opti | True                           | 
+1210 | //usage:     "\n   Examples of string, n | True                           | 
+1211 | //usage:     "\n   -x hostname:bbox - op | True                           | 
+1212 | //usage:     "\n   -x lease:3600 - optio | True                           | 
+1213 | //usage:     "\n   -x 0x3d:0100BEEFC0FFE | True                           | 
+1214 | //usage:     "\n   -x 14:'\"dumpfile\"'  | True                           | 
+1215 | //usage: IF_UDHCP_VERBOSE(               | True                           | 
+1216 | //usage:     "\n -v  Verbose"            | True                           | 
+1217 | //usage: )                               | True                           | 
+1218 | //usage:     "\nSignals:"                | True                           | 
+1219 | //usage:     "\n USR1 Renew lease"       | True                           | 
+1220 | //usage:     "\n USR2 Release lease"     | True                           | 
+1221 |                                          | True                           | 
+1222 | int udhcpc6_main(int argc, char **argv)  | True                           | 
+1223 | int udhcpc6_main(int argc UNUSED_PARAM,  | True                           | 
+1224 | {                                        | True                           | 
+1225 |  const char *str_r;                      | True                           | 
+1226 |  IF_FEATURE_UDHCP_PORT(char *str_P;)     | True                           | 
+1227 |  uint8_t *clientid_mac_ptr;              | True                           | 
+1228 |  llist_t *list_O = NULL;                 | True                           | 
+1229 |  llist_t *list_x = NULL;                 | True                           | 
+1230 |  int tryagain_timeout = 20;              | True                           | 
+1231 |  int discover_timeout = 3;               | True                           | 
+1232 |  int discover_retries = 3;               | True                           | 
+1233 |  struct in6_addr srv6_buf;               | True                           | 
+1234 |  struct in6_addr ipv6_buf;               | True                           | 
+1235 |  struct in6_addr *requested_ipv6;        | True                           | 
+1236 |  int packet_num;                         | True                           | 
+1237 |  int timeout; /* must be signed */       | True                           | 
+1238 |  int lease_remaining; /* must be signed  | True                           | 
+1239 |  unsigned opt;                           | True                           | 
+1240 |  int retval;                             | True                           | 
+1241 |                                          | True                           | 
+1242 |  setup_common_bufsiz();                  | True                           | 
+1243 |  /* We want random_xid to be random */   | True                           | 
+1244 |  srand(monotonic_us());                  | True                           | 
+1245 |                                          | True                           | 
+1246 |  /* Default options */                   | True                           | 
+1247 |  IF_FEATURE_UDHCP_PORT(SERVER_PORT6 = 54 | True                           | 
+1248 |  IF_FEATURE_UDHCP_PORT(CLIENT_PORT6 = 54 | True                           | 
+1249 |  client_data.interface = CONFIG_UDHCPC_D | True                           | 
+1250 |  client_data.script = CONFIG_UDHCPC6_DEF | True                           | 
+1251 |  client_data.sockfd = -1;                | True                           | 
+1252 |                                          | True                           | 
+1253 |  /* Make sure fd 0,1,2 are open */       | True                           | 
+1254 |  /* Set up the signal pipe on fds 3,4 -  | True                           | 
+1255 |  udhcp_sp_setup();                       | True                           | 
+1256 |                                          | True                           | 
+1257 |  /* Parse command line */                | True                           | 
+1258 |  opt = getopt32long(argv, "^"            | True                           | 
+1259 |   /* O,x: list; -T,-t,-A take numeric pa | True                           | 
+1260 |   "i:np:qRr:s:T:+t:+SA:+O:*ox:*fmld"     | True                           | 
+1261 |   USE_FOR_MMU("b")                       | True                           | 
+1262 |   ///IF_FEATURE_UDHCPC_ARPING("a")       | True                           | 
+1263 |   IF_FEATURE_UDHCP_PORT("P:")            | True                           | 
+1264 |   "v"                                    | True                           | 
+1265 |   "\0" IF_UDHCP_VERBOSE("vv") /* -v is a | True                           | 
+1266 |   , udhcpc6_longopts                     | True                           | 
+1267 |   , &client_data.interface, &client_data | True                           | 
+1268 |   , &client_data.script /* s */          | True                           | 
+1269 |   , &discover_timeout, &discover_retries | True                           | 
+1270 |   , &list_O                              | True                           | 
+1271 |   , &list_x                              | True                           | 
+1272 |   IF_FEATURE_UDHCP_PORT(, &str_P)        | True                           | 
+1273 |   IF_UDHCP_VERBOSE(, &dhcp_verbose)      | 1                              | 
+1274 |  );                                      | True                           | 
+1275 |  requested_ipv6 = NULL;                  | True                           | 
+1276 |  option_mask32 |= OPT_r;                 | True                           | 
+1277 |  if (opt & OPT_l) {                      | True                           | 
+1278 |   /* for -l, do not require IPv6 assignm | True                           | 
+1279 |   option_mask32 &= ~OPT_r;               | True                           | 
+1280 |  } else if (opt & OPT_r) {               | True                           | 
+1281 |   /* explicit "-r ARG" given */          | True                           | 
+1282 |   if (strcmp(str_r, "no") == 0) {        | True                           | 
+1283 |    option_mask32 &= ~OPT_r;              | True                           | 
+1284 |   } else {                               | True                           | 
+1285 |    if (inet_pton(AF_INET6, str_r, &ipv6_ | True                           | 
+1286 |     bb_error_msg_and_die("bad IPv6 addre | True                           | 
+1287 |    requested_ipv6 = &ipv6_buf;           | True                           | 
+1288 |   }                                      | True                           | 
+1289 |  }                                       | True                           | 
+1290 |                                          | True                           | 
+1291 | #if ENABLE_FEATURE_UDHCP_PORT            | True                           | 
+1292 |  if (opt & OPT_P) {                      | ENABLE_FEATURE_UDHCP_PORT      | 
+1293 |   CLIENT_PORT6 = xatou16(str_P);         | ENABLE_FEATURE_UDHCP_PORT      | 
+1294 |   SERVER_PORT6 = CLIENT_PORT6 + 1;       | ENABLE_FEATURE_UDHCP_PORT      | 
+1295 |  }                                       | ENABLE_FEATURE_UDHCP_PORT      | 
+1296 | #endif                                   | True                           | 
+1297 |  while (list_O) {                        | True                           | 
+1298 |   char *optstr = llist_pop(&list_O);     | True                           | 
+1299 |   unsigned n = bb_strtou(optstr, NULL, 0 | True                           | 
+1300 |   if (errno || n > 254) {                | True                           | 
+1301 |    n = udhcp_option_idx(optstr, d6_optio | True                           | 
+1302 |    n = d6_optflags[n].code;              | True                           | 
+1303 |   }                                      | True                           | 
+1304 |   client_data.opt_mask[n >> 3] |= 1 << ( | True                           | 
+1305 |  }                                       | True                           | 
+1306 |  if (!(opt & OPT_o)) {                   | True                           | 
+1307 |   unsigned i, n;                         | True                           | 
+1308 |   for (i = 0; (n = d6_optflags[i].code)  | True                           | 
+1309 |    if (d6_optflags[i].flags & OPTION_REQ | True                           | 
+1310 |     client_data.opt_mask[n >> 3] |= 1 << | True                           | 
+1311 |    }                                     | True                           | 
+1312 |   }                                      | True                           | 
+1313 |  }                                       | True                           | 
+1314 |  while (list_x) {                        | True                           | 
+1315 |   char *optstr = xstrdup(llist_pop(&list | True                           | 
+1316 |   udhcp_str2optset(optstr, &client_data. | !ENABLE_UDHCPC6                | 
+1317 |     d6_optflags, d6_option_strings,      | !ENABLE_UDHCPC6                | 
+1318 |     /*dhcpv6:*/ 1                        | ENABLE_UDHCPC6                 | 
+1319 |   );                                     | ENABLE_UDHCPC6                 | 
+1320 |   free(optstr);                          | True                           | 
+1321 |  }                                       | True                           | 
+1322 |                                          | True                           | 
+1323 |  clientid_mac_ptr = NULL;                | True                           | 
+1324 |  if (!udhcp_find_option(client_data.opti | True                           | 
+1325 |   /* not set, set the default client ID  | True                           | 
+1326 |   clientid_mac_ptr = udhcp_insert_new_op | True                           | 
+1327 |     &client_data.options, D6_OPT_CLIENTI | !ENABLE_UDHCPC6                | 
+1328 |     2+2 + 6, /*dhcp6:*/ 1);              | !ENABLE_UDHCPC6                | 
+1329 |   clientid_mac_ptr += 2+2; /* skip optio | True                           | 
+1330 |   clientid_mac_ptr[1] = 3; /* DUID-LL */ | True                           | 
+1331 |   clientid_mac_ptr[3] = 1; /* type: ethe | True                           | 
+1332 |   clientid_mac_ptr += 2+2; /* skip DUID- | True                           | 
+1333 |  }                                       | True                           | 
+1334 |                                          | True                           | 
+1335 |  if (d6_read_interface(client_data.inter | True                           | 
+1336 |    &client_data.ifindex,                 | True                           | 
+1337 |    &client6_data.ll_ip6,                 | True                           | 
+1338 |    client_data.client_mac)               | True                           | 
+1339 |  ) {                                     | True                           | 
+1340 |   return 1;                              | True                           | 
+1341 |  }                                       | True                           | 
+1342 |                                          | True                           | 
+1343 | #if !BB_MMU                              | True                           | 
+1344 |  /* on NOMMU reexec (i.e., background) e | !BB_MMU                        | 
+1345 |  if (!(opt & OPT_f)) {                   | !BB_MMU                        | 
+1346 |   bb_daemonize_or_rexec(0 /* flags */, a | !BB_MMU                        | 
+1347 |   logmode = LOGMODE_NONE;                | !BB_MMU                        | 
+1348 |  }                                       | !BB_MMU                        | 
+1349 | #endif                                   | True                           | 
+1350 |  if (opt & OPT_S) {                      | True                           | 
+1351 |   openlog(applet_name, LOG_PID, LOG_DAEM | True                           | 
+1352 |   logmode |= LOGMODE_SYSLOG;             | True                           | 
+1353 |  }                                       | True                           | 
+1354 |                                          | True                           | 
+1355 |  /* Create pidfile */                    | True                           | 
+1356 |  write_pidfile(client_data.pidfile);     | True                           | 
+1357 |  /* Goes to stdout (unless NOMMU) and po | True                           | 
+1358 |  bb_simple_info_msg("started, v"BB_VER); | True                           | 
+1359 |                                          | True                           | 
+1360 |  client_data.state = INIT_SELECTING;     | True                           | 
+1361 |  d6_run_script_no_option("deconfig");    | True                           | 
+1362 |  packet_num = 0;                         | True                           | 
+1363 |  timeout = 0;                            | True                           | 
+1364 |  lease_remaining = 0;                    | True                           | 
+1365 |                                          | True                           | 
+1366 |  /* Main event loop. select() waits on s | True                           | 
+1367 |   * on sockfd.                           | True                           | 
+1368 |   * "continue" statements in code below  | True                           | 
+1369 |   */                                     | True                           | 
+1370 |  for (;;) {                              | True                           | 
+1371 |   struct pollfd pfds[2];                 | True                           | 
+1372 |   struct d6_packet packet;               | True                           | 
+1373 |   uint8_t *packet_end;                   | True                           | 
+1374 |                                          | True                           | 
+1375 |   //bb_error_msg("sockfd:%d, listen_mode | True                           | 
+1376 |                                          | True                           | 
+1377 |   /* Was opening raw or udp socket here  | True                           | 
+1378 |    * if (client_data.listen_mode != LIST | True                           | 
+1379 |    * but on fast network renew responses | True                           | 
+1380 |    * than we open sockets. Thus this cod | True                           | 
+1381 |    * to change_listen_mode(). Thus we op | True                           | 
+1382 |    * BEFORE we send renew request (see " | True                           | 
+1383 |                                          | True                           | 
+1384 |   udhcp_sp_fd_set(pfds, client_data.sock | True                           | 
+1385 |                                          | True                           | 
+1386 |   retval = 0;                            | True                           | 
+1387 |   /* If we already timed out, fall throu | True                           | 
+1388 |   if (timeout > 0) {                     | True                           | 
+1389 |    unsigned diff;                        | True                           | 
+1390 |                                          | True                           | 
+1391 |    if (timeout > INT_MAX/1000)           | True                           | 
+1392 |     timeout = INT_MAX/1000;              | True                           | 
+1393 |    log1("waiting %u seconds", timeout);  | 1                              | 
+1394 |    diff = (unsigned)monotonic_sec();     | True                           | 
+1395 |    retval = poll(pfds, 2, timeout * 1000 | True                           | 
+1396 |    diff = (unsigned)monotonic_sec() - di | True                           | 
+1397 |    lease_remaining -= diff;              | True                           | 
+1398 |    if (lease_remaining < 0)              | True                           | 
+1399 |     lease_remaining = 0;                 | True                           | 
+1400 |    timeout -= diff;                      | True                           | 
+1401 |    if (timeout < 0)                      | True                           | 
+1402 |     timeout = 0;                         | True                           | 
+1403 |                                          | True                           | 
+1404 |    if (retval < 0) {                     | True                           | 
+1405 |     /* EINTR? A signal was caught, don't | True                           | 
+1406 |     if (errno == EINTR) {                | True                           | 
+1407 |      continue;                           | True                           | 
+1408 |     }                                    | True                           | 
+1409 |     /* Else: an error occurred, panic! * | True                           | 
+1410 |     bb_simple_perror_msg_and_die("poll") | True                           | 
+1411 |    }                                     | True                           | 
+1412 |   }                                      | True                           | 
+1413 |                                          | True                           | 
+1414 |   /* If timeout dropped to zero, time to | True                           | 
+1415 |    * resend discover/renew/whatever      | True                           | 
+1416 |    */                                    | True                           | 
+1417 |   if (retval == 0) {                     | True                           | 
+1418 |    /* When running on a bridge, the ifin | True                           | 
+1419 |     * (e.g. if member interfaces were ad | True                           | 
+1420 |     * or if the status of the bridge cha | True                           | 
+1421 |     * Refresh ifindex and client_mac:    | True                           | 
+1422 |     */                                   | True                           | 
+1423 |    if (d6_read_interface(client_data.int | True                           | 
+1424 |      &client_data.ifindex,               | True                           | 
+1425 |      &client6_data.ll_ip6,               | True                           | 
+1426 |      client_data.client_mac)             | True                           | 
+1427 |    ) {                                   | True                           | 
+1428 |     goto ret0; /* iface is gone? */      | True                           | 
+1429 |    }                                     | True                           | 
+1430 |                                          | True                           | 
+1431 |    if (clientid_mac_ptr)                 | True                           | 
+1432 |     memcpy(clientid_mac_ptr, client_data | True                           | 
+1433 |                                          | True                           | 
+1434 |    switch (client_data.state) {          | True                           | 
+1435 |    case INIT_SELECTING:                  | True                           | 
+1436 |     if (!discover_retries || packet_num  | True                           | 
+1437 |      if (packet_num == 0) {              | True                           | 
+1438 |       change_listen_mode(LISTEN_RAW);    | True                           | 
+1439 |       client_data.xid = random_xid();    | True                           | 
+1440 |      }                                   | True                           | 
+1441 |      /* multicast */                     | True                           | 
+1442 |      if (opt & OPT_l)                    | True                           | 
+1443 |       send_d6_info_request();            | True                           | 
+1444 |      else                                | True                           | 
+1445 |       send_d6_discover(requested_ipv6);  | True                           | 
+1446 |      timeout = discover_timeout;         | True                           | 
+1447 |      packet_num++;                       | True                           | 
+1448 |      continue;                           | True                           | 
+1449 |     }                                    | True                           | 
+1450 |  leasefail:                              | True                           | 
+1451 |     change_listen_mode(LISTEN_NONE);     | True                           | 
+1452 |     d6_run_script_no_option("leasefail") | True                           | 
+1453 | #if BB_MMU /* -b is not supported on NOM | True                           | 
+1454 |     if (opt & OPT_b) { /* background if  | BB_MMU                         | 
+1455 |      bb_simple_info_msg("no lease, forki | BB_MMU                         | 
+1456 |      client_background();                | BB_MMU                         | 
+1457 |      /* do not background again! */      | BB_MMU                         | 
+1458 |      opt = ((opt & ~(OPT_b|OPT_n)) | OPT | BB_MMU                         | 
+1459 |      /* ^^^ also disables -n (-b takes p | BB_MMU                         | 
+1460 |       * ifup's default udhcpc options ar | BB_MMU                         | 
+1461 |       * and users want to be able to add | BB_MMU                         | 
+1462 |       * (in a config file) to make it ba | BB_MMU                         | 
+1463 |       * _and not exit_.                  | BB_MMU                         | 
+1464 |       */                                 | BB_MMU                         | 
+1465 |     } else                               | BB_MMU                         | 
+1466 | #endif                                   | True                           | 
+1467 |     if (opt & OPT_n) { /* abort if no le | True                           | 
+1468 |      bb_simple_info_msg("no lease, faili | True                           | 
+1469 |      retval = 1;                         | True                           | 
+1470 |      goto ret;                           | True                           | 
+1471 |     }                                    | True                           | 
+1472 |     /* Wait before trying again */       | True                           | 
+1473 |     timeout = tryagain_timeout;          | True                           | 
+1474 |     packet_num = 0;                      | True                           | 
+1475 |     continue;                            | True                           | 
+1476 |    case REQUESTING:                      | True                           | 
+1477 |     if (!discover_retries || packet_num  | True                           | 
+1478 |      /* send multicast select packet */  | True                           | 
+1479 |      send_d6_select();                   | True                           | 
+1480 |      timeout = discover_timeout;         | True                           | 
+1481 |      packet_num++;                       | True                           | 
+1482 |      continue;                           | True                           | 
+1483 |     }                                    | True                           | 
+1484 |     /* Timed out, go back to init state. | True                           | 
+1485 |      * "discover...select...discover..." | True                           | 
+1486 |      * were seen in the wild. Treat them | True                           | 
+1487 |      * to "no response to discover" case | True                           | 
+1488 |     client_data.state = INIT_SELECTING;  | True                           | 
+1489 |     goto leasefail;                      | True                           | 
+1490 |    case BOUND:                           | True                           | 
+1491 |     /* 1/2 lease passed, enter renewing  | True                           | 
+1492 |     client_data.state = RENEWING;        | True                           | 
+1493 |     client_data.first_secs = 0; /* make  | True                           | 
+1494 |    got_SIGUSR1:                          | True                           | 
+1495 |     log1s("entering renew state");       | 1                              | 
+1496 |     change_listen_mode(LISTEN_KERNEL);   | True                           | 
+1497 |     /* fall right through */             | True                           | 
+1498 |    case RENEW_REQUESTED: /* in manual (S | True                           | 
+1499 |    case RENEWING:                        | True                           | 
+1500 |     if (packet_num == 0) {               | True                           | 
+1501 |      /* Send an unicast renew request */ | True                           | 
+1502 |    /* Sometimes observed to fail (EADDRN | True                           | 
+1503 |     * a new UDP socket for sending insid | True                           | 
+1504 |     * I hazard to guess existing listeni | True                           | 
+1505 |     * is somehow conflicting with it, bu | True                           | 
+1506 |     * not deterministic then?! Strange.  | True                           | 
+1507 |     * Anyway, it does recover by eventua | True                           | 
+1508 |     * into INIT_SELECTING state.         | True                           | 
+1509 |     */                                   | True                           | 
+1510 |      if (opt & OPT_l)                    | True                           | 
+1511 |       send_d6_info_request();            | True                           | 
+1512 |      else                                | True                           | 
+1513 |       send_d6_renew(OPT_m ? NULL : &srv6 | True                           | 
+1514 |      timeout = discover_timeout;         | True                           | 
+1515 |      packet_num++;                       | True                           | 
+1516 |      continue;                           | True                           | 
+1517 |     } /* else: we had sent one packet, b | True                           | 
+1518 |     log1s("no response to renew");       | 1                              | 
+1519 |     if (lease_remaining > 30) {          | True                           | 
+1520 |      /* Some lease time remains, try to  | True                           | 
+1521 |      change_listen_mode(LISTEN_NONE);    | True                           | 
+1522 |      goto BOUND_for_half_lease;          | True                           | 
+1523 |     }                                    | True                           | 
+1524 |     /* Enter rebinding state */          | True                           | 
+1525 |     client_data.state = REBINDING;       | True                           | 
+1526 |     log1s("entering rebinding state");   | 1                              | 
+1527 |     /* Switch to bcast receive */        | True                           | 
+1528 |     change_listen_mode(LISTEN_RAW);      | True                           | 
+1529 |     packet_num = 0;                      | True                           | 
+1530 |     /* fall right through */             | True                           | 
+1531 |    case REBINDING:                       | True                           | 
+1532 |     /* Lease is *really* about to run ou | True                           | 
+1533 |      * try to find DHCP server using bro | True                           | 
+1534 |     if (lease_remaining > 0 && packet_nu | True                           | 
+1535 |      if (opt & OPT_l)                    | True                           | 
+1536 |       send_d6_info_request();            | True                           | 
+1537 |      else /* send a broadcast renew requ | True                           | 
+1538 | //TODO: send_d6_renew uses D6_MSG_RENEW  | True                           | 
+1539 |       send_d6_renew(/*server_ipv6:*/ NUL | True                           | 
+1540 |      timeout = discover_timeout;         | True                           | 
+1541 |      packet_num++;                       | True                           | 
+1542 |      continue;                           | True                           | 
+1543 |     }                                    | True                           | 
+1544 |     /* Timed out, enter init state */    | True                           | 
+1545 |     change_listen_mode(LISTEN_NONE);     | True                           | 
+1546 |     bb_simple_info_msg("lease lost, ente | True                           | 
+1547 |     d6_run_script_no_option("deconfig"); | True                           | 
+1548 |     client_data.state = INIT_SELECTING;  | True                           | 
+1549 |     client_data.first_secs = 0; /* make  | True                           | 
+1550 |     timeout = 0;                         | True                           | 
+1551 |     packet_num = 0;                      | True                           | 
+1552 |     continue;                            | True                           | 
+1553 |    /* case RELEASED: */                  | True                           | 
+1554 |    }                                     | True                           | 
+1555 |    /* RELEASED state (when we got SIGUSR | True                           | 
+1556 |     * (wait for SIGUSR1 to re-init, or f | True                           | 
+1557 |     */                                   | True                           | 
+1558 |    timeout = INT_MAX;                    | True                           | 
+1559 |    continue; /* back to main loop */     | True                           | 
+1560 |   } /* if poll timed out */              | True                           | 
+1561 |                                          | True                           | 
+1562 |   /* poll() didn't timeout, something ha | True                           | 
+1563 |                                          | True                           | 
+1564 |   /* Is it a signal? */                  | True                           | 
+1565 |   switch (udhcp_sp_read()) {             | True                           | 
+1566 |   case SIGUSR1:                          | True                           | 
+1567 |    if (client_data.state <= REQUESTING)  | True                           | 
+1568 |     /* Initial negotiations in progress, | True                           | 
+1569 |     break;                               | True                           | 
+1570 |    if (client_data.state == REBINDING)   | True                           | 
+1571 |     /* Do not go back from rebind to ren | True                           | 
+1572 |     break;                               | True                           | 
+1573 |                                          | True                           | 
+1574 |    if (lease_remaining > 30) /* if renew | True                           | 
+1575 |     lease_remaining = 30;                | True                           | 
+1576 |    client_data.first_secs = 0; /* make s | True                           | 
+1577 |    packet_num = 0;                       | True                           | 
+1578 |                                          | True                           | 
+1579 |    switch (client_data.state) {          | True                           | 
+1580 |    case BOUND:                           | True                           | 
+1581 |    case RENEWING:                        | True                           | 
+1582 |     /* Try to renew/rebind */            | True                           | 
+1583 |     change_listen_mode(LISTEN_KERNEL);   | True                           | 
+1584 |     client_data.state = RENEW_REQUESTED; | True                           | 
+1585 |     goto got_SIGUSR1;                    | True                           | 
+1586 |                                          | True                           | 
+1587 |    case RENEW_REQUESTED:                 | True                           | 
+1588 |     /* Two SIGUSR1 received, start thing | True                           | 
+1589 |     change_listen_mode(LISTEN_NONE);     | True                           | 
+1590 |     d6_run_script_no_option("deconfig"); | True                           | 
+1591 |                                          | True                           | 
+1592 |    default:                              | True                           | 
+1593 |    /* case RELEASED: */                  | True                           | 
+1594 |     /* Wake from SIGUSR2-induced deconfi | True                           | 
+1595 |     change_listen_mode(LISTEN_NONE);     | True                           | 
+1596 |    }                                     | True                           | 
+1597 |    client_data.state = INIT_SELECTING;   | True                           | 
+1598 |    /* Kill any timeouts, user wants this | True                           | 
+1599 |    timeout = 0;                          | True                           | 
+1600 |    continue;                             | True                           | 
+1601 |   case SIGUSR2:                          | True                           | 
+1602 |    perform_d6_release(&srv6_buf, request | True                           | 
+1603 |    /* ^^^ switches to LISTEN_NONE */     | True                           | 
+1604 |    timeout = INT_MAX;                    | True                           | 
+1605 |    continue;                             | True                           | 
+1606 |   case SIGTERM:                          | True                           | 
+1607 |    bb_info_msg("received %s", "SIGTERM") | True                           | 
+1608 |    goto ret0;                            | True                           | 
+1609 |   }                                      | True                           | 
+1610 |                                          | True                           | 
+1611 |   /* Is it a packet? */                  | True                           | 
+1612 |   if (!pfds[1].revents)                  | True                           | 
+1613 |    continue; /* no */                    | True                           | 
+1614 |                                          | True                           | 
+1615 |   {                                      | True                           | 
+1616 |    int len;                              | True                           | 
+1617 |                                          | True                           | 
+1618 |    /* A packet is ready, read it */      | True                           | 
+1619 |    if (client_data.listen_mode == LISTEN | True                           | 
+1620 |     len = d6_recv_kernel_packet(&srv6_bu | True                           | 
+1621 |    else                                  | True                           | 
+1622 |     len = d6_recv_raw_packet(&srv6_buf,  | True                           | 
+1623 |    if (len == -1) {                      | True                           | 
+1624 |     /* Error is severe, reopen socket */ | True                           | 
+1625 |     bb_error_msg("read error: "STRERROR_ | True                           | 
+1626 |     sleep(discover_timeout); /* 3 second | True                           | 
+1627 |     change_listen_mode(client_data.liste | True                           | 
+1628 |    }                                     | True                           | 
+1629 |    if (len < 0)                          | True                           | 
+1630 |     continue;                            | True                           | 
+1631 |    packet_end = (uint8_t*)&packet + len; | True                           | 
+1632 |   }                                      | True                           | 
+1633 |                                          | True                           | 
+1634 |   if ((packet.d6_xid32 & htonl(0x00fffff | True                           | 
+1635 |    log1("xid %x (our is %x)%s",          | 1                              | 
+1636 |     (unsigned)(packet.d6_xid32 & htonl(0 | 1                              | 
+1637 |     ", ignoring packet"                  | 1                              | 
+1638 |    );                                    | True                           | 
+1639 |    continue;                             | True                           | 
+1640 |   }                                      | True                           | 
+1641 |                                          | True                           | 
+1642 |   switch (client_data.state) {           | True                           | 
+1643 |   case INIT_SELECTING:                   | True                           | 
+1644 |    if (packet.d6_msg_type == D6_MSG_ADVE | True                           | 
+1645 |     goto type_is_ok;                     | True                           | 
+1646 |    /* DHCPv6 has "Rapid Commit", when in | True                           | 
+1647 |     * server sends Reply right away.     | True                           | 
+1648 |     * Fall through to check for this cas | True                           | 
+1649 |     */                                   | True                           | 
+1650 |   case REQUESTING:                       | True                           | 
+1651 |   case RENEWING:                         | True                           | 
+1652 |   case RENEW_REQUESTED:                  | True                           | 
+1653 |   case REBINDING:                        | True                           | 
+1654 |    if (packet.d6_msg_type == D6_MSG_REPL | True                           | 
+1655 | /*                                       | True                           | 
+1656 |  * RFC 3315 18.1.8. Receipt of Reply Mes | True                           | 
+1657 |  *                                       | True                           | 
+1658 |  * Upon the receipt of a valid Reply mes | True                           | 
+1659 |  * (with a Rapid Commit option), Request | True                           | 
+1660 |  * Information-request message, the clie | True                           | 
+1661 |  * information contained in the Reply.   | True                           | 
+1662 |  * any status code or message from the s | True                           | 
+1663 |  * message.                              | True                           | 
+1664 |  *                                       | True                           | 
+1665 |  * The client SHOULD perform duplicate a | True                           | 
+1666 |  * the addresses in any IAs it receives  | True                           | 
+1667 |  * using that address for traffic.  If a | True                           | 
+1668 |  * be in use on the link, the client sen | True                           | 
+1669 |  * server as described in section 18.1.7 | True                           | 
+1670 |  *                                       | True                           | 
+1671 |  * If the Reply was received in response | True                           | 
+1672 |  * Commit option), Request, Renew or Reb | True                           | 
+1673 |  * the information it has recorded about | True                           | 
+1674 |  * contained in the Reply message:       | True                           | 
+1675 |  *                                       | True                           | 
+1676 |  * -  Record T1 and T2 times.            | True                           | 
+1677 |  *                                       | True                           | 
+1678 |  * -  Add any new addresses in the IA op | True                           | 
+1679 |  *    the client.                        | True                           | 
+1680 |  *                                       | True                           | 
+1681 |  * -  Update lifetimes for any addresses | True                           | 
+1682 |  *    client already has recorded in the | True                           | 
+1683 |  *                                       | True                           | 
+1684 |  * -  Discard any addresses from the IA, | True                           | 
+1685 |  *    have a valid lifetime of 0 in the  | True                           | 
+1686 |  *                                       | True                           | 
+1687 |  * -  Leave unchanged any information ab | True                           | 
+1688 |  *    recorded in the IA but that were n | True                           | 
+1689 |  *    server.                            | True                           | 
+1690 |  *                                       | True                           | 
+1691 |  * Management of the specific configurat | True                           | 
+1692 |  * the definition of each option in sect | True                           | 
+1693 |  *                                       | True                           | 
+1694 |  * If the client receives a Reply messag | True                           | 
+1695 |  * UnspecFail, the server is indicating  | True                           | 
+1696 |  * the message due to an unspecified fai | True                           | 
+1697 |  * retransmits the original message to t | True                           | 
+1698 |  * desired operation, the client MUST li | True                           | 
+1699 |  * retransmits the message and limit the | True                           | 
+1700 |  * which it retransmits the message.     | True                           | 
+1701 |  *                                       | True                           | 
+1702 |  * When the client receives a Reply mess | True                           | 
+1703 |  * with the value UseMulticast, the clie | True                           | 
+1704 |  * message and sends subsequent messages | True                           | 
+1705 |  * interface on which the message was re | True                           | 
+1706 |  * client resends the original message u | True                           | 
+1707 |  *                                       | True                           | 
+1708 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1709 |  * |          OPTION_IA_NA         |     | True                           | 
+1710 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1711 |  * |                        IAID (4 octe | True                           | 
+1712 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1713 |  * |                              T1     | True                           | 
+1714 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1715 |  * |                              T2     | True                           | 
+1716 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1717 |  * |                                     | True                           | 
+1718 |  * .                         IA_NA-optio | True                           | 
+1719 |  * .                                     | True                           | 
+1720 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1721 |  *                                       | True                           | 
+1722 |  *                                       | True                           | 
+1723 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1724 |  * |          OPTION_IAADDR        |     | True                           | 
+1725 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1726 |  * |                                     | True                           | 
+1727 |  * |                         IPv6 addres | True                           | 
+1728 |  * |                                     | True                           | 
+1729 |  * |                                     | True                           | 
+1730 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1731 |  * |                      preferred-life | True                           | 
+1732 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1733 |  * |                        valid-lifeti | True                           | 
+1734 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1735 |  * .                                     | True                           | 
+1736 |  * .                        IAaddr-optio | True                           | 
+1737 |  * .                                     | True                           | 
+1738 |  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1739 |  */                                      | True                           | 
+1740 |     unsigned start;                      | True                           | 
+1741 |     uint32_t lease_seconds;              | True                           | 
+1742 |     struct d6_option *option;            | True                           | 
+1743 |     unsigned address_timeout;            | True                           | 
+1744 |     unsigned prefix_timeout;             | True                           | 
+1745 |  type_is_ok:                             | True                           | 
+1746 |     change_listen_mode(LISTEN_NONE);     | True                           | 
+1747 |                                          | True                           | 
+1748 |     address_timeout = 0;                 | True                           | 
+1749 |     prefix_timeout = 0;                  | True                           | 
+1750 |     option = d6_find_option(packet.d6_op | True                           | 
+1751 |     if (option) {                        | True                           | 
+1752 | //    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+1753 | //    |       OPTION_STATUS_CODE      |  | True                           | 
+1754 | //    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+1755 | //    |          status-code          |  | True                           | 
+1756 | //    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  | True                           | 
+1757 | //    .                        status-me | True                           | 
+1758 | //    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                           | 
+1759 |      unsigned len, status;               | True                           | 
+1760 |      len = ((unsigned)option->len_hi <<  | True                           | 
+1761 |      if (len < 2) {                      | True                           | 
+1762 |       bb_simple_error_msg("invalid OPTIO | True                           | 
+1763 |       continue;                          | True                           | 
+1764 |      }                                   | True                           | 
+1765 |      status = ((unsigned)option->data[0] | True                           | 
+1766 |      if (status != 0) {                  | True                           | 
+1767 | //TODO: handle status == 5 (UseMulticast | True                           | 
+1768 |       /* return to init state */         | True                           | 
+1769 |       bb_info_msg("received DHCP NAK: %u | True                           | 
+1770 |       d6_run_script(packet.d6_options, p | True                           | 
+1771 |       if (client_data.state != REQUESTIN | True                           | 
+1772 |        d6_run_script_no_option("deconfig | True                           | 
+1773 |       sleep(3); /* avoid excessive netwo | True                           | 
+1774 |       client_data.state = INIT_SELECTING | True                           | 
+1775 |       client_data.first_secs = 0; /* mak | True                           | 
+1776 |       requested_ipv6 = NULL;             | True                           | 
+1777 |       timeout = 0;                       | True                           | 
+1778 |       packet_num = 0;                    | True                           | 
+1779 |       continue;                          | True                           | 
+1780 |      }                                   | True                           | 
+1781 |     }                                    | True                           | 
+1782 |     option = d6_copy_option(packet.d6_op | True                           | 
+1783 |     if (!option) {                       | True                           | 
+1784 |      bb_simple_info_msg("no server ID, i | True                           | 
+1785 |      continue;                           | True                           | 
+1786 |      /* still selecting - this server lo | True                           | 
+1787 |     }                                    | True                           | 
+1788 | //Note: we do not bother comparing serve | True                           | 
+1789 | //server_id variable is used solely for  | True                           | 
+1790 | //in outgoing packets. (why DHCPv6 even  | True                           | 
+1791 |     free(client6_data.server_id);        | True                           | 
+1792 |     client6_data.server_id = option;     | True                           | 
+1793 |     if (packet.d6_msg_type == D6_MSG_ADV | True                           | 
+1794 |      /* enter requesting state */        | True                           | 
+1795 |      change_listen_mode(LISTEN_RAW);     | True                           | 
+1796 |      client_data.state = REQUESTING;     | True                           | 
+1797 |      timeout = 0;                        | True                           | 
+1798 |      packet_num = 0;                     | True                           | 
+1799 |      continue;                           | True                           | 
+1800 |     }                                    | True                           | 
+1801 |     if (option_mask32 & OPT_r) {         | True                           | 
+1802 |      struct d6_option *iaaddr;           | True                           | 
+1803 |                                          | True                           | 
+1804 |      free(client6_data.ia_na);           | True                           | 
+1805 |      client6_data.ia_na = d6_copy_option | True                           | 
+1806 |      if (!client6_data.ia_na) {          | True                           | 
+1807 |       bb_info_msg("no %s option%s", "IA_ | True                           | 
+1808 |       continue;                          | True                           | 
+1809 |      }                                   | True                           | 
+1810 |      if (client6_data.ia_na->len < (4 +  | True                           | 
+1811 |       bb_info_msg("%s option is too shor | True                           | 
+1812 |        "IA_NA", client6_data.ia_na->len) | True                           | 
+1813 |       continue;                          | True                           | 
+1814 |      }                                   | True                           | 
+1815 |      iaaddr = d6_find_option(client6_dat | True                           | 
+1816 |        client6_data.ia_na->data + client | True                           | 
+1817 |        D6_OPT_IAADDR                     | True                           | 
+1818 |      );                                  | True                           | 
+1819 |      if (!iaaddr) {                      | True                           | 
+1820 |       bb_info_msg("no %s option%s", "IAA | True                           | 
+1821 |       continue;                          | True                           | 
+1822 |      }                                   | True                           | 
+1823 |      if (iaaddr->len < (16 + 4 + 4)) {   | True                           | 
+1824 |       bb_info_msg("%s option is too shor | True                           | 
+1825 |        "IAADDR", iaaddr->len);           | True                           | 
+1826 |       continue;                          | True                           | 
+1827 |      }                                   | True                           | 
+1828 |      /* Note: the address is sufficientl | True                           | 
+1829 |       * we _copied_ IA-NA, and copy is a | True                           | 
+1830 |       */                                 | True                           | 
+1831 |      requested_ipv6 = (struct in6_addr*) | True                           | 
+1832 |      move_from_unaligned32(lease_seconds | True                           | 
+1833 |      lease_seconds = ntohl(lease_seconds | True                           | 
+1834 | /// TODO: check for 0 lease time?        | True                           | 
+1835 |      bb_info_msg("%s obtained, lease tim | True                           | 
+1836 |       "IPv6", /*inet_ntoa(temp_addr),*/  | True                           | 
+1837 |      address_timeout = lease_seconds;    | True                           | 
+1838 |     }                                    | True                           | 
+1839 |     if (option_mask32 & OPT_d) {         | True                           | 
+1840 |      struct d6_option *iaprefix;         | True                           | 
+1841 |                                          | True                           | 
+1842 |      free(client6_data.ia_pd);           | True                           | 
+1843 |      client6_data.ia_pd = d6_copy_option | True                           | 
+1844 | //  0                   1                | True                           | 
+1845 | //  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7  | True                           | 
+1846 | // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1847 | // |         OPTION_IA_PD          |     | True                           | 
+1848 | // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1849 | // |                         IAID (4 oct | True                           | 
+1850 | // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1851 | // |                              T1     | True                           | 
+1852 | // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1853 | // |                              T2     | True                           | 
+1854 | // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1855 | // .                                     | True                           | 
+1856 | // .                          IA_PD-opti | True                           | 
+1857 | // .                                     | True                           | 
+1858 | // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ | True                           | 
+1859 |      if (!client6_data.ia_pd) {          | True                           | 
+1860 |       bb_info_msg("no %s option%s", "IA_ | True                           | 
+1861 |       continue;                          | True                           | 
+1862 |      }                                   | True                           | 
+1863 |      if (client6_data.ia_pd->len < (4 +  | True                           | 
+1864 |       bb_info_msg("%s option is too shor | True                           | 
+1865 |        "IA_PD", client6_data.ia_pd->len) | True                           | 
+1866 |       continue;                          | True                           | 
+1867 |      }                                   | True                           | 
+1868 |      iaprefix = d6_find_option(client6_d | True                           | 
+1869 |        client6_data.ia_pd->data + client | True                           | 
+1870 |        D6_OPT_IAPREFIX                   | True                           | 
+1871 |      );                                  | True                           | 
+1872 |      if (!iaprefix) {                    | True                           | 
+1873 |       bb_info_msg("no %s option%s", "IAP | True                           | 
+1874 |       continue;                          | True                           | 
+1875 |      }                                   | True                           | 
+1876 |      if (iaprefix->len < (4 + 4 + 1 + 16 | True                           | 
+1877 |       bb_info_msg("%s option is too shor | True                           | 
+1878 |        "IAPREFIX", iaprefix->len);       | True                           | 
+1879 |       continue;                          | True                           | 
+1880 |      }                                   | True                           | 
+1881 |      move_from_unaligned32(lease_seconds | True                           | 
+1882 |      lease_seconds = ntohl(lease_seconds | True                           | 
+1883 |      bb_info_msg("%s obtained, lease tim | True                           | 
+1884 |       "prefix", /*inet_ntoa(temp_addr),* | True                           | 
+1885 |      prefix_timeout = lease_seconds;     | True                           | 
+1886 |     }                                    | True                           | 
+1887 |     if (!address_timeout)                | True                           | 
+1888 |      address_timeout = prefix_timeout;   | True                           | 
+1889 |     if (!prefix_timeout)                 | True                           | 
+1890 |      prefix_timeout = address_timeout;   | True                           | 
+1891 |     lease_remaining = (prefix_timeout <  | True                           | 
+1892 |     if (lease_remaining < 0) /* signed o | True                           | 
+1893 |      lease_remaining = INT_MAX;          | True                           | 
+1894 |     if (opt & OPT_l) {                   | True                           | 
+1895 |      /* TODO: request OPTION_INFORMATION | True                           | 
+1896 |       * and use its value instead of the | True                           | 
+1897 |       */                                 | True                           | 
+1898 |      lease_remaining = 24 * 60 * 60;     | True                           | 
+1899 |     }                                    | True                           | 
+1900 |     /* paranoia: must not be too small * | True                           | 
+1901 |     if (lease_remaining < 30)            | True                           | 
+1902 |      lease_remaining = 30;               | True                           | 
+1903 |                                          | True                           | 
+1904 |     /* enter bound state */              | True                           | 
+1905 |     start = monotonic_sec();             | True                           | 
+1906 |     d6_run_script(packet.d6_options, pac | True                           | 
+1907 |      (client_data.state == REQUESTING ?  | True                           | 
+1908 |     lease_remaining -= (unsigned)monoton | True                           | 
+1909 |     if (lease_remaining < 0)             | True                           | 
+1910 |      lease_remaining = 0;                | True                           | 
+1911 |     if (opt & OPT_q) { /* quit after lea | True                           | 
+1912 |      goto ret0;                          | True                           | 
+1913 |     }                                    | True                           | 
+1914 |     /* future renew failures should not  | True                           | 
+1915 |     opt &= ~OPT_n;                       | True                           | 
+1916 | #if BB_MMU /* NOMMU case backgrounded ea | True                           | 
+1917 |     if (!(opt & OPT_f)) {                | BB_MMU                         | 
+1918 |      client_background();                | BB_MMU                         | 
+1919 |      /* do not background again! */      | BB_MMU                         | 
+1920 |      opt = ((opt & ~OPT_b) | OPT_f);     | BB_MMU                         | 
+1921 |     }                                    | BB_MMU                         | 
+1922 | #endif                                   | True                           | 
+1923 |                                          | True                           | 
+1924 |  BOUND_for_half_lease:                   | True                           | 
+1925 |     timeout = (unsigned)lease_remaining  | True                           | 
+1926 |     client_data.state = BOUND;           | True                           | 
+1927 |     packet_num = 0;                      | True                           | 
+1928 |     continue; /* back to main loop */    | True                           | 
+1929 |    }                                     | True                           | 
+1930 |    continue;                             | True                           | 
+1931 |   /* case BOUND: - ignore all packets */ | True                           | 
+1932 |   /* case RELEASED: - ignore all packets | True                           | 
+1933 |   }                                      | True                           | 
+1934 |   /* back to main loop */                | True                           | 
+1935 |  } /* for (;;) - main loop ends */       | True                           | 
+1936 |                                          | True                           | 
+1937 |  ret0:                                   | True                           | 
+1938 |  if (opt & OPT_R) /* release on quit */  | True                           | 
+1939 |   perform_d6_release(&srv6_buf, requeste | True                           | 
+1940 |  retval = 0;                             | True                           | 
+1941 |  ret:                                    | True                           | 
+1942 |  /*if (client_data.pidfile) - remove_pid | True                           | 
+1943 |   remove_pidfile(client_data.pidfile);   | True                           | 
+1944 |  return retval;                          | True                           | 
+1945 | }                                        | True                           | 
+-----+------------------------------------------+--------------------------------+
+     |                                          | +225MB, 551ms                  | 

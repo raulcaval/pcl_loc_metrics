@@ -1,0 +1,628 @@
+FILE: data/raw/busybox-1.38.0/loginutils/login.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                        | 
+-----+------------------------------------------+----------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                         | 
+   2 | /*                                       | True                                         | 
+   3 |  * Licensed under GPLv2 or later, see fi | True                                         | 
+   4 |  */                                      | True                                         | 
+   5 | //config:config LOGIN                    | True                                         | 
+   6 | //config: bool "login (25 kb)"           | True                                         | 
+   7 | //config: default y                      | True                                         | 
+   8 | //config: select FEATURE_SYSLOG          | True                                         | 
+   9 | //config: help                           | True                                         | 
+  10 | //config: login is used when signing ont | True                                         | 
+  11 | //config:                                | True                                         | 
+  12 | //config: Note that busybox binary must  | True                                         | 
+  13 | //config: work properly.                 | True                                         | 
+  14 | //config:                                | True                                         | 
+  15 | //config:config LOGIN_SESSION_AS_CHILD   | True                                         | 
+  16 | //config: bool "Run logged in session in | True                                         | 
+  17 | //config: default y if PAM               | True                                         | 
+  18 | //config: depends on LOGIN               | True                                         | 
+  19 | //config: help                           | True                                         | 
+  20 | //config: Run the logged in session in a | True                                         | 
+  21 | //config: login to clean up things such  | True                                         | 
+  22 | //config: when the login session is comp | True                                         | 
+  23 | //config: almost always would want this  | True                                         | 
+  24 | //config: will not be cleaned up.        | True                                         | 
+  25 | //config:                                | True                                         | 
+  26 | //config:config LOGIN_SCRIPTS            | True                                         | 
+  27 | //config: bool "Support login scripts"   | True                                         | 
+  28 | //config: depends on LOGIN               | True                                         | 
+  29 | //config: default y                      | True                                         | 
+  30 | //config: help                           | True                                         | 
+  31 | //config: Enable this if you want login  | True                                         | 
+  32 | //config: just prior to switching from r | True                                         | 
+  33 | //config:                                | True                                         | 
+  34 | //config:config FEATURE_NOLOGIN          | True                                         | 
+  35 | //config: bool "Support /etc/nologin"    | True                                         | 
+  36 | //config: default y                      | True                                         | 
+  37 | //config: depends on LOGIN               | True                                         | 
+  38 | //config: help                           | True                                         | 
+  39 | //config: The file /etc/nologin is used  | True                                         | 
+  40 | //config: If it exists, non-root logins  | True                                         | 
+  41 | //config:                                | True                                         | 
+  42 | //config:config FEATURE_SECURETTY        | True                                         | 
+  43 | //config: bool "Support /etc/securetty"  | True                                         | 
+  44 | //config: default y                      | True                                         | 
+  45 | //config: depends on LOGIN               | True                                         | 
+  46 | //config: help                           | True                                         | 
+  47 | //config: The file /etc/securetty is use | True                                         | 
+  48 | //config: The file contains the device n | True                                         | 
+  49 | //config: without leading /dev/) on whic | True                                         | 
+  50 |                                          | True                                         | 
+  51 | //applet:/* Needs to be run by root or b | True                                         | 
+  52 | //applet:IF_LOGIN(APPLET(login, BB_DIR_B | True                                         | 
+  53 |                                          | True                                         | 
+  54 | //kbuild:lib-$(CONFIG_LOGIN) += login.o  | True                                         | 
+  55 |                                          | True                                         | 
+  56 | //usage:#define login_trivial_usage      | True                                         | 
+  57 | //usage:       "[-p] [-h HOST] [[-f] USE | True                                         | 
+  58 | //usage:#define login_full_usage "\n\n"  | True                                         | 
+  59 | //usage:       "Begin a new session on t | True                                         | 
+  60 | //usage:     "\n -f Don't authenticate ( | True                                         | 
+  61 | //usage:     "\n -h HOST Host user came  | True                                         | 
+  62 | //usage:     "\n -p Preserve environment | True                                         | 
+  63 | //usage:     "\n"                        | True                                         | 
+  64 | //usage:     "\n$LOGIN_TIMEOUT  Seconds  | True                                         | 
+  65 | //usage: IF_LOGIN_SCRIPTS(               | True                                         | 
+  66 | //usage:     "\n$LOGIN_PRE_SUID_SCRIPT E | True                                         | 
+  67 | //usage: )                               | True                                         | 
+  68 |                                          | True                                         | 
+  69 | #include "libbb.h"                       | True                                         | 
+  70 | #include "common_bufsiz.h"               | True                                         | 
+  71 | #include <syslog.h>                      | True                                         | 
+  72 |                                          | True                                         | 
+  73 | #if ENABLE_SELINUX                       | True                                         | 
+  74 | # include <selinux/selinux.h>  /* for is | ENABLE_SELINUX                               | 
+  75 | # include <selinux/get_context_list.h> / | ENABLE_SELINUX                               | 
+  76 | # /* from deprecated <selinux/flask.h>:  | ENABLE_SELINUX                               | 
+  77 | # undef  SECCLASS_CHR_FILE               | ENABLE_SELINUX                               | 
+  78 | # define SECCLASS_CHR_FILE 10            | ENABLE_SELINUX                               | 
+  79 | #endif                                   | True                                         | 
+  80 |                                          | True                                         | 
+  81 | #if ENABLE_PAM                           | True                                         | 
+  82 | /* PAM may include <locale.h>. We may ne | ENABLE_PAM                                   | 
+  83 | # undef setlocale                        | ENABLE_PAM                                   | 
+  84 | /* For some obscure reason, PAM is not i | ENABLE_PAM                                   | 
+  85 |  * Apparently they like to confuse peopl | ENABLE_PAM                                   | 
+  86 | # include <security/pam_appl.h>          | ENABLE_PAM                                   | 
+  87 | # include <security/pam_misc.h>          | ENABLE_PAM                                   | 
+  88 |                                          | ENABLE_PAM                                   | 
+  89 | # if 0                                   | ENABLE_PAM                                   | 
+  90 | /* This supposedly can be used to avoid  | ENABLE_PAM&&0                                | 
+  91 |  * if used instead of standard misc_conv | ENABLE_PAM&&0                                | 
+  92 |  *                                       | ENABLE_PAM&&0                                | 
+  93 |  * "When we want to authenticate first w | ENABLE_PAM&&0                                | 
+  94 |  *  the password is asked for local meth | ENABLE_PAM&&0                                | 
+  95 |  *  So if we want to authenticate a user | ENABLE_PAM&&0                                | 
+  96 |  *  asked two times before authenticatio | ENABLE_PAM&&0                                | 
+  97 |  *                                       | ENABLE_PAM&&0                                | 
+  98 |  * However, code looks shaky. For exampl | ENABLE_PAM&&0                                | 
+  99 |  * Are msg[i] and resp[i] indexes handle | ENABLE_PAM&&0                                | 
+ 100 |  */                                      | ENABLE_PAM&&0                                | 
+ 101 | static char *passwd = NULL;              | ENABLE_PAM&&0                                | 
+ 102 | static int my_conv(int num_msg, const st | ENABLE_PAM&&0                                | 
+ 103 |   struct pam_response **resp, void *data | ENABLE_PAM&&0                                | 
+ 104 | {                                        | ENABLE_PAM&&0                                | 
+ 105 |  int i;                                  | ENABLE_PAM&&0                                | 
+ 106 |  for (i = 0; i < num_msg; i++) {         | ENABLE_PAM&&0                                | 
+ 107 |   switch (msg[i]->msg_style) {           | ENABLE_PAM&&0                                | 
+ 108 |   case PAM_PROMPT_ECHO_OFF:              | ENABLE_PAM&&0                                | 
+ 109 |    if (passwd == NULL) {                 | ENABLE_PAM&&0                                | 
+ 110 |     misc_conv(num_msg, msg, resp, data); | ENABLE_PAM&&0                                | 
+ 111 |     passwd = xstrdup(resp[i]->resp);     | ENABLE_PAM&&0                                | 
+ 112 |     return PAM_SUCCESS;                  | ENABLE_PAM&&0                                | 
+ 113 |    }                                     | ENABLE_PAM&&0                                | 
+ 114 |                                          | ENABLE_PAM&&0                                | 
+ 115 |    resp[0] = xzalloc(sizeof(struct pam_r | ENABLE_PAM&&0                                | 
+ 116 |    resp[0]->resp = passwd;               | ENABLE_PAM&&0                                | 
+ 117 |    passwd = NULL;                        | ENABLE_PAM&&0                                | 
+ 118 |    resp[0]->resp_retcode = PAM_SUCCESS;  | ENABLE_PAM&&0                                | 
+ 119 |    resp[1] = NULL;                       | ENABLE_PAM&&0                                | 
+ 120 |    return PAM_SUCCESS;                   | ENABLE_PAM&&0                                | 
+ 121 |                                          | ENABLE_PAM&&0                                | 
+ 122 |   default:                               | ENABLE_PAM&&0                                | 
+ 123 |    break;                                | ENABLE_PAM&&0                                | 
+ 124 |   }                                      | ENABLE_PAM&&0                                | 
+ 125 |  }                                       | ENABLE_PAM&&0                                | 
+ 126 |                                          | ENABLE_PAM&&0                                | 
+ 127 |  return PAM_SUCCESS;                     | ENABLE_PAM&&0                                | 
+ 128 | }                                        | ENABLE_PAM&&0                                | 
+ 129 | # endif                                  | ENABLE_PAM                                   | 
+ 130 |                                          | ENABLE_PAM                                   | 
+ 131 | static const struct pam_conv conv = {    | ENABLE_PAM                                   | 
+ 132 |  misc_conv,                              | ENABLE_PAM                                   | 
+ 133 |  NULL                                    | ENABLE_PAM                                   | 
+ 134 | };                                       | ENABLE_PAM                                   | 
+ 135 | #endif                                   | True                                         | 
+ 136 |                                          | True                                         | 
+ 137 | enum {                                   | True                                         | 
+ 138 |  EMPTY_USERNAME_COUNT = 10,              | True                                         | 
+ 139 |  /* Some users found 32 chars limit to b | True                                         | 
+ 140 |  USERNAME_SIZE = 64,                     | True                                         | 
+ 141 |  TTYNAME_SIZE = 32,                      | True                                         | 
+ 142 | };                                       | True                                         | 
+ 143 |                                          | True                                         | 
+ 144 | struct globals {                         | True                                         | 
+ 145 |  struct termios tty_attrs;               | True                                         | 
+ 146 |  int timeout;                            | True                                         | 
+ 147 | } FIX_ALIASING;                          | True                                         | 
+ 148 | #define G (*(struct globals*)bb_common_b | True                                         | 
+ 149 | #define INIT_G() do { setup_common_bufsi | True                                         | 
+ 150 |                                          | True                                         | 
+ 151 |                                          | True                                         | 
+ 152 | #if ENABLE_FEATURE_NOLOGIN               | True                                         | 
+ 153 | static void die_if_nologin(void)         | ENABLE_FEATURE_NOLOGIN                       | 
+ 154 | {                                        | ENABLE_FEATURE_NOLOGIN                       | 
+ 155 |  FILE *fp;                               | ENABLE_FEATURE_NOLOGIN                       | 
+ 156 |  int c;                                  | ENABLE_FEATURE_NOLOGIN                       | 
+ 157 |  int empty = 1;                          | ENABLE_FEATURE_NOLOGIN                       | 
+ 158 |                                          | ENABLE_FEATURE_NOLOGIN                       | 
+ 159 |  fp = fopen_for_read("/etc/nologin");    | ENABLE_FEATURE_NOLOGIN                       | 
+ 160 |  if (!fp) /* assuming it does not exist  | ENABLE_FEATURE_NOLOGIN                       | 
+ 161 |   return;                                | ENABLE_FEATURE_NOLOGIN                       | 
+ 162 |                                          | ENABLE_FEATURE_NOLOGIN                       | 
+ 163 |  while ((c = getc(fp)) != EOF) {         | ENABLE_FEATURE_NOLOGIN                       | 
+ 164 |   if (c == '\n')                         | ENABLE_FEATURE_NOLOGIN                       | 
+ 165 |    bb_putchar('\r');                     | ENABLE_FEATURE_NOLOGIN                       | 
+ 166 |   bb_putchar(c);                         | ENABLE_FEATURE_NOLOGIN                       | 
+ 167 |   empty = 0;                             | ENABLE_FEATURE_NOLOGIN                       | 
+ 168 |  }                                       | ENABLE_FEATURE_NOLOGIN                       | 
+ 169 |  if (empty)                              | ENABLE_FEATURE_NOLOGIN                       | 
+ 170 |   puts("\r\nSystem closed for routine ma | ENABLE_FEATURE_NOLOGIN                       | 
+ 171 |                                          | ENABLE_FEATURE_NOLOGIN                       | 
+ 172 |  fclose(fp);                             | ENABLE_FEATURE_NOLOGIN                       | 
+ 173 |  fflush_all();                           | ENABLE_FEATURE_NOLOGIN                       | 
+ 174 |  /* Users say that they do need this pri | ENABLE_FEATURE_NOLOGIN                       | 
+ 175 |  tcdrain(STDOUT_FILENO);                 | ENABLE_FEATURE_NOLOGIN                       | 
+ 176 |  exit_FAILURE();                         | ENABLE_FEATURE_NOLOGIN                       | 
+ 177 | }                                        | ENABLE_FEATURE_NOLOGIN                       | 
+ 178 | #else                                    | True                                         | 
+ 179 | # define die_if_nologin() ((void)0)      | !ENABLE_FEATURE_NOLOGIN                      | 
+ 180 | #endif                                   | True                                         | 
+ 181 |                                          | True                                         | 
+ 182 | #if ENABLE_SELINUX                       | True                                         | 
+ 183 | static void initselinux(char *username,  | ENABLE_SELINUX                               | 
+ 184 |       security_context_t *user_sid)      | ENABLE_SELINUX                               | 
+ 185 | {                                        | ENABLE_SELINUX                               | 
+ 186 |  security_context_t old_tty_sid, new_tty | ENABLE_SELINUX                               | 
+ 187 |                                          | ENABLE_SELINUX                               | 
+ 188 |  if (!is_selinux_enabled())              | ENABLE_SELINUX                               | 
+ 189 |   return;                                | ENABLE_SELINUX                               | 
+ 190 |                                          | ENABLE_SELINUX                               | 
+ 191 |  if (get_default_context(username, NULL, | ENABLE_SELINUX                               | 
+ 192 |   bb_error_msg_and_die("can't get SID fo | ENABLE_SELINUX                               | 
+ 193 |  }                                       | ENABLE_SELINUX                               | 
+ 194 |  if (getfilecon(full_tty, &old_tty_sid)  | ENABLE_SELINUX                               | 
+ 195 |   bb_perror_msg_and_die("getfilecon(%s)  | ENABLE_SELINUX                               | 
+ 196 |  }                                       | ENABLE_SELINUX                               | 
+ 197 |  if (security_compute_relabel(*user_sid, | ENABLE_SELINUX                               | 
+ 198 |     SECCLASS_CHR_FILE, &new_tty_sid) !=  | ENABLE_SELINUX                               | 
+ 199 |   bb_perror_msg_and_die("security_change | ENABLE_SELINUX                               | 
+ 200 |  }                                       | ENABLE_SELINUX                               | 
+ 201 |  if (setfilecon(full_tty, new_tty_sid) ! | ENABLE_SELINUX                               | 
+ 202 |   bb_perror_msg_and_die("chsid(%s, %s) f | ENABLE_SELINUX                               | 
+ 203 |  }                                       | ENABLE_SELINUX                               | 
+ 204 | }                                        | ENABLE_SELINUX                               | 
+ 205 | #endif                                   | True                                         | 
+ 206 |                                          | True                                         | 
+ 207 | #if ENABLE_LOGIN_SCRIPTS                 | True                                         | 
+ 208 | static void run_login_script(struct pass | ENABLE_LOGIN_SCRIPTS                         | 
+ 209 | {                                        | ENABLE_LOGIN_SCRIPTS                         | 
+ 210 |  char *t_argv[2];                        | ENABLE_LOGIN_SCRIPTS                         | 
+ 211 |                                          | ENABLE_LOGIN_SCRIPTS                         | 
+ 212 |  t_argv[0] = getenv("LOGIN_PRE_SUID_SCRI | ENABLE_LOGIN_SCRIPTS                         | 
+ 213 |  if (t_argv[0]) {                        | ENABLE_LOGIN_SCRIPTS                         | 
+ 214 |   t_argv[1] = NULL;                      | ENABLE_LOGIN_SCRIPTS                         | 
+ 215 |   xsetenv("LOGIN_TTY", full_tty);        | ENABLE_LOGIN_SCRIPTS                         | 
+ 216 |   xsetenv("LOGIN_USER", pw->pw_name);    | ENABLE_LOGIN_SCRIPTS                         | 
+ 217 |   xsetenv("LOGIN_UID", utoa(pw->pw_uid)) | ENABLE_LOGIN_SCRIPTS                         | 
+ 218 |   xsetenv("LOGIN_GID", utoa(pw->pw_gid)) | ENABLE_LOGIN_SCRIPTS                         | 
+ 219 |   xsetenv("LOGIN_SHELL", pw->pw_shell);  | ENABLE_LOGIN_SCRIPTS                         | 
+ 220 |   spawn_and_wait(t_argv); /* NOMMU-frien | ENABLE_LOGIN_SCRIPTS                         | 
+ 221 |   unsetenv("LOGIN_TTY");                 | ENABLE_LOGIN_SCRIPTS                         | 
+ 222 |   unsetenv("LOGIN_USER");                | ENABLE_LOGIN_SCRIPTS                         | 
+ 223 |   unsetenv("LOGIN_UID");                 | ENABLE_LOGIN_SCRIPTS                         | 
+ 224 |   unsetenv("LOGIN_GID");                 | ENABLE_LOGIN_SCRIPTS                         | 
+ 225 |   unsetenv("LOGIN_SHELL");               | ENABLE_LOGIN_SCRIPTS                         | 
+ 226 |  }                                       | ENABLE_LOGIN_SCRIPTS                         | 
+ 227 | }                                        | ENABLE_LOGIN_SCRIPTS                         | 
+ 228 | #else                                    | True                                         | 
+ 229 | void run_login_script(struct passwd *pw, | !ENABLE_LOGIN_SCRIPTS                        | 
+ 230 | #endif                                   | True                                         | 
+ 231 |                                          | True                                         | 
+ 232 | #if ENABLE_LOGIN_SESSION_AS_CHILD && ENA | True                                         | 
+ 233 | static void login_pam_end(pam_handle_t * | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 234 | {                                        | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 235 |  int pamret;                             | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 236 |                                          | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 237 |  pamret = pam_setcred(pamh, PAM_DELETE_C | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 238 |  if (pamret != PAM_SUCCESS) {            | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 239 |   bb_error_msg("pam_%s failed: %s (%d)", | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 240 |    pam_strerror(pamh, pamret), pamret);  | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 241 |  }                                       | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 242 |  pamret = pam_close_session(pamh, 0);    | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 243 |  if (pamret != PAM_SUCCESS) {            | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 244 |   bb_error_msg("pam_%s failed: %s (%d)", | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 245 |    pam_strerror(pamh, pamret), pamret);  | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 246 |  }                                       | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 247 |  pamret = pam_end(pamh, pamret);         | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 248 |  if (pamret != PAM_SUCCESS) {            | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 249 |   bb_error_msg("pam_%s failed: %s (%d)", | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 250 |    pam_strerror(pamh, pamret), pamret);  | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 251 |  }                                       | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 252 | }                                        | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 253 | #else                                    | True                                         | 
+ 254 | # define login_pam_end(pamh) ((void)0)   | !(ENABLE_LOGIN_SESSION_AS_CHILD&&ENABLE_PAM) | 
+ 255 | #endif                                   | True                                         | 
+ 256 |                                          | True                                         | 
+ 257 | static void get_username_or_die(char *bu | True                                         | 
+ 258 | {                                        | True                                         | 
+ 259 |  int c, cntdown;                         | True                                         | 
+ 260 |                                          | True                                         | 
+ 261 |  cntdown = EMPTY_USERNAME_COUNT;         | True                                         | 
+ 262 |  prompt:                                 | True                                         | 
+ 263 |  print_login_prompt();                   | True                                         | 
+ 264 |  /* skip whitespace */                   | True                                         | 
+ 265 |  do {                                    | True                                         | 
+ 266 |   c = getchar();                         | True                                         | 
+ 267 |   if (c == EOF)                          | True                                         | 
+ 268 |    exit_FAILURE();                       | True                                         | 
+ 269 |   if (c == '\n') {                       | True                                         | 
+ 270 |    if (!--cntdown)                       | True                                         | 
+ 271 |     exit_FAILURE();                      | True                                         | 
+ 272 |    goto prompt;                          | True                                         | 
+ 273 |   }                                      | True                                         | 
+ 274 |  } while (isspace(c)); /* maybe isblank? | True                                         | 
+ 275 |                                          | True                                         | 
+ 276 |  *buf++ = c;                             | True                                         | 
+ 277 |  if (!fgets(buf, size_buf-2, stdin))     | True                                         | 
+ 278 |   exit_FAILURE();                        | True                                         | 
+ 279 |  if (!strchr(buf, '\n'))                 | True                                         | 
+ 280 |   exit_FAILURE();                        | True                                         | 
+ 281 |  while ((unsigned char)*buf > ' ')       | True                                         | 
+ 282 |   buf++;                                 | True                                         | 
+ 283 |  *buf = '\0';                            | True                                         | 
+ 284 | }                                        | True                                         | 
+ 285 |                                          | True                                         | 
+ 286 | static void motd(void)                   | True                                         | 
+ 287 | {                                        | True                                         | 
+ 288 |  int fd;                                 | True                                         | 
+ 289 |                                          | True                                         | 
+ 290 |  fd = open(bb_path_motd_file, O_RDONLY); | True                                         | 
+ 291 |  if (fd >= 0) {                          | True                                         | 
+ 292 |   fflush_all();                          | True                                         | 
+ 293 |   bb_copyfd_eof(fd, STDOUT_FILENO);      | True                                         | 
+ 294 |   close(fd);                             | True                                         | 
+ 295 |  }                                       | True                                         | 
+ 296 | }                                        | True                                         | 
+ 297 |                                          | True                                         | 
+ 298 | static void alarm_handler(int sig UNUSED | True                                         | 
+ 299 | {                                        | True                                         | 
+ 300 |  /* This is the escape hatch! Poor seria | True                                         | 
+ 301 |   * arrive here when their connection is | True                                         | 
+ 302 |   * We don't want to block here */       | True                                         | 
+ 303 |  ndelay_on(STDOUT_FILENO);               | True                                         | 
+ 304 |  /* Test for correct attr restoring:     | True                                         | 
+ 305 |   * run "getty 0 -" from a shell, enter  | True                                         | 
+ 306 |   * password prompt, let it time out. Wi | True                                         | 
+ 307 |   * when you are back at shell prompt, e | True                                         | 
+ 308 |   */                                     | True                                         | 
+ 309 |  tcsetattr_stdin_TCSANOW(&G.tty_attrs);  | True                                         | 
+ 310 |  printf("\r\nLogin timed out after %u se | True                                         | 
+ 311 |  fflush_all();                           | True                                         | 
+ 312 |  /* unix API is brain damaged regarding  | True                                         | 
+ 313 |   * we should undo it, or else we can af | True                                         | 
+ 314 |  ndelay_off(STDOUT_FILENO);              | True                                         | 
+ 315 |  _exit_SUCCESS();                        | True                                         | 
+ 316 | }                                        | True                                         | 
+ 317 |                                          | True                                         | 
+ 318 | int login_main(int argc, char **argv) MA | True                                         | 
+ 319 | int login_main(int argc UNUSED_PARAM, ch | True                                         | 
+ 320 | {                                        | True                                         | 
+ 321 |  enum {                                  | True                                         | 
+ 322 |   LOGIN_OPT_f = (1<<0),                  | True                                         | 
+ 323 |   LOGIN_OPT_h = (1<<1),                  | True                                         | 
+ 324 |   LOGIN_OPT_p = (1<<2),                  | True                                         | 
+ 325 |  };                                      | True                                         | 
+ 326 |  char *fromhost;                         | True                                         | 
+ 327 |  char username[USERNAME_SIZE];           | True                                         | 
+ 328 |  int run_by_root;                        | True                                         | 
+ 329 |  unsigned opt;                           | True                                         | 
+ 330 |  int count = 0;                          | True                                         | 
+ 331 |  struct passwd *pw;                      | True                                         | 
+ 332 |  char *opt_host = NULL;                  | True                                         | 
+ 333 |  char *opt_user = opt_user; /* for compi | True                                         | 
+ 334 |  char *full_tty;                         | True                                         | 
+ 335 |  char *short_tty;                        | True                                         | 
+ 336 |  IF_SELINUX(security_context_t user_sid  | True                                         | 
+ 337 | #if ENABLE_PAM                           | True                                         | 
+ 338 |  int pamret;                             | ENABLE_PAM                                   | 
+ 339 |  pam_handle_t *pamh;                     | ENABLE_PAM                                   | 
+ 340 |  const char *pamuser;                    | ENABLE_PAM                                   | 
+ 341 |  const char *failed_msg;                 | ENABLE_PAM                                   | 
+ 342 |  struct passwd pwdstruct;                | ENABLE_PAM                                   | 
+ 343 |  char pwdbuf[256];                       | ENABLE_PAM                                   | 
+ 344 |  char **pamenv;                          | ENABLE_PAM                                   | 
+ 345 | #endif                                   | True                                         | 
+ 346 | #if ENABLE_LOGIN_SESSION_AS_CHILD        | True                                         | 
+ 347 |  pid_t child_pid;                        | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 348 | #endif                                   | True                                         | 
+ 349 |  IF_FEATURE_UTMP(pid_t my_pid;)          | True                                         | 
+ 350 |                                          | True                                         | 
+ 351 |  INIT_G();                               | True                                         | 
+ 352 |                                          | True                                         | 
+ 353 |  G.timeout = xatoi_positive(getenv("LOGI | True                                         | 
+ 354 |                                          | True                                         | 
+ 355 |  /* More of suid paranoia if called by n | True                                         | 
+ 356 |  /* Clear dangerous stuff, set PATH */   | True                                         | 
+ 357 |  run_by_root = !sanitize_env_if_suid();  | True                                         | 
+ 358 |                                          | True                                         | 
+ 359 |  /* Mandatory paranoia for suid applet:  | True                                         | 
+ 360 |   * ensure that fd# 0,1,2 are opened (at | True                                         | 
+ 361 |   * and any extra open fd's are closed.  | True                                         | 
+ 362 |   */                                     | True                                         | 
+ 363 |  bb_daemon_helper(DAEMON_CLOSE_EXTRA_FDS | True                                         | 
+ 364 |                                          | True                                         | 
+ 365 |  username[0] = '\0';                     | True                                         | 
+ 366 |  opt = getopt32(argv, "f:h:p", &opt_user | True                                         | 
+ 367 |  if (opt & LOGIN_OPT_f) {                | True                                         | 
+ 368 |   if (!run_by_root)                      | True                                         | 
+ 369 |    bb_simple_error_msg_and_die("-f is fo | True                                         | 
+ 370 |   safe_strncpy(username, opt_user, sizeo | True                                         | 
+ 371 |  }                                       | True                                         | 
+ 372 |  argv += optind;                         | True                                         | 
+ 373 |  if (argv[0]) /* user from command line  | True                                         | 
+ 374 |   safe_strncpy(username, argv[0], sizeof | True                                         | 
+ 375 |                                          | True                                         | 
+ 376 |  /* Save tty attributes - and by doing i | True                                         | 
+ 377 |  if (tcgetattr(STDIN_FILENO, &G.tty_attr | True                                         | 
+ 378 |   || !isatty(STDOUT_FILENO)              | True                                         | 
+ 379 |   /*|| !isatty(STDERR_FILENO) - no, gues | True                                         | 
+ 380 |  ) {                                     | True                                         | 
+ 381 |   return EXIT_FAILURE;  /* Must be a ter | True                                         | 
+ 382 |  }                                       | True                                         | 
+ 383 |                                          | True                                         | 
+ 384 |  /* We install timeout handler only _aft | True                                         | 
+ 385 |  signal(SIGALRM, alarm_handler);         | True                                         | 
+ 386 |  alarm(G.timeout);                       | True                                         | 
+ 387 |                                          | True                                         | 
+ 388 |  /* Find out and memorize our tty name * | True                                         | 
+ 389 |  full_tty = xmalloc_ttyname(STDIN_FILENO | True                                         | 
+ 390 |  if (!full_tty)                          | True                                         | 
+ 391 |   full_tty = xstrdup("UNKNOWN");         | True                                         | 
+ 392 |  short_tty = skip_dev_pfx(full_tty);     | True                                         | 
+ 393 |                                          | True                                         | 
+ 394 |  if (opt_host) {                         | True                                         | 
+ 395 |   fromhost = xasprintf(" on '%s' from '% | True                                         | 
+ 396 |  } else {                                | True                                         | 
+ 397 |   fromhost = xasprintf(" on '%s'", short | True                                         | 
+ 398 |  }                                       | True                                         | 
+ 399 |                                          | True                                         | 
+ 400 |  /* Was breaking "login <username>" from | True                                         | 
+ 401 |  /*bb_setpgrp();*/                       | True                                         | 
+ 402 |                                          | True                                         | 
+ 403 |  openlog(applet_name, LOG_PID | LOG_CONS | True                                         | 
+ 404 |                                          | True                                         | 
+ 405 |  while (1) {                             | True                                         | 
+ 406 |   /* flush away any type-ahead (as getty | True                                         | 
+ 407 |   tcflush(0, TCIFLUSH);                  | True                                         | 
+ 408 |                                          | True                                         | 
+ 409 |   if (!username[0])                      | True                                         | 
+ 410 |    get_username_or_die(username, sizeof( | True                                         | 
+ 411 |                                          | True                                         | 
+ 412 | #if ENABLE_PAM                           | True                                         | 
+ 413 |   pamret = pam_start("login", username,  | ENABLE_PAM                                   | 
+ 414 |   if (pamret != PAM_SUCCESS) {           | ENABLE_PAM                                   | 
+ 415 |    failed_msg = "start";                 | ENABLE_PAM                                   | 
+ 416 |    goto pam_auth_failed;                 | ENABLE_PAM                                   | 
+ 417 |   }                                      | ENABLE_PAM                                   | 
+ 418 |   /* set TTY (so things like securetty w | ENABLE_PAM                                   | 
+ 419 |   pamret = pam_set_item(pamh, PAM_TTY, s | ENABLE_PAM                                   | 
+ 420 |   if (pamret != PAM_SUCCESS) {           | ENABLE_PAM                                   | 
+ 421 |    failed_msg = "set_item(TTY)";         | ENABLE_PAM                                   | 
+ 422 |    goto pam_auth_failed;                 | ENABLE_PAM                                   | 
+ 423 |   }                                      | ENABLE_PAM                                   | 
+ 424 |   /* set RHOST */                        | ENABLE_PAM                                   | 
+ 425 |   if (opt_host) {                        | ENABLE_PAM                                   | 
+ 426 |    pamret = pam_set_item(pamh, PAM_RHOST | ENABLE_PAM                                   | 
+ 427 |    if (pamret != PAM_SUCCESS) {          | ENABLE_PAM                                   | 
+ 428 |     failed_msg = "set_item(RHOST)";      | ENABLE_PAM                                   | 
+ 429 |     goto pam_auth_failed;                | ENABLE_PAM                                   | 
+ 430 |    }                                     | ENABLE_PAM                                   | 
+ 431 |   }                                      | ENABLE_PAM                                   | 
+ 432 |   if (!(opt & LOGIN_OPT_f)) {            | ENABLE_PAM                                   | 
+ 433 |    pamret = pam_authenticate(pamh, 0);   | ENABLE_PAM                                   | 
+ 434 |    if (pamret != PAM_SUCCESS) {          | ENABLE_PAM                                   | 
+ 435 |     failed_msg = "authenticate";         | ENABLE_PAM                                   | 
+ 436 |     goto pam_auth_failed;                | ENABLE_PAM                                   | 
+ 437 |     /* TODO: or just "goto auth_failed"  | ENABLE_PAM                                   | 
+ 438 |      * since user seems to enter wrong p | ENABLE_PAM                                   | 
+ 439 |      * (in this case pamret == 7)        | ENABLE_PAM                                   | 
+ 440 |      */                                  | ENABLE_PAM                                   | 
+ 441 |    }                                     | ENABLE_PAM                                   | 
+ 442 |   }                                      | ENABLE_PAM                                   | 
+ 443 |   /* check that the account is healthy * | ENABLE_PAM                                   | 
+ 444 |   pamret = pam_acct_mgmt(pamh, 0);       | ENABLE_PAM                                   | 
+ 445 |   if (pamret == PAM_NEW_AUTHTOK_REQD) {  | ENABLE_PAM                                   | 
+ 446 |    pamret = pam_chauthtok(pamh, PAM_CHAN | ENABLE_PAM                                   | 
+ 447 |   }                                      | ENABLE_PAM                                   | 
+ 448 |   if (pamret != PAM_SUCCESS) {           | ENABLE_PAM                                   | 
+ 449 |    failed_msg = "acct_mgmt";             | ENABLE_PAM                                   | 
+ 450 |    goto pam_auth_failed;                 | ENABLE_PAM                                   | 
+ 451 |   }                                      | ENABLE_PAM                                   | 
+ 452 |   /* read user back */                   | ENABLE_PAM                                   | 
+ 453 |   pamuser = NULL;                        | ENABLE_PAM                                   | 
+ 454 |   /* gcc: "dereferencing type-punned poi | ENABLE_PAM                                   | 
+ 455 |    * thus we cast to (void*) */          | ENABLE_PAM                                   | 
+ 456 |   if (pam_get_item(pamh, PAM_USER, (void | ENABLE_PAM                                   | 
+ 457 |    failed_msg = "get_item(USER)";        | ENABLE_PAM                                   | 
+ 458 |    goto pam_auth_failed;                 | ENABLE_PAM                                   | 
+ 459 |   }                                      | ENABLE_PAM                                   | 
+ 460 |   if (!pamuser || !pamuser[0])           | ENABLE_PAM                                   | 
+ 461 |    goto auth_failed;                     | ENABLE_PAM                                   | 
+ 462 |   safe_strncpy(username, pamuser, sizeof | ENABLE_PAM                                   | 
+ 463 |   /* Don't use "pw = getpwnam(username); | ENABLE_PAM                                   | 
+ 464 |    * PAM is said to be capable of destro | ENABLE_PAM                                   | 
+ 465 |    * used by getpwnam(). We are using sa | ENABLE_PAM                                   | 
+ 466 |   pw = NULL;                             | ENABLE_PAM                                   | 
+ 467 |   getpwnam_r(username, &pwdstruct, pwdbu | ENABLE_PAM                                   | 
+ 468 |   if (!pw)                               | ENABLE_PAM                                   | 
+ 469 |    goto auth_failed;                     | ENABLE_PAM                                   | 
+ 470 |   pamret = pam_open_session(pamh, 0);    | ENABLE_PAM                                   | 
+ 471 |   if (pamret != PAM_SUCCESS) {           | ENABLE_PAM                                   | 
+ 472 |    failed_msg = "open_session";          | ENABLE_PAM                                   | 
+ 473 |    goto pam_auth_failed;                 | ENABLE_PAM                                   | 
+ 474 |   }                                      | ENABLE_PAM                                   | 
+ 475 |   pamret = pam_setcred(pamh, PAM_ESTABLI | ENABLE_PAM                                   | 
+ 476 |   if (pamret != PAM_SUCCESS) {           | ENABLE_PAM                                   | 
+ 477 |    failed_msg = "setcred";               | ENABLE_PAM                                   | 
+ 478 |    goto pam_auth_failed;                 | ENABLE_PAM                                   | 
+ 479 |   }                                      | ENABLE_PAM                                   | 
+ 480 |   break; /* success, continue login proc | ENABLE_PAM                                   | 
+ 481 |                                          | ENABLE_PAM                                   | 
+ 482 |  pam_auth_failed:                        | ENABLE_PAM                                   | 
+ 483 |   /* syslog, because we don't want poten | ENABLE_PAM                                   | 
+ 484 |    * to know _why_ login failed */       | ENABLE_PAM                                   | 
+ 485 |   syslog(LOG_WARNING, "pam_%s call faile | ENABLE_PAM                                   | 
+ 486 |      pam_strerror(pamh, pamret), pamret) | ENABLE_PAM                                   | 
+ 487 |   login_pam_end(pamh);                   | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 488 |   safe_strncpy(username, "UNKNOWN", size | ENABLE_PAM                                   | 
+ 489 | #else /* not PAM */                      | True                                         | 
+ 490 |   pw = getpwnam(username);               | !ENABLE_PAM                                  | 
+ 491 |   if (!pw) {                             | !ENABLE_PAM                                  | 
+ 492 |    strcpy(username, "UNKNOWN");          | !ENABLE_PAM                                  | 
+ 493 |    goto fake_it;                         | !ENABLE_PAM                                  | 
+ 494 |   }                                      | !ENABLE_PAM                                  | 
+ 495 |                                          | !ENABLE_PAM                                  | 
+ 496 |   if (pw->pw_passwd[0] == '!' || pw->pw_ | !ENABLE_PAM                                  | 
+ 497 |    goto auth_failed;                     | !ENABLE_PAM                                  | 
+ 498 |                                          | !ENABLE_PAM                                  | 
+ 499 |   if (opt & LOGIN_OPT_f)                 | !ENABLE_PAM                                  | 
+ 500 |    break; /* -f USER: success without as | !ENABLE_PAM                                  | 
+ 501 |                                          | !ENABLE_PAM                                  | 
+ 502 |   if (pw->pw_uid == 0 && !is_tty_secure( | !ENABLE_PAM                                  | 
+ 503 |    goto auth_failed;                     | !ENABLE_PAM                                  | 
+ 504 |                                          | !ENABLE_PAM                                  | 
+ 505 |   /* Don't check the password if passwor | !ENABLE_PAM                                  | 
+ 506 |   if (!pw->pw_passwd[0])                 | !ENABLE_PAM                                  | 
+ 507 |    break;                                | !ENABLE_PAM                                  | 
+ 508 |  fake_it:                                | !ENABLE_PAM                                  | 
+ 509 |   /* Password reading and authorization  | !ENABLE_PAM                                  | 
+ 510 |    * Note that reads (in no-echo mode) t | !ENABLE_PAM                                  | 
+ 511 |    * If we get interrupted by SIGALRM, w | !ENABLE_PAM                                  | 
+ 512 |    */                                    | !ENABLE_PAM                                  | 
+ 513 |   if (ask_and_check_password(pw) > 0)    | !ENABLE_PAM                                  | 
+ 514 |    break;                                | !ENABLE_PAM                                  | 
+ 515 | #endif /* ENABLE_PAM */                  | True                                         | 
+ 516 |  auth_failed:                            | True                                         | 
+ 517 |   opt &= ~LOGIN_OPT_f;                   | True                                         | 
+ 518 |   pause_after_failed_login();            | True                                         | 
+ 519 |   /* TODO: doesn't sound like correct En | True                                         | 
+ 520 |   puts("Login incorrect");               | True                                         | 
+ 521 |   syslog(LOG_WARNING, "invalid password  | True                                         | 
+ 522 |      username, fromhost);                | True                                         | 
+ 523 |   if (++count == 3) {                    | True                                         | 
+ 524 |    if (ENABLE_FEATURE_CLEAN_UP)          | True                                         | 
+ 525 |     free(fromhost);                      | True                                         | 
+ 526 |    return EXIT_FAILURE;                  | True                                         | 
+ 527 |   }                                      | True                                         | 
+ 528 |   username[0] = '\0';                    | True                                         | 
+ 529 |  } /* while (1) */                       | True                                         | 
+ 530 |                                          | True                                         | 
+ 531 |  alarm(0);                               | True                                         | 
+ 532 |  /* We can ignore /etc/nologin if we are | True                                         | 
+ 533 |   * it doesn't matter whether we are run | True                                         | 
+ 534 |  if (pw->pw_uid != 0)                    | True                                         | 
+ 535 |   die_if_nologin();                      | ENABLE_FEATURE_NOLOGIN                       | 
+ 536 |                                          | True                                         | 
+ 537 |  IF_FEATURE_UTMP(my_pid = getpid();)     | True                                         | 
+ 538 |  update_utmp(my_pid, USER_PROCESS, short | True                                         | 
+ 539 |                                          | True                                         | 
+ 540 | #if ENABLE_LOGIN_SESSION_AS_CHILD        | True                                         | 
+ 541 |  child_pid = vfork();                    | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 542 |  if (child_pid != 0) {                   | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 543 |   if (child_pid < 0)                     | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 544 |    bb_simple_perror_msg("vfork");        | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 545 |   else {                                 | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 546 |    wait_for_exitstatus(child_pid);       | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 547 |   }                                      | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 548 |   update_utmp_DEAD_PROCESS(my_pid);      | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 549 |   login_pam_end(pamh);                   | ENABLE_PAM&&ENABLE_LOGIN_SESSION_AS_CHILD    | 
+ 550 |   return 0;                              | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 551 |  }                                       | ENABLE_LOGIN_SESSION_AS_CHILD                | 
+ 552 | #endif                                   | True                                         | 
+ 553 |                                          | True                                         | 
+ 554 |  IF_SELINUX(initselinux(username, full_t | True                                         | 
+ 555 |                                          | True                                         | 
+ 556 |  /* Try these, but don't complain if the | True                                         | 
+ 557 |   * _f_chown is safe wrt race t=ttyname( | True                                         | 
+ 558 |  fchown(0, pw->pw_uid, pw->pw_gid);      | True                                         | 
+ 559 |  fchmod(0, 0600);                        | True                                         | 
+ 560 |                                          | True                                         | 
+ 561 |  /* We trust environment only if we run  | True                                         | 
+ 562 |  if (ENABLE_LOGIN_SCRIPTS && run_by_root | True                                         | 
+ 563 |   run_login_script(pw, full_tty);        | True                                         | 
+ 564 |                                          | True                                         | 
+ 565 |  change_identity(pw);                    | True                                         | 
+ 566 |  setup_environment(pw->pw_shell,         | True                                         | 
+ 567 |    (!(opt & LOGIN_OPT_p) * SETUP_ENV_CLE | True                                         | 
+ 568 |     + SETUP_ENV_CHANGEENV                | True                                         | 
+ 569 |     + SETUP_ENV_CHDIR,                   | True                                         | 
+ 570 |    pw);                                  | True                                         | 
+ 571 |                                          | True                                         | 
+ 572 | #if ENABLE_PAM                           | True                                         | 
+ 573 |  /* Modules such as pam_env will setup t | ENABLE_PAM                                   | 
+ 574 |   * which should be copied into the new  | ENABLE_PAM                                   | 
+ 575 |  pamenv = pam_getenvlist(pamh);          | ENABLE_PAM                                   | 
+ 576 |  if (pamenv) while (*pamenv) {           | ENABLE_PAM                                   | 
+ 577 |   putenv(*pamenv);                       | ENABLE_PAM                                   | 
+ 578 |   pamenv++;                              | ENABLE_PAM                                   | 
+ 579 |  }                                       | ENABLE_PAM                                   | 
+ 580 | #endif                                   | True                                         | 
+ 581 |                                          | True                                         | 
+ 582 |  if (access(".hushlogin", F_OK) != 0)    | True                                         | 
+ 583 |   motd();                                | True                                         | 
+ 584 |                                          | True                                         | 
+ 585 |  if (pw->pw_uid == 0)                    | True                                         | 
+ 586 |   syslog(LOG_INFO, "root login%s", fromh | True                                         | 
+ 587 |                                          | True                                         | 
+ 588 |  if (ENABLE_FEATURE_CLEAN_UP)            | True                                         | 
+ 589 |   free(fromhost);                        | True                                         | 
+ 590 |                                          | True                                         | 
+ 591 |  /* well, a simple setexeccon() here wou | True                                         | 
+ 592 |   * but let's play the game for now */   | True                                         | 
+ 593 |  IF_SELINUX(set_current_security_context | True                                         | 
+ 594 |                                          | True                                         | 
+ 595 |  // util-linux login also does:          | True                                         | 
+ 596 |  // /* start new session */              | True                                         | 
+ 597 |  // setsid();                            | True                                         | 
+ 598 |  // /* TIOCSCTTY: steal tty from other p | True                                         | 
+ 599 |  // if (ioctl(0, TIOCSCTTY, 1)) error_ms | True                                         | 
+ 600 |  // BBox login used to do this (see abov | True                                         | 
+ 601 |  // bb_setpgrp();                        | True                                         | 
+ 602 |  // If this stuff is really needed, add  | True                                         | 
+ 603 |                                          | True                                         | 
+ 604 |  /* Set signals to defaults */           | True                                         | 
+ 605 |  /* Non-ignored signals revert to SIG_DF | True                                         | 
+ 606 |  /*signal(SIGALRM, SIG_DFL);*/           | True                                         | 
+ 607 |                                          | True                                         | 
+ 608 |  /* Is this correct? This way user can c | True                                         | 
+ 609 |   * potentially creating security breach | True                                         | 
+ 610 |   * But without this, bash 3.0 will not  | True                                         | 
+ 611 |   * Maybe bash is buggy?                 | True                                         | 
+ 612 |   * Need to find out what standards say  | True                                         | 
+ 613 |   * should we leave SIGINT etc enabled o | True                                         | 
+ 614 |   * Also note: sulogin does not do it! W | True                                         | 
+ 615 |   */                                     | True                                         | 
+ 616 |  signal(SIGINT, SIG_DFL);                | True                                         | 
+ 617 |                                          | True                                         | 
+ 618 |  /* Exec login shell with no additional  | True                                         | 
+ 619 |  exec_login_shell(pw->pw_shell);         | True                                         | 
+ 620 |                                          | True                                         | 
+ 621 |  /* return EXIT_FAILURE; - not reached * | True                                         | 
+ 622 | }                                        | True                                         | 
+-----+------------------------------------------+----------------------------------------------+
+     |                                          | +122MB, 309ms                                | 

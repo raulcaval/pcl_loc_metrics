@@ -1,0 +1,1042 @@
+FILE: data/raw/busybox-1.38.0/procps/nmeter.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * Based on nanotop.c from floppyfw proj | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Contact me: vda.linux@googlemail.com  | True                      | 
+   7 |  */                                      | True                      | 
+   8 | //config:config NMETER                   | True                      | 
+   9 | //config: bool "nmeter (12 kb)"          | True                      | 
+  10 | //config: default y                      | True                      | 
+  11 | //config: help                           | True                      | 
+  12 | //config: Prints selected system stats c | True                      | 
+  13 |                                          | True                      | 
+  14 | //applet:IF_NMETER(APPLET(nmeter, BB_DIR | True                      | 
+  15 |                                          | True                      | 
+  16 | //kbuild:lib-$(CONFIG_NMETER) += nmeter. | True                      | 
+  17 |                                          | True                      | 
+  18 | //usage:#define nmeter_trivial_usage     | True                      | 
+  19 | //usage:       "[-d MSEC] FORMAT_STRING" | True                      | 
+  20 | //usage:#define nmeter_full_usage "\n\n" | True                      | 
+  21 | //usage:       "Monitor system in real t | True                      | 
+  22 | //usage:     "\n"                        | True                      | 
+  23 | //usage:     "\n -d MSEC Milliseconds be | True                      | 
+  24 | //usage:     "\n"                        | True                      | 
+  25 | //usage:     "\nFormat specifiers:"      | True                      | 
+  26 | //usage:     "\n %Nc or %[cN] CPU. N - b | True                      | 
+  27 | //usage:     "\n  (displays: S:system U: | True                      | 
+  28 | //usage:     "\n %[nINTERFACE] Network I | True                      | 
+  29 | //usage:     "\n %m  Allocated memory"   | True                      | 
+  30 | //usage:     "\n %[md]  Dirty file-backe | True                      | 
+  31 | //usage:     "\n %[mw]  Memory being wri | True                      | 
+  32 | //usage:     "\n %[mf]  Free memory"     | True                      | 
+  33 | //usage:     "\n %[mt]  Total memory"    | True                      | 
+  34 | //usage:     "\n %s  Allocated swap"     | True                      | 
+  35 | //usage:     "\n %f  Number of used file | True                      | 
+  36 | //usage:     "\n %Ni  Total/specific IRQ | True                      | 
+  37 | //usage:     "\n %x  Context switch rate | True                      | 
+  38 | //usage:     "\n %p  Forks"              | True                      | 
+  39 | //usage:     "\n %[pn]  # of processes"  | True                      | 
+  40 | //usage:     "\n %b  Block io"           | True                      | 
+  41 | //usage:     "\n %Nt  Time (with N decim | True                      | 
+  42 | //usage:     "\n %NT  Zero-based timesta | True                      | 
+  43 | //usage:     "\n %r  Print <cr> instead  | True                      | 
+  44 |                                          | True                      | 
+  45 | //TODO:                                  | True                      | 
+  46 | // simplify code                         | True                      | 
+  47 | // /proc/locks                           | True                      | 
+  48 | // /proc/stat:                           | True                      | 
+  49 | // disk_io: (3,0):(22272,17897,410702,43 | True                      | 
+  50 | // btime 1059401962                      | True                      | 
+  51 | //TODO: use sysinfo libc call/syscall, i | True                      | 
+  52 | // (faster than open/read/close):        | True                      | 
+  53 | // sysinfo({uptime=15017, loads=[5728, 1 | True                      | 
+  54 | //  totalram=2107416576, freeram=2115256 | True                      | 
+  55 | //  totalswap=134209536, freeswap=134209 | True                      | 
+  56 |                                          | True                      | 
+  57 | #include "libbb.h"                       | True                      | 
+  58 | #include "common_bufsiz.h"               | True                      | 
+  59 |                                          | True                      | 
+  60 | typedef unsigned long long ullong;       | True                      | 
+  61 |                                          | True                      | 
+  62 | enum {                                   | True                      | 
+  63 |  PROC_MIN_FILE_SIZE = 256,               | True                      | 
+  64 |  PROC_MAX_FILE_SIZE = 64 * 1024, /* 16k  | True                      | 
+  65 | };                                       | True                      | 
+  66 |                                          | True                      | 
+  67 | typedef struct proc_file {               | True                      | 
+  68 |  char *file;                             | True                      | 
+  69 |  int file_sz;                            | True                      | 
+  70 |  smallint last_gen;                      | True                      | 
+  71 | } proc_file;                             | True                      | 
+  72 |                                          | True                      | 
+  73 | static const char *const proc_name[] ALI | True                      | 
+  74 |  "stat",  // Must match the order of pro | True                      | 
+  75 |  "loadavg",                              | True                      | 
+  76 |  "net/dev",                              | True                      | 
+  77 |  "meminfo",                              | True                      | 
+  78 |  "diskstats",                            | True                      | 
+  79 |  "sys/fs/file-nr"                        | True                      | 
+  80 | };                                       | True                      | 
+  81 |                                          | True                      | 
+  82 | struct globals {                         | True                      | 
+  83 |  // Sample generation flip-flop          | True                      | 
+  84 |  smallint gen;                           | True                      | 
+  85 |  // Linux 2.6? (otherwise assumes 2.4)   | True                      | 
+  86 |  smallint is26;                          | True                      | 
+  87 |  // 1 if sample delay is not an integer  | True                      | 
+  88 |  smallint need_seconds;                  | True                      | 
+  89 |  char final_char;                        | True                      | 
+  90 |  char *cur_outbuf;                       | True                      | 
+  91 |  int delta;                              | True                      | 
+  92 |  unsigned deltanz;                       | True                      | 
+  93 |  struct timeval tv;                      | True                      | 
+  94 |  struct timeval start;                   | True                      | 
+  95 | #define first_proc_file proc_stat        | True                      | 
+  96 |  proc_file proc_stat; // Must match the  | True                      | 
+  97 |  proc_file proc_loadavg;                 | True                      | 
+  98 |  proc_file proc_net_dev;                 | True                      | 
+  99 |  proc_file proc_meminfo;                 | True                      | 
+ 100 |  proc_file proc_diskstats;               | True                      | 
+ 101 |  proc_file proc_sys_fs_filenr;           | True                      | 
+ 102 | };                                       | True                      | 
+ 103 | #define G (*ptr_to_globals)              | True                      | 
+ 104 | #define gen                (G.gen        | True                      | 
+ 105 | #define is26               (G.is26       | True                      | 
+ 106 | #define need_seconds       (G.need_secon | True                      | 
+ 107 | #define cur_outbuf         (G.cur_outbuf | True                      | 
+ 108 | #define proc_stat          (G.proc_stat  | True                      | 
+ 109 | #define proc_loadavg       (G.proc_loada | True                      | 
+ 110 | #define proc_net_dev       (G.proc_net_d | True                      | 
+ 111 | #define proc_meminfo       (G.proc_memin | True                      | 
+ 112 | #define proc_diskstats     (G.proc_disks | True                      | 
+ 113 | #define proc_sys_fs_filenr (G.proc_sys_f | True                      | 
+ 114 | #define outbuf bb_common_bufsiz1         | True                      | 
+ 115 | #define INIT_G() do { \                  | True                      | 
+ 116 |  setup_common_bufsiz(); \                | True                      | 
+ 117 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+ 118 |  cur_outbuf = outbuf; \                  | True                      | 
+ 119 |  G.final_char = '\n'; \                  | True                      | 
+ 120 |  G.deltanz = G.delta = 1000000; \        | True                      | 
+ 121 | } while (0)                              | True                      | 
+ 122 |                                          | True                      | 
+ 123 | static inline void reset_outbuf(void)    | True                      | 
+ 124 | {                                        | True                      | 
+ 125 |  cur_outbuf = outbuf;                    | True                      | 
+ 126 | }                                        | True                      | 
+ 127 |                                          | True                      | 
+ 128 | static void print_outbuf(void)           | True                      | 
+ 129 | {                                        | True                      | 
+ 130 |  int sz = cur_outbuf - outbuf;           | True                      | 
+ 131 |  if (sz > 0) {                           | True                      | 
+ 132 |   xwrite(STDOUT_FILENO, outbuf, sz);     | True                      | 
+ 133 |   cur_outbuf = outbuf;                   | True                      | 
+ 134 |  }                                       | True                      | 
+ 135 | }                                        | True                      | 
+ 136 |                                          | True                      | 
+ 137 | static void put(const char *s)           | True                      | 
+ 138 | {                                        | True                      | 
+ 139 |  char *p = cur_outbuf;                   | True                      | 
+ 140 |  int sz = outbuf + COMMON_BUFSIZE - p;   | True                      | 
+ 141 |  while (*s && --sz >= 0)                 | True                      | 
+ 142 |   *p++ = *s++;                           | True                      | 
+ 143 |  cur_outbuf = p;                         | True                      | 
+ 144 | }                                        | True                      | 
+ 145 |                                          | True                      | 
+ 146 | static void put_c(char c)                | True                      | 
+ 147 | {                                        | True                      | 
+ 148 |  if (cur_outbuf < outbuf + COMMON_BUFSIZ | True                      | 
+ 149 |   *cur_outbuf++ = c;                     | True                      | 
+ 150 | }                                        | True                      | 
+ 151 |                                          | True                      | 
+ 152 | static void put_question_marks(int count | True                      | 
+ 153 | {                                        | True                      | 
+ 154 |  while (count--)                         | True                      | 
+ 155 |   put_c('?');                            | True                      | 
+ 156 | }                                        | True                      | 
+ 157 |                                          | True                      | 
+ 158 | static void readfile_z(proc_file *pf, co | True                      | 
+ 159 | {                                        | True                      | 
+ 160 | // open_read_close() will do two reads i | True                      | 
+ 161 | // and we don't need/want that.          | True                      | 
+ 162 |  int fd;                                 | True                      | 
+ 163 |  int sz, rdsz;                           | True                      | 
+ 164 |  char *buf;                              | True                      | 
+ 165 |                                          | True                      | 
+ 166 |  sz = pf->file_sz;                       | True                      | 
+ 167 |  buf = pf->file;                         | True                      | 
+ 168 |  if (!buf) {                             | True                      | 
+ 169 |   buf = xmalloc(PROC_MIN_FILE_SIZE);     | True                      | 
+ 170 |   sz = PROC_MIN_FILE_SIZE;               | True                      | 
+ 171 |  }                                       | True                      | 
+ 172 |  again:                                  | True                      | 
+ 173 |  fd = xopen(fname, O_RDONLY);            | True                      | 
+ 174 |  buf[0] = '\0';                          | True                      | 
+ 175 |  rdsz = read(fd, buf, sz-1);             | True                      | 
+ 176 |  close(fd);                              | True                      | 
+ 177 |  if (rdsz > 0) {                         | True                      | 
+ 178 |   if (rdsz == sz-1 && sz < PROC_MAX_FILE | True                      | 
+ 179 |    if (sz < 4 * 1024)                    | True                      | 
+ 180 |     sz *= 2;                             | True                      | 
+ 181 |    else                                  | True                      | 
+ 182 |     sz += 4 * 1024;                      | True                      | 
+ 183 |    buf = xrealloc(buf, sz);              | True                      | 
+ 184 |    goto again;                           | True                      | 
+ 185 |   }                                      | True                      | 
+ 186 |   buf[rdsz] = '\0';                      | True                      | 
+ 187 |  }                                       | True                      | 
+ 188 |  pf->file_sz = sz;                       | True                      | 
+ 189 |  pf->file = buf;                         | True                      | 
+ 190 | }                                        | True                      | 
+ 191 |                                          | True                      | 
+ 192 | static const char* get_file(proc_file *p | True                      | 
+ 193 | {                                        | True                      | 
+ 194 |  if (pf->last_gen != gen) {              | True                      | 
+ 195 |   pf->last_gen = gen;                    | True                      | 
+ 196 |   readfile_z(pf, proc_name[pf - &first_p | True                      | 
+ 197 |  }                                       | True                      | 
+ 198 |  return pf->file;                        | True                      | 
+ 199 | }                                        | True                      | 
+ 200 |                                          | True                      | 
+ 201 | static ullong read_after_slash(const cha | True                      | 
+ 202 | {                                        | True                      | 
+ 203 |  p = strchr(p, '/');                     | True                      | 
+ 204 |  if (!p) return 0;                       | True                      | 
+ 205 |  return strtoull(p+1, NULL, 10);         | True                      | 
+ 206 | }                                        | True                      | 
+ 207 |                                          | True                      | 
+ 208 | enum conv_type {                         | True                      | 
+ 209 |  conv_decimal = 0,                       | True                      | 
+ 210 |  conv_slash = 1                          | True                      | 
+ 211 | };                                       | True                      | 
+ 212 |                                          | True                      | 
+ 213 | // Reads decimal values from line. Value | True                      | 
+ 214 | // "cpu  649369 0 341297 4336769..." - k | True                      | 
+ 215 | // Values are stored in vec[].           | True                      | 
+ 216 | // posbits is a bit list of positions we | True                      | 
+ 217 | // for example: 00100110 - we want 1st,  | True                      | 
+ 218 | // posbits.bit0 encodes conversion type. | True                      | 
+ 219 | static int rdval(const char* p, const ch | True                      | 
+ 220 | {                                        | True                      | 
+ 221 |  unsigned curpos;                        | True                      | 
+ 222 |                                          | True                      | 
+ 223 |  p = strstr(p, key);                     | True                      | 
+ 224 |  if (!p) return 1;                       | True                      | 
+ 225 |                                          | True                      | 
+ 226 |  p += strlen(key);                       | True                      | 
+ 227 |  curpos = 1 << 1;                        | True                      | 
+ 228 |  while (1) {                             | True                      | 
+ 229 |   while (*p == ' ' || *p == '\t') p++;   | True                      | 
+ 230 |   if (*p == '\n' || *p == '\0') break;   | True                      | 
+ 231 |                                          | True                      | 
+ 232 |   if (curpos & posbits) { // read this v | True                      | 
+ 233 |    *vec++ = (posbits & 1) == conv_decima | True                      | 
+ 234 |     strtoull(p, NULL, 10) :              | True                      | 
+ 235 |     read_after_slash(p);                 | True                      | 
+ 236 |    posbits -= curpos;                    | True                      | 
+ 237 |    if (posbits <= 1)                     | True                      | 
+ 238 |     return 0;                            | True                      | 
+ 239 |   }                                      | True                      | 
+ 240 |   while (*p > ' ') // skip over the valu | True                      | 
+ 241 |    p++;                                  | True                      | 
+ 242 |   curpos <<= 1;                          | True                      | 
+ 243 |  }                                       | True                      | 
+ 244 |  return 0;                               | True                      | 
+ 245 | }                                        | True                      | 
+ 246 |                                          | True                      | 
+ 247 | // Parses files with lines like "... ... | True                      | 
+ 248 | static int rdval_loadavg(const char* p,  | True                      | 
+ 249 | {                                        | True                      | 
+ 250 |  int result;                             | True                      | 
+ 251 |  result = rdval(p, "", vec, posbits | co | True                      | 
+ 252 |  return result;                          | True                      | 
+ 253 | }                                        | True                      | 
+ 254 |                                          | True                      | 
+ 255 | // Parses /proc/diskstats                | True                      | 
+ 256 | //   1  2 3   4     5     6(rd)  7       | True                      | 
+ 257 | //   3  0 hda 51292 14441 841783 926052  | True                      | 
+ 258 | //   3  1 hda1 0 0 0 0 <- ignore if only | True                      | 
+ 259 | // Linux 3.0 (maybe earlier) started pri | True                      | 
+ 260 | // Had to add code which skips such devi | True                      | 
+ 261 | static int rdval_diskstats(const char* p | True                      | 
+ 262 | {                                        | True                      | 
+ 263 |  char devname[32];                       | True                      | 
+ 264 |  unsigned devname_len = 0;               | True                      | 
+ 265 |  int value_idx = 0;                      | True                      | 
+ 266 |                                          | True                      | 
+ 267 |  vec[0] = 0;                             | True                      | 
+ 268 |  vec[1] = 0;                             | True                      | 
+ 269 |  while (1) {                             | True                      | 
+ 270 |   value_idx++;                           | True                      | 
+ 271 |   while (*p == ' ' || *p == '\t')        | True                      | 
+ 272 |    p++;                                  | True                      | 
+ 273 |   if (*p == '\0')                        | True                      | 
+ 274 |    break;                                | True                      | 
+ 275 |   if (*p == '\n') {                      | True                      | 
+ 276 |    value_idx = 0;                        | True                      | 
+ 277 |    p++;                                  | True                      | 
+ 278 |    continue;                             | True                      | 
+ 279 |   }                                      | True                      | 
+ 280 |   if (value_idx == 3) {                  | True                      | 
+ 281 |    char *end = strchrnul(p, ' ');        | True                      | 
+ 282 |    /* If this a hda1-like device (same p | True                      | 
+ 283 |    if (devname_len && strncmp(devname, p | True                      | 
+ 284 |     p = end;                             | True                      | 
+ 285 |     goto skip_line; /* skip entire line  | True                      | 
+ 286 |    }                                     | True                      | 
+ 287 |    /* It is not. Remember the name for f | True                      | 
+ 288 |    devname_len = end - p;                | True                      | 
+ 289 |    if (devname_len > sizeof(devname)-1)  | True                      | 
+ 290 |     devname_len = sizeof(devname)-1;     | True                      | 
+ 291 |    strncpy(devname, p, devname_len);     | True                      | 
+ 292 |    /* devname[devname_len] = '\0'; - not | True                      | 
+ 293 |    p = end;                              | True                      | 
+ 294 |   } else                                 | True                      | 
+ 295 |   if (value_idx == 6) {                  | True                      | 
+ 296 |    // TODO: *sectorsize (don't know how  | True                      | 
+ 297 |    vec[0] += strtoull(p, NULL, 10);      | True                      | 
+ 298 |   } else                                 | True                      | 
+ 299 |   if (value_idx == 10) {                 | True                      | 
+ 300 |    // TODO: *sectorsize (don't know how  | True                      | 
+ 301 |    vec[1] += strtoull(p, NULL, 10);      | True                      | 
+ 302 |  skip_line:                              | True                      | 
+ 303 |    while (*p != '\n' && *p != '\0')      | True                      | 
+ 304 |     p++;                                 | True                      | 
+ 305 |    continue;                             | True                      | 
+ 306 |   }                                      | True                      | 
+ 307 |   while ((unsigned char)(*p) > ' ') // s | True                      | 
+ 308 |    p++;                                  | True                      | 
+ 309 |  }                                       | True                      | 
+ 310 |  return 0;                               | True                      | 
+ 311 | }                                        | True                      | 
+ 312 |                                          | True                      | 
+ 313 | static void scale(ullong ul)             | True                      | 
+ 314 | {                                        | True                      | 
+ 315 |  char buf[5];                            | True                      | 
+ 316 |                                          | True                      | 
+ 317 |  /* see http://en.wikipedia.org/wiki/Ter | True                      | 
+ 318 |  smart_ulltoa4(ul, buf, " kmgtpezy")[0]  | True                      | 
+ 319 |  put(buf);                               | True                      | 
+ 320 | }                                        | True                      | 
+ 321 |                                          | True                      | 
+ 322 | #define S_STAT(a) \                      | True                      | 
+ 323 | typedef struct a { \                     | True                      | 
+ 324 |  struct s_stat *next; \                  | True                      | 
+ 325 |  void (*collect)(struct a *s) FAST_FUNC; | True                      | 
+ 326 |  const char *label;                      | True                      | 
+ 327 | #define S_STAT_END(a) } a;               | True                      | 
+ 328 |                                          | True                      | 
+ 329 | S_STAT(s_stat)                           | True                      | 
+ 330 | S_STAT_END(s_stat)                       | True                      | 
+ 331 |                                          | True                      | 
+ 332 | static void FAST_FUNC collect_literal(s_ | True                      | 
+ 333 | {                                        | True                      | 
+ 334 | }                                        | True                      | 
+ 335 |                                          | True                      | 
+ 336 | static s_stat* init_literal(void)        | True                      | 
+ 337 | {                                        | True                      | 
+ 338 |  s_stat *s = xzalloc(sizeof(*s));        | True                      | 
+ 339 |  s->collect = collect_literal;           | True                      | 
+ 340 |  return (s_stat*)s;                      | True                      | 
+ 341 | }                                        | True                      | 
+ 342 |                                          | True                      | 
+ 343 | static s_stat* init_cr(const char *param | True                      | 
+ 344 | {                                        | True                      | 
+ 345 |  G.final_char = '\r';                    | True                      | 
+ 346 |  return NULL;                            | True                      | 
+ 347 | }                                        | True                      | 
+ 348 |                                          | True                      | 
+ 349 | //     user nice system idle  iowait irq | True                      | 
+ 350 | //cpu  649369 0 341297 4336769 11640 712 | True                      | 
+ 351 | //cpuN 649369 0 341297 4336769 11640 712 | True                      | 
+ 352 | enum { CPU_FIELDCNT = 7 };               | True                      | 
+ 353 | S_STAT(cpu_stat)                         | True                      | 
+ 354 |  ullong old[CPU_FIELDCNT];               | True                      | 
+ 355 |  unsigned bar_sz;                        | True                      | 
+ 356 |  char bar[1];                            | True                      | 
+ 357 | S_STAT_END(cpu_stat)                     | True                      | 
+ 358 |                                          | True                      | 
+ 359 | static void FAST_FUNC collect_cpu(cpu_st | True                      | 
+ 360 | {                                        | True                      | 
+ 361 |  ullong data[CPU_FIELDCNT] = { 0, 0, 0,  | True                      | 
+ 362 |  unsigned frac[CPU_FIELDCNT] = { 0, 0, 0 | True                      | 
+ 363 |  ullong all = 0;                         | True                      | 
+ 364 |  unsigned norm_all = 0;                  | True                      | 
+ 365 |  unsigned bar_sz = s->bar_sz;            | True                      | 
+ 366 |  char *bar = s->bar;                     | True                      | 
+ 367 |  int i;                                  | True                      | 
+ 368 |                                          | True                      | 
+ 369 |  if (rdval(get_file(&proc_stat), "cpu ", | True                      | 
+ 370 |      | (1 << 1)                          | True                      | 
+ 371 |      | (1 << 2)                          | True                      | 
+ 372 |      | (1 << 3)                          | True                      | 
+ 373 |      | (1 << 4)                          | True                      | 
+ 374 |      | (1 << 5)                          | True                      | 
+ 375 |      | (1 << 6)                          | True                      | 
+ 376 |      | (1 << 7))                         | True                      | 
+ 377 |  ) {                                     | True                      | 
+ 378 |   put_question_marks(bar_sz);            | True                      | 
+ 379 |   return;                                | True                      | 
+ 380 |  }                                       | True                      | 
+ 381 |                                          | True                      | 
+ 382 |  for (i = 0; i < CPU_FIELDCNT; i++) {    | True                      | 
+ 383 |   ullong old = s->old[i];                | True                      | 
+ 384 |   if (data[i] < old) old = data[i];  //s | True                      | 
+ 385 |   s->old[i] = data[i];                   | True                      | 
+ 386 |   all += (data[i] -= old);               | True                      | 
+ 387 |  }                                       | True                      | 
+ 388 |                                          | True                      | 
+ 389 |  if (all) {                              | True                      | 
+ 390 |   for (i = 0; i < CPU_FIELDCNT; i++) {   | True                      | 
+ 391 |    ullong t = bar_sz * data[i];          | True                      | 
+ 392 |    norm_all += data[i] = t / all;        | True                      | 
+ 393 |    frac[i] = t % all;                    | True                      | 
+ 394 |   }                                      | True                      | 
+ 395 |                                          | True                      | 
+ 396 |   while (norm_all < bar_sz) {            | True                      | 
+ 397 |    unsigned max = frac[0];               | True                      | 
+ 398 |    int pos = 0;                          | True                      | 
+ 399 |    for (i = 1; i < CPU_FIELDCNT; i++) {  | True                      | 
+ 400 |     if (frac[i] > max) max = frac[i], po | True                      | 
+ 401 |    }                                     | True                      | 
+ 402 |    frac[pos] = 0; //avoid bumping up sam | True                      | 
+ 403 |    data[pos]++;                          | True                      | 
+ 404 |    norm_all++;                           | True                      | 
+ 405 |   }                                      | True                      | 
+ 406 |                                          | True                      | 
+ 407 |   memset(bar, '.', bar_sz);              | True                      | 
+ 408 |   memset(bar, 'S', data[2]); bar += data | True                      | 
+ 409 |   memset(bar, 'U', data[0]); bar += data | True                      | 
+ 410 |   memset(bar, 'N', data[1]); bar += data | True                      | 
+ 411 |   memset(bar, 'D', data[4]); bar += data | True                      | 
+ 412 |   memset(bar, 'I', data[5]); bar += data | True                      | 
+ 413 |   memset(bar, 'i', data[6]); bar += data | True                      | 
+ 414 |  } else {                                | True                      | 
+ 415 |   memset(bar, '?', bar_sz);              | True                      | 
+ 416 |  }                                       | True                      | 
+ 417 |  put(s->bar);                            | True                      | 
+ 418 | }                                        | True                      | 
+ 419 |                                          | True                      | 
+ 420 | static s_stat* init_cpu(const char *para | True                      | 
+ 421 | {                                        | True                      | 
+ 422 |  int sz;                                 | True                      | 
+ 423 |  cpu_stat *s;                            | True                      | 
+ 424 |  sz = param[0] ? strtoul(param, NULL, 0) | True                      | 
+ 425 |  if (sz <= 0) sz = 1;                    | True                      | 
+ 426 |  if (sz > 1000) sz = 1000;               | True                      | 
+ 427 |  s = xzalloc(sizeof(*s) + sz);           | True                      | 
+ 428 |  /*s->bar[sz] = '\0'; - xzalloc did it * | True                      | 
+ 429 |  s->bar_sz = sz;                         | True                      | 
+ 430 |  s->collect = collect_cpu;               | True                      | 
+ 431 |  return (s_stat*)s;                      | True                      | 
+ 432 | }                                        | True                      | 
+ 433 |                                          | True                      | 
+ 434 | S_STAT(int_stat)                         | True                      | 
+ 435 |  ullong old;                             | True                      | 
+ 436 |  int no;                                 | True                      | 
+ 437 | S_STAT_END(int_stat)                     | True                      | 
+ 438 |                                          | True                      | 
+ 439 | static void FAST_FUNC collect_int(int_st | True                      | 
+ 440 | {                                        | True                      | 
+ 441 |  ullong data[1];                         | True                      | 
+ 442 |  ullong old;                             | True                      | 
+ 443 |                                          | True                      | 
+ 444 |  if (rdval(get_file(&proc_stat), "intr", | True                      | 
+ 445 |   put_question_marks(4);                 | True                      | 
+ 446 |   return;                                | True                      | 
+ 447 |  }                                       | True                      | 
+ 448 |                                          | True                      | 
+ 449 |  old = s->old;                           | True                      | 
+ 450 |  if (data[0] < old) old = data[0];  //sa | True                      | 
+ 451 |  s->old = data[0];                       | True                      | 
+ 452 |  scale(data[0] - old);                   | True                      | 
+ 453 | }                                        | True                      | 
+ 454 |                                          | True                      | 
+ 455 | static s_stat* init_int(const char *para | True                      | 
+ 456 | {                                        | True                      | 
+ 457 |  int_stat *s = xzalloc(sizeof(*s));      | True                      | 
+ 458 |  s->collect = collect_int;               | True                      | 
+ 459 |  if (param[0] == '\0') {                 | True                      | 
+ 460 |   s->no = 1;                             | True                      | 
+ 461 |  } else {                                | True                      | 
+ 462 |   int n = xatoi_positive(param);         | True                      | 
+ 463 |   s->no = n + 2;                         | True                      | 
+ 464 |  }                                       | True                      | 
+ 465 |  return (s_stat*)s;                      | True                      | 
+ 466 | }                                        | True                      | 
+ 467 |                                          | True                      | 
+ 468 | S_STAT(ctx_stat)                         | True                      | 
+ 469 |  ullong old;                             | True                      | 
+ 470 | S_STAT_END(ctx_stat)                     | True                      | 
+ 471 |                                          | True                      | 
+ 472 | static void FAST_FUNC collect_ctx(ctx_st | True                      | 
+ 473 | {                                        | True                      | 
+ 474 |  ullong data[1];                         | True                      | 
+ 475 |  ullong old;                             | True                      | 
+ 476 |                                          | True                      | 
+ 477 |  if (rdval(get_file(&proc_stat), "ctxt", | True                      | 
+ 478 |   put_question_marks(4);                 | True                      | 
+ 479 |   return;                                | True                      | 
+ 480 |  }                                       | True                      | 
+ 481 |                                          | True                      | 
+ 482 |  old = s->old;                           | True                      | 
+ 483 |  if (data[0] < old) old = data[0];  //sa | True                      | 
+ 484 |  s->old = data[0];                       | True                      | 
+ 485 |  scale(data[0] - old);                   | True                      | 
+ 486 | }                                        | True                      | 
+ 487 |                                          | True                      | 
+ 488 | static s_stat* init_ctx(const char *para | True                      | 
+ 489 | {                                        | True                      | 
+ 490 |  ctx_stat *s = xzalloc(sizeof(*s));      | True                      | 
+ 491 |  s->collect = collect_ctx;               | True                      | 
+ 492 |  return (s_stat*)s;                      | True                      | 
+ 493 | }                                        | True                      | 
+ 494 |                                          | True                      | 
+ 495 | S_STAT(blk_stat)                         | True                      | 
+ 496 |  const char* lookfor;                    | True                      | 
+ 497 |  ullong old[2];                          | True                      | 
+ 498 | S_STAT_END(blk_stat)                     | True                      | 
+ 499 |                                          | True                      | 
+ 500 | static void FAST_FUNC collect_blk(blk_st | True                      | 
+ 501 | {                                        | True                      | 
+ 502 |  ullong data[2];                         | True                      | 
+ 503 |  int i;                                  | True                      | 
+ 504 |                                          | True                      | 
+ 505 |  if (is26) {                             | True                      | 
+ 506 |   i = rdval_diskstats(get_file(&proc_dis | True                      | 
+ 507 |  } else {                                | True                      | 
+ 508 |   i = rdval(get_file(&proc_stat), s->loo | True                      | 
+ 509 |     | (1 << 1)                           | True                      | 
+ 510 |     | (1 << 2)                           | True                      | 
+ 511 |   );                                     | True                      | 
+ 512 |   // Linux 2.4 reports bio in Kbytes, co | True                      | 
+ 513 |   data[0] *= 2;                          | True                      | 
+ 514 |   data[1] *= 2;                          | True                      | 
+ 515 |  }                                       | True                      | 
+ 516 |  if (i) {                                | True                      | 
+ 517 |   put_question_marks(9);                 | True                      | 
+ 518 |   return;                                | True                      | 
+ 519 |  }                                       | True                      | 
+ 520 |                                          | True                      | 
+ 521 |  for (i = 0; i < 2; i++) {               | True                      | 
+ 522 |   ullong old = s->old[i];                | True                      | 
+ 523 |   if (data[i] < old) old = data[i];  //s | True                      | 
+ 524 |   s->old[i] = data[i];                   | True                      | 
+ 525 |   data[i] -= old;                        | True                      | 
+ 526 |  }                                       | True                      | 
+ 527 |  scale(data[0]*512); // TODO: *sectorsiz | True                      | 
+ 528 |  put_c(' ');                             | True                      | 
+ 529 |  scale(data[1]*512);                     | True                      | 
+ 530 | }                                        | True                      | 
+ 531 |                                          | True                      | 
+ 532 | static s_stat* init_blk(const char *para | True                      | 
+ 533 | {                                        | True                      | 
+ 534 |  blk_stat *s = xzalloc(sizeof(*s));      | True                      | 
+ 535 |  s->collect = collect_blk;               | True                      | 
+ 536 |  s->lookfor = "page";                    | True                      | 
+ 537 |  return (s_stat*)s;                      | True                      | 
+ 538 | }                                        | True                      | 
+ 539 |                                          | True                      | 
+ 540 | S_STAT(fork_stat)                        | True                      | 
+ 541 |  ullong old;                             | True                      | 
+ 542 | S_STAT_END(fork_stat)                    | True                      | 
+ 543 |                                          | True                      | 
+ 544 | static void FAST_FUNC collect_thread_nr( | True                      | 
+ 545 | {                                        | True                      | 
+ 546 |  ullong data[1];                         | True                      | 
+ 547 |                                          | True                      | 
+ 548 |  if (rdval_loadavg(get_file(&proc_loadav | True                      | 
+ 549 |   put_question_marks(4);                 | True                      | 
+ 550 |   return;                                | True                      | 
+ 551 |  }                                       | True                      | 
+ 552 |  scale(data[0]);                         | True                      | 
+ 553 | }                                        | True                      | 
+ 554 |                                          | True                      | 
+ 555 | static void FAST_FUNC collect_fork(fork_ | True                      | 
+ 556 | {                                        | True                      | 
+ 557 |  ullong data[1];                         | True                      | 
+ 558 |  ullong old;                             | True                      | 
+ 559 |                                          | True                      | 
+ 560 |  if (rdval(get_file(&proc_stat), "proces | True                      | 
+ 561 |   put_question_marks(4);                 | True                      | 
+ 562 |   return;                                | True                      | 
+ 563 |  }                                       | True                      | 
+ 564 |                                          | True                      | 
+ 565 |  old = s->old;                           | True                      | 
+ 566 |  if (data[0] < old) old = data[0]; //san | True                      | 
+ 567 |  s->old = data[0];                       | True                      | 
+ 568 |  scale(data[0] - old);                   | True                      | 
+ 569 | }                                        | True                      | 
+ 570 |                                          | True                      | 
+ 571 | static s_stat* init_fork(const char *par | True                      | 
+ 572 | {                                        | True                      | 
+ 573 |  fork_stat *s = xzalloc(sizeof(*s));     | True                      | 
+ 574 |  if (*param == 'n') {                    | True                      | 
+ 575 |   s->collect = collect_thread_nr;        | True                      | 
+ 576 |  } else {                                | True                      | 
+ 577 |   s->collect = collect_fork;             | True                      | 
+ 578 |  }                                       | True                      | 
+ 579 |  return (s_stat*)s;                      | True                      | 
+ 580 | }                                        | True                      | 
+ 581 |                                          | True                      | 
+ 582 | S_STAT(if_stat)                          | True                      | 
+ 583 |  ullong old[4];                          | True                      | 
+ 584 |  const char *device;                     | True                      | 
+ 585 |  char *device_colon;                     | True                      | 
+ 586 | S_STAT_END(if_stat)                      | True                      | 
+ 587 |                                          | True                      | 
+ 588 | static void FAST_FUNC collect_if(if_stat | True                      | 
+ 589 | {                                        | True                      | 
+ 590 |  ullong data[4];                         | True                      | 
+ 591 |  int i;                                  | True                      | 
+ 592 |                                          | True                      | 
+ 593 |  if (rdval(get_file(&proc_net_dev), s->d | True                      | 
+ 594 |      | (1 << 1)                          | True                      | 
+ 595 |      | (1 << 3)                          | True                      | 
+ 596 |      | (1 << 9)                          | True                      | 
+ 597 |      | (1 << 11))                        | True                      | 
+ 598 |  ) {                                     | True                      | 
+ 599 |   put_question_marks(10);                | True                      | 
+ 600 |   return;                                | True                      | 
+ 601 |  }                                       | True                      | 
+ 602 |                                          | True                      | 
+ 603 |  for (i = 0; i < 4; i++) {               | True                      | 
+ 604 |   ullong old = s->old[i];                | True                      | 
+ 605 |   if (data[i] < old) old = data[i];  //s | True                      | 
+ 606 |   s->old[i] = data[i];                   | True                      | 
+ 607 |   data[i] -= old;                        | True                      | 
+ 608 |  }                                       | True                      | 
+ 609 |  put_c(data[1] ? '*' : ' ');             | True                      | 
+ 610 |  scale(data[0]);                         | True                      | 
+ 611 |  put_c(data[3] ? '*' : ' ');             | True                      | 
+ 612 |  scale(data[2]);                         | True                      | 
+ 613 | }                                        | True                      | 
+ 614 |                                          | True                      | 
+ 615 | static s_stat* init_if(const char *devic | True                      | 
+ 616 | {                                        | True                      | 
+ 617 |  if_stat *s = xzalloc(sizeof(*s));       | True                      | 
+ 618 |                                          | True                      | 
+ 619 |  if (!device || !device[0])              | True                      | 
+ 620 |   bb_show_usage();                       | True                      | 
+ 621 |  s->collect = collect_if;                | True                      | 
+ 622 |                                          | True                      | 
+ 623 |  s->device = device;                     | True                      | 
+ 624 |  s->device_colon = xasprintf("%s:", devi | True                      | 
+ 625 |  return (s_stat*)s;                      | True                      | 
+ 626 | }                                        | True                      | 
+ 627 |                                          | True                      | 
+ 628 | S_STAT(mem_stat)                         | True                      | 
+ 629 |  char opt;                               | True                      | 
+ 630 | S_STAT_END(mem_stat)                     | True                      | 
+ 631 |                                          | True                      | 
+ 632 | // "Memory" value should not include any | True                      | 
+ 633 | // IOW: neither "ls -laR /" nor heavy re | True                      | 
+ 634 | //      should affect it. We'd like to a | True                      | 
+ 635 | //      long-term allocated kernel-side  | True                      | 
+ 636 | //      to figure out. For now, bufs, ca | True                      | 
+ 637 | //      counted as "free" memory         | True                      | 
+ 638 | //2.6.16:                                | True                      | 
+ 639 | //MemTotal:       773280 kB              | True                      | 
+ 640 | //MemFree:         25912 kB - genuinely  | True                      | 
+ 641 | //Buffers:        320672 kB - cache      | True                      | 
+ 642 | //Cached:         146396 kB - cache      | True                      | 
+ 643 | //SwapCached:          0 kB              | True                      | 
+ 644 | //Active:         183064 kB              | True                      | 
+ 645 | //Inactive:       356892 kB              | True                      | 
+ 646 | //HighTotal:           0 kB              | True                      | 
+ 647 | //HighFree:            0 kB              | True                      | 
+ 648 | //LowTotal:       773280 kB              | True                      | 
+ 649 | //LowFree:         25912 kB              | True                      | 
+ 650 | //SwapTotal:      131064 kB              | True                      | 
+ 651 | //SwapFree:       131064 kB              | True                      | 
+ 652 | //Dirty:              48 kB              | True                      | 
+ 653 | //Writeback:           0 kB              | True                      | 
+ 654 | //Mapped:          96620 kB              | True                      | 
+ 655 | //Slab:           200668 kB - takes 7 Mb | True                      | 
+ 656 | //                            but includ | True                      | 
+ 657 | //                            (== can ta | True                      | 
+ 658 | //CommitLimit:    517704 kB              | True                      | 
+ 659 | //Committed_AS:   236776 kB              | True                      | 
+ 660 | //PageTables:       1248 kB              | True                      | 
+ 661 | //VmallocTotal:   516052 kB              | True                      | 
+ 662 | //VmallocUsed:      3852 kB              | True                      | 
+ 663 | //VmallocChunk:   512096 kB              | True                      | 
+ 664 | //HugePages_Total:     0                 | True                      | 
+ 665 | //HugePages_Free:      0                 | True                      | 
+ 666 | //Hugepagesize:     4096 kB              | True                      | 
+ 667 | static void FAST_FUNC collect_mem(mem_st | True                      | 
+ 668 | {                                        | True                      | 
+ 669 |  ullong m_total;                         | True                      | 
+ 670 |  ullong m_free;                          | True                      | 
+ 671 |  ullong m_bufs;                          | True                      | 
+ 672 |  ullong m_cached;                        | True                      | 
+ 673 |  ullong m_slab;                          | True                      | 
+ 674 |                                          | True                      | 
+ 675 |  const char *meminfo = get_file(&proc_me | True                      | 
+ 676 |                                          | True                      | 
+ 677 |  if (s->opt == 'd' /* dirty page cache * | True                      | 
+ 678 |   || s->opt == 'w' /* under writeback */ | True                      | 
+ 679 |  ) {                                     | True                      | 
+ 680 |   m_total = 0; /* temporary reuse m_tota | True                      | 
+ 681 |   if (rdval(meminfo,                     | True                      | 
+ 682 |     (s->opt == 'd' ? "Dirty:" : "Writeba | True                      | 
+ 683 |     &m_total, 1 << 1)                    | True                      | 
+ 684 |   ) {                                    | True                      | 
+ 685 |    put_question_marks(4);                | True                      | 
+ 686 |    return;                               | True                      | 
+ 687 |   }                                      | True                      | 
+ 688 |   scale(m_total << 10);                  | True                      | 
+ 689 |   return;                                | True                      | 
+ 690 |  }                                       | True                      | 
+ 691 |                                          | True                      | 
+ 692 |  m_total = 0;                            | True                      | 
+ 693 |  if (rdval(meminfo, "MemTotal:", &m_tota | True                      | 
+ 694 |   put_question_marks(4);                 | True                      | 
+ 695 |   return;                                | True                      | 
+ 696 |  }                                       | True                      | 
+ 697 |  if (s->opt == 't') {                    | True                      | 
+ 698 |   scale(m_total << 10);                  | True                      | 
+ 699 |   return;                                | True                      | 
+ 700 |  }                                       | True                      | 
+ 701 |                                          | True                      | 
+ 702 |  m_free = 0;                             | True                      | 
+ 703 |  m_bufs = 0;                             | True                      | 
+ 704 |  m_cached = 0;                           | True                      | 
+ 705 |  m_slab = 0;                             | True                      | 
+ 706 |  if (rdval(meminfo, "MemFree:", &m_free  | True                      | 
+ 707 |   || rdval(meminfo, "Buffers:", &m_bufs  | True                      | 
+ 708 |   || rdval(meminfo, "Cached:",  &m_cache | True                      | 
+ 709 |   || rdval(meminfo, "Slab:",    &m_slab  | True                      | 
+ 710 |  ) {                                     | True                      | 
+ 711 |   put_question_marks(4);                 | True                      | 
+ 712 |   return;                                | True                      | 
+ 713 |  }                                       | True                      | 
+ 714 |                                          | True                      | 
+ 715 |  m_free += m_bufs + m_cached + m_slab;   | True                      | 
+ 716 |  switch (s->opt) {                       | True                      | 
+ 717 |  case 'f':                               | True                      | 
+ 718 |   scale(m_free << 10); break;            | True                      | 
+ 719 |  default:                                | True                      | 
+ 720 |   scale((m_total - m_free) << 10); break | True                      | 
+ 721 |  }                                       | True                      | 
+ 722 | }                                        | True                      | 
+ 723 |                                          | True                      | 
+ 724 | static s_stat* init_mem(const char *para | True                      | 
+ 725 | {                                        | True                      | 
+ 726 |  mem_stat *s = xzalloc(sizeof(*s));      | True                      | 
+ 727 |  s->collect = collect_mem;               | True                      | 
+ 728 |  s->opt = param[0];                      | True                      | 
+ 729 |  return (s_stat*)s;                      | True                      | 
+ 730 | }                                        | True                      | 
+ 731 |                                          | True                      | 
+ 732 | S_STAT(swp_stat)                         | True                      | 
+ 733 | S_STAT_END(swp_stat)                     | True                      | 
+ 734 |                                          | True                      | 
+ 735 | static void FAST_FUNC collect_swp(swp_st | True                      | 
+ 736 | {                                        | True                      | 
+ 737 |  ullong s_total[1];                      | True                      | 
+ 738 |  ullong s_free[1];                       | True                      | 
+ 739 |  if (rdval(get_file(&proc_meminfo), "Swa | True                      | 
+ 740 |   || rdval(proc_meminfo.file,       "Swa | True                      | 
+ 741 |  ) {                                     | True                      | 
+ 742 |   put_question_marks(4);                 | True                      | 
+ 743 |   return;                                | True                      | 
+ 744 |  }                                       | True                      | 
+ 745 |  scale((s_total[0]-s_free[0]) << 10);    | True                      | 
+ 746 | }                                        | True                      | 
+ 747 |                                          | True                      | 
+ 748 | static s_stat* init_swp(const char *para | True                      | 
+ 749 | {                                        | True                      | 
+ 750 |  swp_stat *s = xzalloc(sizeof(*s));      | True                      | 
+ 751 |  s->collect = collect_swp;               | True                      | 
+ 752 |  return (s_stat*)s;                      | True                      | 
+ 753 | }                                        | True                      | 
+ 754 |                                          | True                      | 
+ 755 | S_STAT(fd_stat)                          | True                      | 
+ 756 | S_STAT_END(fd_stat)                      | True                      | 
+ 757 |                                          | True                      | 
+ 758 | static void FAST_FUNC collect_fd(fd_stat | True                      | 
+ 759 | {                                        | True                      | 
+ 760 |  ullong data[2];                         | True                      | 
+ 761 |                                          | True                      | 
+ 762 |  if (rdval(get_file(&proc_sys_fs_filenr) | True                      | 
+ 763 |      | (1 << 1)                          | True                      | 
+ 764 |      | (1 << 2))                         | True                      | 
+ 765 |  ) {                                     | True                      | 
+ 766 |   put_question_marks(4);                 | True                      | 
+ 767 |   return;                                | True                      | 
+ 768 |  }                                       | True                      | 
+ 769 |                                          | True                      | 
+ 770 |  scale(data[0] - data[1]);               | True                      | 
+ 771 | }                                        | True                      | 
+ 772 |                                          | True                      | 
+ 773 | static s_stat* init_fd(const char *param | True                      | 
+ 774 | {                                        | True                      | 
+ 775 |  fd_stat *s = xzalloc(sizeof(*s));       | True                      | 
+ 776 |  s->collect = collect_fd;                | True                      | 
+ 777 |  return (s_stat*)s;                      | True                      | 
+ 778 | }                                        | True                      | 
+ 779 |                                          | True                      | 
+ 780 | S_STAT(time_stat)                        | True                      | 
+ 781 |  unsigned prec;                          | True                      | 
+ 782 |  unsigned scale;                         | True                      | 
+ 783 | S_STAT_END(time_stat)                    | True                      | 
+ 784 |                                          | True                      | 
+ 785 | static void FAST_FUNC collect_tv(time_st | True                      | 
+ 786 | {                                        | True                      | 
+ 787 |  char buf[sizeof("12:34:56.123456")];    | True                      | 
+ 788 |  struct tm* tm;                          | True                      | 
+ 789 |  unsigned us = tv->tv_usec + s->scale/2; | True                      | 
+ 790 |  time_t t = tv->tv_sec;                  | True                      | 
+ 791 |                                          | True                      | 
+ 792 |  if (us >= 1000000) {                    | True                      | 
+ 793 |   t++;                                   | True                      | 
+ 794 |   us -= 1000000;                         | True                      | 
+ 795 |  }                                       | True                      | 
+ 796 |  if (local)                              | True                      | 
+ 797 |   tm = localtime(&t);                    | True                      | 
+ 798 |  else                                    | True                      | 
+ 799 |   tm = gmtime(&t);                       | True                      | 
+ 800 |                                          | True                      | 
+ 801 |  sprintf(buf, "%02u:%02u:%02u", tm->tm_h | True                      | 
+ 802 |  if (s->prec)                            | True                      | 
+ 803 |   sprintf(buf+8, ".%0*u", s->prec, us /  | True                      | 
+ 804 |  put(buf);                               | True                      | 
+ 805 | }                                        | True                      | 
+ 806 |                                          | True                      | 
+ 807 | static void FAST_FUNC collect_time(time_ | True                      | 
+ 808 | {                                        | True                      | 
+ 809 |  collect_tv(s, &G.tv, /*local:*/ 1);     | True                      | 
+ 810 | }                                        | True                      | 
+ 811 |                                          | True                      | 
+ 812 | static void FAST_FUNC collect_monotonic( | True                      | 
+ 813 | {                                        | True                      | 
+ 814 |  struct timeval tv_mono;                 | True                      | 
+ 815 |                                          | True                      | 
+ 816 |  tv_mono.tv_sec = G.tv.tv_sec - G.start. | True                      | 
+ 817 | #if 0 /* Do we want this? */             | True                      | 
+ 818 |  if (tv_mono.tv_sec < 0) {               | 0                         | 
+ 819 |   /* Time went backwards, reset start ti | 0                         | 
+ 820 |   tv_mono.tv_sec = 0;                    | 0                         | 
+ 821 |   G.start = G.tv;                        | 0                         | 
+ 822 |  }                                       | 0                         | 
+ 823 | #endif                                   | True                      | 
+ 824 |  tv_mono.tv_usec = G.tv.tv_usec - G.star | True                      | 
+ 825 |  if ((int32_t)tv_mono.tv_usec < 0) {     | True                      | 
+ 826 |   tv_mono.tv_usec += 1000000;            | True                      | 
+ 827 |   tv_mono.tv_sec--;                      | True                      | 
+ 828 |  }                                       | True                      | 
+ 829 |  collect_tv(s, &tv_mono, /*local:*/ 0);  | True                      | 
+ 830 | }                                        | True                      | 
+ 831 |                                          | True                      | 
+ 832 | static s_stat* init_time(const char *par | True                      | 
+ 833 | {                                        | True                      | 
+ 834 |  int prec;                               | True                      | 
+ 835 |  time_stat *s = xzalloc(sizeof(*s));     | True                      | 
+ 836 |                                          | True                      | 
+ 837 |  s->collect = collect_time;              | True                      | 
+ 838 |  prec = param[0] - '0';                  | True                      | 
+ 839 |  if (prec < 0) prec = 0;                 | True                      | 
+ 840 |  else if (prec > 6) prec = 6;            | True                      | 
+ 841 |  s->prec = prec;                         | True                      | 
+ 842 |  s->scale = 1;                           | True                      | 
+ 843 |  while (prec++ < 6)                      | True                      | 
+ 844 |   s->scale *= 10;                        | True                      | 
+ 845 |  return (s_stat*)s;                      | True                      | 
+ 846 | }                                        | True                      | 
+ 847 |                                          | True                      | 
+ 848 | static s_stat* init_monotonic(const char | True                      | 
+ 849 | {                                        | True                      | 
+ 850 |  time_stat *s = (void*)init_time(param); | True                      | 
+ 851 |  s->collect = collect_monotonic;         | True                      | 
+ 852 |  return (s_stat*)s;                      | True                      | 
+ 853 | }                                        | True                      | 
+ 854 |                                          | True                      | 
+ 855 | static void FAST_FUNC collect_info(s_sta | True                      | 
+ 856 | {                                        | True                      | 
+ 857 |  gen ^= 1;                               | True                      | 
+ 858 |  while (s) {                             | True                      | 
+ 859 |   put(s->label);                         | True                      | 
+ 860 |   s->collect(s);                         | True                      | 
+ 861 |   s = s->next;                           | True                      | 
+ 862 |  }                                       | True                      | 
+ 863 | }                                        | True                      | 
+ 864 |                                          | True                      | 
+ 865 | typedef s_stat* init_func(const char *pa | True                      | 
+ 866 |                                          | True                      | 
+ 867 | static const char options[] ALIGN1 = "nc | True                      | 
+ 868 | static init_func *const init_functions[] | True                      | 
+ 869 |  init_if,                                | True                      | 
+ 870 |  init_cpu,                               | True                      | 
+ 871 |  init_mem,                               | True                      | 
+ 872 |  init_swp,                               | True                      | 
+ 873 |  init_fd,                                | True                      | 
+ 874 |  init_int,                               | True                      | 
+ 875 |  init_ctx,                               | True                      | 
+ 876 |  init_fork,                              | True                      | 
+ 877 |  init_time,                              | True                      | 
+ 878 |  init_monotonic,                         | True                      | 
+ 879 |  init_blk,                               | True                      | 
+ 880 |  init_cr                                 | True                      | 
+ 881 | };                                       | True                      | 
+ 882 |                                          | True                      | 
+ 883 | int nmeter_main(int argc, char **argv) M | True                      | 
+ 884 | int nmeter_main(int argc UNUSED_PARAM, c | True                      | 
+ 885 | {                                        | True                      | 
+ 886 |  char buf[32];                           | True                      | 
+ 887 |  s_stat *first = NULL;                   | True                      | 
+ 888 |  s_stat *last = NULL;                    | True                      | 
+ 889 |  s_stat *s;                              | True                      | 
+ 890 |  char *opt_d;                            | True                      | 
+ 891 |  char *cur, *prev;                       | True                      | 
+ 892 |                                          | True                      | 
+ 893 |  INIT_G();                               | True                      | 
+ 894 |                                          | True                      | 
+ 895 |  xchdir("/proc");                        | True                      | 
+ 896 |                                          | True                      | 
+ 897 |  if (open_read_close("version", buf, siz | True                      | 
+ 898 |   buf[sizeof(buf)-1] = '\0';             | True                      | 
+ 899 |   is26 = (strstr(buf, " 2.4.") == NULL); | True                      | 
+ 900 |  }                                       | True                      | 
+ 901 |                                          | True                      | 
+ 902 |  if (getopt32(argv, "d:", &opt_d)) {     | True                      | 
+ 903 |   G.delta = xatoi(opt_d) * 1000;         | True                      | 
+ 904 |   G.deltanz = G.delta > 0 ? G.delta : 1; | True                      | 
+ 905 |   need_seconds = (1000000 % G.deltanz) ! | True                      | 
+ 906 |  }                                       | True                      | 
+ 907 |  argv += optind;                         | True                      | 
+ 908 |                                          | True                      | 
+ 909 |  if (!argv[0])                           | True                      | 
+ 910 |   bb_show_usage();                       | True                      | 
+ 911 |                                          | True                      | 
+ 912 |  // Can use argv[0] directly, but this w | True                      | 
+ 913 |  // parameters as seen by e.g. ps. Makin | True                      | 
+ 914 |  cur = xstrdup(argv[0]);                 | True                      | 
+ 915 |  while (1) {                             | True                      | 
+ 916 |   char *param;                           | True                      | 
+ 917 |   const char *p;                         | True                      | 
+ 918 |   prev = cur;                            | True                      | 
+ 919 |  again:                                  | True                      | 
+ 920 |   cur = strchr(cur, '%');                | True                      | 
+ 921 |   if (!cur)                              | True                      | 
+ 922 |    break;                                | True                      | 
+ 923 |   if (cur[1] == '%') { // %%             | True                      | 
+ 924 |    overlapping_strcpy(cur, cur + 1);     | True                      | 
+ 925 |    cur++;                                | True                      | 
+ 926 |    goto again;                           | True                      | 
+ 927 |   }                                      | True                      | 
+ 928 |   *cur++ = '\0';  // overwrite %         | True                      | 
+ 929 |   if (cur[0] == '[') {                   | True                      | 
+ 930 |    // format: %[foptstring]              | True                      | 
+ 931 |    cur++;                                | True                      | 
+ 932 |    p = strchr(options, cur[0]);          | True                      | 
+ 933 |    param = cur + 1;                      | True                      | 
+ 934 |    while (cur[0] != ']') {               | True                      | 
+ 935 |     if (!cur[0])                         | True                      | 
+ 936 |      bb_show_usage();                    | True                      | 
+ 937 |     cur++;                               | True                      | 
+ 938 |    }                                     | True                      | 
+ 939 |    *cur++ = '\0'; // overwrite [         | True                      | 
+ 940 |   } else {                               | True                      | 
+ 941 |    // format: %NNNNNNf                   | True                      | 
+ 942 |    param = cur;                          | True                      | 
+ 943 |    while (cur[0] >= '0' && cur[0] <= '9' | True                      | 
+ 944 |     cur++;                               | True                      | 
+ 945 |    if (!cur[0])                          | True                      | 
+ 946 |     bb_show_usage();                     | True                      | 
+ 947 |    p = strchr(options, cur[0]);          | True                      | 
+ 948 |    *cur++ = '\0'; // overwrite format ch | True                      | 
+ 949 |   }                                      | True                      | 
+ 950 |   if (!p)                                | True                      | 
+ 951 |    bb_show_usage();                      | True                      | 
+ 952 |   s = init_functions[p-options](param);  | True                      | 
+ 953 |   if (s) {                               | True                      | 
+ 954 |    s->label = prev;                      | True                      | 
+ 955 |    /*s->next = NULL; - all initXXX funcs | True                      | 
+ 956 |    if (!first)                           | True                      | 
+ 957 |     first = s;                           | True                      | 
+ 958 |    else                                  | True                      | 
+ 959 |     last->next = s;                      | True                      | 
+ 960 |    last = s;                             | True                      | 
+ 961 |   } else {                               | True                      | 
+ 962 |    // %r option. remove it from string   | True                      | 
+ 963 |    overlapping_strcpy(prev + strlen(prev | True                      | 
+ 964 |    cur = prev;                           | True                      | 
+ 965 |   }                                      | True                      | 
+ 966 |  }                                       | True                      | 
+ 967 |  if (prev[0]) {                          | True                      | 
+ 968 |   s = init_literal();                    | True                      | 
+ 969 |   s->label = prev;                       | True                      | 
+ 970 |   /*s->next = NULL; - all initXXX funcs  | True                      | 
+ 971 |   if (!first)                            | True                      | 
+ 972 |    first = s;                            | True                      | 
+ 973 |   else                                   | True                      | 
+ 974 |    last->next = s;                       | True                      | 
+ 975 |   last = s;                              | True                      | 
+ 976 |  }                                       | True                      | 
+ 977 |                                          | True                      | 
+ 978 |  // Generate first samples but do not pr | True                      | 
+ 979 |  collect_info(first);                    | True                      | 
+ 980 |  reset_outbuf();                         | True                      | 
+ 981 |                                          | True                      | 
+ 982 |  if (G.delta >= 0) {                     | True                      | 
+ 983 |   xgettimeofday(&G.tv);                  | True                      | 
+ 984 |   usleep(G.delta > 1000000 ? 1000000 : G | True                      | 
+ 985 |  }                                       | True                      | 
+ 986 |                                          | True                      | 
+ 987 |  xgettimeofday(&G.start);                | True                      | 
+ 988 |  G.tv = G.start;                         | True                      | 
+ 989 |                                          | True                      | 
+ 990 |  // Move back start of monotonic time a  | True                      | 
+ 991 |  // nmeter -d500 '%6T %6t'               | True                      | 
+ 992 |  // 00:00:00.000161 12:32:07.500161      | True                      | 
+ 993 |  // 00:00:00.500282 12:32:08.000282      | True                      | 
+ 994 |  // 00:00:01.000286 12:32:08.500286      | True                      | 
+ 995 |  if (G.delta > 0)                        | True                      | 
+ 996 |   G.start.tv_usec -= (G.start.tv_usec %  | True                      | 
+ 997 |                                          | True                      | 
+ 998 |  while (1) {                             | True                      | 
+ 999 |   collect_info(first);                   | True                      | 
+1000 |   put_c(G.final_char);                   | True                      | 
+1001 |   print_outbuf();                        | True                      | 
+1002 |                                          | True                      | 
+1003 |   // Negative delta -> no usleep at all  | True                      | 
+1004 |   // This will hog the CPU but you can h | True                      | 
+1005 |   // time resolution ;)                  | True                      | 
+1006 |   // TODO: detect and avoid useless upda | True                      | 
+1007 |   // (like: nothing happens except time) | True                      | 
+1008 |   if (G.delta >= 0) {                    | True                      | 
+1009 |    int rem;                              | True                      | 
+1010 |    // can be commented out, will sacrifi | True                      | 
+1011 |    xgettimeofday(&G.tv);                 | True                      | 
+1012 |                                          | True                      | 
+1013 |  // TODO: nmeter -d10000 '%6T %6t'       | True                      | 
+1014 |  // 00:00:00.770333 12:34:44.770333      | True                      | 
+1015 |  // 00:00:06.000088 12:34:50.000088      | True                      | 
+1016 |  // 00:00:16.000094 12:35:00.000094      | True                      | 
+1017 |  // 00:00:26.000275 12:35:10.000275      | True                      | 
+1018 |  // we can't syncronize interval to star | True                      | 
+1019 |  // %T and %t (as shown above), but what | True                      | 
+1020 |  // in format string? Maybe sync _it_ in | True                      | 
+1021 |    if (need_seconds)                     | True                      | 
+1022 |     rem = G.delta - ((ullong)G.tv.tv_sec | True                      | 
+1023 |    else                                  | True                      | 
+1024 |     rem = G.delta - (unsigned)G.tv.tv_us | True                      | 
+1025 |    // Sometimes kernel wakes us up just  | True                      | 
+1026 |    // Do not go to very short sleep in t | True                      | 
+1027 |    if (rem < (unsigned)G.delta / 128) {  | True                      | 
+1028 |     rem += G.delta;                      | True                      | 
+1029 |    }                                     | True                      | 
+1030 |    usleep(rem);                          | True                      | 
+1031 |   }                                      | True                      | 
+1032 |   xgettimeofday(&G.tv);                  | True                      | 
+1033 |  }                                       | True                      | 
+1034 |                                          | True                      | 
+1035 |  /*return 0;*/                           | True                      | 
+1036 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +141MB, 272ms             | 

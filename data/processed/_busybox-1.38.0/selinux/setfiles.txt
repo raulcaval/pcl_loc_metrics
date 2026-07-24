@@ -1,0 +1,727 @@
+FILE: data/raw/busybox-1.38.0/selinux/setfiles.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                | 
+-----+------------------------------------------+--------------------------------------+
+   1 | /*                                       | True                                 | 
+   2 |   setfiles: based on policycoreutils 2.0 | True                                 | 
+   3 |   policycoreutils was released under GPL | True                                 | 
+   4 |   Port to BusyBox (c) 2007 by Yuichi Nak | True                                 | 
+   5 | */                                       | True                                 | 
+   6 | //config:config SETFILES                 | True                                 | 
+   7 | //config: bool "setfiles (13 kb)"        | True                                 | 
+   8 | //config: default n                      | True                                 | 
+   9 | //config: depends on SELINUX             | True                                 | 
+  10 | //config: help                           | True                                 | 
+  11 | //config: Enable support to modify to re | True                                 | 
+  12 | //config: Notice: If you built libselinu | True                                 | 
+  13 | //config: (It is default in libselinux's | True                                 | 
+  14 | //config: CONFIG_LFS.                    | True                                 | 
+  15 | //config:                                | True                                 | 
+  16 | //config:config FEATURE_SETFILES_CHECK_O | True                                 | 
+  17 | //config: bool "Enable check option"     | True                                 | 
+  18 | //config: default n                      | True                                 | 
+  19 | //config: depends on SETFILES            | True                                 | 
+  20 | //config: help                           | True                                 | 
+  21 | //config: Support "-c" option (check the | True                                 | 
+  22 | //config: the specified binary policy) f | True                                 | 
+  23 | //config:                                | True                                 | 
+  24 | //config:config RESTORECON               | True                                 | 
+  25 | //config: bool "restorecon (12 kb)"      | True                                 | 
+  26 | //config: default n                      | True                                 | 
+  27 | //config: depends on SELINUX             | True                                 | 
+  28 | //config: help                           | True                                 | 
+  29 | //config: Enable support to relabel file | True                                 | 
+  30 | //config: the same as setfiles, but usag | True                                 | 
+  31 |                                          | True                                 | 
+  32 | //applet:IF_SETFILES(APPLET(setfiles, BB | True                                 | 
+  33 | //                     APPLET_ODDNAME:na | True                                 | 
+  34 | //applet:IF_RESTORECON(APPLET_ODDNAME(re | True                                 | 
+  35 |                                          | True                                 | 
+  36 | //kbuild:lib-$(CONFIG_SETFILES) += setfi | True                                 | 
+  37 | //kbuild:lib-$(CONFIG_RESTORECON) += set | True                                 | 
+  38 |                                          | True                                 | 
+  39 | //usage:#define setfiles_trivial_usage   | True                                 | 
+  40 | //usage:       "[-dnpqsvW] [-e DIR]... [ | True                                 | 
+  41 | //usage: IF_FEATURE_SETFILES_CHECK_OPTIO | True                                 | 
+  42 | //usage:       " [-c policyfile] spec_fi | True                                 | 
+  43 | //usage: )                               | True                                 | 
+  44 | //usage:       " pathname"               | True                                 | 
+  45 | //usage:#define setfiles_full_usage "\n\ | True                                 | 
+  46 | //usage:       "Reset file contexts unde | True                                 | 
+  47 | //usage: IF_FEATURE_SETFILES_CHECK_OPTIO | True                                 | 
+  48 | //usage:     "\n -c FILE Check the valid | True                                 | 
+  49 | //usage: )                               | True                                 | 
+  50 | //usage:     "\n -d Show which specifica | True                                 | 
+  51 | //usage:     "\n -l Log changes in file  | True                                 | 
+  52 | //TODO: log to syslog is not yet impleme | True                                 | 
+  53 | //usage:     "\n -n Don't change any fil | True                                 | 
+  54 | //usage:     "\n -q Suppress warnings"   | True                                 | 
+  55 | //usage:     "\n -r DIR Use an alternate | True                                 | 
+  56 | //usage:     "\n -e DIR Exclude DIR"     | True                                 | 
+  57 | //usage:     "\n -F Force reset of conte | True                                 | 
+  58 | //usage:     "\n -o FILE Save list of fi | True                                 | 
+  59 | //usage:     "\n -s Take a list of files | True                                 | 
+  60 | //usage:     "\n -v Show changes in file | True                                 | 
+  61 | //usage:     "\n -vv Show changes in fil | True                                 | 
+  62 | //usage:     "\n -W Display warnings abo | True                                 | 
+  63 | //usage:                                 | True                                 | 
+  64 | //usage:#define restorecon_trivial_usage | True                                 | 
+  65 | //usage:       "[-iFnRv] [-e EXCLUDEDIR] | True                                 | 
+  66 | //usage:#define restorecon_full_usage "\ | True                                 | 
+  67 | //usage:       "Reset security contexts  | True                                 | 
+  68 | //usage:     "\n -i Ignore files that do | True                                 | 
+  69 | //usage:     "\n -f FILE File with list  | True                                 | 
+  70 | //usage:     "\n -e DIR Directory to exc | True                                 | 
+  71 | //usage:     "\n -R,-r Recurse"          | True                                 | 
+  72 | //usage:     "\n -n Don't change any fil | True                                 | 
+  73 | //usage:     "\n -o FILE Save list of fi | True                                 | 
+  74 | //usage:     "\n -v Verbose"             | True                                 | 
+  75 | //usage:     "\n -vv Show changed labels | True                                 | 
+  76 | //usage:     "\n -F Force reset of conte | True                                 | 
+  77 | //usage:     "\n  for customizable files | True                                 | 
+  78 | //usage:     "\n  if it has changed"     | True                                 | 
+  79 |                                          | True                                 | 
+  80 | #include "libbb.h"                       | True                                 | 
+  81 | #include "common_bufsiz.h"               | True                                 | 
+  82 | #if ENABLE_FEATURE_SETFILES_CHECK_OPTION | True                                 | 
+  83 | #include <sepol/sepol.h>                 | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+  84 | #endif                                   | True                                 | 
+  85 |                                          | True                                 | 
+  86 | #define MAX_EXCLUDES 50                  | True                                 | 
+  87 |                                          | True                                 | 
+  88 | struct edir {                            | True                                 | 
+  89 |  char *directory;                        | True                                 | 
+  90 |  size_t size;                            | True                                 | 
+  91 | };                                       | True                                 | 
+  92 |                                          | True                                 | 
+  93 | struct globals {                         | True                                 | 
+  94 |  FILE *outfile;                          | True                                 | 
+  95 |  char *policyfile;                       | True                                 | 
+  96 |  char *rootpath;                         | True                                 | 
+  97 |  int rootpathlen;                        | True                                 | 
+  98 |  unsigned count;                         | True                                 | 
+  99 |  int excludeCtr;                         | True                                 | 
+ 100 |  int errors;                             | True                                 | 
+ 101 |  int verbose; /* getopt32 uses it, has t | True                                 | 
+ 102 |  smallint recurse; /* Recursive descent  | True                                 | 
+ 103 |  smallint follow_mounts;                 | True                                 | 
+ 104 |  /* Behavior flags determined based on s | True                                 | 
+ 105 |  smallint expand_realpath;  /* Expand pa | True                                 | 
+ 106 |  smallint abort_on_error; /* Abort the f | True                                 | 
+ 107 |  int add_assoc; /* Track inode associati | True                                 | 
+ 108 |  int matchpathcon_flags; /* Flags to mat | True                                 | 
+ 109 |  dev_t dev_id; /* Device id where target | True                                 | 
+ 110 |  int nerr;                               | True                                 | 
+ 111 |  struct edir excludeArray[MAX_EXCLUDES]; | True                                 | 
+ 112 | } FIX_ALIASING;                          | True                                 | 
+ 113 | #define G (*(struct globals*)bb_common_b | True                                 | 
+ 114 | void BUG_setfiles_globals_too_big(void); | True                                 | 
+ 115 | #define INIT_G() do { \                  | True                                 | 
+ 116 |  setup_common_bufsiz(); \                | True                                 | 
+ 117 |  if (sizeof(G) > COMMON_BUFSIZE) \       | True                                 | 
+ 118 |   BUG_setfiles_globals_too_big(); \      | True                                 | 
+ 119 |  /* memset(&G, 0, sizeof(G)); - already  | True                                 | 
+ 120 | } while (0)                              | True                                 | 
+ 121 | #define outfile            (G.outfile    | True                                 | 
+ 122 | #define policyfile         (G.policyfile | True                                 | 
+ 123 | #define rootpath           (G.rootpath   | True                                 | 
+ 124 | #define rootpathlen        (G.rootpathle | True                                 | 
+ 125 | #define count              (G.count      | True                                 | 
+ 126 | #define excludeCtr         (G.excludeCtr | True                                 | 
+ 127 | #define errors             (G.errors     | True                                 | 
+ 128 | #define verbose            (G.verbose    | True                                 | 
+ 129 | #define recurse            (G.recurse    | True                                 | 
+ 130 | #define follow_mounts      (G.follow_mou | True                                 | 
+ 131 | #define expand_realpath    (G.expand_rea | True                                 | 
+ 132 | #define abort_on_error     (G.abort_on_e | True                                 | 
+ 133 | #define add_assoc          (G.add_assoc  | True                                 | 
+ 134 | #define matchpathcon_flags (G.matchpathc | True                                 | 
+ 135 | #define dev_id             (G.dev_id     | True                                 | 
+ 136 | #define nerr               (G.nerr       | True                                 | 
+ 137 | #define excludeArray       (G.excludeArr | True                                 | 
+ 138 |                                          | True                                 | 
+ 139 | /* Must match getopt32 string! */        | True                                 | 
+ 140 | enum {                                   | True                                 | 
+ 141 |  OPT_d = (1 << 0),                       | True                                 | 
+ 142 |  OPT_e = (1 << 1),                       | True                                 | 
+ 143 |  OPT_f = (1 << 2),                       | True                                 | 
+ 144 |  OPT_i = (1 << 3),                       | True                                 | 
+ 145 |  OPT_l = (1 << 4),                       | True                                 | 
+ 146 |  OPT_n = (1 << 5),                       | True                                 | 
+ 147 |  OPT_p = (1 << 6),                       | True                                 | 
+ 148 |  OPT_q = (1 << 7),                       | True                                 | 
+ 149 |  OPT_r = (1 << 8),                       | True                                 | 
+ 150 |  OPT_s = (1 << 9),                       | True                                 | 
+ 151 |  OPT_v = (1 << 10),                      | True                                 | 
+ 152 |  OPT_o = (1 << 11),                      | True                                 | 
+ 153 |  OPT_F = (1 << 12),                      | True                                 | 
+ 154 |  OPT_W = (1 << 13),                      | True                                 | 
+ 155 |  OPT_c = (1 << 14), /* c only for setfil | True                                 | 
+ 156 |  OPT_R = (1 << 14), /* R only for restor | True                                 | 
+ 157 | };                                       | True                                 | 
+ 158 | #define FLAG_d_debug         (option_mas | True                                 | 
+ 159 | #define FLAG_e               (option_mas | True                                 | 
+ 160 | #define FLAG_f               (option_mas | True                                 | 
+ 161 | #define FLAG_i_ignore_enoent (option_mas | True                                 | 
+ 162 | #define FLAG_l_take_log      (option_mas | True                                 | 
+ 163 | #define FLAG_n_dry_run       (option_mas | True                                 | 
+ 164 | #define FLAG_p_progress      (option_mas | True                                 | 
+ 165 | #define FLAG_q_quiet         (option_mas | True                                 | 
+ 166 | #define FLAG_r               (option_mas | True                                 | 
+ 167 | #define FLAG_s               (option_mas | True                                 | 
+ 168 | #define FLAG_v               (option_mas | True                                 | 
+ 169 | #define FLAG_o               (option_mas | True                                 | 
+ 170 | #define FLAG_F_force         (option_mas | True                                 | 
+ 171 | #define FLAG_W_warn_no_match (option_mas | True                                 | 
+ 172 | #define FLAG_c               (option_mas | True                                 | 
+ 173 | #define FLAG_R               (option_mas | True                                 | 
+ 174 |                                          | True                                 | 
+ 175 |                                          | True                                 | 
+ 176 | static void qprintf(const char *fmt UNUS | True                                 | 
+ 177 | {                                        | True                                 | 
+ 178 |  /* quiet, do nothing */                 | True                                 | 
+ 179 | }                                        | True                                 | 
+ 180 |                                          | True                                 | 
+ 181 | static void inc_err(void)                | True                                 | 
+ 182 | {                                        | True                                 | 
+ 183 |  nerr++;                                 | True                                 | 
+ 184 |  if (nerr > 9 && !FLAG_d_debug) {        | True                                 | 
+ 185 |   bb_simple_error_msg_and_die("exiting a | True                                 | 
+ 186 |  }                                       | True                                 | 
+ 187 | }                                        | True                                 | 
+ 188 |                                          | True                                 | 
+ 189 | static void add_exclude(const char *dire | True                                 | 
+ 190 | {                                        | True                                 | 
+ 191 |  struct stat sb;                         | True                                 | 
+ 192 |  size_t len;                             | True                                 | 
+ 193 |                                          | True                                 | 
+ 194 |  if (directory == NULL || directory[0] ! | True                                 | 
+ 195 |   bb_error_msg_and_die("full path requir | True                                 | 
+ 196 |  }                                       | True                                 | 
+ 197 |  if (lstat(directory, &sb)) {            | True                                 | 
+ 198 |   bb_error_msg("directory \"%s\" not fou | True                                 | 
+ 199 |   return;                                | True                                 | 
+ 200 |  }                                       | True                                 | 
+ 201 |  if ((sb.st_mode & S_IFDIR) == 0) {      | True                                 | 
+ 202 |   bb_error_msg("\"%s\" is not a director | True                                 | 
+ 203 |    directory, sb.st_mode);               | True                                 | 
+ 204 |   return;                                | True                                 | 
+ 205 |  }                                       | True                                 | 
+ 206 |  if (excludeCtr == MAX_EXCLUDES) {       | True                                 | 
+ 207 |   bb_error_msg_and_die("maximum excludes | True                                 | 
+ 208 |  }                                       | True                                 | 
+ 209 |                                          | True                                 | 
+ 210 |  len = strlen(directory);                | True                                 | 
+ 211 |  while (len > 1 && directory[len - 1] == | True                                 | 
+ 212 |   len--;                                 | True                                 | 
+ 213 |  }                                       | True                                 | 
+ 214 |  excludeArray[excludeCtr].directory = xs | True                                 | 
+ 215 |  excludeArray[excludeCtr++].size = len;  | True                                 | 
+ 216 | }                                        | True                                 | 
+ 217 |                                          | True                                 | 
+ 218 | static bool exclude(const char *file)    | True                                 | 
+ 219 | {                                        | True                                 | 
+ 220 |  int i = 0;                              | True                                 | 
+ 221 |  for (i = 0; i < excludeCtr; i++) {      | True                                 | 
+ 222 |   if (strncmp(file, excludeArray[i].dire | True                                 | 
+ 223 |      excludeArray[i].size) == 0) {       | True                                 | 
+ 224 |    if (file[excludeArray[i].size] == '\0 | True                                 | 
+ 225 |     || file[excludeArray[i].size] == '/' | True                                 | 
+ 226 |     return 1;                            | True                                 | 
+ 227 |    }                                     | True                                 | 
+ 228 |   }                                      | True                                 | 
+ 229 |  }                                       | True                                 | 
+ 230 |  return 0;                               | True                                 | 
+ 231 | }                                        | True                                 | 
+ 232 |                                          | True                                 | 
+ 233 | static int match(const char *name, struc | True                                 | 
+ 234 | {                                        | True                                 | 
+ 235 |  int ret;                                | True                                 | 
+ 236 |  char path[PATH_MAX + 1];                | True                                 | 
+ 237 |  char *tmp_path = xstrdup(name);         | True                                 | 
+ 238 |                                          | True                                 | 
+ 239 |  if (excludeCtr > 0 && exclude(name)) {  | True                                 | 
+ 240 |   goto err;                              | True                                 | 
+ 241 |  }                                       | True                                 | 
+ 242 |  ret = lstat(name, sb);                  | True                                 | 
+ 243 |  if (ret) {                              | True                                 | 
+ 244 |   if (FLAG_i_ignore_enoent && errno == E | True                                 | 
+ 245 |    free(tmp_path);                       | True                                 | 
+ 246 |    return 0;                             | True                                 | 
+ 247 |   }                                      | True                                 | 
+ 248 |   bb_error_msg("stat(%s)", name);        | True                                 | 
+ 249 |   goto err;                              | True                                 | 
+ 250 |  }                                       | True                                 | 
+ 251 |                                          | True                                 | 
+ 252 |  if (expand_realpath) {                  | True                                 | 
+ 253 |   if (S_ISLNK(sb->st_mode)) {            | True                                 | 
+ 254 |    char *p = NULL;                       | True                                 | 
+ 255 |    char *file_sep;                       | True                                 | 
+ 256 |                                          | True                                 | 
+ 257 |    size_t len = 0;                       | True                                 | 
+ 258 |                                          | True                                 | 
+ 259 |    if (verbose > 1)                      | True                                 | 
+ 260 |     bb_error_msg("warning! %s refers to  | True                                 | 
+ 261 |                                          | True                                 | 
+ 262 |    file_sep = strrchr(tmp_path, '/');    | True                                 | 
+ 263 |    if (file_sep == tmp_path) {           | True                                 | 
+ 264 |     file_sep++;                          | True                                 | 
+ 265 |     path[0] = '\0';                      | True                                 | 
+ 266 |     p = path;                            | True                                 | 
+ 267 |    } else if (file_sep) {                | True                                 | 
+ 268 |     *file_sep++ = '\0';                  | True                                 | 
+ 269 |     p = realpath(tmp_path, path);        | True                                 | 
+ 270 |    } else {                              | True                                 | 
+ 271 |     file_sep = tmp_path;                 | True                                 | 
+ 272 |     p = realpath("./", path);            | True                                 | 
+ 273 |    }                                     | True                                 | 
+ 274 |    if (p)                                | True                                 | 
+ 275 |     len = strlen(p);                     | True                                 | 
+ 276 |    if (!p || len + strlen(file_sep) + 2  | True                                 | 
+ 277 |     bb_perror_msg("realpath(%s) failed", | True                                 | 
+ 278 |     goto err;                            | True                                 | 
+ 279 |    }                                     | True                                 | 
+ 280 |    p += len;                             | True                                 | 
+ 281 |    /* ensure trailing slash of directory | True                                 | 
+ 282 |    if (len == 0 || p[-1] != '/') {       | True                                 | 
+ 283 |     *p++ = '/';                          | True                                 | 
+ 284 |    }                                     | True                                 | 
+ 285 |    strcpy(p, file_sep);                  | True                                 | 
+ 286 |    name = path;                          | True                                 | 
+ 287 |    if (excludeCtr > 0 && exclude(name))  | True                                 | 
+ 288 |     goto err;                            | True                                 | 
+ 289 |   } else {                               | True                                 | 
+ 290 |    char *p;                              | True                                 | 
+ 291 |    p = realpath(name, path);             | True                                 | 
+ 292 |    if (!p) {                             | True                                 | 
+ 293 |     bb_perror_msg("realpath(%s)", name); | True                                 | 
+ 294 |     goto err;                            | True                                 | 
+ 295 |    }                                     | True                                 | 
+ 296 |    name = p;                             | True                                 | 
+ 297 |    if (excludeCtr > 0 && exclude(name))  | True                                 | 
+ 298 |     goto err;                            | True                                 | 
+ 299 |   }                                      | True                                 | 
+ 300 |  }                                       | True                                 | 
+ 301 |                                          | True                                 | 
+ 302 |  /* name will be what is matched in the  | True                                 | 
+ 303 |  if (NULL != rootpath) {                 | True                                 | 
+ 304 |   if (0 != strncmp(rootpath, name, rootp | True                                 | 
+ 305 |    bb_error_msg("%s is not located in %s | True                                 | 
+ 306 |     name, rootpath);                     | True                                 | 
+ 307 |    goto err;                             | True                                 | 
+ 308 |   }                                      | True                                 | 
+ 309 |   name += rootpathlen;                   | True                                 | 
+ 310 |  }                                       | True                                 | 
+ 311 |                                          | True                                 | 
+ 312 |  free(tmp_path);                         | True                                 | 
+ 313 |  if (rootpath != NULL && name[0] == '\0' | True                                 | 
+ 314 |   /* this is actually the root dir of th | True                                 | 
+ 315 |   return matchpathcon_index("/", sb->st_ | True                                 | 
+ 316 |  return matchpathcon_index(name, sb->st_ | True                                 | 
+ 317 |  err:                                    | True                                 | 
+ 318 |  free(tmp_path);                         | True                                 | 
+ 319 |  return -1;                              | True                                 | 
+ 320 | }                                        | True                                 | 
+ 321 |                                          | True                                 | 
+ 322 | /* Compare two contexts to see if their  | True                                 | 
+ 323 |  * or whether the only difference is in  | True                                 | 
+ 324 | static bool only_changed_user(const char | True                                 | 
+ 325 | {                                        | True                                 | 
+ 326 |  if (FLAG_F_force)                       | True                                 | 
+ 327 |   return 0;                              | True                                 | 
+ 328 |  if (!a || !b)                           | True                                 | 
+ 329 |   return 0;                              | True                                 | 
+ 330 |  a = strchr(a, ':'); /* Rest of the cont | True                                 | 
+ 331 |  b = strchr(b, ':');                     | True                                 | 
+ 332 |  if (!a || !b)                           | True                                 | 
+ 333 |   return 0;                              | True                                 | 
+ 334 |  return (strcmp(a, b) == 0);             | True                                 | 
+ 335 | }                                        | True                                 | 
+ 336 |                                          | True                                 | 
+ 337 | static int restore(const char *file)     | True                                 | 
+ 338 | {                                        | True                                 | 
+ 339 |  char *my_file;                          | True                                 | 
+ 340 |  struct stat my_sb;                      | True                                 | 
+ 341 |  int i, j, ret;                          | True                                 | 
+ 342 |  char *context = NULL;                   | True                                 | 
+ 343 |  char *newcon = NULL;                    | True                                 | 
+ 344 |  bool user_only_changed = 0;             | True                                 | 
+ 345 |  int retval = 0;                         | True                                 | 
+ 346 |                                          | True                                 | 
+ 347 |  my_file = bb_simplify_path(file);       | True                                 | 
+ 348 |                                          | True                                 | 
+ 349 |  i = match(my_file, &my_sb, &newcon);    | True                                 | 
+ 350 |                                          | True                                 | 
+ 351 |  if (i < 0) /* No matching specification | True                                 | 
+ 352 |   goto out;                              | True                                 | 
+ 353 |                                          | True                                 | 
+ 354 |  if (FLAG_p_progress) {                  | True                                 | 
+ 355 |   count++;                               | True                                 | 
+ 356 |   if (count % 0x400 == 0) { /* every 102 | True                                 | 
+ 357 |    count = (count % (80*0x400));         | True                                 | 
+ 358 |    if (count == 0)                       | True                                 | 
+ 359 |     bb_putchar('\n');                    | True                                 | 
+ 360 |    bb_putchar('*');                      | True                                 | 
+ 361 |    fflush_all();                         | True                                 | 
+ 362 |   }                                      | True                                 | 
+ 363 |  }                                       | True                                 | 
+ 364 |                                          | True                                 | 
+ 365 |  /*                                      | True                                 | 
+ 366 |   * Try to add an association between th | True                                 | 
+ 367 |   * this specification. If there is alre | True                                 | 
+ 368 |   * for this inode and it conflicts with | True                                 | 
+ 369 |   * then use the last matching specifica | True                                 | 
+ 370 |   */                                     | True                                 | 
+ 371 |  if (add_assoc) {                        | True                                 | 
+ 372 |   j = matchpathcon_filespec_add(my_sb.st | True                                 | 
+ 373 |   if (j < 0)                             | True                                 | 
+ 374 |    goto err;                             | True                                 | 
+ 375 |                                          | True                                 | 
+ 376 |   if (j != i) {                          | True                                 | 
+ 377 |    /* There was already an association a | True                                 | 
+ 378 |    goto out;                             | True                                 | 
+ 379 |   }                                      | True                                 | 
+ 380 |  }                                       | True                                 | 
+ 381 |                                          | True                                 | 
+ 382 |  if (FLAG_d_debug)                       | True                                 | 
+ 383 |   printf("%s: %s matched by %s\n", apple | True                                 | 
+ 384 |                                          | True                                 | 
+ 385 |  /* Get the current context of the file. | True                                 | 
+ 386 |  ret = lgetfilecon_raw(my_file, &context | True                                 | 
+ 387 |  if (ret < 0) {                          | True                                 | 
+ 388 |   if (errno == ENODATA) {                | True                                 | 
+ 389 |    context = NULL; /* paranoia */        | True                                 | 
+ 390 |   } else {                               | True                                 | 
+ 391 |    bb_perror_msg("lgetfilecon_raw on %s" | True                                 | 
+ 392 |    goto err;                             | True                                 | 
+ 393 |   }                                      | True                                 | 
+ 394 |   user_only_changed = 0;                 | True                                 | 
+ 395 |  } else                                  | True                                 | 
+ 396 |   user_only_changed = only_changed_user( | True                                 | 
+ 397 |                                          | True                                 | 
+ 398 |  /*                                      | True                                 | 
+ 399 |   * Do not relabel the file if the match | True                                 | 
+ 400 |   * <<none>> or the file is already labe | True                                 | 
+ 401 |   * specification.                       | True                                 | 
+ 402 |   */                                     | True                                 | 
+ 403 |  if ((strcmp(newcon, "<<none>>") == 0)   | True                                 | 
+ 404 |   || (context && (strcmp(context, newcon | True                                 | 
+ 405 |   goto out;                              | True                                 | 
+ 406 |  }                                       | True                                 | 
+ 407 |                                          | True                                 | 
+ 408 |  if (!FLAG_F_force && context && (is_con | True                                 | 
+ 409 |   if (verbose > 1) {                     | True                                 | 
+ 410 |    bb_error_msg("skipping %s. %s is cust | True                                 | 
+ 411 |     my_file, context);                   | True                                 | 
+ 412 |   }                                      | True                                 | 
+ 413 |   goto out;                              | True                                 | 
+ 414 |  }                                       | True                                 | 
+ 415 |                                          | True                                 | 
+ 416 |  if (verbose) {                          | True                                 | 
+ 417 |   /* If we're just doing "-v", trim out  | True                                 | 
+ 418 |    * the user has changed but the role a | True                                 | 
+ 419 |    * same.  For "-vv", emit everything.  | True                                 | 
+ 420 |   if (verbose > 1 || !user_only_changed) | True                                 | 
+ 421 |    printf("%s: reset %s context %s->%s\n | True                                 | 
+ 422 |     applet_name, my_file, context ? cont | True                                 | 
+ 423 |   }                                      | True                                 | 
+ 424 |  }                                       | True                                 | 
+ 425 |                                          | True                                 | 
+ 426 |  if (FLAG_l_take_log && !user_only_chang | True                                 | 
+ 427 |   if (context)                           | True                                 | 
+ 428 |    printf("relabeling %s from %s to %s\n | True                                 | 
+ 429 |   else                                   | True                                 | 
+ 430 |    printf("labeling %s to %s\n", my_file | True                                 | 
+ 431 |  }                                       | True                                 | 
+ 432 |                                          | True                                 | 
+ 433 |  if (outfile && !user_only_changed)      | True                                 | 
+ 434 |   fprintf(outfile, "%s\n", my_file);     | True                                 | 
+ 435 |                                          | True                                 | 
+ 436 |  /*                                      | True                                 | 
+ 437 |   * Do not relabel the file if -n was us | True                                 | 
+ 438 |   */                                     | True                                 | 
+ 439 |  if (FLAG_n_dry_run || user_only_changed | True                                 | 
+ 440 |   goto out;                              | True                                 | 
+ 441 |                                          | True                                 | 
+ 442 |  /*                                      | True                                 | 
+ 443 |   * Relabel the file to the specified co | True                                 | 
+ 444 |   */                                     | True                                 | 
+ 445 |  ret = lsetfilecon(my_file, newcon);     | True                                 | 
+ 446 |  if (ret) {                              | True                                 | 
+ 447 |   bb_perror_msg("lsetfileconon(%s,%s)",  | True                                 | 
+ 448 |   goto err;                              | True                                 | 
+ 449 |  }                                       | True                                 | 
+ 450 |                                          | True                                 | 
+ 451 |  out:                                    | True                                 | 
+ 452 |  freecon(context);                       | True                                 | 
+ 453 |  freecon(newcon);                        | True                                 | 
+ 454 |  free(my_file);                          | True                                 | 
+ 455 |  return retval;                          | True                                 | 
+ 456 |  err:                                    | True                                 | 
+ 457 |  retval--; /* -1 */                      | True                                 | 
+ 458 |  goto out;                               | True                                 | 
+ 459 | }                                        | True                                 | 
+ 460 |                                          | True                                 | 
+ 461 | /*                                       | True                                 | 
+ 462 |  * Apply the last matching specification | True                                 | 
+ 463 |  * This function is called by recursive_ | True                                 | 
+ 464 |  * the directory traversal.              | True                                 | 
+ 465 |  */                                      | True                                 | 
+ 466 | static int FAST_FUNC apply_spec(struct r | True                                 | 
+ 467 |   const char *file,                      | True                                 | 
+ 468 |   struct stat *sb)                       | True                                 | 
+ 469 | {                                        | True                                 | 
+ 470 |  if (!follow_mounts) {                   | True                                 | 
+ 471 |   /* setfiles does not process across di | True                                 | 
+ 472 |   if (sb->st_dev != dev_id) {            | True                                 | 
+ 473 |    return SKIP;                          | True                                 | 
+ 474 |   }                                      | True                                 | 
+ 475 |  }                                       | True                                 | 
+ 476 |  errors |= restore(file);                | True                                 | 
+ 477 |  if (abort_on_error && errors)           | True                                 | 
+ 478 |   return FALSE;                          | True                                 | 
+ 479 |  return TRUE;                            | True                                 | 
+ 480 | }                                        | True                                 | 
+ 481 |                                          | True                                 | 
+ 482 |                                          | True                                 | 
+ 483 | static int canoncon(const char *path, un | True                                 | 
+ 484 | {                                        | True                                 | 
+ 485 |  static const char err_msg[] ALIGN1 = "% | True                                 | 
+ 486 |                                          | True                                 | 
+ 487 |  char *tmpcon;                           | True                                 | 
+ 488 |  char *context = *contextp;              | True                                 | 
+ 489 |  int invalid = 0;                        | True                                 | 
+ 490 |                                          | True                                 | 
+ 491 | #if ENABLE_FEATURE_SETFILES_CHECK_OPTION | True                                 | 
+ 492 |  if (policyfile) {                       | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 493 |   if (sepol_check_context(context) >= 0) | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 494 |    return 0;                             | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 495 |   /* Exit immediately if we're in checki | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 496 |   bb_error_msg_and_die(err_msg, path, li | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 497 |  }                                       | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 498 | #endif                                   | True                                 | 
+ 499 |                                          | True                                 | 
+ 500 |  if (security_canonicalize_context_raw(c | True                                 | 
+ 501 |   if (errno != ENOENT) {                 | True                                 | 
+ 502 |    invalid = 1;                          | True                                 | 
+ 503 |    inc_err();                            | True                                 | 
+ 504 |   }                                      | True                                 | 
+ 505 |  } else {                                | True                                 | 
+ 506 |   free(context);                         | True                                 | 
+ 507 |   *contextp = tmpcon;                    | True                                 | 
+ 508 |  }                                       | True                                 | 
+ 509 |                                          | True                                 | 
+ 510 |  if (invalid) {                          | True                                 | 
+ 511 |   bb_error_msg(err_msg, path, lineno, co | True                                 | 
+ 512 |  }                                       | True                                 | 
+ 513 |                                          | True                                 | 
+ 514 |  return invalid;                         | True                                 | 
+ 515 | }                                        | True                                 | 
+ 516 |                                          | True                                 | 
+ 517 | static int process_one(char *name)       | True                                 | 
+ 518 | {                                        | True                                 | 
+ 519 |  struct stat sb;                         | True                                 | 
+ 520 |  int rc;                                 | True                                 | 
+ 521 |                                          | True                                 | 
+ 522 |  rc = lstat(name, &sb);                  | True                                 | 
+ 523 |  if (rc < 0) {                           | True                                 | 
+ 524 |   if (FLAG_i_ignore_enoent && errno == E | True                                 | 
+ 525 |    return 0;                             | True                                 | 
+ 526 |   bb_perror_msg("stat(%s)", name);       | True                                 | 
+ 527 |   goto err;                              | True                                 | 
+ 528 |  }                                       | True                                 | 
+ 529 |  dev_id = sb.st_dev;                     | True                                 | 
+ 530 |                                          | True                                 | 
+ 531 |  if (S_ISDIR(sb.st_mode) && recurse) {   | True                                 | 
+ 532 |   if (recursive_action(name,             | True                                 | 
+ 533 |     ACTION_RECURSE,                      | True                                 | 
+ 534 |     apply_spec,                          | True                                 | 
+ 535 |     apply_spec,                          | True                                 | 
+ 536 |     NULL) != TRUE                        | True                                 | 
+ 537 |   ) {                                    | True                                 | 
+ 538 |    bb_error_msg("error while labeling %s | True                                 | 
+ 539 |    goto err;                             | True                                 | 
+ 540 |   }                                      | True                                 | 
+ 541 |  } else {                                | True                                 | 
+ 542 |   rc = restore(name);                    | True                                 | 
+ 543 |   if (rc)                                | True                                 | 
+ 544 |    goto err;                             | True                                 | 
+ 545 |  }                                       | True                                 | 
+ 546 |                                          | True                                 | 
+ 547 |  out:                                    | True                                 | 
+ 548 |  if (add_assoc) {                        | True                                 | 
+ 549 |   if (FLAG_q_quiet)                      | True                                 | 
+ 550 |    set_matchpathcon_printf(&qprintf);    | True                                 | 
+ 551 |   matchpathcon_filespec_eval();          | True                                 | 
+ 552 |   set_matchpathcon_printf(NULL);         | True                                 | 
+ 553 |   matchpathcon_filespec_destroy();       | True                                 | 
+ 554 |  }                                       | True                                 | 
+ 555 |                                          | True                                 | 
+ 556 |  return rc;                              | True                                 | 
+ 557 |                                          | True                                 | 
+ 558 |  err:                                    | True                                 | 
+ 559 |  rc = -1;                                | True                                 | 
+ 560 |  goto out;                               | True                                 | 
+ 561 | }                                        | True                                 | 
+ 562 |                                          | True                                 | 
+ 563 | int setfiles_main(int argc, char **argv) | True                                 | 
+ 564 | int setfiles_main(int argc UNUSED_PARAM, | True                                 | 
+ 565 | {                                        | True                                 | 
+ 566 |  struct stat sb;                         | True                                 | 
+ 567 |  int rc, i = 0;                          | True                                 | 
+ 568 |  const char *input_filename = NULL;      | True                                 | 
+ 569 |  char *buf = NULL;                       | True                                 | 
+ 570 |  size_t buf_len;                         | True                                 | 
+ 571 |  int flags;                              | True                                 | 
+ 572 |  llist_t *exclude_dir = NULL;            | True                                 | 
+ 573 |  char *out_filename = NULL;              | True                                 | 
+ 574 |                                          | True                                 | 
+ 575 |  INIT_G();                               | True                                 | 
+ 576 |                                          | True                                 | 
+ 577 |  if (applet_name[0] == 's') { /* "setfil | True                                 | 
+ 578 |   /*                                     | True                                 | 
+ 579 |    * setfiles:                           | True                                 | 
+ 580 |    * Recursive descent,                  | True                                 | 
+ 581 |    * Does not expand paths via realpath, | True                                 | 
+ 582 |    * Aborts on errors during the file tr | True                                 | 
+ 583 |    * Try to track inode associations for | True                                 | 
+ 584 |    * Does not follow mounts,             | True                                 | 
+ 585 |    * Validates all file contexts at init | True                                 | 
+ 586 |    */                                    | True                                 | 
+ 587 |   recurse = 1;                           | True                                 | 
+ 588 |   abort_on_error = 1;                    | True                                 | 
+ 589 |   add_assoc = 1;                         | True                                 | 
+ 590 |   /* follow_mounts = 0; - already is */  | True                                 | 
+ 591 |   matchpathcon_flags = MATCHPATHCON_VALI | True                                 | 
+ 592 |  } else {                                | True                                 | 
+ 593 |   /*                                     | True                                 | 
+ 594 |    * restorecon:                         | True                                 | 
+ 595 |    * No recursive descent unless -r/-R,  | True                                 | 
+ 596 |    * Expands paths via realpath,         | True                                 | 
+ 597 |    * Do not abort on errors during the f | True                                 | 
+ 598 |    * Do not try to track inode associati | True                                 | 
+ 599 |    * Follows mounts,                     | True                                 | 
+ 600 |    * Does lazy validation of contexts up | True                                 | 
+ 601 |    */                                    | True                                 | 
+ 602 |   expand_realpath = 1;                   | True                                 | 
+ 603 |   follow_mounts = 1;                     | True                                 | 
+ 604 |   matchpathcon_flags = MATCHPATHCON_NOTR | True                                 | 
+ 605 |   /* restorecon only */                  | True                                 | 
+ 606 |   selinux_or_die();                      | True                                 | 
+ 607 |  }                                       | True                                 | 
+ 608 |                                          | True                                 | 
+ 609 |  set_matchpathcon_flags(matchpathcon_fla | True                                 | 
+ 610 |                                          | True                                 | 
+ 611 |  /* Option order must match OPT_x defini | True                                 | 
+ 612 |  if (applet_name[0] == 'r') { /* restore | True                                 | 
+ 613 |   flags = getopt32(argv, "^"             | True                                 | 
+ 614 |    "de:*f:ilnpqrsvo:FWR"                 | True                                 | 
+ 615 |     "\0"                                 | True                                 | 
+ 616 |     "vv:v--p:p--v:v--q:q--v",            | True                                 | 
+ 617 |    &exclude_dir, &input_filename, &out_f | True                                 | 
+ 618 |     &verbose                             | True                                 | 
+ 619 |   );                                     | True                                 | 
+ 620 |  } else { /* setfiles */                 | True                                 | 
+ 621 |   flags = getopt32(argv, "^"             | True                                 | 
+ 622 |    "de:*f:ilnpqr:svo:FW"                 | True                                 | 
+ 623 |    IF_FEATURE_SETFILES_CHECK_OPTION("c:" | True                                 | 
+ 624 |     "\0"                                 | True                                 | 
+ 625 |     "vv:v--p:p--v:v--q:q--v",            | True                                 | 
+ 626 |    &exclude_dir, &input_filename, &rootp | True                                 | 
+ 627 |    IF_FEATURE_SETFILES_CHECK_OPTION(&pol | True                                 | 
+ 628 |     &verbose                             | True                                 | 
+ 629 |   );                                     | True                                 | 
+ 630 |  }                                       | True                                 | 
+ 631 |  argv += optind;                         | True                                 | 
+ 632 |                                          | True                                 | 
+ 633 | #if ENABLE_FEATURE_SETFILES_CHECK_OPTION | True                                 | 
+ 634 |  if ((applet_name[0] == 's') && (flags & | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 635 |   FILE *policystream;                    | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 636 |                                          | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 637 |   policystream = xfopen_for_read(policyf | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 638 |   if (sepol_set_policydb_from_file(polic | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 639 |    bb_error_msg_and_die("sepol_set_polic | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 640 |   }                                      | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 641 |   fclose(policystream);                  | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 642 |                                          | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 643 |   /* Only process the specified file_con | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 644 |    * any .homedirs or .local files, and  | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 645 |    * context translations. */            | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 646 |   set_matchpathcon_flags(MATCHPATHCON_BA | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 647 |            MATCHPATHCON_NOTRANS |        | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 648 |            MATCHPATHCON_VALIDATE);       | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 649 |  }                                       | ENABLE_FEATURE_SETFILES_CHECK_OPTION | 
+ 650 | #endif                                   | True                                 | 
+ 651 |                                          | True                                 | 
+ 652 |  while (exclude_dir)                     | True                                 | 
+ 653 |   add_exclude(llist_pop(&exclude_dir));  | True                                 | 
+ 654 |                                          | True                                 | 
+ 655 |  if (flags & OPT_o) {                    | True                                 | 
+ 656 |   outfile = stdout;                      | True                                 | 
+ 657 |   if (NOT_LONE_CHAR(out_filename, '-'))  | True                                 | 
+ 658 |    outfile = xfopen_for_write(out_filena | True                                 | 
+ 659 |   }                                      | True                                 | 
+ 660 |  }                                       | True                                 | 
+ 661 |  if (applet_name[0] == 'r') { /* restore | True                                 | 
+ 662 |   if (flags & (OPT_r | OPT_R))           | True                                 | 
+ 663 |    recurse = 1;                          | True                                 | 
+ 664 |  } else { /* setfiles */                 | True                                 | 
+ 665 |   if (flags & OPT_r)                     | True                                 | 
+ 666 |    rootpathlen = strlen(rootpath);       | True                                 | 
+ 667 |  }                                       | True                                 | 
+ 668 |  if (flags & OPT_s) {                    | True                                 | 
+ 669 |   input_filename = "-";                  | True                                 | 
+ 670 |   add_assoc = 0;                         | True                                 | 
+ 671 |  }                                       | True                                 | 
+ 672 |                                          | True                                 | 
+ 673 |  if (applet_name[0] == 's') { /* setfile | True                                 | 
+ 674 |   /* Use our own invalid context checkin | True                                 | 
+ 675 |    * we can support either checking agai | True                                 | 
+ 676 |    * checking against a binary policy fi | True                                 | 
+ 677 |   set_matchpathcon_canoncon(&canoncon);  | True                                 | 
+ 678 |   if (!argv[0])                          | True                                 | 
+ 679 |    bb_show_usage();                      | True                                 | 
+ 680 |   xstat(argv[0], &sb);                   | True                                 | 
+ 681 |   if (!S_ISREG(sb.st_mode)) {            | True                                 | 
+ 682 |    bb_error_msg_and_die("'%s' is not a r | True                                 | 
+ 683 |   }                                      | True                                 | 
+ 684 |   /* Load the file contexts configuratio | True                                 | 
+ 685 |   rc = matchpathcon_init(argv[0]);       | True                                 | 
+ 686 |   if (rc < 0) {                          | True                                 | 
+ 687 |    bb_simple_perror_msg_and_die(argv[0]) | True                                 | 
+ 688 |   }                                      | True                                 | 
+ 689 |   if (nerr)                              | True                                 | 
+ 690 |    exit_FAILURE();                       | True                                 | 
+ 691 |   argv++;                                | True                                 | 
+ 692 |  }                                       | True                                 | 
+ 693 |                                          | True                                 | 
+ 694 |  if (input_filename) {                   | True                                 | 
+ 695 |   ssize_t len;                           | True                                 | 
+ 696 |   FILE *f = stdin;                       | True                                 | 
+ 697 |                                          | True                                 | 
+ 698 |   if (NOT_LONE_CHAR(input_filename, '-') | True                                 | 
+ 699 |    f = xfopen_for_read(input_filename);  | True                                 | 
+ 700 |   while ((len = getline(&buf, &buf_len,  | True                                 | 
+ 701 |    buf[len - 1] = '\0';                  | True                                 | 
+ 702 |    errors |= process_one(buf);           | True                                 | 
+ 703 |   }                                      | True                                 | 
+ 704 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                                 | 
+ 705 |    fclose_if_not_stdin(f);               | True                                 | 
+ 706 |  } else {                                | True                                 | 
+ 707 |   if (!argv[0])                          | True                                 | 
+ 708 |    bb_show_usage();                      | True                                 | 
+ 709 |   for (i = 0; argv[i]; i++) {            | True                                 | 
+ 710 |    errors |= process_one(argv[i]);       | True                                 | 
+ 711 |   }                                      | True                                 | 
+ 712 |  }                                       | True                                 | 
+ 713 |                                          | True                                 | 
+ 714 |  if (FLAG_W_warn_no_match)               | True                                 | 
+ 715 |   matchpathcon_checkmatches(argv[0]);    | True                                 | 
+ 716 |                                          | True                                 | 
+ 717 |  if (ENABLE_FEATURE_CLEAN_UP && outfile) | True                                 | 
+ 718 |   fclose(outfile);                       | True                                 | 
+ 719 |                                          | True                                 | 
+ 720 |  return errors;                          | True                                 | 
+ 721 | }                                        | True                                 | 
+-----+------------------------------------------+--------------------------------------+
+     |                                          | +121MB, 311ms                        | 

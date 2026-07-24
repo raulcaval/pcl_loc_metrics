@@ -1,0 +1,215 @@
+FILE: data/raw/busybox-1.38.0/loginutils/su.c
+Resultado PCLocator:
+   # | line of code                             | Merge                           | 
+-----+------------------------------------------+---------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                            | 
+   2 | /*                                       | True                            | 
+   3 |  * Mini su implementation for busybox    | True                            | 
+   4 |  *                                       | True                            | 
+   5 |  * Licensed under GPLv2 or later, see fi | True                            | 
+   6 |  */                                      | True                            | 
+   7 | //config:config SU                       | True                            | 
+   8 | //config: bool "su (19 kb)"              | True                            | 
+   9 | //config: default y                      | True                            | 
+  10 | //config: select FEATURE_SYSLOG          | True                            | 
+  11 | //config: help                           | True                            | 
+  12 | //config: su is used to become another u | True                            | 
+  13 | //config: Invoked without a username, su | True                            | 
+  14 | //config: Note that busybox binary must  | True                            | 
+  15 | //config: work properly.                 | True                            | 
+  16 | //config:                                | True                            | 
+  17 | //config:config FEATURE_SU_SYSLOG        | True                            | 
+  18 | //config: bool "Log to syslog all attemp | True                            | 
+  19 | //config: default y                      | True                            | 
+  20 | //config: depends on SU                  | True                            | 
+  21 | //config:                                | True                            | 
+  22 | //config:config FEATURE_SU_CHECKS_SHELLS | True                            | 
+  23 | //config: bool "If user's shell is not i | True                            | 
+  24 | //config: default y                      | True                            | 
+  25 | //config: depends on SU                  | True                            | 
+  26 | //config:                                | True                            | 
+  27 | //config:config FEATURE_SU_BLANK_PW_NEED | True                            | 
+  28 | //config: bool "Allow blank passwords on | True                            | 
+  29 | //config: default n                      | True                            | 
+  30 | //config: depends on SU                  | True                            | 
+  31 |                                          | True                            | 
+  32 | //applet:/* Needs to be run by root or b | True                            | 
+  33 | //applet:IF_SU(APPLET(su, BB_DIR_BIN, BB | True                            | 
+  34 |                                          | True                            | 
+  35 | //kbuild:lib-$(CONFIG_SU) += su.o        | True                            | 
+  36 |                                          | True                            | 
+  37 | //usage:#define su_trivial_usage         | True                            | 
+  38 | //usage:       "[-lmp] [-s SH] [-] [USER | True                            | 
+  39 | //usage:#define su_full_usage "\n\n"     | True                            | 
+  40 | //usage:       "Run shell under USER (by | True                            | 
+  41 | //usage:     "\n -,-l Clear environment, | True                            | 
+  42 | //usage:     "\n -p,-m Do not set new $H | True                            | 
+  43 | //usage:     "\n -c CMD Command to pass  | True                            | 
+  44 | //usage:     "\n -s SH Shell to use inst | True                            | 
+  45 |                                          | True                            | 
+  46 | #include "libbb.h"                       | True                            | 
+  47 | #include <syslog.h>                      | True                            | 
+  48 |                                          | True                            | 
+  49 | #if ENABLE_FEATURE_SU_CHECKS_SHELLS      | True                            | 
+  50 | /* Return 1 if SHELL is a restricted she | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  51 |  * getusershell), else 0, meaning it is  | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  52 | static int restricted_shell(const char * | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  53 | {                                        | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  54 |  char *line;                             | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  55 |  int result = 1;                         | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  56 |                                          | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  57 |  /*setusershell(); - getusershell does i | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  58 |  while ((line = getusershell()) != NULL) | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  59 |   if (/* *line != '#' && */ strcmp(line, | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  60 |    result = 0;                           | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  61 |    break;                                | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  62 |   }                                      | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  63 |  }                                       | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  64 |  if (ENABLE_FEATURE_CLEAN_UP)            | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  65 |   endusershell();                        | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  66 |  return result;                          | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  67 | }                                        | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+  68 | #endif                                   | True                            | 
+  69 |                                          | True                            | 
+  70 | #define SU_OPT_mp (3)                    | True                            | 
+  71 | #define SU_OPT_l  (4)                    | True                            | 
+  72 |                                          | True                            | 
+  73 | int su_main(int argc, char **argv) MAIN_ | True                            | 
+  74 | int su_main(int argc UNUSED_PARAM, char  | True                            | 
+  75 | {                                        | True                            | 
+  76 |  unsigned flags;                         | True                            | 
+  77 |  char *opt_shell = NULL;                 | True                            | 
+  78 |  char *opt_command = NULL;               | True                            | 
+  79 |  const char *opt_username = "root";      | True                            | 
+  80 |  struct passwd *pw;                      | True                            | 
+  81 |  uid_t cur_uid = getuid();               | True                            | 
+  82 |  const char *tty;                        | True                            | 
+  83 | #if ENABLE_FEATURE_UTMP                  | True                            | 
+  84 |  char user_buf[64];                      | ENABLE_FEATURE_UTMP             | 
+  85 | #endif                                   | True                            | 
+  86 |  const char *old_user;                   | True                            | 
+  87 |  int r;                                  | True                            | 
+  88 |                                          | True                            | 
+  89 |  /* Note: we don't use "'+': stop at fir | True                            | 
+  90 |   * For su, "SCRIPT ARGS" or "-c CMD ARG | True                            | 
+  91 |   * ARGS starting with dash will be trea | True                            | 
+  92 |   * not passed to shell. (Tested on util | True                            | 
+  93 |   */                                     | True                            | 
+  94 |  flags = getopt32(argv, "mplc:s:", &opt_ | True                            | 
+  95 |  argv += optind;                         | True                            | 
+  96 |                                          | True                            | 
+  97 |  if (argv[0] && LONE_DASH(argv[0])) {    | True                            | 
+  98 |   flags |= SU_OPT_l;                     | True                            | 
+  99 |   argv++;                                | True                            | 
+ 100 |  }                                       | True                            | 
+ 101 |                                          | True                            | 
+ 102 |  /* get user if specified */             | True                            | 
+ 103 |  if (argv[0]) {                          | True                            | 
+ 104 |   opt_username = argv[0];                | True                            | 
+ 105 |   argv++;                                | True                            | 
+ 106 |  }                                       | True                            | 
+ 107 |                                          | True                            | 
+ 108 |  tty = xmalloc_ttyname(STDIN_FILENO);    | True                            | 
+ 109 |  if (!tty)                               | True                            | 
+ 110 |   tty = "none";                          | True                            | 
+ 111 |  tty = skip_dev_pfx(tty);                | True                            | 
+ 112 |                                          | True                            | 
+ 113 |  if (ENABLE_FEATURE_SU_SYSLOG) {         | True                            | 
+ 114 |   /* The utmp entry (via getlogin) is pr | True                            | 
+ 115 |    * identify the user, especially if so | True                            | 
+ 116 |    * But getlogin can fail -- usually du | True                            | 
+ 117 |    * in this case resort to getpwuid.  * | True                            | 
+ 118 | #if ENABLE_FEATURE_UTMP                  | True                            | 
+ 119 |   old_user = user_buf;                   | ENABLE_FEATURE_UTMP             | 
+ 120 |   if (getlogin_r(user_buf, sizeof(user_b | ENABLE_FEATURE_UTMP             | 
+ 121 | #endif                                   | True                            | 
+ 122 |   {                                      | True                            | 
+ 123 |    pw = getpwuid(cur_uid);               | True                            | 
+ 124 |    old_user = pw ? xstrdup(pw->pw_name)  | True                            | 
+ 125 |   }                                      | True                            | 
+ 126 |   openlog(applet_name, 0, LOG_AUTH);     | True                            | 
+ 127 |  }                                       | True                            | 
+ 128 |                                          | True                            | 
+ 129 |  pw = xgetpwnam(opt_username);           | True                            | 
+ 130 |                                          | True                            | 
+ 131 |  r = 1;                                  | True                            | 
+ 132 |  if (cur_uid != 0)                       | True                            | 
+ 133 |   r = ask_and_check_password(pw);        | True                            | 
+ 134 |  if (r > 0) {                            | True                            | 
+ 135 |   if (ENABLE_FEATURE_SU_BLANK_PW_NEEDS_S | True                            | 
+ 136 |    && r == CHECKPASS_PW_HAS_EMPTY_PASSWO | True                            | 
+ 137 |    && !is_tty_secure(tty)                | True                            | 
+ 138 |   ) {                                    | True                            | 
+ 139 |    goto fail;                            | True                            | 
+ 140 |   }                                      | True                            | 
+ 141 |   if (ENABLE_FEATURE_SU_SYSLOG)          | True                            | 
+ 142 |    syslog(LOG_NOTICE, "%c %s %s:%s",     | True                            | 
+ 143 |     '+', tty, old_user, opt_username);   | True                            | 
+ 144 |  } else {                                | True                            | 
+ 145 |  fail:                                   | True                            | 
+ 146 |   if (ENABLE_FEATURE_SU_SYSLOG)          | True                            | 
+ 147 |    syslog(LOG_NOTICE, "%c %s %s:%s",     | True                            | 
+ 148 |     '-', tty, old_user, opt_username);   | True                            | 
+ 149 |   pause_after_failed_login();            | True                            | 
+ 150 |   bb_simple_error_msg_and_die("incorrect | True                            | 
+ 151 |  }                                       | True                            | 
+ 152 |                                          | True                            | 
+ 153 |  if (ENABLE_FEATURE_CLEAN_UP && ENABLE_F | True                            | 
+ 154 |   closelog();                            | True                            | 
+ 155 |  }                                       | True                            | 
+ 156 |                                          | True                            | 
+ 157 |  if (!opt_shell && (flags & SU_OPT_mp))  | True                            | 
+ 158 |   /* -s SHELL is not given, but "preserv | True                            | 
+ 159 |   opt_shell = getenv("SHELL");           | True                            | 
+ 160 |  }                                       | True                            | 
+ 161 |                                          | True                            | 
+ 162 | #if ENABLE_FEATURE_SU_CHECKS_SHELLS      | True                            | 
+ 163 |  if (opt_shell && cur_uid != 0 && pw->pw | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+ 164 |   /* The user being su'd to has a nonsta | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+ 165 |    * probably a uucp account or has rest | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+ 166 |    * compromise the account by allowing  | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+ 167 |    * shell.  */                          | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+ 168 |   bb_simple_error_msg("using restricted  | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+ 169 |   opt_shell = NULL; /* ignore -s PROG */ | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+ 170 |  }                                       | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+ 171 |  /* else: user can run whatever he wants | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+ 172 |   * This is safe since PROG is run under | ENABLE_FEATURE_SU_CHECKS_SHELLS | 
+ 173 | #endif                                   | True                            | 
+ 174 |  if (!opt_shell)                         | True                            | 
+ 175 |   opt_shell = pw->pw_shell;              | True                            | 
+ 176 |                                          | True                            | 
+ 177 |  change_identity(pw);                    | True                            | 
+ 178 |  setup_environment(opt_shell,            | True                            | 
+ 179 |   ((flags & SU_OPT_l) ? (SETUP_ENV_CLEAR | True                            | 
+ 180 |    + (!(flags & SU_OPT_mp) * SETUP_ENV_C | True                            | 
+ 181 |   pw);                                   | True                            | 
+ 182 |  IF_SELINUX(set_current_security_context | True                            | 
+ 183 |                                          | True                            | 
+ 184 |  if (opt_command) {                      | True                            | 
+ 185 |   *--argv = opt_command;                 | True                            | 
+ 186 |   *--argv = (char*)"-c";                 | True                            | 
+ 187 |  }                                       | True                            | 
+ 188 |                                          | True                            | 
+ 189 |  /* A nasty ioctl exists which can stuff | True                            | 
+ 190 |   * #include <sys/ioctl.h>               | True                            | 
+ 191 |   * int main() {                         | True                            | 
+ 192 |   * const char *msg = "echo $UID\n";     | True                            | 
+ 193 |   * while (*msg) ioctl(0, TIOCSTI, *msg+ | True                            | 
+ 194 |   * return 0;                            | True                            | 
+ 195 |   * }                                    | True                            | 
+ 196 |   * With "su USER -c EXPLOIT" run by roo | True                            | 
+ 197 |   * read as input and execute arbitrary  | True                            | 
+ 198 |   * It's debatable whether we need to pr | True                            | 
+ 199 |   * (root may hesitate to run unknown sc | True                            | 
+ 200 |   *                                      | True                            | 
+ 201 |   * Some versions of su run -c CMD in a  | True                            | 
+ 202 |   * ioctl(TIOCSTI) works only on the con | True                            | 
+ 203 |   */                                     | True                            | 
+ 204 |                                          | True                            | 
+ 205 |  /* Never returns */                     | True                            | 
+ 206 |  exec_shell(opt_shell, flags & SU_OPT_l, | True                            | 
+ 207 |                                          | True                            | 
+ 208 |  /* return EXIT_FAILURE; - not reached * | True                            | 
+ 209 | }                                        | True                            | 
+-----+------------------------------------------+---------------------------------+
+     |                                          | +112MB, 261ms                   | 

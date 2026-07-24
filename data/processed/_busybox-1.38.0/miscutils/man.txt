@@ -1,0 +1,413 @@
+FILE: data/raw/busybox-1.38.0/miscutils/man.c
+Resultado PCLocator:
+   # | line of code                             | Merge                        | 
+-----+------------------------------------------+------------------------------+
+   1 | /* mini man implementation for busybox   | True                         | 
+   2 |  * Copyright (C) 2008 Denys Vlasenko <vd | True                         | 
+   3 |  * Licensed under GPLv2, see file LICENS | True                         | 
+   4 |  */                                      | True                         | 
+   5 | //config:config MAN                      | True                         | 
+   6 | //config: bool "man (26 kb)"             | True                         | 
+   7 | //config: default y                      | True                         | 
+   8 | //config: help                           | True                         | 
+   9 | //config: Format and display manual page | True                         | 
+  10 |                                          | True                         | 
+  11 | //applet:IF_MAN(APPLET(man, BB_DIR_USR_B | True                         | 
+  12 |                                          | True                         | 
+  13 | //kbuild:lib-$(CONFIG_MAN) += man.o      | True                         | 
+  14 |                                          | True                         | 
+  15 | //usage:#define man_trivial_usage        | True                         | 
+  16 | //usage:       "[-aw] [SECTION] MANPAGE[ | True                         | 
+  17 | //usage:#define man_full_usage "\n\n"    | True                         | 
+  18 | //usage:       "Display manual page\n"   | True                         | 
+  19 | //usage:     "\n -a Display all pages"   | True                         | 
+  20 | //usage:     "\n -w Show page locations" | True                         | 
+  21 | //usage:     "\n"                        | True                         | 
+  22 | //usage:     "\n$COLUMNS overrides outpu | True                         | 
+  23 |                                          | True                         | 
+  24 | #include "libbb.h"                       | True                         | 
+  25 | #include "common_bufsiz.h"               | True                         | 
+  26 |                                          | True                         | 
+  27 | enum {                                   | True                         | 
+  28 |  OPT_a = 1, /* all */                    | True                         | 
+  29 |  OPT_w = 2, /* print path */             | True                         | 
+  30 | };                                       | True                         | 
+  31 |                                          | True                         | 
+  32 | /* This is what I see on my desktop syst | True                         | 
+  33 | (                                        | True                         | 
+  34 | echo ".ll 12.4i"                         | True                         | 
+  35 | echo ".nr LL 12.4i"                      | True                         | 
+  36 | echo ".pl 1100i"                         | True                         | 
+  37 | gunzip -c '/usr/man/man1/bzip2.1.gz'     | True                         | 
+  38 | echo ".\\\""                             | True                         | 
+  39 | echo ".pl \n(nlu+10"                     | True                         | 
+  40 | ) | gtbl | nroff -Tlatin1 -mandoc | less | True                         | 
+  41 |                                          | True                         | 
+  42 | Some systems use -Tascii.                | True                         | 
+  43 |                                          | True                         | 
+  44 | On another system I see this:            | True                         | 
+  45 |                                          | True                         | 
+  46 | ... | tbl | nroff -mandoc -rLL=<NNN>n -r | True                         | 
+  47 |                                          | True                         | 
+  48 | where <NNN> is screen width minus 5.     | True                         | 
+  49 | Replacing "DEFINE nroff nroff -mandoc" i | True                         | 
+  50 | changes "nroff -mandoc" part; -rLL=<NNN> | True                         | 
+  51 | appended to the user-specified command.  | True                         | 
+  52 |                                          | True                         | 
+  53 | Redirecting to a pipe or file sets GROFF | True                         | 
+  54 | and uses "col -b -p -x" instead of pager | True                         | 
+  55 | and underscore tricks.                   | True                         | 
+  56 | */                                       | True                         | 
+  57 |                                          | True                         | 
+  58 | struct globals {                         | True                         | 
+  59 |  const char *col;                        | True                         | 
+  60 |  const char *tbl;                        | True                         | 
+  61 |  const char *nroff;                      | True                         | 
+  62 |  const char *pager;                      | True                         | 
+  63 | } FIX_ALIASING;                          | True                         | 
+  64 | #define G (*(struct globals*)bb_common_b | True                         | 
+  65 | #define INIT_G() do { \                  | True                         | 
+  66 |  setup_common_bufsiz(); \                | True                         | 
+  67 |  G.col = "col"; \                        | True                         | 
+  68 |  G.tbl = "tbl"; \                        | True                         | 
+  69 |  /* Removed -Tlatin1. Assuming system nr | True                         | 
+  70 |  G.nroff = "nroff -mandoc"; \            | True                         | 
+  71 |  G.pager = ENABLE_LESS ? "less" : "more" | True                         | 
+  72 | } while (0)                              | True                         | 
+  73 |                                          | True                         | 
+  74 | static int show_manpage(char *man_filena | True                         | 
+  75 |                                          | True                         | 
+  76 | static int run_man_pipe(char *man_filena | True                         | 
+  77 | {                                        | True                         | 
+  78 |  char *cmd;                              | True                         | 
+  79 |                                          | True                         | 
+  80 |  /* Prevent man page link loops */       | True                         | 
+  81 |  if (level > 10)                         | True                         | 
+  82 |   return 0;                              | True                         | 
+  83 |                                          | True                         | 
+  84 |  if (access(man_filename, R_OK) != 0)    | True                         | 
+  85 |   return 0;                              | True                         | 
+  86 |                                          | True                         | 
+  87 |  if (option_mask32 & OPT_w) {            | True                         | 
+  88 |   puts(man_filename);                    | True                         | 
+  89 |   return 1;                              | True                         | 
+  90 |  }                                       | True                         | 
+  91 |                                          | True                         | 
+  92 |  if (man) { /* man page, not cat page */ | True                         | 
+  93 |   /* Is this a link to another manpage?  | True                         | 
+  94 |   /* The link has the following on the f | True                         | 
+  95 |   /* ".so another_man_page" */           | True                         | 
+  96 |                                          | True                         | 
+  97 |   struct stat sb;                        | True                         | 
+  98 |   char *line;                            | True                         | 
+  99 |   char *linkname, *p;                    | True                         | 
+ 100 |                                          | True                         | 
+ 101 |   /* On my system:                       | True                         | 
+ 102 |    * man1/genhostid.1.gz: 203 bytes - sm | True                         | 
+ 103 |    * man2/path_resolution.2.gz: 114 byte | True                         | 
+ 104 |    */                                    | True                         | 
+ 105 |   xstat(man_filename, &sb);              | True                         | 
+ 106 |   if (sb.st_size > 300) /* err on the sa | True                         | 
+ 107 |    goto ordinary_manpage;                | True                         | 
+ 108 |                                          | True                         | 
+ 109 |   line = xmalloc_open_zipped_read_close( | True                         | 
+ 110 |   if (!line || !is_prefixed_with(line, " | True                         | 
+ 111 |    free(line);                           | True                         | 
+ 112 |    goto ordinary_manpage;                | True                         | 
+ 113 |   }                                      | True                         | 
+ 114 |   /* Example: man2/path_resolution.2.gz  | True                         | 
+ 115 |    * ".so man7/path_resolution.7\n<junk> | True                         | 
+ 116 |    */                                    | True                         | 
+ 117 |   *strchrnul(line, '\n') = '\0';         | True                         | 
+ 118 |   linkname = skip_whitespace(line + 4);  | True                         | 
+ 119 | //testcase:                              | True                         | 
+ 120 | // cd /usr/share/man/man2                | True                         | 
+ 121 | // man ./path_resolution.2.gz            | True                         | 
+ 122 |   while (man_filename[0] == '.' && man_f | True                         | 
+ 123 |    man_filename += 2;                    | True                         | 
+ 124 |   p = strrchr(man_filename, '/');        | True                         | 
+ 125 |   if (!p)                                | True                         | 
+ 126 |    man_filename = (char*)".." + 1; /* "N | True                         | 
+ 127 |   else                                   | True                         | 
+ 128 |    *p = '\0'; /* "PFX/manN/NAME.N" -> "P | True                         | 
+ 129 |                                          | True                         | 
+ 130 |   /* If link has slashes (however many), | True                         | 
+ 131 |    * ".so zzz/ggg/page.3" does NOT go ba | True                         | 
+ 132 |    */                                    | True                         | 
+ 133 |   if (strchr(linkname, '/')) {           | True                         | 
+ 134 |    if (!p) { /* man_filename had no path | True                         | 
+ 135 |     man_filename--; /* ".." */           | True                         | 
+ 136 |     goto append_link;                    | True                         | 
+ 137 |    }                                     | True                         | 
+ 138 |    p = strrchr(man_filename, '/');       | True                         | 
+ 139 |    if (!p)                               | True                         | 
+ 140 |     man_filename = (char*)".." + 1; /* " | True                         | 
+ 141 |    else                                  | True                         | 
+ 142 |     *p = '\0'; /* "PFX/manN" -> "PFX" */ | True                         | 
+ 143 |   } /* else (link has no slashes): will  | True                         | 
+ 144 |                                          | True                         | 
+ 145 |   /* Links do not have .gz extensions, e | True                         | 
+ 146 |    * is compressed */                    | True                         | 
+ 147 |  append_link:                            | True                         | 
+ 148 |   man_filename = xasprintf("%s/%s", man_ | True                         | 
+ 149 |   free(line);                            | True                         | 
+ 150 |   /* Note: we leak "new" man_filename st | True                         | 
+ 151 |   if (show_manpage(man_filename, man, le | True                         | 
+ 152 |    return 1;                             | True                         | 
+ 153 |   /* else: show the link, it's better th | True                         | 
+ 154 |  }                                       | True                         | 
+ 155 |                                          | True                         | 
+ 156 |  ordinary_manpage:                       | True                         | 
+ 157 |  close(STDIN_FILENO);                    | True                         | 
+ 158 |  open_zipped(man_filename, /*die_if_not_ | True                         | 
+ 159 |  if (man) {                              | True                         | 
+ 160 |   int w = get_terminal_width(-1);        | True                         | 
+ 161 |   if (w > 10)                            | True                         | 
+ 162 |    w -= 2;                               | True                         | 
+ 163 |   /* "2>&1" is added so that nroff error | True                         | 
+ 164 |    * Otherwise it may show just empty sc | True                         | 
+ 165 |    */                                    | True                         | 
+ 166 |   cmd = xasprintf("%s | %s -rLL=%un -rLT | True                         | 
+ 167 |     G.tbl, G.nroff, w, w,                | True                         | 
+ 168 |     G.pager);                            | True                         | 
+ 169 |  } else {                                | True                         | 
+ 170 |   cmd = xstrdup(G.pager);                | True                         | 
+ 171 |  }                                       | True                         | 
+ 172 |  system(cmd);                            | True                         | 
+ 173 |  free(cmd);                              | True                         | 
+ 174 |  return 1;                               | True                         | 
+ 175 | }                                        | True                         | 
+ 176 |                                          | True                         | 
+ 177 | /* man_filename is of the form "/dir/dir | True                         | 
+ 178 | static int show_manpage(char *man_filena | True                         | 
+ 179 | {                                        | True                         | 
+ 180 | #if SEAMLESS_COMPRESSION                 | True                         | 
+ 181 |  /* We leak this allocation... */        | SEAMLESS_COMPRESSION         | 
+ 182 |  char *filename_with_zext = xasprintf("% | SEAMLESS_COMPRESSION         | 
+ 183 |  char *ext = strrchr(filename_with_zext, | SEAMLESS_COMPRESSION         | 
+ 184 | #endif                                   | True                         | 
+ 185 |                                          | True                         | 
+ 186 | #if ENABLE_FEATURE_SEAMLESS_LZMA         | True                         | 
+ 187 |  if (run_man_pipe(filename_with_zext, ma | ENABLE_FEATURE_SEAMLESS_LZMA | 
+ 188 |   return 1;                              | ENABLE_FEATURE_SEAMLESS_LZMA | 
+ 189 | #endif                                   | True                         | 
+ 190 | #if ENABLE_FEATURE_SEAMLESS_XZ           | True                         | 
+ 191 |  strcpy(ext, "xz");                      | ENABLE_FEATURE_SEAMLESS_XZ   | 
+ 192 |  if (run_man_pipe(filename_with_zext, ma | ENABLE_FEATURE_SEAMLESS_XZ   | 
+ 193 |   return 1;                              | ENABLE_FEATURE_SEAMLESS_XZ   | 
+ 194 | #endif                                   | True                         | 
+ 195 | #if ENABLE_FEATURE_SEAMLESS_BZ2          | True                         | 
+ 196 |  strcpy(ext, "bz2");                     | ENABLE_FEATURE_SEAMLESS_BZ2  | 
+ 197 |  if (run_man_pipe(filename_with_zext, ma | ENABLE_FEATURE_SEAMLESS_BZ2  | 
+ 198 |   return 1;                              | ENABLE_FEATURE_SEAMLESS_BZ2  | 
+ 199 | #endif                                   | True                         | 
+ 200 | #if ENABLE_FEATURE_SEAMLESS_GZ           | True                         | 
+ 201 |  strcpy(ext, "gz");                      | ENABLE_FEATURE_SEAMLESS_GZ   | 
+ 202 |  if (run_man_pipe(filename_with_zext, ma | ENABLE_FEATURE_SEAMLESS_GZ   | 
+ 203 |   return 1;                              | ENABLE_FEATURE_SEAMLESS_GZ   | 
+ 204 | #endif                                   | True                         | 
+ 205 |                                          | True                         | 
+ 206 |  return run_man_pipe(man_filename, man,  | True                         | 
+ 207 | }                                        | True                         | 
+ 208 |                                          | True                         | 
+ 209 | static char **add_MANPATH(char **man_pat | True                         | 
+ 210 | {                                        | True                         | 
+ 211 |  if (path) while (*path) {               | True                         | 
+ 212 |   char *next_path;                       | True                         | 
+ 213 |   char **path_element;                   | True                         | 
+ 214 |                                          | True                         | 
+ 215 |   next_path = strchr(path, ':');         | True                         | 
+ 216 |   if (next_path) {                       | True                         | 
+ 217 |    if (next_path == path) /* "::"? */    | True                         | 
+ 218 |     goto next;                           | True                         | 
+ 219 |    *next_path = '\0';                    | True                         | 
+ 220 |   }                                      | True                         | 
+ 221 |   /* Do we already have path? */         | True                         | 
+ 222 |   path_element = man_path_list;          | True                         | 
+ 223 |   if (path_element) while (*path_element | True                         | 
+ 224 |    if (strcmp(*path_element, path) == 0) | True                         | 
+ 225 |     goto skip;                           | True                         | 
+ 226 |    }                                     | True                         | 
+ 227 |    path_element++;                       | True                         | 
+ 228 |   }                                      | True                         | 
+ 229 |   man_path_list = xrealloc_vector(man_pa | True                         | 
+ 230 |   man_path_list[*count_mp] = xstrdup(pat | True                         | 
+ 231 |   (*count_mp)++;                         | True                         | 
+ 232 |   /* man_path_list is NULL terminated */ | True                         | 
+ 233 |   /* man_path_list[*count_mp] = NULL; -  | True                         | 
+ 234 |  skip:                                   | True                         | 
+ 235 |   if (!next_path)                        | True                         | 
+ 236 |    break;                                | True                         | 
+ 237 |   /* "path" may be a result of getenv(), | True                         | 
+ 238 |   *next_path = ':';                      | True                         | 
+ 239 |  next:                                   | True                         | 
+ 240 |   path = next_path + 1;                  | True                         | 
+ 241 |  }                                       | True                         | 
+ 242 |  return man_path_list;                   | True                         | 
+ 243 | }                                        | True                         | 
+ 244 |                                          | True                         | 
+ 245 | static const char *if_redefined(const ch | True                         | 
+ 246 | {                                        | True                         | 
+ 247 |  if (!is_prefixed_with(line, key))       | True                         | 
+ 248 |   return var;                            | True                         | 
+ 249 |  line += strlen(key);                    | True                         | 
+ 250 |  if (!isspace(line[0]))                  | True                         | 
+ 251 |   return var;                            | True                         | 
+ 252 |  return xstrdup(skip_whitespace(line));  | True                         | 
+ 253 | }                                        | True                         | 
+ 254 |                                          | True                         | 
+ 255 | static int is_section_name(const char *s | True                         | 
+ 256 | {                                        | True                         | 
+ 257 |  const char *s = strstr(sections, str);  | True                         | 
+ 258 |  if (s) {                                | True                         | 
+ 259 |   int l = strlen(str);                   | True                         | 
+ 260 |   return (s[l] == ':' || s[l] == '\0');  | True                         | 
+ 261 |  }                                       | True                         | 
+ 262 |  return 0;                               | True                         | 
+ 263 | }                                        | True                         | 
+ 264 |                                          | True                         | 
+ 265 | int man_main(int argc, char **argv) MAIN | True                         | 
+ 266 | int man_main(int argc UNUSED_PARAM, char | True                         | 
+ 267 | {                                        | True                         | 
+ 268 |  parser_t *parser;                       | True                         | 
+ 269 |  char *conf_sec_list;                    | True                         | 
+ 270 |  char *sec_list;                         | True                         | 
+ 271 |  char **man_path_list;                   | True                         | 
+ 272 |  int count_mp;                           | True                         | 
+ 273 |  int opt, not_found;                     | True                         | 
+ 274 |  char *token[2];                         | True                         | 
+ 275 |                                          | True                         | 
+ 276 |  INIT_G();                               | True                         | 
+ 277 |                                          | True                         | 
+ 278 |  opt = getopt32(argv, "^+" "aw" "\0" "-1 | True                         | 
+ 279 |  argv += optind;                         | True                         | 
+ 280 |                                          | True                         | 
+ 281 |  conf_sec_list = xstrdup("0p:1:1p:2:3:3p | True                         | 
+ 282 |                                          | True                         | 
+ 283 |  count_mp = 0;                           | True                         | 
+ 284 |  man_path_list = add_MANPATH(NULL, &coun | True                         | 
+ 285 |    getenv("MANDATORY_MANPATH"+10) /* "MA | True                         | 
+ 286 |  );                                      | True                         | 
+ 287 |  /* Parse man.conf[ig] or man_db.conf */ | True                         | 
+ 288 |  /* man version 1.6f uses man.config */  | True                         | 
+ 289 |  /* man-db implementation of man uses ma | True                         | 
+ 290 |  parser = config_open2("/etc/man.config" | True                         | 
+ 291 |  if (!parser)                            | True                         | 
+ 292 |   parser = config_open2("/etc/man.conf", | True                         | 
+ 293 |  if (!parser)                            | True                         | 
+ 294 |   parser = config_open2("/etc/man_db.con | True                         | 
+ 295 |                                          | True                         | 
+ 296 |  while (config_read(parser, token, 2, 0, | True                         | 
+ 297 |   if (!token[1])                         | True                         | 
+ 298 |    continue;                             | True                         | 
+ 299 |   if (strcmp("DEFINE", token[0]) == 0) { | True                         | 
+ 300 |    G.col   = if_redefined(G.col  , "col" | True                         | 
+ 301 |    G.tbl   = if_redefined(G.tbl  , "tbl" | True                         | 
+ 302 |    G.nroff = if_redefined(G.nroff, "nrof | True                         | 
+ 303 |    G.pager = if_redefined(G.pager, "page | True                         | 
+ 304 |   } else                                 | True                         | 
+ 305 |   if (strcmp("MANDATORY_MANPATH"+10, tok | True                         | 
+ 306 |    || strcmp("MANDATORY_MANPATH", token[ | True                         | 
+ 307 |   ) {                                    | True                         | 
+ 308 |    man_path_list = add_MANPATH(man_path_ | True                         | 
+ 309 |   }                                      | True                         | 
+ 310 |   if (strcmp("MANSECT", token[0]) == 0)  | True                         | 
+ 311 |    free(conf_sec_list);                  | True                         | 
+ 312 |    conf_sec_list = xstrdup(token[1]);    | True                         | 
+ 313 |   }                                      | True                         | 
+ 314 |  }                                       | True                         | 
+ 315 |  config_close(parser);                   | True                         | 
+ 316 |                                          | True                         | 
+ 317 |  if (!man_path_list) {                   | True                         | 
+ 318 |   static const char *const mpl[] ALIGN_P | True                         | 
+ 319 |   man_path_list = (char**)mpl;           | True                         | 
+ 320 |   /*count_mp = 2; - not used below anywa | True                         | 
+ 321 |  }                                       | True                         | 
+ 322 |                                          | True                         | 
+ 323 |  {                                       | True                         | 
+ 324 |   /* environment overrides setting from  | True                         | 
+ 325 |   char *env_pager = getenv("MANPAGER");  | True                         | 
+ 326 |   if (!env_pager)                        | True                         | 
+ 327 |    env_pager = getenv("PAGER");          | True                         | 
+ 328 |   if (env_pager)                         | True                         | 
+ 329 |    G.pager = env_pager;                  | True                         | 
+ 330 |  }                                       | True                         | 
+ 331 |                                          | True                         | 
+ 332 |  if (!isatty(STDOUT_FILENO)) {           | True                         | 
+ 333 |   putenv((char*)"GROFF_NO_SGR=1");       | True                         | 
+ 334 |   G.pager = xasprintf("%s -b -p -x", G.c | True                         | 
+ 335 |  }                                       | True                         | 
+ 336 |                                          | True                         | 
+ 337 |  /* is 1st ARG a SECTION? */             | True                         | 
+ 338 |  sec_list = conf_sec_list;               | True                         | 
+ 339 |  if (is_section_name(conf_sec_list, *arg | True                         | 
+ 340 |   /* yes */                              | True                         | 
+ 341 |   sec_list = *argv++;                    | True                         | 
+ 342 |  }                                       | True                         | 
+ 343 |                                          | True                         | 
+ 344 |  not_found = 0;                          | True                         | 
+ 345 |  do { /* for each argv[] */              | True                         | 
+ 346 |   const char *cur_path;                  | True                         | 
+ 347 |   int cur_mp;                            | True                         | 
+ 348 |   int found = 0;                         | True                         | 
+ 349 |                                          | True                         | 
+ 350 |   if (strchr(*argv, '/')) {              | True                         | 
+ 351 |    found = show_manpage(*argv, /*man:*/  | True                         | 
+ 352 |    goto check_found;                     | True                         | 
+ 353 |   }                                      | True                         | 
+ 354 |                                          | True                         | 
+ 355 |   /* for each MANPATH */                 | True                         | 
+ 356 |   cur_mp = 0;                            | True                         | 
+ 357 |   while ((cur_path = man_path_list[cur_m | True                         | 
+ 358 |    const char *cur_sect = sec_list;      | True                         | 
+ 359 |                                          | True                         | 
+ 360 |    /* is MANPAGE of the form NAME.SECTIO | True                         | 
+ 361 |    char *sect_ext = strrchr(*argv, '.'); | True                         | 
+ 362 |    if (sect_ext && is_section_name(conf_ | True                         | 
+ 363 |     *sect_ext = '\0';                    | True                         | 
+ 364 |     cur_sect = sect_ext + 1;             | True                         | 
+ 365 |    }                                     | True                         | 
+ 366 |                                          | True                         | 
+ 367 |    do { /* for each SECTION in cur_sect  | True                         | 
+ 368 |     char *next_sect = strchrnul(cur_sect | True                         | 
+ 369 |     int sect_len = next_sect - cur_sect; | True                         | 
+ 370 |     char *man_filename;                  | True                         | 
+ 371 |     int cat0man1 = 0;                    | True                         | 
+ 372 |                                          | True                         | 
+ 373 |     /* Search for cat, then man page */  | True                         | 
+ 374 |     while (cat0man1 < 2) {               | True                         | 
+ 375 |      int found_here;                     | True                         | 
+ 376 |      man_filename = xasprintf("%s/%s%.*s | True                         | 
+ 377 |        cur_path,                         | True                         | 
+ 378 |        "cat\0man" + (cat0man1 * 4),      | True                         | 
+ 379 |        sect_len, cur_sect,               | True                         | 
+ 380 |        *argv,                            | True                         | 
+ 381 |        sect_len, cur_sect);              | True                         | 
+ 382 |      found_here = show_manpage(man_filen | True                         | 
+ 383 |      found |= found_here;                | True                         | 
+ 384 |      cat0man1 += found_here + 1;         | True                         | 
+ 385 |      free(man_filename);                 | True                         | 
+ 386 |     }                                    | True                         | 
+ 387 |                                          | True                         | 
+ 388 |     if (found && !(opt & OPT_a))         | True                         | 
+ 389 |      goto next_arg;                      | True                         | 
+ 390 |     cur_sect = next_sect;                | True                         | 
+ 391 |     while (*cur_sect == ':')             | True                         | 
+ 392 |      cur_sect++;                         | True                         | 
+ 393 |    } while (*cur_sect);                  | True                         | 
+ 394 |                                          | True                         | 
+ 395 |    if (sect_ext) *sect_ext = '.';        | True                         | 
+ 396 |   }                                      | True                         | 
+ 397 |  check_found:                            | True                         | 
+ 398 |   if (!found) {                          | True                         | 
+ 399 |    bb_error_msg("no manual entry for '%s | True                         | 
+ 400 |    not_found = 1;                        | True                         | 
+ 401 |   }                                      | True                         | 
+ 402 |  next_arg:                               | True                         | 
+ 403 |   argv++;                                | True                         | 
+ 404 |  } while (*argv);                        | True                         | 
+ 405 |                                          | True                         | 
+ 406 |  return not_found;                       | True                         | 
+ 407 | }                                        | True                         | 
+-----+------------------------------------------+------------------------------+
+     |                                          | +111MB, 266ms                | 

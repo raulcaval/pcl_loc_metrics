@@ -1,0 +1,1218 @@
+FILE: data/raw/busybox-1.38.0/libbb/yescrypt/alg-yescrypt-kdf.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                        | 
+-----+------------------------------------------+----------------------------------------------+
+   1 | /*-                                      | True                                         | 
+   2 |  * Copyright 2009 Colin Percival         | True                                         | 
+   3 |  * Copyright 2012-2018 Alexander Peslyak | True                                         | 
+   4 |  * All rights reserved.                  | True                                         | 
+   5 |  *                                       | True                                         | 
+   6 |  * Redistribution and use in source and  | True                                         | 
+   7 |  * modification, are permitted provided  | True                                         | 
+   8 |  * are met:                              | True                                         | 
+   9 |  * 1. Redistributions of source code mus | True                                         | 
+  10 |  *    notice, this list of conditions an | True                                         | 
+  11 |  * 2. Redistributions in binary form mus | True                                         | 
+  12 |  *    notice, this list of conditions an | True                                         | 
+  13 |  *    documentation and/or other materia | True                                         | 
+  14 |  *                                       | True                                         | 
+  15 |  * THIS SOFTWARE IS PROVIDED BY THE AUTH | True                                         | 
+  16 |  * ANY EXPRESS OR IMPLIED WARRANTIES, IN | True                                         | 
+  17 |  * IMPLIED WARRANTIES OF MERCHANTABILITY | True                                         | 
+  18 |  * ARE DISCLAIMED.  IN NO EVENT SHALL TH | True                                         | 
+  19 |  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, | True                                         | 
+  20 |  * DAMAGES (INCLUDING, BUT NOT LIMITED T | True                                         | 
+  21 |  * OR SERVICES; LOSS OF USE, DATA, OR PR | True                                         | 
+  22 |  * HOWEVER CAUSED AND ON ANY THEORY OF L | True                                         | 
+  23 |  * LIABILITY, OR TORT (INCLUDING NEGLIGE | True                                         | 
+  24 |  * OUT OF THE USE OF THIS SOFTWARE, EVEN | True                                         | 
+  25 |  * SUCH DAMAGE.                          | True                                         | 
+  26 |  *                                       | True                                         | 
+  27 |  * This file was originally written by C | True                                         | 
+  28 |  * online backup system.                 | True                                         | 
+  29 |  */                                      | True                                         | 
+  30 |                                          | True                                         | 
+  31 | #if __STDC_VERSION__ >= 199901L          | True                                         | 
+  32 | /* Have restrict */                      | __STDC_VERSION__>=199901L                    | 
+  33 | #elif defined(__GNUC__)                  | True                                         | 
+  34 | #define restrict __restrict              | (__GNUC__)                                   | 
+  35 | #else                                    | True                                         | 
+  36 | #define restrict                         | !((__STDC_VERSION__>=199901L)||(__GNUC__))   | 
+  37 | #endif                                   | True                                         | 
+  38 |                                          | True                                         | 
+  39 | #ifdef __GNUC__                          | True                                         | 
+  40 | #define unlikely(exp) __builtin_expect(e | (__GNUC__)                                   | 
+  41 | #else                                    | True                                         | 
+  42 | #define unlikely(exp) (exp)              | !(__GNUC__)                                  | 
+  43 | #endif                                   | True                                         | 
+  44 |                                          | True                                         | 
+  45 | typedef union {                          | True                                         | 
+  46 |  uint32_t w[16];                         | True                                         | 
+  47 |  uint64_t d[8];                          | True                                         | 
+  48 | } salsa20_blk_t;                         | True                                         | 
+  49 |                                          | True                                         | 
+  50 | static void salsa20_simd_shuffle(        | True                                         | 
+  51 |   const salsa20_blk_t *Bin,              | True                                         | 
+  52 |   salsa20_blk_t *Bout)                   | True                                         | 
+  53 | {                                        | True                                         | 
+  54 | #define COMBINE(out, in1, in2) \         | True                                         | 
+  55 | do { \                                   | True                                         | 
+  56 |  Bout->d[out] = Bin->w[in1 * 2] | ((uint | True                                         | 
+  57 | } while (0)                              | True                                         | 
+  58 |  COMBINE(0, 0, 2);                       | True                                         | 
+  59 |  COMBINE(1, 5, 7);                       | True                                         | 
+  60 |  COMBINE(2, 2, 4);                       | True                                         | 
+  61 |  COMBINE(3, 7, 1);                       | True                                         | 
+  62 |  COMBINE(4, 4, 6);                       | True                                         | 
+  63 |  COMBINE(5, 1, 3);                       | True                                         | 
+  64 |  COMBINE(6, 6, 0);                       | True                                         | 
+  65 |  COMBINE(7, 3, 5);                       | True                                         | 
+  66 | #undef COMBINE                           | True                                         | 
+  67 | }                                        | True                                         | 
+  68 |                                          | True                                         | 
+  69 | static void salsa20_simd_unshuffle(      | True                                         | 
+  70 |   const salsa20_blk_t *Bin,              | True                                         | 
+  71 |   salsa20_blk_t *Bout)                   | True                                         | 
+  72 | {                                        | True                                         | 
+  73 | #define UNCOMBINE(out, in1, in2) \       | True                                         | 
+  74 | do { \                                   | True                                         | 
+  75 |  Bout->w[out * 2] = Bin->d[in1]; \       | True                                         | 
+  76 |  Bout->w[out * 2 + 1] = Bin->d[in2] >> 3 | True                                         | 
+  77 | } while (0)                              | True                                         | 
+  78 |  UNCOMBINE(0, 0, 6);                     | True                                         | 
+  79 |  UNCOMBINE(1, 5, 3);                     | True                                         | 
+  80 |  UNCOMBINE(2, 2, 0);                     | True                                         | 
+  81 |  UNCOMBINE(3, 7, 5);                     | True                                         | 
+  82 |  UNCOMBINE(4, 4, 2);                     | True                                         | 
+  83 |  UNCOMBINE(5, 1, 7);                     | True                                         | 
+  84 |  UNCOMBINE(6, 6, 4);                     | True                                         | 
+  85 |  UNCOMBINE(7, 3, 1);                     | True                                         | 
+  86 | #undef UNCOMBINE                         | True                                         | 
+  87 | }                                        | True                                         | 
+  88 |                                          | True                                         | 
+  89 | #define DECL_X \                         | True                                         | 
+  90 |  salsa20_blk_t X                         | True                                         | 
+  91 | #define DECL_Y \                         | True                                         | 
+  92 |  salsa20_blk_t Y                         | True                                         | 
+  93 |                                          | True                                         | 
+  94 | #if KDF_UNROLL_COPY                      | True                                         | 
+  95 | #define COPY(out, in) \                  | KDF_UNROLL_COPY                              | 
+  96 | do { \                                   | KDF_UNROLL_COPY                              | 
+  97 |  (out).d[0] = (in).d[0]; \               | KDF_UNROLL_COPY                              | 
+  98 |  (out).d[1] = (in).d[1]; \               | KDF_UNROLL_COPY                              | 
+  99 |  (out).d[2] = (in).d[2]; \               | KDF_UNROLL_COPY                              | 
+ 100 |  (out).d[3] = (in).d[3]; \               | KDF_UNROLL_COPY                              | 
+ 101 |  (out).d[4] = (in).d[4]; \               | KDF_UNROLL_COPY                              | 
+ 102 |  (out).d[5] = (in).d[5]; \               | KDF_UNROLL_COPY                              | 
+ 103 |  (out).d[6] = (in).d[6]; \               | KDF_UNROLL_COPY                              | 
+ 104 |  (out).d[7] = (in).d[7]; \               | KDF_UNROLL_COPY                              | 
+ 105 | } while (0)                              | KDF_UNROLL_COPY                              | 
+ 106 | #else                                    | True                                         | 
+ 107 | #define COPY(out, in) \                  | !KDF_UNROLL_COPY                             | 
+ 108 | do { \                                   | !KDF_UNROLL_COPY                             | 
+ 109 |  memcpy((out).d, (in).d, sizeof((in).d)) | !KDF_UNROLL_COPY                             | 
+ 110 | } while (0)                              | !KDF_UNROLL_COPY                             | 
+ 111 | #endif                                   | True                                         | 
+ 112 |                                          | True                                         | 
+ 113 | #define READ_X(in)   COPY(X, in)         | True                                         | 
+ 114 | #define WRITE_X(out) COPY(out, X)        | True                                         | 
+ 115 |                                          | True                                         | 
+ 116 | /**                                      | True                                         | 
+ 117 |  * salsa20(B):                           | True                                         | 
+ 118 |  * Apply the Salsa20 core to the provide | True                                         | 
+ 119 |  */                                      | True                                         | 
+ 120 | static void salsa20(salsa20_blk_t *restr | True                                         | 
+ 121 |   salsa20_blk_t *restrict Bout,          | True                                         | 
+ 122 |   uint32_t doublerounds)                 | True                                         | 
+ 123 | {                                        | True                                         | 
+ 124 |  salsa20_blk_t X;                        | True                                         | 
+ 125 | #define x X.w                            | True                                         | 
+ 126 |                                          | True                                         | 
+ 127 |  salsa20_simd_unshuffle(B, &X);          | True                                         | 
+ 128 |                                          | True                                         | 
+ 129 |  do {                                    | True                                         | 
+ 130 | #define R(a,b) (((a) << (b)) | ((a) >> ( | True                                         | 
+ 131 |   /* Operate on columns */               | True                                         | 
+ 132 | #if KDF_UNROLL_SALSA20                   | True                                         | 
+ 133 |   x[ 4] ^= R(x[ 0]+x[12], 7); // x[j] ^= | KDF_UNROLL_SALSA20                           | 
+ 134 |   x[ 8] ^= R(x[ 4]+x[ 0], 9);            | KDF_UNROLL_SALSA20                           | 
+ 135 |   x[12] ^= R(x[ 8]+x[ 4],13);            | KDF_UNROLL_SALSA20                           | 
+ 136 |   x[ 0] ^= R(x[12]+x[ 8],18);            | KDF_UNROLL_SALSA20                           | 
+ 137 |                                          | KDF_UNROLL_SALSA20                           | 
+ 138 |   x[ 9] ^= R(x[ 5]+x[ 1], 7);            | KDF_UNROLL_SALSA20                           | 
+ 139 |   x[13] ^= R(x[ 9]+x[ 5], 9);            | KDF_UNROLL_SALSA20                           | 
+ 140 |   x[ 1] ^= R(x[13]+x[ 9],13);            | KDF_UNROLL_SALSA20                           | 
+ 141 |   x[ 5] ^= R(x[ 1]+x[13],18);            | KDF_UNROLL_SALSA20                           | 
+ 142 |                                          | KDF_UNROLL_SALSA20                           | 
+ 143 |   x[14] ^= R(x[10]+x[ 6], 7);            | KDF_UNROLL_SALSA20                           | 
+ 144 |   x[ 2] ^= R(x[14]+x[10], 9);            | KDF_UNROLL_SALSA20                           | 
+ 145 |   x[ 6] ^= R(x[ 2]+x[14],13);            | KDF_UNROLL_SALSA20                           | 
+ 146 |   x[10] ^= R(x[ 6]+x[ 2],18);            | KDF_UNROLL_SALSA20                           | 
+ 147 |                                          | KDF_UNROLL_SALSA20                           | 
+ 148 |   x[ 3] ^= R(x[15]+x[11], 7);            | KDF_UNROLL_SALSA20                           | 
+ 149 |   x[ 7] ^= R(x[ 3]+x[15], 9);            | KDF_UNROLL_SALSA20                           | 
+ 150 |   x[11] ^= R(x[ 7]+x[ 3],13);            | KDF_UNROLL_SALSA20                           | 
+ 151 |   x[15] ^= R(x[11]+x[ 7],18);            | KDF_UNROLL_SALSA20                           | 
+ 152 | #else                                    | True                                         | 
+ 153 |   {                                      | !KDF_UNROLL_SALSA20                          | 
+ 154 |    unsigned j, k, l;                     | !KDF_UNROLL_SALSA20                          | 
+ 155 |    j = 4; k = 0; l = 12;                 | !KDF_UNROLL_SALSA20                          | 
+ 156 |    for (;;) {                            | !KDF_UNROLL_SALSA20                          | 
+ 157 |     uint32_t t;                          | !KDF_UNROLL_SALSA20                          | 
+ 158 |     x[j] ^= ({ t = x[k] + x[l]; R(t, 7); | !KDF_UNROLL_SALSA20                          | 
+ 159 |     x[j] ^= ({ t = x[k] + x[l]; R(t, 9); | !KDF_UNROLL_SALSA20                          | 
+ 160 |     x[j] ^= ({ t = x[k] + x[l]; R(t,13); | !KDF_UNROLL_SALSA20                          | 
+ 161 |     x[j] ^= ({ t = x[k] + x[l]; R(t,18); | !KDF_UNROLL_SALSA20                          | 
+ 162 |     if (j == 15) break;                  | !KDF_UNROLL_SALSA20                          | 
+ 163 |     l = j + 1; k = j + 5; j = (j+9) & 0x | !KDF_UNROLL_SALSA20                          | 
+ 164 |    }                                     | !KDF_UNROLL_SALSA20                          | 
+ 165 |   }                                      | !KDF_UNROLL_SALSA20                          | 
+ 166 | #endif                                   | True                                         | 
+ 167 |   /* Operate on rows */                  | True                                         | 
+ 168 | #if KDF_UNROLL_SALSA20                   | True                                         | 
+ 169 | // i=0 n=0                               | KDF_UNROLL_SALSA20                           | 
+ 170 |   x[ 1] ^= R(x[ 0]+x[ 3], 7); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 171 |   x[ 2] ^= R(x[ 1]+x[ 0], 9); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 172 |   x[ 3] ^= R(x[ 2]+x[ 1],13); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 173 |   x[ 0] ^= R(x[ 3]+x[ 2],18); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 174 | // i=4 n=1                               | KDF_UNROLL_SALSA20                           | 
+ 175 |   x[ 6] ^= R(x[ 5]+x[ 4], 7); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 176 |   x[ 7] ^= R(x[ 6]+x[ 5], 9); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 177 |   x[ 4] ^= R(x[ 7]+x[ 6],13); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 178 |   x[ 5] ^= R(x[ 4]+x[ 7],18); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 179 | // i=8 n=2                               | KDF_UNROLL_SALSA20                           | 
+ 180 |   x[11] ^= R(x[10]+x[ 9], 7); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 181 |   x[ 8] ^= R(x[11]+x[10], 9); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 182 |   x[ 9] ^= R(x[ 8]+x[11],13); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 183 |   x[10] ^= R(x[ 9]+x[ 8],18); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 184 | // i=12 n=3                              | KDF_UNROLL_SALSA20                           | 
+ 185 |   x[12] ^= R(x[15]+x[14], 7); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 186 |   x[13] ^= R(x[12]+x[15], 9); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 187 |   x[14] ^= R(x[13]+x[12],13); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 188 |   x[15] ^= R(x[14]+x[13],18); // [i + (n | KDF_UNROLL_SALSA20                           | 
+ 189 | #else                                    | True                                         | 
+ 190 |   {                                      | !KDF_UNROLL_SALSA20                          | 
+ 191 |    unsigned j, k, l;                     | !KDF_UNROLL_SALSA20                          | 
+ 192 |    uint32_t *xrow;                       | !KDF_UNROLL_SALSA20                          | 
+ 193 |    j = 1; k = 0; l = 3;                  | !KDF_UNROLL_SALSA20                          | 
+ 194 |    xrow = &x[0];                         | !KDF_UNROLL_SALSA20                          | 
+ 195 |    for (;;) {                            | !KDF_UNROLL_SALSA20                          | 
+ 196 |     uint32_t t;                          | !KDF_UNROLL_SALSA20                          | 
+ 197 |     xrow[j] ^= ({ t = xrow[k] + xrow[l]; | !KDF_UNROLL_SALSA20                          | 
+ 198 |     xrow[j] ^= ({ t = xrow[k] + xrow[l]; | !KDF_UNROLL_SALSA20                          | 
+ 199 |     xrow[j] ^= ({ t = xrow[k] + xrow[l]; | !KDF_UNROLL_SALSA20                          | 
+ 200 |     xrow[j] ^= ({ t = xrow[k] + xrow[l]; | !KDF_UNROLL_SALSA20                          | 
+ 201 |     if (j == 3) break;                   | !KDF_UNROLL_SALSA20                          | 
+ 202 |     l = j; k = j + 1; j = (j+2) & 3;     | !KDF_UNROLL_SALSA20                          | 
+ 203 |     xrow += 4;                           | !KDF_UNROLL_SALSA20                          | 
+ 204 |    }                                     | !KDF_UNROLL_SALSA20                          | 
+ 205 |   }                                      | !KDF_UNROLL_SALSA20                          | 
+ 206 | #endif                                   | True                                         | 
+ 207 |                                          | True                                         | 
+ 208 | #undef R                                 | True                                         | 
+ 209 |  } while (--doublerounds);               | True                                         | 
+ 210 | #undef x                                 | True                                         | 
+ 211 |                                          | True                                         | 
+ 212 |  {                                       | True                                         | 
+ 213 |   uint32_t i;                            | True                                         | 
+ 214 |   salsa20_simd_shuffle(&X, Bout);        | True                                         | 
+ 215 |   for (i = 0; i < 16; i++) {             | True                                         | 
+ 216 |    // bbox: note: was unrolled x4        | True                                         | 
+ 217 |    B->w[i] = Bout->w[i] += B->w[i];      | True                                         | 
+ 218 |   }                                      | True                                         | 
+ 219 |  }                                       | True                                         | 
+ 220 | #if 0                                    | True                                         | 
+ 221 |  /* Too expensive */                     | 0                                            | 
+ 222 |  explicit_bzero(&X, sizeof(X));          | 0                                            | 
+ 223 | #endif                                   | True                                         | 
+ 224 | }                                        | True                                         | 
+ 225 |                                          | True                                         | 
+ 226 | /**                                      | True                                         | 
+ 227 |  * Apply the Salsa20/2 core to the block | True                                         | 
+ 228 |  */                                      | True                                         | 
+ 229 | #define SALSA20_2(out) \                 | True                                         | 
+ 230 |  salsa20(&X, &out, 1)                    | True                                         | 
+ 231 |                                          | True                                         | 
+ 232 | #if 0                                    | True                                         | 
+ 233 | #define XOR(out, in1, in2) \             | 0                                            | 
+ 234 | do { \                                   | 0                                            | 
+ 235 |  (out).d[0] = (in1).d[0] ^ (in2).d[0]; \ | 0                                            | 
+ 236 |  (out).d[1] = (in1).d[1] ^ (in2).d[1]; \ | 0                                            | 
+ 237 |  (out).d[2] = (in1).d[2] ^ (in2).d[2]; \ | 0                                            | 
+ 238 |  (out).d[3] = (in1).d[3] ^ (in2).d[3]; \ | 0                                            | 
+ 239 |  (out).d[4] = (in1).d[4] ^ (in2).d[4]; \ | 0                                            | 
+ 240 |  (out).d[5] = (in1).d[5] ^ (in2).d[5]; \ | 0                                            | 
+ 241 |  (out).d[6] = (in1).d[6] ^ (in2).d[6]; \ | 0                                            | 
+ 242 |  (out).d[7] = (in1).d[7] ^ (in2).d[7]; \ | 0                                            | 
+ 243 | } while (0)                              | 0                                            | 
+ 244 | #else                                    | True                                         | 
+ 245 | #define XOR(out, in1, in2) \             | !0                                           | 
+ 246 | do { \                                   | !0                                           | 
+ 247 |  xorbuf64_3_aligned64(&(out).d, &(in1).d | !0                                           | 
+ 248 | } while (0)                              | !0                                           | 
+ 249 | #endif                                   | True                                         | 
+ 250 |                                          | True                                         | 
+ 251 | #define XOR_X(in)         XOR(X, X, in)  | True                                         | 
+ 252 | #define XOR_X_2(in1, in2) XOR(X, in1, in | True                                         | 
+ 253 | #define XOR_X_WRITE_XOR_Y_2(out, in) \   | True                                         | 
+ 254 | do { \                                   | True                                         | 
+ 255 |  XOR(Y, out, in); \                      | True                                         | 
+ 256 |  COPY(out, Y); \                         | True                                         | 
+ 257 |  XOR(X, X, Y); \                         | True                                         | 
+ 258 | } while (0)                              | True                                         | 
+ 259 |                                          | True                                         | 
+ 260 | /**                                      | True                                         | 
+ 261 |  * Apply the Salsa20/8 core to the block | True                                         | 
+ 262 |  */                                      | True                                         | 
+ 263 | #define SALSA20_8_XOR_MEM(in, out) \     | True                                         | 
+ 264 | do { \                                   | True                                         | 
+ 265 |  XOR_X(in); \                            | True                                         | 
+ 266 |  salsa20(&X, &out, 4); \                 | True                                         | 
+ 267 | } while (0)                              | True                                         | 
+ 268 |                                          | True                                         | 
+ 269 | #define INTEGERIFY ((uint32_t)X.d[0])    | True                                         | 
+ 270 |                                          | True                                         | 
+ 271 | /**                                      | True                                         | 
+ 272 |  * blockmix_salsa8(Bin, Bout, r):        | True                                         | 
+ 273 |  * Compute Bout = BlockMix_{salsa20/8, r | True                                         | 
+ 274 |  * bytes in length; the output Bout must | True                                         | 
+ 275 |  */                                      | True                                         | 
+ 276 | static void blockmix_salsa8(             | True                                         | 
+ 277 |   const salsa20_blk_t *restrict Bin,     | True                                         | 
+ 278 |   salsa20_blk_t *restrict Bout,          | True                                         | 
+ 279 |   size_t r)                              | True                                         | 
+ 280 | {                                        | True                                         | 
+ 281 |  size_t i;                               | True                                         | 
+ 282 |  DECL_X;                                 | True                                         | 
+ 283 |                                          | True                                         | 
+ 284 |  READ_X(Bin[r * 2 - 1]);                 | KDF_UNROLL_COPY                              | 
+ 285 |  for (i = 0; i < r; i++) {               | True                                         | 
+ 286 |   SALSA20_8_XOR_MEM(Bin[i * 2], Bout[i]) | True                                         | 
+ 287 |   SALSA20_8_XOR_MEM(Bin[i * 2 + 1], Bout | True                                         | 
+ 288 |  }                                       | True                                         | 
+ 289 | }                                        | True                                         | 
+ 290 |                                          | True                                         | 
+ 291 | static uint32_t blockmix_salsa8_xor(     | True                                         | 
+ 292 |   const salsa20_blk_t *restrict Bin1,    | True                                         | 
+ 293 |   const salsa20_blk_t *restrict Bin2,    | True                                         | 
+ 294 |   salsa20_blk_t *restrict Bout,          | True                                         | 
+ 295 |   size_t r)                              | True                                         | 
+ 296 | {                                        | True                                         | 
+ 297 |  size_t i;                               | True                                         | 
+ 298 |  DECL_X;                                 | True                                         | 
+ 299 |                                          | True                                         | 
+ 300 |  XOR_X_2(Bin1[r * 2 - 1], Bin2[r * 2 - 1 | True                                         | 
+ 301 |  for (i = 0; i < r; i++) {               | True                                         | 
+ 302 |   XOR_X(Bin1[i * 2]);                    | True                                         | 
+ 303 |   SALSA20_8_XOR_MEM(Bin2[i * 2], Bout[i] | True                                         | 
+ 304 |   XOR_X(Bin1[i * 2 + 1]);                | True                                         | 
+ 305 |   SALSA20_8_XOR_MEM(Bin2[i * 2 + 1], Bou | True                                         | 
+ 306 |  }                                       | True                                         | 
+ 307 |                                          | True                                         | 
+ 308 |  return INTEGERIFY;                      | True                                         | 
+ 309 | }                                        | True                                         | 
+ 310 |                                          | True                                         | 
+ 311 | /* This is tunable */                    | True                                         | 
+ 312 | #define Swidth 8                         | True                                         | 
+ 313 |                                          | True                                         | 
+ 314 | /* Not tunable in this implementation, h | True                                         | 
+ 315 | #define PWXsimple 2                      | True                                         | 
+ 316 | #define PWXgather 4                      | True                                         | 
+ 317 |                                          | True                                         | 
+ 318 | /* Derived values.  Not tunable except v | True                                         | 
+ 319 | #define PWXbytes (PWXgather * PWXsimple  | True                                         | 
+ 320 | #define Sbytes   (3 * (1 << Swidth) * PW | True                                         | 
+ 321 | #define Smask    (((1 << Swidth) - 1) *  | True                                         | 
+ 322 | #define Smask2   (((uint64_t)Smask << 32 | True                                         | 
+ 323 |                                          | True                                         | 
+ 324 | #define DECL_SMASK2REG       do {} while | True                                         | 
+ 325 | #define FORCE_REGALLOC_3     do {} while | True                                         | 
+ 326 | #define MAYBE_MEMORY_BARRIER do {} while | True                                         | 
+ 327 |                                          | True                                         | 
+ 328 | #define PWXFORM_SIMD(x0, x1) \           | True                                         | 
+ 329 | do { \                                   | True                                         | 
+ 330 |  uint64_t x = x0 & Smask2; \             | True                                         | 
+ 331 |  uint64_t *p0 = (uint64_t *)(S0 + (uint3 | True                                         | 
+ 332 |  uint64_t *p1 = (uint64_t *)(S1 + (x >>  | True                                         | 
+ 333 |  x0 = ((x0 >> 32) * (uint32_t)x0 + p0[0] | True                                         | 
+ 334 |  x1 = ((x1 >> 32) * (uint32_t)x1 + p0[1] | True                                         | 
+ 335 | } while (0)                              | True                                         | 
+ 336 |                                          | True                                         | 
+ 337 | #if KDF_UNROLL_PWXFORM_ROUND             | True                                         | 
+ 338 | #define PWXFORM_ROUND \                  | KDF_UNROLL_PWXFORM_ROUND                     | 
+ 339 | do { \                                   | KDF_UNROLL_PWXFORM_ROUND                     | 
+ 340 |  PWXFORM_SIMD(X.d[0], X.d[1]); \         | KDF_UNROLL_PWXFORM_ROUND                     | 
+ 341 |  PWXFORM_SIMD(X.d[2], X.d[3]); \         | KDF_UNROLL_PWXFORM_ROUND                     | 
+ 342 |  PWXFORM_SIMD(X.d[4], X.d[5]); \         | KDF_UNROLL_PWXFORM_ROUND                     | 
+ 343 |  PWXFORM_SIMD(X.d[6], X.d[7]); \         | KDF_UNROLL_PWXFORM_ROUND                     | 
+ 344 | } while (0)                              | KDF_UNROLL_PWXFORM_ROUND                     | 
+ 345 | #else                                    | True                                         | 
+ 346 | #define PWXFORM_ROUND \                  | !KDF_UNROLL_PWXFORM_ROUND                    | 
+ 347 | do { \                                   | !KDF_UNROLL_PWXFORM_ROUND                    | 
+ 348 |  for (int pwxi=0; pwxi<8; pwxi+=2) \     | !KDF_UNROLL_PWXFORM_ROUND                    | 
+ 349 |   PWXFORM_SIMD(X.d[pwxi], X.d[pwxi + 1]) | !KDF_UNROLL_PWXFORM_ROUND                    | 
+ 350 | } while (0)                              | !KDF_UNROLL_PWXFORM_ROUND                    | 
+ 351 | #endif                                   | True                                         | 
+ 352 |                                          | True                                         | 
+ 353 | /*                                       | True                                         | 
+ 354 |  * This offset helps address the 256-byt | True                                         | 
+ 355 |  * displacements encodable in x86(-64) i | True                                         | 
+ 356 |  * displacements are signed.  Without it | True                                         | 
+ 357 |  * half of the writes.  Setting it to 0x | True                                         | 
+ 358 |  * a displacement for one of the writes, | True                                         | 
+ 359 |  * need a 4-byte displacement.           | True                                         | 
+ 360 |  */                                      | True                                         | 
+ 361 | #define PWXFORM_WRITE_OFFSET 0x7c        | True                                         | 
+ 362 |                                          | True                                         | 
+ 363 | #define PWXFORM_WRITE \                  | True                                         | 
+ 364 | do { \                                   | True                                         | 
+ 365 |  WRITE_X(*(salsa20_blk_t *)(Sw - PWXFORM | True                                         | 
+ 366 |  Sw += 64; \                             | True                                         | 
+ 367 | } while (0)                              | True                                         | 
+ 368 |                                          | True                                         | 
+ 369 | #if KDF_UNROLL_PWXFORM                   | True                                         | 
+ 370 | #define PWXFORM \                        | KDF_UNROLL_PWXFORM                           | 
+ 371 | do { \                                   | KDF_UNROLL_PWXFORM                           | 
+ 372 |  uint8_t *Sw = S2 + w + PWXFORM_WRITE_OF | KDF_UNROLL_PWXFORM                           | 
+ 373 |  FORCE_REGALLOC_3; \                     | KDF_UNROLL_PWXFORM                           | 
+ 374 |  MAYBE_MEMORY_BARRIER; \                 | KDF_UNROLL_PWXFORM                           | 
+ 375 |  PWXFORM_ROUND; \                        | KDF_UNROLL_PWXFORM                           | 
+ 376 |  PWXFORM_ROUND; PWXFORM_WRITE; \         | KDF_UNROLL_PWXFORM                           | 
+ 377 |  PWXFORM_ROUND; PWXFORM_WRITE; \         | KDF_UNROLL_PWXFORM                           | 
+ 378 |  PWXFORM_ROUND; PWXFORM_WRITE; \         | KDF_UNROLL_PWXFORM                           | 
+ 379 |  PWXFORM_ROUND; PWXFORM_WRITE; \         | KDF_UNROLL_PWXFORM                           | 
+ 380 |  PWXFORM_ROUND; \                        | KDF_UNROLL_PWXFORM                           | 
+ 381 |  w = (w + 64 * 4) & Smask2; \            | KDF_UNROLL_PWXFORM                           | 
+ 382 |  { \                                     | KDF_UNROLL_PWXFORM                           | 
+ 383 |   uint8_t *Stmp = S2; \                  | KDF_UNROLL_PWXFORM                           | 
+ 384 |   S2 = S1; \                             | KDF_UNROLL_PWXFORM                           | 
+ 385 |   S1 = S0; \                             | KDF_UNROLL_PWXFORM                           | 
+ 386 |   S0 = Stmp; \                           | KDF_UNROLL_PWXFORM                           | 
+ 387 |  } \                                     | KDF_UNROLL_PWXFORM                           | 
+ 388 | } while (0)                              | KDF_UNROLL_PWXFORM                           | 
+ 389 | #else                                    | True                                         | 
+ 390 | #define PWXFORM \                        | !KDF_UNROLL_PWXFORM                          | 
+ 391 | do { \                                   | !KDF_UNROLL_PWXFORM                          | 
+ 392 |  uint8_t *Sw = S2 + w + PWXFORM_WRITE_OF | !KDF_UNROLL_PWXFORM                          | 
+ 393 |  FORCE_REGALLOC_3; \                     | !KDF_UNROLL_PWXFORM                          | 
+ 394 |  MAYBE_MEMORY_BARRIER; \                 | !KDF_UNROLL_PWXFORM                          | 
+ 395 |  PWXFORM_ROUND; \                        | !KDF_UNROLL_PWXFORM                          | 
+ 396 |  for (int pwxj=0; pwxj<4; pwxj++) {\     | !KDF_UNROLL_PWXFORM                          | 
+ 397 |   PWXFORM_ROUND; PWXFORM_WRITE; \        | !KDF_UNROLL_PWXFORM                          | 
+ 398 |  } \                                     | !KDF_UNROLL_PWXFORM                          | 
+ 399 |  PWXFORM_ROUND; \                        | !KDF_UNROLL_PWXFORM                          | 
+ 400 |  w = (w + 64 * 4) & Smask2; \            | !KDF_UNROLL_PWXFORM                          | 
+ 401 |  { \                                     | !KDF_UNROLL_PWXFORM                          | 
+ 402 |   uint8_t *Stmp = S2; \                  | !KDF_UNROLL_PWXFORM                          | 
+ 403 |   S2 = S1; \                             | !KDF_UNROLL_PWXFORM                          | 
+ 404 |   S1 = S0; \                             | !KDF_UNROLL_PWXFORM                          | 
+ 405 |   S0 = Stmp; \                           | !KDF_UNROLL_PWXFORM                          | 
+ 406 |  } \                                     | !KDF_UNROLL_PWXFORM                          | 
+ 407 | } while (0)                              | !KDF_UNROLL_PWXFORM                          | 
+ 408 | #endif                                   | True                                         | 
+ 409 |                                          | True                                         | 
+ 410 | typedef struct {                         | True                                         | 
+ 411 |  uint8_t *S0, *S1, *S2;                  | True                                         | 
+ 412 |  size_t w;                               | True                                         | 
+ 413 | } pwxform_ctx_t;                         | True                                         | 
+ 414 |                                          | True                                         | 
+ 415 | #define Salloc (Sbytes + ((sizeof(pwxfor | True                                         | 
+ 416 |                                          | True                                         | 
+ 417 | /**                                      | True                                         | 
+ 418 |  * blockmix_pwxform(Bin, Bout, r, S):    | True                                         | 
+ 419 |  * Compute Bout = BlockMix_pwxform{salsa | True                                         | 
+ 420 |  * be 128r bytes in length; the output B | True                                         | 
+ 421 |  */                                      | True                                         | 
+ 422 | static void blockmix(                    | True                                         | 
+ 423 |   const salsa20_blk_t *restrict Bin,     | True                                         | 
+ 424 |   salsa20_blk_t *restrict Bout,          | True                                         | 
+ 425 |   size_t r,                              | True                                         | 
+ 426 |   pwxform_ctx_t *restrict ctx)           | True                                         | 
+ 427 | {                                        | True                                         | 
+ 428 |  uint8_t *S0 = ctx->S0, *S1 = ctx->S1, * | True                                         | 
+ 429 |  size_t w = ctx->w;                      | True                                         | 
+ 430 |  size_t i;                               | True                                         | 
+ 431 |  DECL_X;                                 | True                                         | 
+ 432 |                                          | True                                         | 
+ 433 |  /* Convert count of 128-byte blocks to  | True                                         | 
+ 434 |  r = r * 2 - 1;                          | True                                         | 
+ 435 |                                          | True                                         | 
+ 436 |  READ_X(Bin[r]);                         | KDF_UNROLL_COPY                              | 
+ 437 |                                          | True                                         | 
+ 438 |  DECL_SMASK2REG;                         | True                                         | 
+ 439 |                                          | True                                         | 
+ 440 |  i = 0;                                  | True                                         | 
+ 441 |  for (;;) {                              | True                                         | 
+ 442 |   XOR_X(Bin[i]);                         | True                                         | 
+ 443 |   PWXFORM;                               | True                                         | 
+ 444 |   if (unlikely(i >= r))                  | True                                         | 
+ 445 |    break;                                | True                                         | 
+ 446 |   WRITE_X(Bout[i]);                      | KDF_UNROLL_COPY                              | 
+ 447 |   i++;                                   | True                                         | 
+ 448 |  }                                       | True                                         | 
+ 449 |                                          | True                                         | 
+ 450 |  ctx->S0 = S0;                           | True                                         | 
+ 451 |  ctx->S1 = S1;                           | True                                         | 
+ 452 |  ctx->S2 = S2;                           | True                                         | 
+ 453 |  ctx->w = w;                             | True                                         | 
+ 454 |                                          | True                                         | 
+ 455 |  SALSA20_2(Bout[i]);                     | True                                         | 
+ 456 | }                                        | True                                         | 
+ 457 |                                          | True                                         | 
+ 458 | static uint32_t blockmix_xor(            | True                                         | 
+ 459 |   const salsa20_blk_t *Bin1,             | True                                         | 
+ 460 |   const salsa20_blk_t *restrict Bin2,    | True                                         | 
+ 461 |   salsa20_blk_t *Bout,                   | True                                         | 
+ 462 |   size_t r,                              | True                                         | 
+ 463 |   pwxform_ctx_t *restrict ctx)           | True                                         | 
+ 464 | {                                        | True                                         | 
+ 465 |  uint8_t *S0 = ctx->S0, *S1 = ctx->S1, * | True                                         | 
+ 466 |  size_t w = ctx->w;                      | True                                         | 
+ 467 |  size_t i;                               | True                                         | 
+ 468 |  DECL_X;                                 | True                                         | 
+ 469 |                                          | True                                         | 
+ 470 |  /* Convert count of 128-byte blocks to  | True                                         | 
+ 471 |  r = r * 2 - 1;                          | True                                         | 
+ 472 |                                          | True                                         | 
+ 473 |  XOR_X_2(Bin1[r], Bin2[r]);              | True                                         | 
+ 474 |                                          | True                                         | 
+ 475 |  DECL_SMASK2REG;                         | True                                         | 
+ 476 |                                          | True                                         | 
+ 477 |  i = 0;                                  | True                                         | 
+ 478 |  r--;                                    | True                                         | 
+ 479 |  for (;;) {                              | True                                         | 
+ 480 |   XOR_X(Bin1[i]);                        | True                                         | 
+ 481 |   XOR_X(Bin2[i]);                        | True                                         | 
+ 482 |   PWXFORM;                               | True                                         | 
+ 483 |   if (unlikely(i > r))                   | True                                         | 
+ 484 |    break;                                | True                                         | 
+ 485 |   WRITE_X(Bout[i]);                      | KDF_UNROLL_COPY                              | 
+ 486 |   i++;                                   | True                                         | 
+ 487 |  }                                       | True                                         | 
+ 488 |                                          | True                                         | 
+ 489 |  ctx->S0 = S0;                           | True                                         | 
+ 490 |  ctx->S1 = S1;                           | True                                         | 
+ 491 |  ctx->S2 = S2;                           | True                                         | 
+ 492 |  ctx->w = w;                             | True                                         | 
+ 493 |                                          | True                                         | 
+ 494 |  SALSA20_2(Bout[i]);                     | True                                         | 
+ 495 |                                          | True                                         | 
+ 496 |  return INTEGERIFY;                      | True                                         | 
+ 497 | }                                        | True                                         | 
+ 498 |                                          | True                                         | 
+ 499 | static uint32_t blockmix_xor_save(       | True                                         | 
+ 500 |   salsa20_blk_t *restrict Bin1out,       | True                                         | 
+ 501 |   salsa20_blk_t *restrict Bin2,          | True                                         | 
+ 502 |   size_t r,                              | True                                         | 
+ 503 |   pwxform_ctx_t *restrict ctx)           | True                                         | 
+ 504 | {                                        | True                                         | 
+ 505 |  uint8_t *S0 = ctx->S0, *S1 = ctx->S1, * | True                                         | 
+ 506 |  size_t w = ctx->w;                      | True                                         | 
+ 507 |  size_t i;                               | True                                         | 
+ 508 |  DECL_X;                                 | True                                         | 
+ 509 |  DECL_Y;                                 | True                                         | 
+ 510 |                                          | True                                         | 
+ 511 |  /* Convert count of 128-byte blocks to  | True                                         | 
+ 512 |  r = r * 2 - 1;                          | True                                         | 
+ 513 |                                          | True                                         | 
+ 514 |  XOR_X_2(Bin1out[r], Bin2[r]);           | True                                         | 
+ 515 |                                          | True                                         | 
+ 516 |  DECL_SMASK2REG;                         | True                                         | 
+ 517 |                                          | True                                         | 
+ 518 |  i = 0;                                  | True                                         | 
+ 519 |  r--;                                    | True                                         | 
+ 520 |  for (;;) {                              | True                                         | 
+ 521 |   XOR_X_WRITE_XOR_Y_2(Bin2[i], Bin1out[i | True                                         | 
+ 522 |   PWXFORM;                               | True                                         | 
+ 523 |   if (unlikely(i > r))                   | True                                         | 
+ 524 |    break;                                | True                                         | 
+ 525 |   WRITE_X(Bin1out[i]);                   | KDF_UNROLL_COPY                              | 
+ 526 |   i++;                                   | True                                         | 
+ 527 |  }                                       | True                                         | 
+ 528 |                                          | True                                         | 
+ 529 |  ctx->S0 = S0;                           | True                                         | 
+ 530 |  ctx->S1 = S1;                           | True                                         | 
+ 531 |  ctx->S2 = S2;                           | True                                         | 
+ 532 |  ctx->w = w;                             | True                                         | 
+ 533 |                                          | True                                         | 
+ 534 |  SALSA20_2(Bin1out[i]);                  | True                                         | 
+ 535 |                                          | True                                         | 
+ 536 |  return INTEGERIFY;                      | True                                         | 
+ 537 | }                                        | True                                         | 
+ 538 |                                          | True                                         | 
+ 539 | /**                                      | True                                         | 
+ 540 |  * integerify(B, r):                     | True                                         | 
+ 541 |  * Return the result of parsing B_{2r-1} | True                                         | 
+ 542 |  */                                      | True                                         | 
+ 543 | static inline uint32_t integerify(const  | True                                         | 
+ 544 | {                                        | True                                         | 
+ 545 | /*                                       | True                                         | 
+ 546 |  * Our 64-bit words are in host byte ord | True                                         | 
+ 547 |  * w[0] here (would be wrong on big-endi | True                                         | 
+ 548 |  * SIMD-shuffled (so the next 32 bits wo | True                                         | 
+ 549 |  * this does not matter as we only care  | True                                         | 
+ 550 |  */                                      | True                                         | 
+ 551 |  return (uint32_t)B[2 * r - 1].d[0];     | True                                         | 
+ 552 | }                                        | True                                         | 
+ 553 |                                          | True                                         | 
+ 554 | /**                                      | True                                         | 
+ 555 |  * smix1(B, r, N, flags, V, NROM, VROM,  | True                                         | 
+ 556 |  * Compute first loop of B = SMix_r(B, N | True                                         | 
+ 557 |  * length; the temporary storage V must  | True                                         | 
+ 558 |  * storage XY must be 128r+64 bytes in l | True                                         | 
+ 559 |  * The array V must be aligned to a mult | True                                         | 
+ 560 |  * to a multiple of at least 16 bytes.   | True                                         | 
+ 561 |  */                                      | True                                         | 
+ 562 | #if DISABLE_NROM_CODE                    | True                                         | 
+ 563 | #define smix1(B,r,N,flags,V,NROM,VROM,XY | DISABLE_NROM_CODE                            | 
+ 564 |  smix1(B,r,N,flags,V,XY,ctx)             | DISABLE_NROM_CODE                            | 
+ 565 | #endif                                   | True                                         | 
+ 566 | static void smix1(uint8_t *B, size_t r,  | True                                         | 
+ 567 |   uint32_t flags,                        | DISABLE_NROM_CODE                            | 
+ 568 |   salsa20_blk_t *V,                      | DISABLE_NROM_CODE                            | 
+ 569 |   uint32_t NROM, const salsa20_blk_t *VR | True                                         | 
+ 570 |   salsa20_blk_t *XY,                     | DISABLE_NROM_CODE                            | 
+ 571 |   pwxform_ctx_t *ctx)                    | DISABLE_NROM_CODE                            | 
+ 572 | {                                        | True                                         | 
+ 573 | #if DISABLE_NROM_CODE                    | True                                         | 
+ 574 |  uint32_t NROM = 0;                      | DISABLE_NROM_CODE                            | 
+ 575 |  const salsa20_blk_t *VROM = NULL;       | DISABLE_NROM_CODE                            | 
+ 576 | #endif                                   | True                                         | 
+ 577 |  size_t s = 2 * r;                       | True                                         | 
+ 578 |  salsa20_blk_t *X = V, *Y = &V[s];       | True                                         | 
+ 579 |  uint32_t i, j;                          | True                                         | 
+ 580 |                                          | True                                         | 
+ 581 |  for (i = 0; i < 2 * r; i++) {           | True                                         | 
+ 582 |   const salsa20_blk_t *src = (salsa20_bl | True                                         | 
+ 583 |   salsa20_blk_t *tmp = Y;                | True                                         | 
+ 584 |   salsa20_blk_t *dst = &X[i];            | True                                         | 
+ 585 |   size_t k;                              | True                                         | 
+ 586 |   for (k = 0; k < 16; k++)               | True                                         | 
+ 587 |    tmp->w[k] = SWAP_LE32(src->w[k]);     | True                                         | 
+ 588 |   salsa20_simd_shuffle(tmp, dst);        | True                                         | 
+ 589 |  }                                       | True                                         | 
+ 590 |                                          | True                                         | 
+ 591 |  if (VROM) {                             | True                                         | 
+ 592 |   uint32_t n;                            | True                                         | 
+ 593 |   const salsa20_blk_t *V_j;              | True                                         | 
+ 594 |                                          | True                                         | 
+ 595 |   V_j = &VROM[(NROM - 1) * s];           | True                                         | 
+ 596 |   j = blockmix_xor(X, V_j, Y, r, ctx) &  | True                                         | 
+ 597 |   V_j = &VROM[j * s];                    | True                                         | 
+ 598 |   X = Y + s;                             | True                                         | 
+ 599 |   j = blockmix_xor(Y, V_j, X, r, ctx);   | True                                         | 
+ 600 |                                          | True                                         | 
+ 601 |   for (n = 2; n < N; n <<= 1) {          | True                                         | 
+ 602 |    uint32_t m = (n < N / 2) ? n : (N - 1 | True                                         | 
+ 603 |    for (i = 1; i < m; i += 2) {          | True                                         | 
+ 604 |     j &= n - 1;                          | True                                         | 
+ 605 |     j += i - 1;                          | True                                         | 
+ 606 |     V_j = &V[j * s];                     | True                                         | 
+ 607 |     Y = X + s;                           | True                                         | 
+ 608 |     j = blockmix_xor(X, V_j, Y, r, ctx)  | True                                         | 
+ 609 |     V_j = &VROM[j * s];                  | True                                         | 
+ 610 |     X = Y + s;                           | True                                         | 
+ 611 |     j = blockmix_xor(Y, V_j, X, r, ctx); | True                                         | 
+ 612 |    }                                     | True                                         | 
+ 613 |   }                                      | True                                         | 
+ 614 |   n >>= 1;                               | True                                         | 
+ 615 |                                          | True                                         | 
+ 616 |   j &= n - 1;                            | True                                         | 
+ 617 |   j += N - 2 - n;                        | True                                         | 
+ 618 |   V_j = &V[j * s];                       | True                                         | 
+ 619 |   Y = X + s;                             | True                                         | 
+ 620 |   j = blockmix_xor(X, V_j, Y, r, ctx) &  | True                                         | 
+ 621 |   V_j = &VROM[j * s];                    | True                                         | 
+ 622 |   blockmix_xor(Y, V_j, XY, r, ctx);      | True                                         | 
+ 623 |  } else if (flags & YESCRYPT_RW) {       | True                                         | 
+ 624 | //can't use flags___YESCRYPT_RW, smix1() | True                                         | 
+ 625 |   uint32_t n;                            | True                                         | 
+ 626 |   salsa20_blk_t *V_j;                    | True                                         | 
+ 627 |                                          | True                                         | 
+ 628 |   blockmix(X, Y, r, ctx);                | True                                         | 
+ 629 |   X = Y + s;                             | True                                         | 
+ 630 |   blockmix(Y, X, r, ctx);                | True                                         | 
+ 631 |   j = integerify(X, r);                  | True                                         | 
+ 632 |                                          | True                                         | 
+ 633 |   for (n = 2; n < N; n <<= 1) {          | True                                         | 
+ 634 |    uint32_t m = (n < N / 2) ? n : (N - 1 | True                                         | 
+ 635 |    for (i = 1; i < m; i += 2) {          | True                                         | 
+ 636 |     Y = X + s;                           | True                                         | 
+ 637 |     j &= n - 1;                          | True                                         | 
+ 638 |     j += i - 1;                          | True                                         | 
+ 639 |     V_j = &V[j * s];                     | True                                         | 
+ 640 |     j = blockmix_xor(X, V_j, Y, r, ctx); | True                                         | 
+ 641 |     j &= n - 1;                          | True                                         | 
+ 642 |     j += i;                              | True                                         | 
+ 643 |     V_j = &V[j * s];                     | True                                         | 
+ 644 |     X = Y + s;                           | True                                         | 
+ 645 |     j = blockmix_xor(Y, V_j, X, r, ctx); | True                                         | 
+ 646 |    }                                     | True                                         | 
+ 647 |   }                                      | True                                         | 
+ 648 |   n >>= 1;                               | True                                         | 
+ 649 |                                          | True                                         | 
+ 650 |   j &= n - 1;                            | True                                         | 
+ 651 |   j += N - 2 - n;                        | True                                         | 
+ 652 |   V_j = &V[j * s];                       | True                                         | 
+ 653 |   Y = X + s;                             | True                                         | 
+ 654 |   j = blockmix_xor(X, V_j, Y, r, ctx);   | True                                         | 
+ 655 |   j &= n - 1;                            | True                                         | 
+ 656 |   j += N - 1 - n;                        | True                                         | 
+ 657 |   V_j = &V[j * s];                       | True                                         | 
+ 658 |   blockmix_xor(Y, V_j, XY, r, ctx);      | True                                         | 
+ 659 |  } else {                                | True                                         | 
+ 660 |   N -= 2;                                | True                                         | 
+ 661 |   do {                                   | True                                         | 
+ 662 |    blockmix_salsa8(X, Y, r);             | True                                         | 
+ 663 |    X = Y + s;                            | True                                         | 
+ 664 |    blockmix_salsa8(Y, X, r);             | True                                         | 
+ 665 |    Y = X + s;                            | True                                         | 
+ 666 |   } while ((N -= 2));                    | True                                         | 
+ 667 |                                          | True                                         | 
+ 668 |   blockmix_salsa8(X, Y, r);              | True                                         | 
+ 669 |   blockmix_salsa8(Y, XY, r);             | True                                         | 
+ 670 |  }                                       | True                                         | 
+ 671 |                                          | True                                         | 
+ 672 |  for (i = 0; i < 2 * r; i++) {           | True                                         | 
+ 673 |   const salsa20_blk_t *src = &XY[i];     | True                                         | 
+ 674 |   salsa20_blk_t *tmp = &XY[s];           | True                                         | 
+ 675 |   salsa20_blk_t *dst = (salsa20_blk_t *) | True                                         | 
+ 676 |   size_t k;                              | True                                         | 
+ 677 |   for (k = 0; k < 16; k++)               | True                                         | 
+ 678 |    tmp->w[k] = SWAP_LE32(src->w[k]);     | True                                         | 
+ 679 |   salsa20_simd_unshuffle(tmp, dst);      | True                                         | 
+ 680 |  }                                       | True                                         | 
+ 681 | }                                        | True                                         | 
+ 682 |                                          | True                                         | 
+ 683 | /**                                      | True                                         | 
+ 684 |  * smix2(B, r, N, Nloop, flags, V, NROM, | True                                         | 
+ 685 |  * Compute second loop of B = SMix_r(B,  | True                                         | 
+ 686 |  * length; the temporary storage V must  | True                                         | 
+ 687 |  * storage XY must be 256r bytes in leng | True                                         | 
+ 688 |  * least 2.  Nloop must be even.  The ar | True                                         | 
+ 689 |  * 64 bytes, and arrays B and XY to a mu | True                                         | 
+ 690 |  */                                      | True                                         | 
+ 691 | #if DISABLE_NROM_CODE                    | True                                         | 
+ 692 | #define smix2(B,r,N,Nloop,flags,V,NROM,V | DISABLE_NROM_CODE                            | 
+ 693 |  smix2(B,r,N,Nloop,flags,V,XY,ctx)       | DISABLE_NROM_CODE                            | 
+ 694 | #endif                                   | True                                         | 
+ 695 | static void smix2(uint8_t *B, size_t r,  | True                                         | 
+ 696 |   uint32_t flags,                        | DISABLE_NROM_CODE                            | 
+ 697 |   salsa20_blk_t *V,                      | DISABLE_NROM_CODE                            | 
+ 698 |   uint32_t NROM, const salsa20_blk_t *VR | True                                         | 
+ 699 |   salsa20_blk_t *XY,                     | DISABLE_NROM_CODE                            | 
+ 700 |   pwxform_ctx_t *ctx)                    | DISABLE_NROM_CODE                            | 
+ 701 | {                                        | True                                         | 
+ 702 | #if DISABLE_NROM_CODE                    | True                                         | 
+ 703 |  uint32_t NROM = 0;                      | DISABLE_NROM_CODE                            | 
+ 704 |  const salsa20_blk_t *VROM = NULL;       | DISABLE_NROM_CODE                            | 
+ 705 | #endif                                   | True                                         | 
+ 706 |  size_t s = 2 * r;                       | True                                         | 
+ 707 |  salsa20_blk_t *X = XY, *Y = &XY[s];     | True                                         | 
+ 708 |  uint32_t i, j;                          | True                                         | 
+ 709 |                                          | True                                         | 
+ 710 |  if (Nloop == 0)                         | True                                         | 
+ 711 |   return;                                | True                                         | 
+ 712 |                                          | True                                         | 
+ 713 |  for (i = 0; i < 2 * r; i++) {           | True                                         | 
+ 714 |   const salsa20_blk_t *src = (salsa20_bl | True                                         | 
+ 715 |   salsa20_blk_t *tmp = Y;                | True                                         | 
+ 716 |   salsa20_blk_t *dst = &X[i];            | True                                         | 
+ 717 |   size_t k;                              | True                                         | 
+ 718 |   for (k = 0; k < 16; k++)               | True                                         | 
+ 719 |    tmp->w[k] = SWAP_LE32(src->w[k]);     | True                                         | 
+ 720 |   salsa20_simd_shuffle(tmp, dst);        | True                                         | 
+ 721 |  }                                       | True                                         | 
+ 722 |                                          | True                                         | 
+ 723 |  j = integerify(X, r) & (N - 1);         | True                                         | 
+ 724 |                                          | True                                         | 
+ 725 | /*                                       | True                                         | 
+ 726 |  * Normally, VROM implies YESCRYPT_RW, b | True                                         | 
+ 727 |  * because our SMix resets YESCRYPT_RW f | True                                         | 
+ 728 |  * entire V when p > 1.                  | True                                         | 
+ 729 |  */                                      | True                                         | 
+ 730 | //and this is why bbox can't use flags__ | True                                         | 
+ 731 |  if (VROM && (flags & YESCRYPT_RW)) {    | True                                         | 
+ 732 |   do {                                   | True                                         | 
+ 733 |    salsa20_blk_t *V_j = &V[j * s];       | True                                         | 
+ 734 |    const salsa20_blk_t *VROM_j;          | True                                         | 
+ 735 |    j = blockmix_xor_save(X, V_j, r, ctx) | True                                         | 
+ 736 |    VROM_j = &VROM[j * s];                | True                                         | 
+ 737 |    j = blockmix_xor(X, VROM_j, X, r, ctx | True                                         | 
+ 738 |   } while (Nloop -= 2);                  | True                                         | 
+ 739 |  } else if (VROM) {                      | True                                         | 
+ 740 |   do {                                   | True                                         | 
+ 741 |    const salsa20_blk_t *V_j = &V[j * s]; | True                                         | 
+ 742 |    j = blockmix_xor(X, V_j, X, r, ctx) & | True                                         | 
+ 743 |    V_j = &VROM[j * s];                   | True                                         | 
+ 744 |    j = blockmix_xor(X, V_j, X, r, ctx) & | True                                         | 
+ 745 |   } while (Nloop -= 2);                  | True                                         | 
+ 746 |  } else if (flags & YESCRYPT_RW) {       | True                                         | 
+ 747 |   do {                                   | True                                         | 
+ 748 |    salsa20_blk_t *V_j = &V[j * s];       | True                                         | 
+ 749 |    j = blockmix_xor_save(X, V_j, r, ctx) | True                                         | 
+ 750 |    V_j = &V[j * s];                      | True                                         | 
+ 751 |    j = blockmix_xor_save(X, V_j, r, ctx) | True                                         | 
+ 752 |   } while (Nloop -= 2);                  | True                                         | 
+ 753 |  } else if (ctx) {                       | True                                         | 
+ 754 |   do {                                   | True                                         | 
+ 755 |    const salsa20_blk_t *V_j = &V[j * s]; | True                                         | 
+ 756 |    j = blockmix_xor(X, V_j, X, r, ctx) & | True                                         | 
+ 757 |    V_j = &V[j * s];                      | True                                         | 
+ 758 |    j = blockmix_xor(X, V_j, X, r, ctx) & | True                                         | 
+ 759 |   } while (Nloop -= 2);                  | True                                         | 
+ 760 |  } else {                                | True                                         | 
+ 761 |   do {                                   | True                                         | 
+ 762 |    const salsa20_blk_t *V_j = &V[j * s]; | True                                         | 
+ 763 |    j = blockmix_salsa8_xor(X, V_j, Y, r) | True                                         | 
+ 764 |    V_j = &V[j * s];                      | True                                         | 
+ 765 |    j = blockmix_salsa8_xor(Y, V_j, X, r) | True                                         | 
+ 766 |   } while (Nloop -= 2);                  | True                                         | 
+ 767 |  }                                       | True                                         | 
+ 768 |                                          | True                                         | 
+ 769 |  for (i = 0; i < 2 * r; i++) {           | True                                         | 
+ 770 |   const salsa20_blk_t *src = &X[i];      | True                                         | 
+ 771 |   salsa20_blk_t *tmp = Y;                | True                                         | 
+ 772 |   salsa20_blk_t *dst = (salsa20_blk_t *) | True                                         | 
+ 773 |   size_t k;                              | True                                         | 
+ 774 |   for (k = 0; k < 16; k++)               | True                                         | 
+ 775 |    tmp->w[k] = SWAP_LE32(src->w[k]);     | True                                         | 
+ 776 |   salsa20_simd_unshuffle(tmp, dst);      | True                                         | 
+ 777 |  }                                       | True                                         | 
+ 778 | }                                        | True                                         | 
+ 779 |                                          | True                                         | 
+ 780 | /**                                      | True                                         | 
+ 781 |  * p2floor(x):                           | True                                         | 
+ 782 |  * Largest power of 2 not greater than a | True                                         | 
+ 783 |  */                                      | True                                         | 
+ 784 | static uint64_t p2floor(uint64_t x)      | True                                         | 
+ 785 | {                                        | True                                         | 
+ 786 |  uint64_t y;                             | True                                         | 
+ 787 |  while ((y = x & (x - 1)))               | True                                         | 
+ 788 |   x = y;                                 | True                                         | 
+ 789 |  return x;                               | True                                         | 
+ 790 | }                                        | True                                         | 
+ 791 |                                          | True                                         | 
+ 792 | /**                                      | True                                         | 
+ 793 |  * smix(B, r, N, p, t, flags, V, NROM, V | True                                         | 
+ 794 |  * Compute B = SMix_r(B, N).  The input  | True                                         | 
+ 795 |  * temporary storage V must be 128rN byt | True                                         | 
+ 796 |  * XY must be 256r or 256rp bytes in len | True                                         | 
+ 797 |  * OpenMP-enabled builds).  N must be a  | True                                         | 
+ 798 |  * must be aligned to a multiple of 64 b | True                                         | 
+ 799 |  * of at least 16 bytes (aligning them t | True                                         | 
+ 800 |  * and helps avoid false sharing in Open | True                                         | 
+ 801 |  * might also result in cache bank confl | True                                         | 
+ 802 |  */                                      | True                                         | 
+ 803 | #if DISABLE_NROM_CODE                    | True                                         | 
+ 804 | #define smix(B,r,N,p,t,flags,V,NROM,VROM | DISABLE_NROM_CODE                            | 
+ 805 |  smix(B,r,N,p,t,flags,V,XY,S,passwd)     | DISABLE_NROM_CODE                            | 
+ 806 | #endif                                   | True                                         | 
+ 807 | static void smix(uint8_t *B, size_t r, u | True                                         | 
+ 808 |   uint32_t flags,                        | DISABLE_NROM_CODE                            | 
+ 809 |   salsa20_blk_t *V,                      | DISABLE_NROM_CODE                            | 
+ 810 |   uint32_t NROM, const salsa20_blk_t *VR | True                                         | 
+ 811 |   salsa20_blk_t *XY,                     | DISABLE_NROM_CODE                            | 
+ 812 |   uint8_t *S, uint8_t *passwd)           | DISABLE_NROM_CODE                            | 
+ 813 | {                                        | True                                         | 
+ 814 |  size_t s = 2 * r;                       | True                                         | 
+ 815 |  uint32_t Nchunk;                        | True                                         | 
+ 816 |  uint64_t Nloop_all, Nloop_rw;           | True                                         | 
+ 817 |  uint32_t i;                             | True                                         | 
+ 818 |                                          | True                                         | 
+ 819 |  Nchunk = N / p;                         | True                                         | 
+ 820 |  Nloop_all = Nchunk;                     | True                                         | 
+ 821 |  if (flags___YESCRYPT_RW) {              | True                                         | 
+ 822 |   if (t <= 1) {                          | True                                         | 
+ 823 |    if (t)                                | True                                         | 
+ 824 |     Nloop_all *= 2; /* 2/3 */            | True                                         | 
+ 825 |    Nloop_all = (Nloop_all + 2) / 3; /* 1 | True                                         | 
+ 826 |   } else {                               | True                                         | 
+ 827 |    Nloop_all *= t - 1;                   | True                                         | 
+ 828 |   }                                      | True                                         | 
+ 829 |  } else if (t) {                         | True                                         | 
+ 830 |   if (t == 1)                            | True                                         | 
+ 831 |    Nloop_all += (Nloop_all + 1) / 2; /*  | True                                         | 
+ 832 |   Nloop_all *= t;                        | True                                         | 
+ 833 |  }                                       | True                                         | 
+ 834 |                                          | True                                         | 
+ 835 |  Nloop_rw = 0;                           | True                                         | 
+ 836 |  if (flags___YESCRYPT_RW)                | True                                         | 
+ 837 |   Nloop_rw = Nloop_all / p;              | True                                         | 
+ 838 |                                          | True                                         | 
+ 839 |  Nchunk &= ~(uint32_t)1; /* round down t | True                                         | 
+ 840 |  Nloop_all++; Nloop_all &= ~(uint64_t)1; | True                                         | 
+ 841 |  Nloop_rw++; Nloop_rw &= ~(uint64_t)1; / | True                                         | 
+ 842 |                                          | True                                         | 
+ 843 |  for (i = 0; i < p; i++) {               | True                                         | 
+ 844 |   uint32_t Vchunk = i * Nchunk;          | True                                         | 
+ 845 |   uint32_t Np = (i < p - 1) ? Nchunk : ( | True                                         | 
+ 846 |   uint8_t *Bp = &B[128 * r * i];         | True                                         | 
+ 847 |   salsa20_blk_t *Vp = &V[Vchunk * s];    | True                                         | 
+ 848 |   salsa20_blk_t *XYp = XY;               | True                                         | 
+ 849 |   pwxform_ctx_t *ctx_i = NULL;           | True                                         | 
+ 850 |   if (flags___YESCRYPT_RW) {             | True                                         | 
+ 851 |    uint8_t *Si = S + i * Salloc;         | True                                         | 
+ 852 |    smix1(Bp, 1, Sbytes / 128, 0 /* no fl | DISABLE_NROM_CODE                            | 
+ 853 |     (salsa20_blk_t *)Si, 0, NULL, XYp, N | DISABLE_NROM_CODE                            | 
+ 854 |    ctx_i = (pwxform_ctx_t *)(Si + Sbytes | True                                         | 
+ 855 |    ctx_i->S2 = Si;                       | True                                         | 
+ 856 |    ctx_i->S1 = Si + Sbytes / 3;          | True                                         | 
+ 857 |    ctx_i->S0 = Si + Sbytes / 3 * 2;      | True                                         | 
+ 858 |    ctx_i->w = 0;                         | True                                         | 
+ 859 |    if (i == 0)                           | True                                         | 
+ 860 |     hmac_block(                          | True                                         | 
+ 861 |      /* key,len: */ Bp + (128 * r - 64), | True                                         | 
+ 862 |      /* hash fn: */ sha256_begin,        | True                                         | 
+ 863 |      /* in,len: */  passwd, 32,          | True                                         | 
+ 864 |      /* outbuf: */  passwd               | True                                         | 
+ 865 |     );                                   | True                                         | 
+ 866 |   }                                      | True                                         | 
+ 867 |   smix1(Bp, r, Np, flags, Vp, NROM, VROM | DISABLE_NROM_CODE                            | 
+ 868 |   smix2(Bp, r, p2floor(Np), Nloop_rw, fl | DISABLE_NROM_CODE                            | 
+ 869 |    NROM, VROM, XYp, ctx_i);              | DISABLE_NROM_CODE                            | 
+ 870 |  }                                       | True                                         | 
+ 871 |                                          | True                                         | 
+ 872 |  if (Nloop_all > Nloop_rw) {             | True                                         | 
+ 873 |   for (i = 0; i < p; i++) {              | True                                         | 
+ 874 |    uint8_t *Bp = &B[128 * r * i];        | True                                         | 
+ 875 |    salsa20_blk_t *XYp = XY;              | True                                         | 
+ 876 |    pwxform_ctx_t *ctx_i = NULL;          | True                                         | 
+ 877 |    if (flags___YESCRYPT_RW) {            | True                                         | 
+ 878 |     uint8_t *Si = S + i * Salloc;        | True                                         | 
+ 879 |     ctx_i = (pwxform_ctx_t *)(Si + Sbyte | True                                         | 
+ 880 |    }                                     | True                                         | 
+ 881 |    smix2(Bp, r, N, Nloop_all - Nloop_rw, | DISABLE_NROM_CODE                            | 
+ 882 |     flags & (uint32_t)~YESCRYPT_RW,      | DISABLE_NROM_CODE                            | 
+ 883 |     V, NROM, VROM, XYp, ctx_i);          | DISABLE_NROM_CODE                            | 
+ 884 |   }                                      | True                                         | 
+ 885 |  }                                       | True                                         | 
+ 886 | }                                        | True                                         | 
+ 887 |                                          | True                                         | 
+ 888 | /* Allocator code */                     | True                                         | 
+ 889 |                                          | True                                         | 
+ 890 | static void alloc_region(yescrypt_region | True                                         | 
+ 891 | {                                        | True                                         | 
+ 892 |  uint8_t *base;                          | True                                         | 
+ 893 |  int flags =                             | True                                         | 
+ 894 | # ifdef MAP_NOCORE /* huh? */            | True                                         | 
+ 895 |   MAP_NOCORE |                           | (MAP_NOCORE)                                 | 
+ 896 | # endif                                  | True                                         | 
+ 897 |   MAP_ANON | MAP_PRIVATE;                | True                                         | 
+ 898 |                                          | True                                         | 
+ 899 |  base = mmap(NULL, size, PROT_READ | PRO | True                                         | 
+ 900 |  if (base == MAP_FAILED)                 | True                                         | 
+ 901 |   bb_die_memory_exhausted();             | True                                         | 
+ 902 |                                          | True                                         | 
+ 903 | #if defined(MADV_HUGEPAGE)               | True                                         | 
+ 904 |  /* Reduces mkpasswd qweRTY123@-+ '$y$jH | (MADV_HUGEPAGE)                              | 
+ 905 |   * (which allocates 4 Gbytes)           | (MADV_HUGEPAGE)                              | 
+ 906 |   * run time from 10.543s to 5.635s      | (MADV_HUGEPAGE)                              | 
+ 907 |   * Seen on linux-5.18.0.                | (MADV_HUGEPAGE)                              | 
+ 908 |   */                                     | (MADV_HUGEPAGE)                              | 
+ 909 |  madvise(base, size, MADV_HUGEPAGE);     | (MADV_HUGEPAGE)                              | 
+ 910 | #endif                                   | True                                         | 
+ 911 |  //region->base = base;                  | True                                         | 
+ 912 |  //region->base_size = size;             | True                                         | 
+ 913 |  region->aligned = base;                 | True                                         | 
+ 914 |  region->aligned_size = size;            | True                                         | 
+ 915 | }                                        | True                                         | 
+ 916 |                                          | True                                         | 
+ 917 | static void free_region(yescrypt_region_ | True                                         | 
+ 918 | {                                        | True                                         | 
+ 919 |  if (region->aligned)                    | True                                         | 
+ 920 |   munmap(region->aligned, region->aligne | True                                         | 
+ 921 |  //region->base = NULL;                  | True                                         | 
+ 922 |  //region->base_size = 0;                | True                                         | 
+ 923 |  region->aligned = NULL;                 | True                                         | 
+ 924 |  region->aligned_size = 0;               | True                                         | 
+ 925 | }                                        | True                                         | 
+ 926 | /**                                      | True                                         | 
+ 927 |  * yescrypt_kdf_body(shared, local, pass | True                                         | 
+ 928 |  *     flags, N, r, p, t, NROM, buf, buf | True                                         | 
+ 929 |  * Compute scrypt(passwd[0 .. passwdlen  | True                                         | 
+ 930 |  * p, buflen), or a revision of scrypt a | True                                         | 
+ 931 |  * write the result into buf.            | True                                         | 
+ 932 |  *                                       | True                                         | 
+ 933 |  * shared and flags may request special  | True                                         | 
+ 934 |  *                                       | True                                         | 
+ 935 |  * local is the thread-local data struct | True                                         | 
+ 936 |  * memory allocation across calls, there | True                                         | 
+ 937 |  *                                       | True                                         | 
+ 938 |  * t controls computation time while not | True                                         | 
+ 939 |  *                                       | True                                         | 
+ 940 |  * Return 0 on success; or -1 on error.  | True                                         | 
+ 941 |  *                                       | True                                         | 
+ 942 |  * This optimized implementation current | True                                         | 
+ 943 |  * 2^31, but other implementations might | True                                         | 
+ 944 |  */                                      | True                                         | 
+ 945 | static int yescrypt_kdf32_body(          | True                                         | 
+ 946 |   yescrypt_ctx_t *yctx,                  | True                                         | 
+ 947 |   const uint8_t *passwd, size_t passwdle | True                                         | 
+ 948 |   uint32_t flags, uint64_t N, uint32_t t | True                                         | 
+ 949 |   uint8_t *buf32)                        | True                                         | 
+ 950 | {                                        | True                                         | 
+ 951 | #if !DISABLE_NROM_CODE                   | True                                         | 
+ 952 |  const salsa20_blk_t *VROM;              | !DISABLE_NROM_CODE                           | 
+ 953 | #endif                                   | True                                         | 
+ 954 |  size_t B_size, V_size, XY_size, need;   | True                                         | 
+ 955 |  uint8_t *B, *S;                         | True                                         | 
+ 956 |  salsa20_blk_t *V, *XY;                  | True                                         | 
+ 957 |  struct {                                | True                                         | 
+ 958 |   uint8_t sha256[32];                    | True                                         | 
+ 959 |   uint8_t dk[32];                        | True                                         | 
+ 960 |  } u;                                    | True                                         | 
+ 961 | #define sha256 u.sha256                  | True                                         | 
+ 962 | #define dk     u.dk                      | True                                         | 
+ 963 |  uint8_t *dkp = buf32;                   | True                                         | 
+ 964 |  uint32_t r, p;                          | True                                         | 
+ 965 |                                          | True                                         | 
+ 966 |  /* Sanity-check parameters */           | True                                         | 
+ 967 |  switch (flags___YESCRYPT_MODE_MASK) {   | True                                         | 
+ 968 |  case 0: /* classic scrypt - can't have  | True                                         | 
+ 969 |   if (flags || t || YCTX_param_NROM)     | True                                         | 
+ 970 |    goto out_EINVAL;                      | True                                         | 
+ 971 |   break;                                 | True                                         | 
+ 972 |  case YESCRYPT_WORM:                     | True                                         | 
+ 973 |   if (flags != YESCRYPT_WORM || YCTX_par | True                                         | 
+ 974 |    goto out_EINVAL;                      | True                                         | 
+ 975 |   break;                                 | True                                         | 
+ 976 |  case YESCRYPT_RW:                       | True                                         | 
+ 977 |   if (flags != (flags & YESCRYPT_KNOWN_F | True                                         | 
+ 978 |    goto out_EINVAL;                      | True                                         | 
+ 979 | #if PWXsimple == 2 && PWXgather == 4 &&  | True                                         | 
+ 980 |   if ((flags & YESCRYPT_RW_FLAVOR_MASK)  | True                                         | 
+ 981 |       (YESCRYPT_ROUNDS_6 | YESCRYPT_GATH | True                                         | 
+ 982 |       YESCRYPT_SIMPLE_2 | YESCRYPT_SBOX_ | True                                         | 
+ 983 |    break;                                | True                                         | 
+ 984 | #else                                    | True                                         | 
+ 985 | #error "Unsupported pwxform settings"    | !(PWXsimple==2&&PWXgather==4&&Sbytes==12288) | 
+ 986 | #endif                                   | True                                         | 
+ 987 |   /* FALLTHRU */                         | True                                         | 
+ 988 |  default:                                | True                                         | 
+ 989 |   goto out_EINVAL;                       | True                                         | 
+ 990 |  }                                       | True                                         | 
+ 991 |                                          | True                                         | 
+ 992 |  r = YCTX_param_r;                       | True                                         | 
+ 993 |  p = YCTX_param_p;                       | True                                         | 
+ 994 |  if ((uint64_t)r * (uint64_t)p >= 1 << 3 | True                                         | 
+ 995 |   dbg("r * n >= 2^30");                  | True                                         | 
+ 996 |   goto out_EINVAL;                       | True                                         | 
+ 997 |  }                                       | True                                         | 
+ 998 |  if (N > UINT32_MAX) {                   | True                                         | 
+ 999 |   dbg("N > 0x%lx", (long)UINT32_MAX);    | True                                         | 
+1000 |   goto out_EINVAL;                       | True                                         | 
+1001 |  }                                       | True                                         | 
+1002 |  if (N <= 3                              | True                                         | 
+1003 |   || r < 1                               | True                                         | 
+1004 |   || p < 1                               | True                                         | 
+1005 |  ) {                                     | True                                         | 
+1006 |   dbg("bad N, r or p");                  | True                                         | 
+1007 |   goto out_EINVAL;                       | True                                         | 
+1008 |  }                                       | True                                         | 
+1009 |  if (r > SIZE_MAX / 256 / p              | True                                         | 
+1010 |   || N > SIZE_MAX / 128 / r              | True                                         | 
+1011 |  ) {                                     | True                                         | 
+1012 |   /* 32-bit testcase: mkpasswd qweRTY123 | True                                         | 
+1013 |    * (works on 64-bit, needs buffer > 4G | True                                         | 
+1014 |    */                                    | True                                         | 
+1015 |   dbg("r > SIZE_MAX / 256 / p? %c", "NY" | True                                         | 
+1016 |   dbg("N > SIZE_MAX / 128 / r? %c", "NY" | True                                         | 
+1017 |   goto out_EINVAL;                       | True                                         | 
+1018 |  }                                       | True                                         | 
+1019 |  if (flags___YESCRYPT_RW) {              | True                                         | 
+1020 |   /* p cannot be greater than SIZE_MAX/S | True                                         | 
+1021 |      but it can on 32-bit systems.  */   | True                                         | 
+1022 | #pragma GCC diagnostic push              | True                                         | 
+1023 | #pragma GCC diagnostic ignored "-Wtype-l | True                                         | 
+1024 |   if (N / p <= 3 || p > SIZE_MAX / Sallo | True                                         | 
+1025 |    dbg("bad p:%ld", (long)p);            | True                                         | 
+1026 |    goto out_EINVAL;                      | True                                         | 
+1027 |   }                                      | True                                         | 
+1028 | #pragma GCC diagnostic pop               | True                                         | 
+1029 |  }                                       | True                                         | 
+1030 |                                          | True                                         | 
+1031 | #if !DISABLE_NROM_CODE                   | True                                         | 
+1032 |  VROM = NULL;                            | !DISABLE_NROM_CODE                           | 
+1033 |  if (YCTX_param_NROM)                    | !DISABLE_NROM_CODE                           | 
+1034 |   goto out_EINVAL;                       | !DISABLE_NROM_CODE                           | 
+1035 | #endif                                   | True                                         | 
+1036 |                                          | True                                         | 
+1037 |  /* Allocate memory */                   | True                                         | 
+1038 |  V = NULL;                               | True                                         | 
+1039 |  V_size = (size_t)128 * r * N;           | True                                         | 
+1040 |  need = V_size;                          | True                                         | 
+1041 |  B_size = (size_t)128 * r * p;           | True                                         | 
+1042 |  need += B_size;                         | True                                         | 
+1043 |  if (need < B_size) {                    | True                                         | 
+1044 |   dbg("integer overflow at += B_size(%lu | True                                         | 
+1045 |   goto out_EINVAL;                       | True                                         | 
+1046 |  }                                       | True                                         | 
+1047 |  XY_size = (size_t)256 * r;              | True                                         | 
+1048 |  need += XY_size;                        | True                                         | 
+1049 |  if (need < XY_size) {                   | True                                         | 
+1050 |   dbg("integer overflow at += XY_size(%l | True                                         | 
+1051 |   goto out_EINVAL;                       | True                                         | 
+1052 |  }                                       | True                                         | 
+1053 |  if (flags___YESCRYPT_RW) {              | True                                         | 
+1054 |   size_t S_size = (size_t)Salloc * p;    | True                                         | 
+1055 |   need += S_size;                        | True                                         | 
+1056 |   if (need < S_size) {                   | True                                         | 
+1057 |    dbg("integer overflow at += S_size(%l | True                                         | 
+1058 |    goto out_EINVAL;                      | True                                         | 
+1059 |   }                                      | True                                         | 
+1060 |  }                                       | True                                         | 
+1061 |  if (yctx->local->aligned_size < need) { | True                                         | 
+1062 |   free_region(yctx->local);              | True                                         | 
+1063 |   alloc_region(yctx->local, need);       | True                                         | 
+1064 |   dbg("allocated local:%lu 0x%lx", (long | True                                         | 
+1065 |   /* standard "j9T" params allocate 16Mb | True                                         | 
+1066 |  }                                       | True                                         | 
+1067 |  if (flags & YESCRYPT_ALLOC_ONLY)        | True                                         | 
+1068 |   return -3; /* expected "failure" */    | True                                         | 
+1069 |  B = (uint8_t *)yctx->local->aligned;    | True                                         | 
+1070 |  V = (salsa20_blk_t *)((uint8_t *)B + B_ | True                                         | 
+1071 |  XY = (salsa20_blk_t *)((uint8_t *)V + V | True                                         | 
+1072 |  S = NULL;                               | True                                         | 
+1073 |  if (flags___YESCRYPT_RW)                | True                                         | 
+1074 |   S = (uint8_t *)XY + XY_size;           | True                                         | 
+1075 |                                          | True                                         | 
+1076 |  if (flags) {                            | True                                         | 
+1077 |   hmac_block(                            | True                                         | 
+1078 |    /* key,len: */ (const void*)"yescrypt | True                                         | 
+1079 |    /* hash fn: */ sha256_begin,          | True                                         | 
+1080 |    /* in,len: */  passwd, passwdlen,     | True                                         | 
+1081 |    /* outbuf: */  sha256                 | True                                         | 
+1082 |   );                                     | True                                         | 
+1083 |   passwd = sha256;                       | True                                         | 
+1084 |   passwdlen = sizeof(sha256);            | True                                         | 
+1085 |  }                                       | True                                         | 
+1086 |                                          | True                                         | 
+1087 |  PBKDF2_SHA256(passwd, passwdlen, yctx-> | True                                         | 
+1088 |                                          | True                                         | 
+1089 |  if (flags)                              | True                                         | 
+1090 |   memcpy(sha256, B, sizeof(sha256));     | True                                         | 
+1091 |                                          | True                                         | 
+1092 |  if (p == 1 || (flags___YESCRYPT_RW)) {  | True                                         | 
+1093 |   smix(B, r, N, p, t, flags, V, YCTX_par | DISABLE_NROM_CODE                            | 
+1094 |  } else {                                | True                                         | 
+1095 |   uint32_t i;                            | True                                         | 
+1096 |   for (i = 0; i < p; i++) {              | True                                         | 
+1097 |    smix(&B[(size_t)128 * r * i], r, N, 1 | DISABLE_NROM_CODE                            | 
+1098 |     YCTX_param_NROM, VROM, XY, NULL, NUL | DISABLE_NROM_CODE                            | 
+1099 |   }                                      | True                                         | 
+1100 |  }                                       | True                                         | 
+1101 |                                          | True                                         | 
+1102 |  dkp = buf32;                            | True                                         | 
+1103 |  if (flags && /*buflen:*/32 < sizeof(dk) | True                                         | 
+1104 |   PBKDF2_SHA256(passwd, passwdlen, B, B_ | True                                         | 
+1105 |   dkp = dk;                              | True                                         | 
+1106 |  }                                       | True                                         | 
+1107 |                                          | True                                         | 
+1108 |  PBKDF2_SHA256(passwd, passwdlen, B, B_s | True                                         | 
+1109 |                                          | True                                         | 
+1110 |  /*                                      | True                                         | 
+1111 |   * Except when computing classic scrypt | True                                         | 
+1112 |   * to be performed on the client.  The  | True                                         | 
+1113 |   * SCRAM (RFC 5802), so that an extensi | True                                         | 
+1114 |   * far in place of SCRAM's use of PBKDF | True                                         | 
+1115 |   * SCRAM's use of SHA-1) would be usabl | True                                         | 
+1116 |   */                                     | True                                         | 
+1117 |  if (flags && !(flags & YESCRYPT_PREHASH | True                                         | 
+1118 |   /* Compute ClientKey */                | True                                         | 
+1119 |   hmac_block(                            | True                                         | 
+1120 |    /* key,len: */ dkp, sizeof(dk),       | True                                         | 
+1121 |    /* hash fn: */ sha256_begin,          | True                                         | 
+1122 |    /* in,len: */  "Client Key", 10,      | True                                         | 
+1123 |    /* outbuf: */  sha256                 | True                                         | 
+1124 |   );                                     | True                                         | 
+1125 |   /* Compute StoredKey */                | True                                         | 
+1126 |   {                                      | True                                         | 
+1127 |    size_t clen = /*buflen:*/32;          | True                                         | 
+1128 |    if (clen > sizeof(dk))                | True                                         | 
+1129 |     clen = sizeof(dk);                   | True                                         | 
+1130 |    if (sizeof(dk) != 32) { /* not true,  | True                                         | 
+1131 |     sha256_block(sha256, sizeof(sha256), | True                                         | 
+1132 |     memcpy(buf32, dk, clen);             | True                                         | 
+1133 |    } else {                              | True                                         | 
+1134 |     sha256_block(sha256, sizeof(sha256), | True                                         | 
+1135 |    }                                     | True                                         | 
+1136 |   }                                      | True                                         | 
+1137 |  }                                       | True                                         | 
+1138 |                                          | True                                         | 
+1139 |  explicit_bzero(&u, sizeof(u));          | True                                         | 
+1140 |                                          | True                                         | 
+1141 |  /* Success! */                          | True                                         | 
+1142 |  return 0;                               | True                                         | 
+1143 |                                          | True                                         | 
+1144 |  out_EINVAL:                             | True                                         | 
+1145 |  //bbox does not need this: errno = EINV | True                                         | 
+1146 |  return -1;                              | True                                         | 
+1147 | #undef sha256                            | True                                         | 
+1148 | #undef dk                                | True                                         | 
+1149 | }                                        | True                                         | 
+1150 |                                          | True                                         | 
+1151 | /**                                      | True                                         | 
+1152 |  * yescrypt_kdf(shared, local, passwd, p | True                                         | 
+1153 |  *     buf, buflen):                     | True                                         | 
+1154 |  * Compute scrypt or its revision as req | True                                         | 
+1155 |  * to this function are the same as thos | True                                         | 
+1156 |  * the addition of g, which controls has | True                                         | 
+1157 |  */                                      | True                                         | 
+1158 | static                                   | True                                         | 
+1159 | int yescrypt_kdf32(                      | True                                         | 
+1160 |   yescrypt_ctx_t *yctx,                  | True                                         | 
+1161 |   const uint8_t *passwd, size_t passwdle | True                                         | 
+1162 |   uint8_t *buf32)                        | True                                         | 
+1163 | {                                        | True                                         | 
+1164 |  uint32_t flags = YCTX_param_flags;      | True                                         | 
+1165 |  uint64_t N = YCTX_param_N;              | True                                         | 
+1166 |  uint32_t r = YCTX_param_r;              | True                                         | 
+1167 |  uint32_t p = YCTX_param_p;              | True                                         | 
+1168 |  uint32_t t = YCTX_param_t;              | True                                         | 
+1169 |  uint32_t g = YCTX_param_g;              | True                                         | 
+1170 |  uint8_t dk32[32];                       | True                                         | 
+1171 |  int retval;                             | True                                         | 
+1172 |                                          | True                                         | 
+1173 |  /* Support for hash upgrades has been t | True                                         | 
+1174 |  if (g) {                                | True                                         | 
+1175 |   //bbox does not need this: errno = EIN | True                                         | 
+1176 |   return -1;                             | True                                         | 
+1177 |  }                                       | True                                         | 
+1178 |                                          | True                                         | 
+1179 |  if ((flags___YESCRYPT_RW)               | True                                         | 
+1180 |   && p >= 1                              | True                                         | 
+1181 |   && N / p >= 0x100                      | True                                         | 
+1182 |   && N / p * r >= 0x20000                | True                                         | 
+1183 |  ) {                                     | True                                         | 
+1184 |   if (yescrypt_kdf32_body(yctx,          | True                                         | 
+1185 |       passwd, passwdlen,                 | True                                         | 
+1186 |       flags | YESCRYPT_ALLOC_ONLY, N, t, | True                                         | 
+1187 |       buf32) != -3                       | True                                         | 
+1188 |   ) {                                    | True                                         | 
+1189 |    dbg("yescrypt_kdf32_body: not -3");   | True                                         | 
+1190 |    return -1;                            | True                                         | 
+1191 |   }                                      | True                                         | 
+1192 |   retval = yescrypt_kdf32_body(yctx,     | True                                         | 
+1193 |     passwd, passwdlen,                   | True                                         | 
+1194 |     flags | YESCRYPT_PREHASH, N >> 6, 0, | True                                         | 
+1195 |     dk32);                               | True                                         | 
+1196 |   if (retval) {                          | True                                         | 
+1197 |    dbg("yescrypt_kdf32_body(PREHASH):%d" | True                                         | 
+1198 |    return retval;                        | True                                         | 
+1199 |   }                                      | True                                         | 
+1200 |   passwd = dk32;                         | True                                         | 
+1201 |   passwdlen = sizeof(dk32);              | True                                         | 
+1202 |  }                                       | True                                         | 
+1203 |                                          | True                                         | 
+1204 |  retval = yescrypt_kdf32_body(yctx,      | True                                         | 
+1205 |    passwd, passwdlen,                    | True                                         | 
+1206 |    flags, N, t, buf32);                  | True                                         | 
+1207 |                                          | True                                         | 
+1208 |  explicit_bzero(dk32, sizeof(dk32));     | True                                         | 
+1209 |                                          | True                                         | 
+1210 |  dbg("yescrypt_kdf32_body:%d", retval);  | True                                         | 
+1211 |  return retval;                          | True                                         | 
+1212 | }                                        | True                                         | 
+-----+------------------------------------------+----------------------------------------------+
+     |                                          | +168MB, 398ms                                | 

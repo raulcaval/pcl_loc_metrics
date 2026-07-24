@@ -1,0 +1,906 @@
+FILE: data/raw/busybox-1.38.0/archival/libarchive/decompress_bunzip2.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Small bzip2 deflate implementation, b | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Based on bzip2 decompression code by  | True                      | 
+   6 |  * which also acknowledges contributions | True                      | 
+   7 |  * Peter Fenwick, Alistair Moffat, Radfo | True                      | 
+   8 |  * Robert Sedgewick, and Jon L. Bentley. | True                      | 
+   9 |  *                                       | True                      | 
+  10 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  11 |  */                                      | True                      | 
+  12 | /*                                       | True                      | 
+  13 |  Size and speed optimizations by Manuel  | True                      | 
+  14 |                                          | True                      | 
+  15 |  More efficient reading of Huffman codes | True                      | 
+  16 |  function, and various other tweaks.  In | True                      | 
+  17 |  20% faster than bzcat on x86 and about  | True                      | 
+  18 |                                          | True                      | 
+  19 |  Note that about 2/3 of the time is spen | True                      | 
+  20 |  the Burrows-Wheeler transformation.  Mu | True                      | 
+  21 |  resulting from cache misses.            | True                      | 
+  22 |                                          | True                      | 
+  23 |  (2010 update by vda: profiled "bzcat <8 | True                      | 
+  24 |  on x86-64 CPU with L2 > 1M: get_next_bl | True                      | 
+  25 |  %time seconds   calls function          | True                      | 
+  26 |  71.01   12.69     444 get_next_block    | True                      | 
+  27 |  28.65    5.12   93065 read_bunzip       | True                      | 
+  28 |  00.22    0.04 7736490 get_bits          | True                      | 
+  29 |  00.11    0.02      47 dealloc_bunzip    | True                      | 
+  30 |  00.00    0.00   93018 full_write        | True                      | 
+  31 |  ...)                                    | True                      | 
+  32 |                                          | True                      | 
+  33 |                                          | True                      | 
+  34 |  I would ask that anyone benefiting from | True                      | 
+  35 |  using it in commercial products, consid | True                      | 
+  36 |  non-profit hospice organization (www.ho | True                      | 
+  37 |  the woman I loved, Toni W. Hagan, who p | True                      | 
+  38 |                                          | True                      | 
+  39 |  Manuel                                  | True                      | 
+  40 |  */                                      | True                      | 
+  41 | #include "libbb.h"                       | True                      | 
+  42 | #include "bb_archive.h"                  | True                      | 
+  43 |                                          | True                      | 
+  44 | #if 0                                    | True                      | 
+  45 | # define dbg(...) bb_error_msg(__VA_ARGS | 0                         | 
+  46 | #else                                    | True                      | 
+  47 | # define dbg(...) ((void)0)              | !0                        | 
+  48 | #endif                                   | True                      | 
+  49 |                                          | True                      | 
+  50 | /* Constants for Huffman coding */       | True                      | 
+  51 | #define MAX_GROUPS          6            | True                      | 
+  52 | #define GROUP_SIZE          50      /* 6 | True                      | 
+  53 | #define MAX_HUFCODE_BITS    20      /* L | True                      | 
+  54 | #define MAX_SYMBOLS         258     /* 2 | True                      | 
+  55 | #define SYMBOL_RUNA         0            | True                      | 
+  56 | #define SYMBOL_RUNB         1            | True                      | 
+  57 |                                          | True                      | 
+  58 | /* Status return values */               | True                      | 
+  59 | #define RETVAL_OK                        | True                      | 
+  60 | #define RETVAL_LAST_BLOCK                | True                      | 
+  61 | #define RETVAL_NOT_BZIP_DATA             | True                      | 
+  62 | #define RETVAL_UNEXPECTED_INPUT_EOF      | True                      | 
+  63 | #define RETVAL_SHORT_WRITE               | True                      | 
+  64 | #define RETVAL_DATA_ERROR                | True                      | 
+  65 | #define RETVAL_OUT_OF_MEMORY             | True                      | 
+  66 | #define RETVAL_OBSOLETE_INPUT            | True                      | 
+  67 |                                          | True                      | 
+  68 | /* Other housekeeping constants */       | True                      | 
+  69 | #define IOBUF_SIZE          4096         | True                      | 
+  70 |                                          | True                      | 
+  71 | /* This is what we know about each Huffm | True                      | 
+  72 | struct group_data {                      | True                      | 
+  73 |  /* We have an extra slot at the end of  | True                      | 
+  74 |  int limit[MAX_HUFCODE_BITS+1], base[MAX | True                      | 
+  75 |  int minLen, maxLen;                     | True                      | 
+  76 | };                                       | True                      | 
+  77 |                                          | True                      | 
+  78 | /* Structure holding all the housekeepin | True                      | 
+  79 |  * memory that persists between calls to | True                      | 
+  80 |  * Found the most used member:           | True                      | 
+  81 |  *  cat this_file.c | sed -e 's/"/ /g' - | True                      | 
+  82 |  *  | grep 'bd->' | sed 's/^.*bd->/bd->/ | True                      | 
+  83 |  * and moved it (inbufBitCount) to offse | True                      | 
+  84 |  */                                      | True                      | 
+  85 | struct bunzip_data {                     | True                      | 
+  86 |  /* I/O tracking data (file handles, buf | True                      | 
+  87 |  unsigned inbufBitCount, inbufBits;      | True                      | 
+  88 |  int in_fd, out_fd, inbufCount, inbufPos | True                      | 
+  89 |  uint8_t *inbuf /*,*outbuf*/;            | True                      | 
+  90 |                                          | True                      | 
+  91 |  /* State for interrupting output loop * | True                      | 
+  92 |  int writeCopies, writePos, writeRunCoun | True                      | 
+  93 |  int writeCurrent; /* actually a uint8_t | True                      | 
+  94 |                                          | True                      | 
+  95 |  /* The CRC values stored in the block h | True                      | 
+  96 |  uint32_t headerCRC, totalCRC, writeCRC; | True                      | 
+  97 |                                          | True                      | 
+  98 |  /* Intermediate buffer and its size (in | True                      | 
+  99 |  uint32_t *dbuf;                         | True                      | 
+ 100 |  unsigned dbufSize;                      | True                      | 
+ 101 |                                          | True                      | 
+ 102 |  /* For I/O error handling */            | True                      | 
+ 103 |  jmp_buf *jmpbuf;                        | True                      | 
+ 104 |                                          | True                      | 
+ 105 |  /* Big things go last (register-relativ | True                      | 
+ 106 |  uint32_t crc32Table[256];               | True                      | 
+ 107 |  uint8_t selectors[32768];  /* nSelector | True                      | 
+ 108 |  struct group_data groups[MAX_GROUPS];   | True                      | 
+ 109 | };                                       | True                      | 
+ 110 | typedef struct bunzip_data bunzip_data;  | True                      | 
+ 111 |                                          | True                      | 
+ 112 |                                          | True                      | 
+ 113 | /* Return the next nnn bits of input.  A | True                      | 
+ 114 |    are done through this function.  All  | True                      | 
+ 115 | static unsigned get_bits(bunzip_data *bd | True                      | 
+ 116 | {                                        | True                      | 
+ 117 |  unsigned bits = 0;                      | True                      | 
+ 118 |  /* Cache bd->inbufBitCount in a CPU reg | True                      | 
+ 119 |  int bit_count = bd->inbufBitCount;      | True                      | 
+ 120 |                                          | True                      | 
+ 121 |  /* If we need to get more data from the | True                      | 
+ 122 |     one byte at a time to enforce endian | True                      | 
+ 123 |  while (bit_count < bits_wanted) {       | True                      | 
+ 124 |                                          | True                      | 
+ 125 |   /* If we need to read more data from f | True                      | 
+ 126 |   if (bd->inbufPos == bd->inbufCount) {  | True                      | 
+ 127 |    /* if "no input fd" case: in_fd == -1 | True                      | 
+ 128 |    bd->inbufCount = read(bd->in_fd, bd-> | True                      | 
+ 129 |    if (bd->inbufCount <= 0)              | True                      | 
+ 130 |     longjmp(*bd->jmpbuf, RETVAL_UNEXPECT | True                      | 
+ 131 |    bd->inbufPos = 0;                     | True                      | 
+ 132 |   }                                      | True                      | 
+ 133 |                                          | True                      | 
+ 134 |   /* Avoid 32-bit overflow (dump bit buf | True                      | 
+ 135 |   if (bit_count >= 24) {                 | True                      | 
+ 136 |    bits = bd->inbufBits & ((1U << bit_co | True                      | 
+ 137 |    bits_wanted -= bit_count;             | True                      | 
+ 138 |    bits <<= bits_wanted;                 | True                      | 
+ 139 |    bit_count = 0;                        | True                      | 
+ 140 |   }                                      | True                      | 
+ 141 |                                          | True                      | 
+ 142 |   /* Grab next 8 bits of input from buff | True                      | 
+ 143 |   bd->inbufBits = (bd->inbufBits << 8) | | True                      | 
+ 144 |   bit_count += 8;                        | True                      | 
+ 145 |  }                                       | True                      | 
+ 146 |                                          | True                      | 
+ 147 |  /* Calculate result */                  | True                      | 
+ 148 |  bit_count -= bits_wanted;               | True                      | 
+ 149 |  bd->inbufBitCount = bit_count;          | True                      | 
+ 150 |  bits |= (bd->inbufBits >> bit_count) &  | True                      | 
+ 151 |                                          | True                      | 
+ 152 |  return bits;                            | True                      | 
+ 153 | }                                        | True                      | 
+ 154 | //#define get_bits(bd, n) (dbg("%d:get_b | True                      | 
+ 155 |                                          | True                      | 
+ 156 | /* Unpacks the next block and sets up fo | True                      | 
+ 157 | static int get_next_block(bunzip_data *b | True                      | 
+ 158 | {                                        | True                      | 
+ 159 |  int groupCount, selector,               | True                      | 
+ 160 |   i, j, symCount, symTotal, nSelectors,  | True                      | 
+ 161 |  uint8_t uc, symToByte[256], mtfSymbol[2 | True                      | 
+ 162 |  uint32_t *dbuf;                         | True                      | 
+ 163 |  unsigned origPtr, t;                    | True                      | 
+ 164 |  unsigned dbufCount, runPos;             | True                      | 
+ 165 |  unsigned runCnt = runCnt; /* for compil | True                      | 
+ 166 |                                          | True                      | 
+ 167 |  dbuf = bd->dbuf;                        | True                      | 
+ 168 |  selectors = bd->selectors;              | True                      | 
+ 169 |                                          | True                      | 
+ 170 | /* In bbox, we are ok with aborting thro | True                      | 
+ 171 | #if 0                                    | True                      | 
+ 172 |  /* Reset longjmp I/O error handling */  | 0                         | 
+ 173 |  i = setjmp(bd->jmpbuf);                 | 0                         | 
+ 174 |  if (i) return i;                        | 0                         | 
+ 175 | #endif                                   | True                      | 
+ 176 |                                          | True                      | 
+ 177 |  /* Read in header signature and CRC, th | True                      | 
+ 178 |     (last block signature means CRC is f | True                      | 
+ 179 |  i = get_bits(bd, 24);                   | True                      | 
+ 180 |  j = get_bits(bd, 24);                   | True                      | 
+ 181 |  bd->headerCRC = get_bits(bd, 32);       | True                      | 
+ 182 |  if ((i == 0x177245) && (j == 0x385090)) | True                      | 
+ 183 |   return RETVAL_LAST_BLOCK;              | True                      | 
+ 184 |  if ((i != 0x314159) || (j != 0x265359)) | True                      | 
+ 185 |   return RETVAL_NOT_BZIP_DATA;           | True                      | 
+ 186 |                                          | True                      | 
+ 187 |  /* We can add support for blockRandomis | True                      | 
+ 188 |     some code for this in busybox 1.0.0- | True                      | 
+ 189 |     it didn't actually work. */          | True                      | 
+ 190 |  if (get_bits(bd, 1))                    | True                      | 
+ 191 |   return RETVAL_OBSOLETE_INPUT;          | True                      | 
+ 192 |  origPtr = get_bits(bd, 24);             | True                      | 
+ 193 |  if (origPtr > bd->dbufSize)             | True                      | 
+ 194 |   return RETVAL_DATA_ERROR;              | True                      | 
+ 195 |                                          | True                      | 
+ 196 |  /* mapping table: if some byte values a | True                      | 
+ 197 |     like ascii text), the compression co | True                      | 
+ 198 |     symbols to deal with, and writes a s | True                      | 
+ 199 |     values were present.  We make a tran | True                      | 
+ 200 |     back to the corresponding bytes. */  | True                      | 
+ 201 |  symTotal = 0;                           | True                      | 
+ 202 |  i = 0;                                  | True                      | 
+ 203 |  t = get_bits(bd, 16);                   | True                      | 
+ 204 |  do {                                    | True                      | 
+ 205 |   if (t & (1 << 15)) {                   | True                      | 
+ 206 |    unsigned inner_map = get_bits(bd, 16) | True                      | 
+ 207 |    do {                                  | True                      | 
+ 208 |     if (inner_map & (1 << 15))           | True                      | 
+ 209 |      symToByte[symTotal++] = i;          | True                      | 
+ 210 |     inner_map <<= 1;                     | True                      | 
+ 211 |     i++;                                 | True                      | 
+ 212 |    } while (i & 15);                     | True                      | 
+ 213 |    i -= 16;                              | True                      | 
+ 214 |   }                                      | True                      | 
+ 215 |   t <<= 1;                               | True                      | 
+ 216 |   i += 16;                               | True                      | 
+ 217 |  } while (i < 256);                      | True                      | 
+ 218 |                                          | True                      | 
+ 219 |  /* How many different Huffman coding gr | True                      | 
+ 220 |  groupCount = get_bits(bd, 3);           | True                      | 
+ 221 |  if (groupCount < 2 || groupCount > MAX_ | True                      | 
+ 222 |   return RETVAL_DATA_ERROR;              | True                      | 
+ 223 |                                          | True                      | 
+ 224 |  /* nSelectors: Every GROUP_SIZE many sy | True                      | 
+ 225 |     group.  Read in the group selector l | True                      | 
+ 226 |     bit runs.  (MTF=Move To Front, as ea | True                      | 
+ 227 |     start of the list.) */               | True                      | 
+ 228 |  for (i = 0; i < groupCount; i++)        | True                      | 
+ 229 |   mtfSymbol[i] = i;                      | True                      | 
+ 230 |  nSelectors = get_bits(bd, 15);          | True                      | 
+ 231 |  if (!nSelectors)                        | True                      | 
+ 232 |   return RETVAL_DATA_ERROR;              | True                      | 
+ 233 |  for (i = 0; i < nSelectors; i++) {      | True                      | 
+ 234 |   uint8_t tmp_byte;                      | True                      | 
+ 235 |   /* Get next value */                   | True                      | 
+ 236 |   int n = 0;                             | True                      | 
+ 237 |   while (get_bits(bd, 1)) {              | True                      | 
+ 238 |    n++;                                  | True                      | 
+ 239 |    if (n >= groupCount)                  | True                      | 
+ 240 |     return RETVAL_DATA_ERROR;            | True                      | 
+ 241 |   }                                      | True                      | 
+ 242 |   /* Decode MTF to get the next selector | True                      | 
+ 243 |   tmp_byte = mtfSymbol[n];               | True                      | 
+ 244 |   while (--n >= 0)                       | True                      | 
+ 245 |    mtfSymbol[n + 1] = mtfSymbol[n];      | True                      | 
+ 246 | //We catch it later, in the second loop  | True                      | 
+ 247 | //Maybe this is a better place, though?  | True                      | 
+ 248 | //  if (tmp_byte >= groupCount) {        | True                      | 
+ 249 | //   dbg("%d: selectors[%d]:%d groupCoun | True                      | 
+ 250 | //     __LINE__, i, tmp_byte, groupCount | True                      | 
+ 251 | //   return RETVAL_DATA_ERROR;           | True                      | 
+ 252 | //  }                                    | True                      | 
+ 253 |   mtfSymbol[0] = selectors[i] = tmp_byte | True                      | 
+ 254 |  }                                       | True                      | 
+ 255 |                                          | True                      | 
+ 256 |  /* Read the Huffman coding tables for e | True                      | 
+ 257 |     literal symbols, plus two run symbol | True                      | 
+ 258 |  symCount = symTotal + 2;                | True                      | 
+ 259 |  for (j = 0; j < groupCount; j++) {      | True                      | 
+ 260 |   uint8_t length[MAX_SYMBOLS];           | True                      | 
+ 261 |   /* 8 bits is ALMOST enough for temp[], | True                      | 
+ 262 |   unsigned temp[MAX_HUFCODE_BITS+1];     | True                      | 
+ 263 |   struct group_data *hufGroup;           | True                      | 
+ 264 |   int *base, *limit;                     | True                      | 
+ 265 |   int minLen, maxLen, pp, len_m1;        | True                      | 
+ 266 |                                          | True                      | 
+ 267 |   /* Read Huffman code lengths for each  | True                      | 
+ 268 |      a way similar to mtf; record a star | True                      | 
+ 269 |      and an offset from the previous val | True                      | 
+ 270 |      (Subtracting 1 before the loop and  | True                      | 
+ 271 |      an optimization that makes the test | True                      | 
+ 272 |      length 0 becomes negative, so an un | True                      | 
+ 273 |   len_m1 = get_bits(bd, 5) - 1;          | True                      | 
+ 274 |   for (i = 0; i < symCount; i++) {       | True                      | 
+ 275 |    for (;;) {                            | True                      | 
+ 276 |     int two_bits;                        | True                      | 
+ 277 |     if ((unsigned)len_m1 > (MAX_HUFCODE_ | True                      | 
+ 278 |      return RETVAL_DATA_ERROR;           | True                      | 
+ 279 |                                          | True                      | 
+ 280 |     /* If first bit is 0, stop.  Else se | True                      | 
+ 281 |        to increment or decrement the val | True                      | 
+ 282 |        bits and unget the second if the  | True                      | 
+ 283 |     two_bits = get_bits(bd, 2);          | True                      | 
+ 284 |     if (two_bits < 2) {                  | True                      | 
+ 285 |      bd->inbufBitCount++;                | True                      | 
+ 286 |      break;                              | True                      | 
+ 287 |     }                                    | True                      | 
+ 288 |                                          | True                      | 
+ 289 |     /* Add one if second bit 1, else sub | True                      | 
+ 290 |     len_m1 += (((two_bits+1) & 2) - 1);  | True                      | 
+ 291 |    }                                     | True                      | 
+ 292 |                                          | True                      | 
+ 293 |    /* Correct for the initial -1, to get | True                      | 
+ 294 |    length[i] = len_m1 + 1;               | True                      | 
+ 295 |   }                                      | True                      | 
+ 296 |                                          | True                      | 
+ 297 |   /* Find largest and smallest lengths i | True                      | 
+ 298 |   minLen = maxLen = length[0];           | True                      | 
+ 299 |   for (i = 1; i < symCount; i++) {       | True                      | 
+ 300 |    if (length[i] > maxLen)               | True                      | 
+ 301 |     maxLen = length[i];                  | True                      | 
+ 302 |    else if (length[i] < minLen)          | True                      | 
+ 303 |     minLen = length[i];                  | True                      | 
+ 304 |   }                                      | True                      | 
+ 305 |                                          | True                      | 
+ 306 |   /* Calculate permute[], base[], and li | True                      | 
+ 307 |    *                                     | True                      | 
+ 308 |    * permute[] is the lookup table for c | True                      | 
+ 309 |    * into decoded symbols.  base[] is th | True                      | 
+ 310 |    * value of a Huffman symbol of a give | True                      | 
+ 311 |    *                                     | True                      | 
+ 312 |    * limit[] indicates the largest numer | True                      | 
+ 313 |    * number of bits can have.  This is h | True                      | 
+ 314 |    * length: each code with a value>limi | True                      | 
+ 315 |    */                                    | True                      | 
+ 316 |   hufGroup = bd->groups + j;             | True                      | 
+ 317 |   hufGroup->minLen = minLen;             | True                      | 
+ 318 |   hufGroup->maxLen = maxLen;             | True                      | 
+ 319 |                                          | True                      | 
+ 320 |   /* Note that minLen can't be smaller t | True                      | 
+ 321 |      and limit array pointers so we're n | True                      | 
+ 322 |      entry.  We do this again when using | True                      | 
+ 323 |   base = hufGroup->base - 1;             | True                      | 
+ 324 |   limit = hufGroup->limit - 1;           | True                      | 
+ 325 |                                          | True                      | 
+ 326 |   /* Calculate permute[].  Concurrently, | True                      | 
+ 327 |   pp = 0;                                | True                      | 
+ 328 |   for (i = minLen; i <= maxLen; i++) {   | True                      | 
+ 329 |    int k;                                | True                      | 
+ 330 |    temp[i] = limit[i] = 0;               | True                      | 
+ 331 |    for (k = 0; k < symCount; k++)        | True                      | 
+ 332 |     if (length[k] == i)                  | True                      | 
+ 333 |      hufGroup->permute[pp++] = k;        | True                      | 
+ 334 |   }                                      | True                      | 
+ 335 |                                          | True                      | 
+ 336 |   /* Count symbols coded for at each bit | True                      | 
+ 337 |   /* NB: in pathological cases, temp[8]  | True                      | 
+ 338 |    * That's why uint8_t is too small for | True                      | 
+ 339 |   for (i = 0; i < symCount; i++)         | True                      | 
+ 340 |    temp[length[i]]++;                    | True                      | 
+ 341 |                                          | True                      | 
+ 342 |   /* Calculate limit[] (the largest symb | True                      | 
+ 343 |    * length, which is (previous limit<<1 | True                      | 
+ 344 |    * base[] (number of symbols to ignore | True                      | 
+ 345 |    * limit minus the cumulative count of | True                      | 
+ 346 |   pp = t = 0;                            | True                      | 
+ 347 |   for (i = minLen; i < maxLen;) {        | True                      | 
+ 348 |    unsigned temp_i = temp[i];            | True                      | 
+ 349 |                                          | True                      | 
+ 350 |    pp += temp_i;                         | True                      | 
+ 351 |                                          | True                      | 
+ 352 |    /* We read the largest possible symbo | True                      | 
+ 353 |       after determining how many we need | True                      | 
+ 354 |       be set to anything.  (They're nois | True                      | 
+ 355 |       each level we're really only inter | True                      | 
+ 356 |       so here we set all the trailing to | True                      | 
+ 357 |       don't affect the value>limit[lengt | True                      | 
+ 358 |    limit[i] = (pp << (maxLen - i)) - 1;  | True                      | 
+ 359 |    pp <<= 1;                             | True                      | 
+ 360 |    t += temp_i;                          | True                      | 
+ 361 |    base[++i] = pp - t;                   | True                      | 
+ 362 |   }                                      | True                      | 
+ 363 |   limit[maxLen] = pp + temp[maxLen] - 1; | True                      | 
+ 364 |   limit[maxLen+1] = INT_MAX; /* Sentinel | True                      | 
+ 365 |   base[minLen] = 0;                      | True                      | 
+ 366 |  }                                       | True                      | 
+ 367 |                                          | True                      | 
+ 368 |  /* We've finished reading and digesting | True                      | 
+ 369 |     block's Huffman coded symbols from t | True                      | 
+ 370 |     and run length encoding, saving the  | True                      | 
+ 371 |                                          | True                      | 
+ 372 |  /* Initialize symbol occurrence counter | True                      | 
+ 373 |  /*memset(byteCount, 0, sizeof(byteCount | True                      | 
+ 374 |  for (i = 0; i < 256; i++) {             | True                      | 
+ 375 |   byteCount[i] = 0;                      | True                      | 
+ 376 |   mtfSymbol[i] = (uint8_t)i;             | True                      | 
+ 377 |  }                                       | True                      | 
+ 378 |                                          | True                      | 
+ 379 |  /* Loop through compressed symbols. */  | True                      | 
+ 380 |                                          | True                      | 
+ 381 |  runPos = dbufCount = selector = 0;      | True                      | 
+ 382 |  for (;;) {                              | True                      | 
+ 383 |   struct group_data *hufGroup;           | True                      | 
+ 384 |   int *base, *limit;                     | True                      | 
+ 385 |   int nextSym;                           | True                      | 
+ 386 |   uint8_t ngrp;                          | True                      | 
+ 387 |                                          | True                      | 
+ 388 |   /* Fetch next Huffman coding group fro | True                      | 
+ 389 |   symCount = GROUP_SIZE - 1;             | True                      | 
+ 390 |   if (selector >= nSelectors)            | True                      | 
+ 391 |    return RETVAL_DATA_ERROR;             | True                      | 
+ 392 |   ngrp = selectors[selector++];          | True                      | 
+ 393 |   if (ngrp >= groupCount) {              | True                      | 
+ 394 |    dbg("%d selectors[%d]:%d groupCount:% | True                      | 
+ 395 |     __LINE__, selector-1, ngrp, groupCou | True                      | 
+ 396 |    return RETVAL_DATA_ERROR;             | True                      | 
+ 397 |   }                                      | True                      | 
+ 398 |   hufGroup = bd->groups + ngrp;          | True                      | 
+ 399 |   base = hufGroup->base - 1;             | True                      | 
+ 400 |   limit = hufGroup->limit - 1;           | True                      | 
+ 401 |                                          | True                      | 
+ 402 |  continue_this_group:                    | True                      | 
+ 403 |   /* Read next Huffman-coded symbol. */  | True                      | 
+ 404 |                                          | True                      | 
+ 405 |   /* Note: It is far cheaper to read max | True                      | 
+ 406 |      to read minLen bits and then add ad | True                      | 
+ 407 |      as we go.  Because there is a trail | True                      | 
+ 408 |      there is no danger of the overread  | True                      | 
+ 409 |      valid compressed file.              | True                      | 
+ 410 |    */                                    | True                      | 
+ 411 |   if (1) {                               | True                      | 
+ 412 |    /* As a further optimization, we do t | True                      | 
+ 413 |       (falling back to a call to get_bit | True                      | 
+ 414 |     */                                   | True                      | 
+ 415 |    int new_cnt;                          | True                      | 
+ 416 |    while ((new_cnt = bd->inbufBitCount - | True                      | 
+ 417 |     /* bd->inbufBitCount < hufGroup->max | True                      | 
+ 418 |     if (bd->inbufPos == bd->inbufCount)  | True                      | 
+ 419 |      nextSym = get_bits(bd, hufGroup->ma | True                      | 
+ 420 |      goto got_huff_bits;                 | True                      | 
+ 421 |     }                                    | True                      | 
+ 422 |     bd->inbufBits = (bd->inbufBits << 8) | True                      | 
+ 423 |     bd->inbufBitCount += 8;              | True                      | 
+ 424 |    };                                    | True                      | 
+ 425 |    bd->inbufBitCount = new_cnt; /* "bd-> | True                      | 
+ 426 |    nextSym = (bd->inbufBits >> new_cnt)  | True                      | 
+ 427 |  got_huff_bits: ;                        | True                      | 
+ 428 |   } else { /* unoptimized equivalent */  | True                      | 
+ 429 |    nextSym = get_bits(bd, hufGroup->maxL | True                      | 
+ 430 |   }                                      | True                      | 
+ 431 |   /* Figure how many bits are in next sy | True                      | 
+ 432 |   i = hufGroup->minLen;                  | True                      | 
+ 433 |   while (nextSym > limit[i])             | True                      | 
+ 434 |    ++i;                                  | True                      | 
+ 435 |   j = hufGroup->maxLen - i;              | True                      | 
+ 436 |   if (j < 0)                             | True                      | 
+ 437 |    return RETVAL_DATA_ERROR;             | True                      | 
+ 438 |   bd->inbufBitCount += j;                | True                      | 
+ 439 |                                          | True                      | 
+ 440 |   /* Huffman decode value to get nextSym | True                      | 
+ 441 |   nextSym = (nextSym >> j) - base[i];    | True                      | 
+ 442 |   if ((unsigned)nextSym >= MAX_SYMBOLS)  | True                      | 
+ 443 |    return RETVAL_DATA_ERROR;             | True                      | 
+ 444 |   nextSym = hufGroup->permute[nextSym];  | True                      | 
+ 445 |                                          | True                      | 
+ 446 |   /* We have now decoded the symbol, whi | True                      | 
+ 447 |      byte, or a repeated run of the most | True                      | 
+ 448 |      check if nextSym indicates a repeat | True                      | 
+ 449 |      how many times to repeat the last l | True                      | 
+ 450 |   if ((unsigned)nextSym <= SYMBOL_RUNB)  | True                      | 
+ 451 |                                          | True                      | 
+ 452 |    /* If this is the start of a new run, | True                      | 
+ 453 |    if (runPos == 0) {                    | True                      | 
+ 454 |     runPos = 1;                          | True                      | 
+ 455 |     runCnt = 0;                          | True                      | 
+ 456 |    }                                     | True                      | 
+ 457 |                                          | True                      | 
+ 458 |    /* Neat trick that saves 1 symbol: in | True                      | 
+ 459 |       each bit position, add 1 or 2 inst | True                      | 
+ 460 |       1011 is 1<<0 + 1<<1 + 2<<2.  1010  | True                      | 
+ 461 |       You can make any bit pattern that  | True                      | 
+ 462 |       the basic or 0/1 method (except al | True                      | 
+ 463 |       symbols, but a run of length 0 doe | True                      | 
+ 464 |       context).  Thus space is saved. */ | True                      | 
+ 465 |    runCnt += (runPos << nextSym); /* +ru | True                      | 
+ 466 | //The 32-bit overflow of runCnt wasn't y | True                      | 
+ 467 | //This would be the fix (catches too lar | True                      | 
+ 468 | //   if (runCnt > bd->dbufSize) {        | True                      | 
+ 469 | //    dbg("runCnt:%u > dbufSize:%u RETVA | True                      | 
+ 470 | //      runCnt, bd->dbufSize);           | True                      | 
+ 471 | //    return RETVAL_DATA_ERROR;          | True                      | 
+ 472 | //   }                                   | True                      | 
+ 473 |    if (runPos < bd->dbufSize) runPos <<= | True                      | 
+ 474 |    goto end_of_huffman_loop;             | True                      | 
+ 475 |   }                                      | True                      | 
+ 476 |                                          | True                      | 
+ 477 |   /* When we hit the first non-run symbo | True                      | 
+ 478 |      how many times to repeat the last l | True                      | 
+ 479 |      copies to our buffer of decoded sym | True                      | 
+ 480 |      literal used is the one at the head | True                      | 
+ 481 |   if (runPos != 0) {                     | True                      | 
+ 482 |    uint8_t tmp_byte;                     | True                      | 
+ 483 |    if (dbufCount + runCnt > bd->dbufSize | True                      | 
+ 484 |     dbg("dbufCount:%u+runCnt:%u %u > dbu | True                      | 
+ 485 |       dbufCount, runCnt, dbufCount + run | True                      | 
+ 486 |     return RETVAL_DATA_ERROR;            | True                      | 
+ 487 |    }                                     | True                      | 
+ 488 |    tmp_byte = symToByte[mtfSymbol[0]];   | True                      | 
+ 489 |    byteCount[tmp_byte] += runCnt;        | True                      | 
+ 490 |    while ((int)--runCnt >= 0)            | True                      | 
+ 491 |     dbuf[dbufCount++] = (uint32_t)tmp_by | True                      | 
+ 492 |    runPos = 0;                           | True                      | 
+ 493 |   }                                      | True                      | 
+ 494 |                                          | True                      | 
+ 495 |   /* Is this the terminating symbol? */  | True                      | 
+ 496 |   if (nextSym > symTotal) break;         | True                      | 
+ 497 |                                          | True                      | 
+ 498 |   /* At this point, nextSym indicates a  | True                      | 
+ 499 |      one to get the position in the MTF  | True                      | 
+ 500 |      currently to be found.  (Note that  | True                      | 
+ 501 |      because 0 and 1 are RUNA and RUNB.  | True                      | 
+ 502 |      first symbol in the mtf array, posi | True                      | 
+ 503 |      as part of a run above.  Therefore  | True                      | 
+ 504 |      2 non-literal nextSym values equals | True                      | 
+ 505 |   if (dbufCount >= bd->dbufSize) return  | True                      | 
+ 506 |   i = nextSym - 1;                       | True                      | 
+ 507 |   uc = mtfSymbol[i];                     | True                      | 
+ 508 |                                          | True                      | 
+ 509 |   /* Adjust the MTF array.  Since we typ | True                      | 
+ 510 |    * small number of symbols, and are bo | True                      | 
+ 511 |    * memmove here would typically be big | True                      | 
+ 512 |    * call overhead and other assorted se | True                      | 
+ 513 |   do {                                   | True                      | 
+ 514 |    mtfSymbol[i] = mtfSymbol[i-1];        | True                      | 
+ 515 |   } while (--i);                         | True                      | 
+ 516 |   mtfSymbol[0] = uc;                     | True                      | 
+ 517 |   uc = symToByte[uc];                    | True                      | 
+ 518 |                                          | True                      | 
+ 519 |   /* We have our literal byte.  Save it  | True                      | 
+ 520 |   byteCount[uc]++;                       | True                      | 
+ 521 |   dbuf[dbufCount++] = (uint32_t)uc;      | True                      | 
+ 522 |                                          | True                      | 
+ 523 |   /* Skip group initialization if we're  | True                      | 
+ 524 |    * this way to avoid compiler warning. | True                      | 
+ 525 |  end_of_huffman_loop:                    | True                      | 
+ 526 |   if (--symCount >= 0) goto continue_thi | True                      | 
+ 527 |  }                                       | True                      | 
+ 528 |                                          | True                      | 
+ 529 |  /* At this point, we've read all the Hu | True                      | 
+ 530 |     runs) for this block from the input  | True                      | 
+ 531 |     intermediate buffer.  There are dbuf | True                      | 
+ 532 |     Now undo the Burrows-Wheeler transfo | True                      | 
+ 533 |     See http://dogma.net/markn/articles/ | True                      | 
+ 534 |   */                                     | True                      | 
+ 535 |                                          | True                      | 
+ 536 |  /* Turn byteCount into cumulative occur | True                      | 
+ 537 |  j = 0;                                  | True                      | 
+ 538 |  for (i = 0; i < 256; i++) {             | True                      | 
+ 539 |   int tmp_count = j + byteCount[i];      | True                      | 
+ 540 |   byteCount[i] = j;                      | True                      | 
+ 541 |   j = tmp_count;                         | True                      | 
+ 542 |  }                                       | True                      | 
+ 543 |                                          | True                      | 
+ 544 |  /* Figure out what order dbuf would be  | True                      | 
+ 545 |  for (i = 0; i < dbufCount; i++) {       | True                      | 
+ 546 |   uint8_t tmp_byte = (uint8_t)dbuf[i];   | True                      | 
+ 547 |   int tmp_count = byteCount[tmp_byte];   | True                      | 
+ 548 |   dbuf[tmp_count] |= (i << 8);           | True                      | 
+ 549 |   byteCount[tmp_byte] = tmp_count + 1;   | True                      | 
+ 550 |  }                                       | True                      | 
+ 551 |                                          | True                      | 
+ 552 |  /* Decode first byte by hand to initial | True                      | 
+ 553 |     doesn't get output, and if the first | True                      | 
+ 554 |     it doesn't qualify as a run (hence w | True                      | 
+ 555 |  if (dbufCount) {                        | True                      | 
+ 556 |   uint32_t tmp;                          | True                      | 
+ 557 |   if ((int)origPtr >= dbufCount) return  | True                      | 
+ 558 |   tmp = dbuf[origPtr];                   | True                      | 
+ 559 |   bd->writeCurrent = (uint8_t)tmp;       | True                      | 
+ 560 |   bd->writePos = (tmp >> 8);             | True                      | 
+ 561 |   bd->writeRunCountdown = 5;             | True                      | 
+ 562 |  }                                       | True                      | 
+ 563 |  bd->writeCount = dbufCount;             | True                      | 
+ 564 |                                          | True                      | 
+ 565 |  return RETVAL_OK;                       | True                      | 
+ 566 | }                                        | True                      | 
+ 567 |                                          | True                      | 
+ 568 | /* Undo Burrows-Wheeler transform on int | True                      | 
+ 569 |    If start_bunzip was initialized with  | True                      | 
+ 570 |    data are written to outbuf.  Return v | True                      | 
+ 571 |    error (all errors are negative number | True                      | 
+ 572 |    are ignored, data is written to out_f | True                      | 
+ 573 |                                          | True                      | 
+ 574 |    NB: read_bunzip returns < 0 on error, | True                      | 
+ 575 |    in outbuf. IOW: on EOF returns len (" | True                      | 
+ 576 |    (Why? This allows to get rid of one l | True                      | 
+ 577 | */                                       | True                      | 
+ 578 | static int read_bunzip(bunzip_data *bd,  | True                      | 
+ 579 | {                                        | True                      | 
+ 580 |  const uint32_t *dbuf;                   | True                      | 
+ 581 |  int pos, current, previous;             | True                      | 
+ 582 |  uint32_t CRC;                           | True                      | 
+ 583 |                                          | True                      | 
+ 584 |  /* If we already have error/end indicat | True                      | 
+ 585 |  if (bd->writeCount < 0)                 | True                      | 
+ 586 |   return bd->writeCount;                 | True                      | 
+ 587 |                                          | True                      | 
+ 588 |  dbuf = bd->dbuf;                        | True                      | 
+ 589 |                                          | True                      | 
+ 590 |  /* Register-cached state (hopefully): * | True                      | 
+ 591 |  pos = bd->writePos;                     | True                      | 
+ 592 |  current = bd->writeCurrent;             | True                      | 
+ 593 |  CRC = bd->writeCRC; /* small loss on x8 | True                      | 
+ 594 |                                          | True                      | 
+ 595 |  /* We will always have pending decoded  | True                      | 
+ 596 |     buffer unless this is the very first | True                      | 
+ 597 |     Huffman-decoded a block into the int | True                      | 
+ 598 |  if (bd->writeCopies) {                  | True                      | 
+ 599 |                                          | True                      | 
+ 600 |  dec_writeCopies:                        | True                      | 
+ 601 |   /* Inside the loop, writeCopies means  | True                      | 
+ 602 |   --bd->writeCopies;                     | True                      | 
+ 603 |                                          | True                      | 
+ 604 |   /* Loop outputting bytes */            | True                      | 
+ 605 |   for (;;) {                             | True                      | 
+ 606 |                                          | True                      | 
+ 607 |    /* If the output buffer is full, save | True                      | 
+ 608 |    if (--len < 0) {                      | True                      | 
+ 609 |     /* Unlikely branch.                  | True                      | 
+ 610 |      * Use of "goto" instead of keeping  | True                      | 
+ 611 |      * helps compiler to realize this. * | True                      | 
+ 612 |     goto outbuf_full;                    | True                      | 
+ 613 |    }                                     | True                      | 
+ 614 |                                          | True                      | 
+ 615 |    /* Write next byte into output buffer | True                      | 
+ 616 |    *outbuf++ = current;                  | True                      | 
+ 617 |    CRC = (CRC << 8) ^ bd->crc32Table[(CR | True                      | 
+ 618 |                                          | True                      | 
+ 619 |    /* Loop now if we're outputting multi | True                      | 
+ 620 |    if (bd->writeCopies) {                | True                      | 
+ 621 |     /* Unlikely branch */                | True                      | 
+ 622 |     /*--bd->writeCopies;*/               | True                      | 
+ 623 |     /*continue;*/                        | True                      | 
+ 624 |     /* Same, but (ab)using other existin | True                      | 
+ 625 |      * (and this if() compiles into just | True                      | 
+ 626 |     goto dec_writeCopies;                | True                      | 
+ 627 |    }                                     | True                      | 
+ 628 |  decode_next_byte:                       | True                      | 
+ 629 |    if (--bd->writeCount < 0)             | True                      | 
+ 630 |     break; /* input block is fully consu | True                      | 
+ 631 |                                          | True                      | 
+ 632 |    /* Follow sequence vector to undo Bur | True                      | 
+ 633 |    previous = current;                   | True                      | 
+ 634 |    pos = dbuf[pos];                      | True                      | 
+ 635 |    current = (uint8_t)pos;               | True                      | 
+ 636 |    pos >>= 8;                            | True                      | 
+ 637 |                                          | True                      | 
+ 638 |    /* After 3 consecutive copies of the  | True                      | 
+ 639 |     * is a repeat count.  We count down  | True                      | 
+ 640 |     * of counting up because testing for | True                      | 
+ 641 |    if (--bd->writeRunCountdown != 0) {   | True                      | 
+ 642 |     if (current != previous)             | True                      | 
+ 643 |      bd->writeRunCountdown = 4;          | True                      | 
+ 644 |    } else {                              | True                      | 
+ 645 |     /* Unlikely branch */                | True                      | 
+ 646 |     /* We have a repeated run, this byte | True                      | 
+ 647 |     bd->writeCopies = current;           | True                      | 
+ 648 |     current = previous;                  | True                      | 
+ 649 |     bd->writeRunCountdown = 5;           | True                      | 
+ 650 |                                          | True                      | 
+ 651 |     /* Sometimes there are just 3 bytes  | True                      | 
+ 652 |     if (!bd->writeCopies) goto decode_ne | True                      | 
+ 653 |                                          | True                      | 
+ 654 |     /* Subtract the 1 copy we'd output a | True                      | 
+ 655 |     --bd->writeCopies;                   | True                      | 
+ 656 |    }                                     | True                      | 
+ 657 |   } /* for (;;) */                       | True                      | 
+ 658 |                                          | True                      | 
+ 659 |   /* Decompression of this input block c | True                      | 
+ 660 |   bd->writeCRC = CRC = ~CRC;             | True                      | 
+ 661 |   bd->totalCRC = ((bd->totalCRC << 1) |  | True                      | 
+ 662 |                                          | True                      | 
+ 663 |   /* If this block had a CRC error, forc | True                      | 
+ 664 |   if (CRC != bd->headerCRC) {            | True                      | 
+ 665 |    bd->totalCRC = bd->headerCRC + 1;     | True                      | 
+ 666 |    return RETVAL_LAST_BLOCK;             | True                      | 
+ 667 |   }                                      | True                      | 
+ 668 |  }                                       | True                      | 
+ 669 |                                          | True                      | 
+ 670 |  /* Refill the intermediate buffer by Hu | True                      | 
+ 671 |  {                                       | True                      | 
+ 672 |   int r = get_next_block(bd);            | True                      | 
+ 673 |   if (r) { /* error/end */               | True                      | 
+ 674 |    bd->writeCount = r;                   | True                      | 
+ 675 |    return (r != RETVAL_LAST_BLOCK) ? r : | True                      | 
+ 676 |   }                                      | True                      | 
+ 677 |  }                                       | True                      | 
+ 678 |                                          | True                      | 
+ 679 |  CRC = ~0;                               | True                      | 
+ 680 |  pos = bd->writePos;                     | True                      | 
+ 681 |  current = bd->writeCurrent;             | True                      | 
+ 682 |  goto decode_next_byte;                  | True                      | 
+ 683 |                                          | True                      | 
+ 684 |  outbuf_full:                            | True                      | 
+ 685 |  /* Output buffer is full, save cached s | True                      | 
+ 686 |  bd->writePos = pos;                     | True                      | 
+ 687 |  bd->writeCurrent = current;             | True                      | 
+ 688 |  bd->writeCRC = CRC;                     | True                      | 
+ 689 |                                          | True                      | 
+ 690 |  bd->writeCopies++;                      | True                      | 
+ 691 |                                          | True                      | 
+ 692 |  return 0;                               | True                      | 
+ 693 | }                                        | True                      | 
+ 694 |                                          | True                      | 
+ 695 | /* Allocate the structure, read file hea | True                      | 
+ 696 |    a complete bunzip file (len bytes lon | True                      | 
+ 697 |    ignored, and data is read from file h | True                      | 
+ 698 |                                          | True                      | 
+ 699 | /* Because bunzip2 is used for help text | True                      | 
+ 700 |    should work for NOFORK applets too, w | True                      | 
+ 701 |    any allocations! */                   | True                      | 
+ 702 | static int FAST_FUNC start_bunzip(       | True                      | 
+ 703 |   void *jmpbuf,                          | True                      | 
+ 704 |   bunzip_data **bdp,                     | True                      | 
+ 705 |   int in_fd,                             | True                      | 
+ 706 |   const void *inbuf, int len)            | True                      | 
+ 707 | {                                        | True                      | 
+ 708 |  bunzip_data *bd;                        | True                      | 
+ 709 |  unsigned i;                             | True                      | 
+ 710 |  enum {                                  | True                      | 
+ 711 |   BZh0 = ('B' << 24) + ('Z' << 16) + ('h | True                      | 
+ 712 |   h0 = ('h' << 8) + '0',                 | True                      | 
+ 713 |  };                                      | True                      | 
+ 714 |                                          | True                      | 
+ 715 |  /* Figure out how much data to allocate | True                      | 
+ 716 |  i = sizeof(bunzip_data);                | True                      | 
+ 717 |  if (in_fd != -1)                        | True                      | 
+ 718 |   i += IOBUF_SIZE;                       | True                      | 
+ 719 |                                          | True                      | 
+ 720 |  /* Allocate bunzip_data.  Most fields i | True                      | 
+ 721 |  bd = *bdp = xzalloc(i);                 | True                      | 
+ 722 |                                          | True                      | 
+ 723 |  bd->jmpbuf = jmpbuf;                    | True                      | 
+ 724 |                                          | True                      | 
+ 725 |  /* Setup input buffer */                | True                      | 
+ 726 |  bd->in_fd = in_fd;                      | True                      | 
+ 727 |  if (-1 == in_fd) {                      | True                      | 
+ 728 |   /* in this case, bd->inbuf is read-onl | True                      | 
+ 729 |   bd->inbuf = (void*)inbuf; /* cast away | True                      | 
+ 730 |  } else {                                | True                      | 
+ 731 |   bd->inbuf = (uint8_t*)(bd + 1);        | True                      | 
+ 732 |   memcpy(bd->inbuf, inbuf, len);         | True                      | 
+ 733 |  }                                       | True                      | 
+ 734 |  bd->inbufCount = len;                   | True                      | 
+ 735 |                                          | True                      | 
+ 736 |  /* Init the CRC32 table (big endian) */ | True                      | 
+ 737 |  crc32_filltable(bd->crc32Table, 1);     | True                      | 
+ 738 |                                          | True                      | 
+ 739 |  /* Ensure that file starts with "BZh['1 | True                      | 
+ 740 |  /* Update: now caller verifies 1st two  | True                      | 
+ 741 |   * integration easier */                | True                      | 
+ 742 |  /* was: */                              | True                      | 
+ 743 |  /* i = get_bits(bd, 32); */             | True                      | 
+ 744 |  /* if ((unsigned)(i - BZh0 - 1) >= 9) r | True                      | 
+ 745 |  i = get_bits(bd, 16);                   | True                      | 
+ 746 |  if ((unsigned)(i - h0 - 1) >= 9) return | True                      | 
+ 747 |                                          | True                      | 
+ 748 |  /* Fourth byte (ascii '1'-'9') indicate | True                      | 
+ 749 |     uncompressed data.  Allocate interme | True                      | 
+ 750 |  /* bd->dbufSize = 100000 * (i - BZh0);  | True                      | 
+ 751 |  bd->dbufSize = 100000 * (i - h0);       | True                      | 
+ 752 |                                          | True                      | 
+ 753 |  /* Cannot use xmalloc - may leak bd in  | True                      | 
+ 754 |  bd->dbuf = malloc_or_warn(bd->dbufSize  | True                      | 
+ 755 |  if (!bd->dbuf) {                        | True                      | 
+ 756 |   free(bd);                              | True                      | 
+ 757 |   xfunc_die();                           | True                      | 
+ 758 |  }                                       | True                      | 
+ 759 |  return RETVAL_OK;                       | True                      | 
+ 760 | }                                        | True                      | 
+ 761 |                                          | True                      | 
+ 762 | static void FAST_FUNC dealloc_bunzip(bun | True                      | 
+ 763 | {                                        | True                      | 
+ 764 |  free(bd->dbuf);                         | True                      | 
+ 765 |  free(bd);                               | True                      | 
+ 766 | }                                        | True                      | 
+ 767 |                                          | True                      | 
+ 768 |                                          | True                      | 
+ 769 | /* Decompress src_fd to dst_fd.  Stops a | True                      | 
+ 770 | IF_DESKTOP(long long) int FAST_FUNC      | True                      | 
+ 771 | unpack_bz2_stream(transformer_state_t *x | True                      | 
+ 772 | {                                        | True                      | 
+ 773 |  IF_DESKTOP(long long total_written = 0; | True                      | 
+ 774 |  bunzip_data *bd;                        | True                      | 
+ 775 |  char *outbuf;                           | True                      | 
+ 776 |  int i;                                  | True                      | 
+ 777 |  unsigned len;                           | True                      | 
+ 778 |                                          | True                      | 
+ 779 |  if (check_signature16(xstate, BZIP2_MAG | True                      | 
+ 780 |   return -1;                             | True                      | 
+ 781 |                                          | True                      | 
+ 782 |  outbuf = xmalloc(IOBUF_SIZE);           | True                      | 
+ 783 |  len = 0;                                | True                      | 
+ 784 |  while (1) { /* "Process one BZ... strea | True                      | 
+ 785 |   jmp_buf jmpbuf;                        | True                      | 
+ 786 |                                          | True                      | 
+ 787 |   /* Setup for I/O error handling via lo | True                      | 
+ 788 |   i = setjmp(jmpbuf);                    | True                      | 
+ 789 |   if (i == 0)                            | True                      | 
+ 790 |    i = start_bunzip(&jmpbuf, &bd, xstate | True                      | 
+ 791 |                                          | True                      | 
+ 792 |   if (i == 0) {                          | True                      | 
+ 793 |    while (1) { /* "Produce some output b | True                      | 
+ 794 |     i = read_bunzip(bd, outbuf, IOBUF_SI | True                      | 
+ 795 |     if (i < 0) /* error? */              | True                      | 
+ 796 |      break;                              | True                      | 
+ 797 |     i = IOBUF_SIZE - i; /* number of byt | True                      | 
+ 798 |     if (i == 0) /* EOF? */               | True                      | 
+ 799 |      break;                              | True                      | 
+ 800 |     if (i != transformer_write(xstate, o | True                      | 
+ 801 |      i = RETVAL_SHORT_WRITE;             | True                      | 
+ 802 |      goto release_mem;                   | True                      | 
+ 803 |     }                                    | True                      | 
+ 804 |     IF_DESKTOP(total_written += i;)      | True                      | 
+ 805 |    }                                     | True                      | 
+ 806 |   }                                      | True                      | 
+ 807 |                                          | True                      | 
+ 808 |   if (i != RETVAL_LAST_BLOCK             | True                      | 
+ 809 |   /* Observed case when i == RETVAL_OK:  | True                      | 
+ 810 |    * "bzcat z.bz2", where "z.bz2" is a b | True                      | 
+ 811 |    * (to be exact, z.bz2 is exactly thes | True                      | 
+ 812 |    * 42 5a 68 39 17 72 45 38 50 90 00 00 | True                      | 
+ 813 |    */                                    | True                      | 
+ 814 |    && i != RETVAL_OK                     | True                      | 
+ 815 |   ) {                                    | True                      | 
+ 816 |    bb_error_msg("bunzip error %d", i);   | True                      | 
+ 817 |    break;                                | True                      | 
+ 818 |   }                                      | True                      | 
+ 819 |   if (bd->headerCRC != bd->totalCRC) {   | True                      | 
+ 820 |    bb_simple_error_msg("CRC error");     | True                      | 
+ 821 |    break;                                | True                      | 
+ 822 |   }                                      | True                      | 
+ 823 |                                          | True                      | 
+ 824 |   /* Successfully unpacked one BZ stream | True                      | 
+ 825 |   i = RETVAL_OK;                         | True                      | 
+ 826 |                                          | True                      | 
+ 827 |   /* Do we have "BZ..." after last proce | True                      | 
+ 828 |    * pbzip2 (parallelized bzip2) produce | True                      | 
+ 829 |    */                                    | True                      | 
+ 830 |   len = bd->inbufCount - bd->inbufPos;   | True                      | 
+ 831 |   memcpy(outbuf, &bd->inbuf[bd->inbufPos | True                      | 
+ 832 |   if (len < 2) {                         | True                      | 
+ 833 |    if (safe_read(xstate->src_fd, outbuf  | True                      | 
+ 834 |     break;                               | True                      | 
+ 835 |    len = 2;                              | True                      | 
+ 836 |   }                                      | True                      | 
+ 837 |   if (*(uint16_t*)outbuf != BZIP2_MAGIC) | True                      | 
+ 838 |    break;                                | True                      | 
+ 839 |   dealloc_bunzip(bd);                    | True                      | 
+ 840 |   len -= 2;                              | True                      | 
+ 841 |  }                                       | True                      | 
+ 842 |                                          | True                      | 
+ 843 |  release_mem:                            | True                      | 
+ 844 |  dealloc_bunzip(bd);                     | True                      | 
+ 845 |  free(outbuf);                           | True                      | 
+ 846 |                                          | True                      | 
+ 847 |  return i ? i : IF_DESKTOP(total_written | True                      | 
+ 848 | }                                        | True                      | 
+ 849 |                                          | True                      | 
+ 850 | char* FAST_FUNC                          | True                      | 
+ 851 | unpack_bz2_data(const char *packed, int  | True                      | 
+ 852 | {                                        | True                      | 
+ 853 |  char *outbuf = NULL;                    | True                      | 
+ 854 |  bunzip_data *bd;                        | True                      | 
+ 855 |  int i;                                  | True                      | 
+ 856 |  jmp_buf jmpbuf;                         | True                      | 
+ 857 |                                          | True                      | 
+ 858 |  /* Setup for I/O error handling via lon | True                      | 
+ 859 |  i = setjmp(jmpbuf);                     | True                      | 
+ 860 |  if (i == 0) {                           | True                      | 
+ 861 |   i = start_bunzip(&jmpbuf,              | True                      | 
+ 862 |    &bd,                                  | True                      | 
+ 863 |    /* src_fd: */ -1,                     | True                      | 
+ 864 |    /* inbuf:  */ packed,                 | True                      | 
+ 865 |    /* len:    */ packed_len              | True                      | 
+ 866 |   );                                     | True                      | 
+ 867 |  }                                       | True                      | 
+ 868 |  /* read_bunzip can longjmp and end up h | True                      | 
+ 869 |   * on read data errors! Not trivial */  | True                      | 
+ 870 |  if (i == 0) {                           | True                      | 
+ 871 |   /* Cannot use xmalloc: will leak bd in | True                      | 
+ 872 |   outbuf = malloc_or_warn(unpacked_len); | True                      | 
+ 873 |   if (outbuf)                            | True                      | 
+ 874 |    read_bunzip(bd, outbuf, unpacked_len) | True                      | 
+ 875 |  }                                       | True                      | 
+ 876 |  dealloc_bunzip(bd);                     | True                      | 
+ 877 |  return outbuf;                          | True                      | 
+ 878 | }                                        | True                      | 
+ 879 |                                          | True                      | 
+ 880 | #ifdef TESTING                           | True                      | 
+ 881 |                                          | (TESTING)                 | 
+ 882 | static char *const bunzip_errors[] = {   | (TESTING)                 | 
+ 883 |  NULL, "Bad file checksum", "Not bzip da | (TESTING)                 | 
+ 884 |  "Unexpected input EOF", "Unexpected out | (TESTING)                 | 
+ 885 |  "Out of memory", "Obsolete (pre 0.9.5)  | (TESTING)                 | 
+ 886 | };                                       | (TESTING)                 | 
+ 887 |                                          | (TESTING)                 | 
+ 888 | /* Dumb little test thing, decompress st | (TESTING)                 | 
+ 889 | int main(int argc, char **argv)          | (TESTING)                 | 
+ 890 | {                                        | (TESTING)                 | 
+ 891 |  char c;                                 | (TESTING)                 | 
+ 892 |                                          | (TESTING)                 | 
+ 893 |  int i = unpack_bz2_stream(0, 1);        | (TESTING)                 | 
+ 894 |  if (i < 0)                              | (TESTING)                 | 
+ 895 |   fprintf(stderr, "%s\n", bunzip_errors[ | (TESTING)                 | 
+ 896 |  else if (read(STDIN_FILENO, &c, 1))     | (TESTING)                 | 
+ 897 |   fprintf(stderr, "Trailing garbage igno | (TESTING)                 | 
+ 898 |  return -i;                              | (TESTING)                 | 
+ 899 | }                                        | (TESTING)                 | 
+ 900 | #endif                                   | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +131MB, 277ms             | 

@@ -1,0 +1,857 @@
+FILE: data/raw/busybox-1.38.0/networking/libiproute/ipaddress.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Authors: Alexey Kuznetsov, <kuznet@ms | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Changes:                              | True                      | 
+   8 |  * Laszlo Valko <valko@linux.karinthy.hu | True                      | 
+   9 |  */                                      | True                      | 
+  10 | #include <fnmatch.h>                     | True                      | 
+  11 | #include <net/if.h>                      | True                      | 
+  12 | #include <net/if_arp.h>                  | True                      | 
+  13 |                                          | True                      | 
+  14 | #include "ip_common.h"  /* #include "lib | True                      | 
+  15 | #include "common_bufsiz.h"               | True                      | 
+  16 | #include "rt_names.h"                    | True                      | 
+  17 | #include "utils.h"                       | True                      | 
+  18 |                                          | True                      | 
+  19 | #ifndef IFF_LOWER_UP                     | True                      | 
+  20 | /* from linux/if.h */                    | !(IFF_LOWER_UP)           | 
+  21 | #define IFF_LOWER_UP  0x10000  /* driver | !(IFF_LOWER_UP)           | 
+  22 | #endif                                   | True                      | 
+  23 |                                          | True                      | 
+  24 | /* for old uclibc */                     | True                      | 
+  25 | #ifndef IFA_F_NOPREFIXROUTE              | True                      | 
+  26 | # define IFA_FLAGS           8           | !(IFA_F_NOPREFIXROUTE)    | 
+  27 | # define IFA_F_NOPREFIXROUTE 0x200       | !(IFA_F_NOPREFIXROUTE)    | 
+  28 | enum { /* can't do this with preporcesso | !(IFA_F_NOPREFIXROUTE)    | 
+  29 |  REAL_IFA_MAX = (IFA_MAX >= IFA_FLAGS) ? | !(IFA_F_NOPREFIXROUTE)    | 
+  30 | };                                       | !(IFA_F_NOPREFIXROUTE)    | 
+  31 | # undef IFA_MAX                          | !(IFA_F_NOPREFIXROUTE)    | 
+  32 | # define IFA_MAX REAL_IFA_MAX            | !(IFA_F_NOPREFIXROUTE)    | 
+  33 | #endif                                   | True                      | 
+  34 |                                          | True                      | 
+  35 | struct filter_t {                        | True                      | 
+  36 |  char *label;                            | True                      | 
+  37 |  /* Flush cmd buf. If !NULL, print_addri | True                      | 
+  38 |  char *flushb;                           | True                      | 
+  39 |  struct rtnl_handle *rth;                | True                      | 
+  40 |  int scope, scopemask;                   | True                      | 
+  41 |  int flags, flagmask;                    | True                      | 
+  42 |  int flushp;                             | True                      | 
+  43 |  int flushe;                             | True                      | 
+  44 |  int ifindex;                            | True                      | 
+  45 |  family_t family;                        | True                      | 
+  46 |  smallint showqueue;                     | True                      | 
+  47 |  /*smallint oneline; - redundant, global | True                      | 
+  48 |  smallint up;                            | True                      | 
+  49 |  /* Misnomer. Does not mean "flushed som | True                      | 
+  50 |  /* More like "flush commands were const | True                      | 
+  51 |  smallint flushed;                       | True                      | 
+  52 |  inet_prefix pfx;                        | True                      | 
+  53 | } FIX_ALIASING;                          | True                      | 
+  54 | typedef struct filter_t filter_t;        | True                      | 
+  55 |                                          | True                      | 
+  56 | #define G_filter (*(filter_t*)bb_common_ | True                      | 
+  57 | #define INIT_G() do { setup_common_bufsi | True                      | 
+  58 |                                          | True                      | 
+  59 | static void print_link_flags(unsigned fl | True                      | 
+  60 | {                                        | True                      | 
+  61 |  static const int flag_masks[] ALIGN_INT | True                      | 
+  62 |   IFF_LOOPBACK, IFF_BROADCAST, IFF_POINT | True                      | 
+  63 |   IFF_MULTICAST, IFF_NOARP, IFF_UP, IFF_ | True                      | 
+  64 |  static const char flag_labels[] ALIGN1  | True                      | 
+  65 |   "LOOPBACK\0""BROADCAST\0""POINTOPOINT\ | True                      | 
+  66 |   "MULTICAST\0""NOARP\0""UP\0""LOWER_UP\ | True                      | 
+  67 |                                          | True                      | 
+  68 |  bb_putchar('<');                        | True                      | 
+  69 |  if (flags & IFF_UP && !(flags & IFF_RUN | True                      | 
+  70 |   printf("NO-CARRIER,");                 | True                      | 
+  71 |  flags &= ~IFF_RUNNING;                  | True                      | 
+  72 | #if 0                                    | True                      | 
+  73 |  _PF(ALLMULTI);                          | 0                         | 
+  74 |  _PF(PROMISC);                           | 0                         | 
+  75 |  _PF(MASTER);                            | 0                         | 
+  76 |  _PF(SLAVE);                             | 0                         | 
+  77 |  _PF(DEBUG);                             | 0                         | 
+  78 |  _PF(DYNAMIC);                           | 0                         | 
+  79 |  _PF(AUTOMEDIA);                         | 0                         | 
+  80 |  _PF(PORTSEL);                           | 0                         | 
+  81 |  _PF(NOTRAILERS);                        | 0                         | 
+  82 | #endif                                   | True                      | 
+  83 |  flags = print_flags_separated(flag_mask | True                      | 
+  84 |  if (flags)                              | True                      | 
+  85 |   printf("%x", flags);                   | True                      | 
+  86 |  if (mdown)                              | True                      | 
+  87 |   printf(",M-DOWN");                     | True                      | 
+  88 |  printf("> ");                           | True                      | 
+  89 | }                                        | True                      | 
+  90 |                                          | True                      | 
+  91 | static void print_queuelen(char *name)   | True                      | 
+  92 | {                                        | True                      | 
+  93 |  struct ifreq ifr;                       | True                      | 
+  94 |  int s;                                  | True                      | 
+  95 |                                          | True                      | 
+  96 |  s = socket(AF_INET, SOCK_STREAM, 0);    | True                      | 
+  97 |  if (s < 0)                              | True                      | 
+  98 |   return;                                | True                      | 
+  99 |                                          | True                      | 
+ 100 |  memset(&ifr, 0, sizeof(ifr));           | True                      | 
+ 101 |  strncpy_IFNAMSIZ(ifr.ifr_name, name);   | True                      | 
+ 102 |  if (ioctl_or_warn(s, SIOCGIFTXQLEN, &if | True                      | 
+ 103 |   close(s);                              | True                      | 
+ 104 |   return;                                | True                      | 
+ 105 |  }                                       | True                      | 
+ 106 |  close(s);                               | True                      | 
+ 107 |                                          | True                      | 
+ 108 |  if (ifr.ifr_qlen)                       | True                      | 
+ 109 |   printf("qlen %d", ifr.ifr_qlen);       | True                      | 
+ 110 | }                                        | True                      | 
+ 111 |                                          | True                      | 
+ 112 | static NOINLINE int print_linkinfo(const | True                      | 
+ 113 | {                                        | True                      | 
+ 114 |  struct ifinfomsg *ifi = NLMSG_DATA(n);  | True                      | 
+ 115 |  struct rtattr *tb[IFLA_MAX+1];          | True                      | 
+ 116 |  int len = n->nlmsg_len;                 | True                      | 
+ 117 |                                          | True                      | 
+ 118 |  if (n->nlmsg_type != RTM_NEWLINK && n-> | True                      | 
+ 119 |   return 0;                              | True                      | 
+ 120 |                                          | True                      | 
+ 121 |  len -= NLMSG_LENGTH(sizeof(*ifi));      | True                      | 
+ 122 |  if (len < 0)                            | True                      | 
+ 123 |   return -1;                             | True                      | 
+ 124 |                                          | True                      | 
+ 125 |  if (G_filter.ifindex && ifi->ifi_index  | True                      | 
+ 126 |   return 0;                              | True                      | 
+ 127 |  if (G_filter.up && !(ifi->ifi_flags & I | True                      | 
+ 128 |   return 0;                              | True                      | 
+ 129 |                                          | True                      | 
+ 130 |  //memset(tb, 0, sizeof(tb)); - parse_rt | True                      | 
+ 131 |  parse_rtattr(tb, IFLA_MAX, IFLA_RTA(ifi | True                      | 
+ 132 |  if (tb[IFLA_IFNAME] == NULL) {          | True                      | 
+ 133 |   bb_simple_error_msg("nil ifname");     | True                      | 
+ 134 |   return -1;                             | True                      | 
+ 135 |  }                                       | True                      | 
+ 136 |  if (G_filter.label                      | True                      | 
+ 137 |   && (!G_filter.family || G_filter.famil | True                      | 
+ 138 |   && fnmatch(G_filter.label, RTA_DATA(tb | True                      | 
+ 139 |  ) {                                     | True                      | 
+ 140 |   return 0;                              | True                      | 
+ 141 |  }                                       | True                      | 
+ 142 |                                          | True                      | 
+ 143 |  if (n->nlmsg_type == RTM_DELLINK)       | True                      | 
+ 144 |   printf("Deleted ");                    | True                      | 
+ 145 |                                          | True                      | 
+ 146 |  printf("%d: %s", ifi->ifi_index,        | True                      | 
+ 147 |   /*tb[IFLA_IFNAME] ? (char*)RTA_DATA(tb | True                      | 
+ 148 |   (char*)RTA_DATA(tb[IFLA_IFNAME])       | True                      | 
+ 149 |  );                                      | True                      | 
+ 150 |                                          | True                      | 
+ 151 |  {                                       | True                      | 
+ 152 |   unsigned m_flag = 0;                   | True                      | 
+ 153 |   if (tb[IFLA_LINK]) {                   | True                      | 
+ 154 |    int iflink = *(int*)RTA_DATA(tb[IFLA_ | True                      | 
+ 155 |    if (iflink == 0)                      | True                      | 
+ 156 |     printf("@NONE: ");                   | True                      | 
+ 157 |    else {                                | True                      | 
+ 158 |     printf("@%s: ", ll_index_to_name(ifl | True                      | 
+ 159 |     m_flag = ll_index_to_flags(iflink);  | True                      | 
+ 160 |     m_flag = !(m_flag & IFF_UP);         | True                      | 
+ 161 |    }                                     | True                      | 
+ 162 |   } else {                               | True                      | 
+ 163 |    printf(": ");                         | True                      | 
+ 164 |   }                                      | True                      | 
+ 165 |   print_link_flags(ifi->ifi_flags, m_fla | True                      | 
+ 166 |  }                                       | True                      | 
+ 167 |                                          | True                      | 
+ 168 |  if (tb[IFLA_MTU])                       | True                      | 
+ 169 |   printf("mtu %u ", *(int*)RTA_DATA(tb[I | True                      | 
+ 170 |  if (tb[IFLA_QDISC])                     | True                      | 
+ 171 |   printf("qdisc %s ", (char*)RTA_DATA(tb | True                      | 
+ 172 | #ifdef IFLA_MASTER                       | True                      | 
+ 173 |  if (tb[IFLA_MASTER]) {                  | (IFLA_MASTER)             | 
+ 174 |   printf("master %s ", ll_index_to_name( | (IFLA_MASTER)             | 
+ 175 |  }                                       | (IFLA_MASTER)             | 
+ 176 | #endif                                   | True                      | 
+ 177 | /* IFLA_OPERSTATE was added to kernel wi | True                      | 
+ 178 | #ifdef IFF_DORMANT                       | True                      | 
+ 179 |  if (tb[IFLA_OPERSTATE]) {               | (IFF_DORMANT)             | 
+ 180 |   static const char operstate_labels[] A | (IFF_DORMANT)             | 
+ 181 |    "UNKNOWN\0""NOTPRESENT\0""DOWN\0""LOW | (IFF_DORMANT)             | 
+ 182 |    "TESTING\0""DORMANT\0""UP\0";         | (IFF_DORMANT)             | 
+ 183 |   printf("state %s ", nth_string(opersta | (IFF_DORMANT)             | 
+ 184 |      *(uint8_t *)RTA_DATA(tb[IFLA_OPERST | (IFF_DORMANT)             | 
+ 185 |  }                                       | (IFF_DORMANT)             | 
+ 186 | #endif                                   | True                      | 
+ 187 |  if (G_filter.showqueue)                 | True                      | 
+ 188 |   print_queuelen((char*)RTA_DATA(tb[IFLA | True                      | 
+ 189 |                                          | True                      | 
+ 190 |  if (!G_filter.family || G_filter.family | True                      | 
+ 191 |   SPRINT_BUF(b1);                        | True                      | 
+ 192 |   printf("%c    link/%s ", _SL_, ll_type | True                      | 
+ 193 |                                          | True                      | 
+ 194 |   if (tb[IFLA_ADDRESS]) {                | True                      | 
+ 195 |    fputs_stdout(ll_addr_n2a(RTA_DATA(tb[ | True                      | 
+ 196 |             RTA_PAYLOAD(tb[IFLA_ADDRESS] | True                      | 
+ 197 |             ifi->ifi_type,               | True                      | 
+ 198 |             b1, sizeof(b1)));            | True                      | 
+ 199 |   }                                      | True                      | 
+ 200 |   if (tb[IFLA_BROADCAST]) {              | True                      | 
+ 201 |    if (ifi->ifi_flags & IFF_POINTOPOINT) | True                      | 
+ 202 |     printf(" peer ");                    | True                      | 
+ 203 |    else                                  | True                      | 
+ 204 |     printf(" brd ");                     | True                      | 
+ 205 |    fputs_stdout(ll_addr_n2a(RTA_DATA(tb[ | True                      | 
+ 206 |             RTA_PAYLOAD(tb[IFLA_BROADCAS | True                      | 
+ 207 |             ifi->ifi_type,               | True                      | 
+ 208 |             b1, sizeof(b1)));            | True                      | 
+ 209 |   }                                      | True                      | 
+ 210 |  }                                       | True                      | 
+ 211 |  bb_putchar('\n');                       | True                      | 
+ 212 |  /*fflush_all();*/                       | True                      | 
+ 213 |  return 0;                               | True                      | 
+ 214 | }                                        | True                      | 
+ 215 |                                          | True                      | 
+ 216 | static int flush_update(void)            | True                      | 
+ 217 | {                                        | True                      | 
+ 218 |  if (rtnl_send_check(G_filter.rth, G_fil | True                      | 
+ 219 |   bb_simple_perror_msg("can't send flush | True                      | 
+ 220 |   return -1;                             | True                      | 
+ 221 |  }                                       | True                      | 
+ 222 |  G_filter.flushp = 0;                    | True                      | 
+ 223 |  return 0;                               | True                      | 
+ 224 | }                                        | True                      | 
+ 225 |                                          | True                      | 
+ 226 | static int FAST_FUNC print_addrinfo(cons | True                      | 
+ 227 |   struct nlmsghdr *n, void *arg UNUSED_P | True                      | 
+ 228 | {                                        | True                      | 
+ 229 |  struct ifaddrmsg *ifa = NLMSG_DATA(n);  | True                      | 
+ 230 |  int len = n->nlmsg_len;                 | True                      | 
+ 231 |  unsigned int ifa_flags;                 | True                      | 
+ 232 |  struct rtattr *rta_tb[IFA_MAX+1];       | True                      | 
+ 233 |                                          | True                      | 
+ 234 |  if (n->nlmsg_type != RTM_NEWADDR && n-> | True                      | 
+ 235 |   return 0;                              | True                      | 
+ 236 |  len -= NLMSG_LENGTH(sizeof(*ifa));      | True                      | 
+ 237 |  if (len < 0) {                          | True                      | 
+ 238 |   bb_error_msg("wrong nlmsg len %d", len | True                      | 
+ 239 |   return -1;                             | True                      | 
+ 240 |  }                                       | True                      | 
+ 241 |                                          | True                      | 
+ 242 |  if (G_filter.flushb && n->nlmsg_type != | True                      | 
+ 243 |   return 0;                              | True                      | 
+ 244 |                                          | True                      | 
+ 245 |  //memset(rta_tb, 0, sizeof(rta_tb)); -  | True                      | 
+ 246 |  parse_rtattr(rta_tb, IFA_MAX, IFA_RTA(i | True                      | 
+ 247 |                                          | True                      | 
+ 248 |  ifa_flags = rta_tb[IFA_FLAGS] ? *(__u32 | True                      | 
+ 249 |                                          | True                      | 
+ 250 |  if (!rta_tb[IFA_LOCAL])                 | True                      | 
+ 251 |   rta_tb[IFA_LOCAL] = rta_tb[IFA_ADDRESS | True                      | 
+ 252 |  if (!rta_tb[IFA_ADDRESS])               | True                      | 
+ 253 |   rta_tb[IFA_ADDRESS] = rta_tb[IFA_LOCAL | True                      | 
+ 254 |                                          | True                      | 
+ 255 |  if (G_filter.ifindex && G_filter.ifinde | True                      | 
+ 256 |   return 0;                              | True                      | 
+ 257 |  if ((G_filter.scope ^ ifa->ifa_scope) & | True                      | 
+ 258 |   return 0;                              | True                      | 
+ 259 |  if ((G_filter.flags ^ ifa_flags) & G_fi | True                      | 
+ 260 |   return 0;                              | True                      | 
+ 261 |  if (G_filter.label) {                   | True                      | 
+ 262 |   const char *label;                     | True                      | 
+ 263 |   if (rta_tb[IFA_LABEL])                 | True                      | 
+ 264 |    label = RTA_DATA(rta_tb[IFA_LABEL]);  | True                      | 
+ 265 |   else                                   | True                      | 
+ 266 |    label = ll_index_to_name(ifa->ifa_ind | True                      | 
+ 267 |   if (fnmatch(G_filter.label, label, 0)  | True                      | 
+ 268 |    return 0;                             | True                      | 
+ 269 |  }                                       | True                      | 
+ 270 |  if (G_filter.pfx.family) {              | True                      | 
+ 271 |   if (rta_tb[IFA_LOCAL]) {               | True                      | 
+ 272 |    inet_prefix dst;                      | True                      | 
+ 273 |    memset(&dst, 0, sizeof(dst));         | True                      | 
+ 274 |    dst.family = ifa->ifa_family;         | True                      | 
+ 275 |    memcpy(&dst.data, RTA_DATA(rta_tb[IFA | True                      | 
+ 276 |    if (inet_addr_match(&dst, &G_filter.p | True                      | 
+ 277 |     return 0;                            | True                      | 
+ 278 |   }                                      | True                      | 
+ 279 |  }                                       | True                      | 
+ 280 |                                          | True                      | 
+ 281 |  if (G_filter.flushb) {                  | True                      | 
+ 282 |   struct nlmsghdr *fn;                   | True                      | 
+ 283 |   if (NLMSG_ALIGN(G_filter.flushp) + n-> | True                      | 
+ 284 |    if (flush_update())                   | True                      | 
+ 285 |     return -1;                           | True                      | 
+ 286 |   }                                      | True                      | 
+ 287 |   fn = (struct nlmsghdr*)(G_filter.flush | True                      | 
+ 288 |   memcpy(fn, n, n->nlmsg_len);           | True                      | 
+ 289 |   fn->nlmsg_type = RTM_DELADDR;          | True                      | 
+ 290 |   fn->nlmsg_flags = NLM_F_REQUEST;       | True                      | 
+ 291 |   fn->nlmsg_seq = ++G_filter.rth->seq;   | True                      | 
+ 292 |   G_filter.flushp = (((char*)fn) + n->nl | True                      | 
+ 293 |   G_filter.flushed = 1;                  | True                      | 
+ 294 |   return 0;                              | True                      | 
+ 295 |  }                                       | True                      | 
+ 296 |                                          | True                      | 
+ 297 |  if (n->nlmsg_type == RTM_DELADDR)       | True                      | 
+ 298 |   printf("Deleted ");                    | True                      | 
+ 299 |                                          | True                      | 
+ 300 |  if (/*G_filter.*/ oneline)              | True                      | 
+ 301 |   printf("%u: %s", ifa->ifa_index, ll_in | True                      | 
+ 302 |  if (ifa->ifa_family == AF_INET)         | True                      | 
+ 303 |   printf("    inet ");                   | True                      | 
+ 304 |  else if (ifa->ifa_family == AF_INET6)   | True                      | 
+ 305 |   printf("    inet6 ");                  | True                      | 
+ 306 |  else                                    | True                      | 
+ 307 |   printf("    family %d ", ifa->ifa_fami | True                      | 
+ 308 |                                          | True                      | 
+ 309 |  if (rta_tb[IFA_LOCAL]) {                | True                      | 
+ 310 |   fputs_stdout(rt_addr_n2a(ifa->ifa_fami | True                      | 
+ 311 |                                          | True                      | 
+ 312 |   if (rta_tb[IFA_ADDRESS] == NULL        | True                      | 
+ 313 |    || memcmp(RTA_DATA(rta_tb[IFA_ADDRESS | True                      | 
+ 314 |   ) {                                    | True                      | 
+ 315 |    printf("/%d ", ifa->ifa_prefixlen);   | True                      | 
+ 316 |   } else {                               | True                      | 
+ 317 |    printf(" peer %s/%d ",                | True                      | 
+ 318 |     rt_addr_n2a(ifa->ifa_family, RTA_DAT | True                      | 
+ 319 |     ifa->ifa_prefixlen                   | True                      | 
+ 320 |    );                                    | True                      | 
+ 321 |   }                                      | True                      | 
+ 322 |  }                                       | True                      | 
+ 323 |                                          | True                      | 
+ 324 |  if (rta_tb[IFA_BROADCAST]) {            | True                      | 
+ 325 |   printf("brd %s ",                      | True                      | 
+ 326 |    rt_addr_n2a(ifa->ifa_family,          | True                      | 
+ 327 |     RTA_DATA(rta_tb[IFA_BROADCAST]))     | True                      | 
+ 328 |   );                                     | True                      | 
+ 329 |  }                                       | True                      | 
+ 330 |  if (rta_tb[IFA_ANYCAST]) {              | True                      | 
+ 331 |   printf("any %s ",                      | True                      | 
+ 332 |    rt_addr_n2a(ifa->ifa_family,          | True                      | 
+ 333 |     RTA_DATA(rta_tb[IFA_ANYCAST]))       | True                      | 
+ 334 |   );                                     | True                      | 
+ 335 |  }                                       | True                      | 
+ 336 |  printf("scope %s ", rtnl_rtscope_n2a(if | True                      | 
+ 337 |  if (ifa_flags & IFA_F_SECONDARY) {      | True                      | 
+ 338 |   ifa_flags &= ~IFA_F_SECONDARY;         | True                      | 
+ 339 |   printf("secondary ");                  | True                      | 
+ 340 |  }                                       | True                      | 
+ 341 |  if (ifa_flags & IFA_F_TENTATIVE) {      | True                      | 
+ 342 |   ifa_flags &= ~IFA_F_TENTATIVE;         | True                      | 
+ 343 |   printf("tentative ");                  | True                      | 
+ 344 |  }                                       | True                      | 
+ 345 |  if (ifa_flags & IFA_F_DADFAILED) {      | True                      | 
+ 346 |   ifa_flags &= ~IFA_F_DADFAILED;         | True                      | 
+ 347 |   printf("dadfailed ");                  | True                      | 
+ 348 |  }                                       | True                      | 
+ 349 |  if (ifa_flags & IFA_F_DEPRECATED) {     | True                      | 
+ 350 |   ifa_flags &= ~IFA_F_DEPRECATED;        | True                      | 
+ 351 |   printf("deprecated ");                 | True                      | 
+ 352 |  }                                       | True                      | 
+ 353 |  if (!(ifa_flags & IFA_F_PERMANENT)) {   | True                      | 
+ 354 |   printf("dynamic ");                    | True                      | 
+ 355 |  } else                                  | True                      | 
+ 356 |   ifa_flags &= ~IFA_F_PERMANENT;         | True                      | 
+ 357 |  if (ifa_flags & IFA_F_NOPREFIXROUTE) {  | True                      | 
+ 358 |   ifa_flags &= ~IFA_F_NOPREFIXROUTE;     | True                      | 
+ 359 |   printf("noprefixroute ");              | True                      | 
+ 360 |  }                                       | True                      | 
+ 361 |  if (ifa_flags)                          | True                      | 
+ 362 |   printf("flags %02x ", ifa_flags);      | True                      | 
+ 363 |  if (rta_tb[IFA_LABEL])                  | True                      | 
+ 364 |   fputs_stdout((char*)RTA_DATA(rta_tb[IF | True                      | 
+ 365 |  if (rta_tb[IFA_CACHEINFO]) {            | True                      | 
+ 366 |   struct ifa_cacheinfo *ci = RTA_DATA(rt | True                      | 
+ 367 |   char buf[128];                         | True                      | 
+ 368 |   bb_putchar(_SL_);                      | True                      | 
+ 369 |   if (ci->ifa_valid == 0xFFFFFFFFU)      | True                      | 
+ 370 |    sprintf(buf, "valid_lft forever");    | True                      | 
+ 371 |   else                                   | True                      | 
+ 372 |    sprintf(buf, "valid_lft %dsec", ci->i | True                      | 
+ 373 |   if (ci->ifa_prefered == 0xFFFFFFFFU)   | True                      | 
+ 374 |    sprintf(buf+strlen(buf), " preferred_ | True                      | 
+ 375 |   else                                   | True                      | 
+ 376 |    sprintf(buf+strlen(buf), " preferred_ | True                      | 
+ 377 |   printf("       %s", buf);              | True                      | 
+ 378 |  }                                       | True                      | 
+ 379 |  bb_putchar('\n');                       | True                      | 
+ 380 |  /*fflush_all();*/                       | True                      | 
+ 381 |  return 0;                               | True                      | 
+ 382 | }                                        | True                      | 
+ 383 |                                          | True                      | 
+ 384 |                                          | True                      | 
+ 385 | struct nlmsg_list {                      | True                      | 
+ 386 |  struct nlmsg_list *next;                | True                      | 
+ 387 |  struct nlmsghdr   h;                    | True                      | 
+ 388 | };                                       | True                      | 
+ 389 |                                          | True                      | 
+ 390 | static int print_selected_addrinfo(int i | True                      | 
+ 391 | {                                        | True                      | 
+ 392 |  for (; ainfo; ainfo = ainfo->next) {    | True                      | 
+ 393 |   struct nlmsghdr *n = &ainfo->h;        | True                      | 
+ 394 |   struct ifaddrmsg *ifa = NLMSG_DATA(n); | True                      | 
+ 395 |                                          | True                      | 
+ 396 |   if (n->nlmsg_type != RTM_NEWADDR)      | True                      | 
+ 397 |    continue;                             | True                      | 
+ 398 |   if (n->nlmsg_len < NLMSG_LENGTH(sizeof | True                      | 
+ 399 |    return -1;                            | True                      | 
+ 400 |   if (ifa->ifa_index != ifindex          | True                      | 
+ 401 |    || (G_filter.family && G_filter.famil | True                      | 
+ 402 |   ) {                                    | True                      | 
+ 403 |    continue;                             | True                      | 
+ 404 |   }                                      | True                      | 
+ 405 |   print_addrinfo(NULL, n, NULL);         | True                      | 
+ 406 |  }                                       | True                      | 
+ 407 |  return 0;                               | True                      | 
+ 408 | }                                        | True                      | 
+ 409 |                                          | True                      | 
+ 410 |                                          | True                      | 
+ 411 | static int FAST_FUNC store_nlmsg(const s | True                      | 
+ 412 | {                                        | True                      | 
+ 413 |  struct nlmsg_list **linfo = (struct nlm | True                      | 
+ 414 |  struct nlmsg_list *h;                   | True                      | 
+ 415 |  struct nlmsg_list **lp;                 | True                      | 
+ 416 |                                          | True                      | 
+ 417 |  h = xzalloc(n->nlmsg_len + sizeof(void* | True                      | 
+ 418 |                                          | True                      | 
+ 419 |  memcpy(&h->h, n, n->nlmsg_len);         | True                      | 
+ 420 |  /*h->next = NULL; - xzalloc did it */   | True                      | 
+ 421 |                                          | True                      | 
+ 422 |  for (lp = linfo; *lp; lp = &(*lp)->next | True                      | 
+ 423 |   continue;                              | True                      | 
+ 424 |  *lp = h;                                | True                      | 
+ 425 |                                          | True                      | 
+ 426 |  ll_remember_index(who, n, NULL);        | True                      | 
+ 427 |  return 0;                               | True                      | 
+ 428 | }                                        | True                      | 
+ 429 |                                          | True                      | 
+ 430 | static void ipaddr_reset_filter(void /*i | True                      | 
+ 431 | {                                        | True                      | 
+ 432 |  memset(&G_filter, 0, sizeof(G_filter)); | True                      | 
+ 433 |  /*G_filter.oneline = _oneline;*/        | True                      | 
+ 434 | }                                        | True                      | 
+ 435 |                                          | True                      | 
+ 436 | /* Return value becomes exitcode. It's o | True                      | 
+ 437 | int FAST_FUNC ipaddr_list_or_flush(char  | True                      | 
+ 438 | {                                        | True                      | 
+ 439 |  static const char option[] ALIGN1 = "to | True                      | 
+ 440 |                                          | True                      | 
+ 441 |  struct nlmsg_list *linfo = NULL;        | True                      | 
+ 442 |  struct nlmsg_list *ainfo = NULL;        | True                      | 
+ 443 |  struct nlmsg_list *l;                   | True                      | 
+ 444 |  struct rtnl_handle rth;                 | True                      | 
+ 445 |  char *filter_dev = NULL;                | True                      | 
+ 446 |                                          | True                      | 
+ 447 |  ipaddr_reset_filter(/*oneline*/);       | True                      | 
+ 448 |  G_filter.showqueue = 1;                 | True                      | 
+ 449 |                                          | True                      | 
+ 450 |  if (G_filter.family == AF_UNSPEC)       | True                      | 
+ 451 |   G_filter.family = preferred_family;    | True                      | 
+ 452 |                                          | True                      | 
+ 453 |  if (flush) {                            | True                      | 
+ 454 |   if (!*argv) {                          | True                      | 
+ 455 |    bb_error_msg_and_die(bb_msg_requires_ | True                      | 
+ 456 |   }                                      | True                      | 
+ 457 |   if (G_filter.family == AF_PACKET) {    | True                      | 
+ 458 |    bb_simple_error_msg_and_die("can't fl | True                      | 
+ 459 |   }                                      | True                      | 
+ 460 |  }                                       | True                      | 
+ 461 |                                          | True                      | 
+ 462 |  while (*argv) {                         | True                      | 
+ 463 |   const smalluint key = index_in_strings | True                      | 
+ 464 |   if (key == 0) { /* to */               | True                      | 
+ 465 |    NEXT_ARG();                           | True                      | 
+ 466 |    get_prefix(&G_filter.pfx, *argv, G_fi | True                      | 
+ 467 |    if (G_filter.family == AF_UNSPEC) {   | True                      | 
+ 468 |     G_filter.family = G_filter.pfx.famil | True                      | 
+ 469 |    }                                     | True                      | 
+ 470 |   } else if (key == 1) { /* scope */     | True                      | 
+ 471 |    uint32_t scope = 0;                   | True                      | 
+ 472 |    NEXT_ARG();                           | True                      | 
+ 473 |    G_filter.scopemask = -1;              | True                      | 
+ 474 |    if (rtnl_rtscope_a2n(&scope, *argv))  | True                      | 
+ 475 |     if (strcmp(*argv, "all") != 0) {     | True                      | 
+ 476 |      invarg_1_to_2(*argv, "scope");      | True                      | 
+ 477 |     }                                    | True                      | 
+ 478 |     scope = RT_SCOPE_NOWHERE;            | True                      | 
+ 479 |     G_filter.scopemask = 0;              | True                      | 
+ 480 |    }                                     | True                      | 
+ 481 |    G_filter.scope = scope;               | True                      | 
+ 482 |   } else if (key == 2) { /* up */        | True                      | 
+ 483 |    G_filter.up = 1;                      | True                      | 
+ 484 |   } else if (key == 3) { /* label */     | True                      | 
+ 485 |    NEXT_ARG();                           | True                      | 
+ 486 |    G_filter.label = *argv;               | True                      | 
+ 487 |   } else {                               | True                      | 
+ 488 |    if (key == 4) /* dev */               | True                      | 
+ 489 |     NEXT_ARG();                          | True                      | 
+ 490 |    if (filter_dev)                       | True                      | 
+ 491 |     duparg2("dev", *argv);               | True                      | 
+ 492 |    filter_dev = *argv;                   | True                      | 
+ 493 |   }                                      | True                      | 
+ 494 |   argv++;                                | True                      | 
+ 495 |  }                                       | True                      | 
+ 496 |                                          | True                      | 
+ 497 |  xrtnl_open(&rth);                       | True                      | 
+ 498 |                                          | True                      | 
+ 499 |  xrtnl_wilddump_request(&rth, preferred_ | True                      | 
+ 500 |  xrtnl_dump_filter(&rth, store_nlmsg, &l | True                      | 
+ 501 |                                          | True                      | 
+ 502 |  if (filter_dev) {                       | True                      | 
+ 503 |   G_filter.ifindex = xll_name_to_index(f | True                      | 
+ 504 |  }                                       | True                      | 
+ 505 |                                          | True                      | 
+ 506 |  if (flush) {                            | True                      | 
+ 507 |   char flushb[4096-512];                 | True                      | 
+ 508 |                                          | True                      | 
+ 509 |   G_filter.flushb = flushb;              | True                      | 
+ 510 |   G_filter.flushp = 0;                   | True                      | 
+ 511 |   G_filter.flushe = sizeof(flushb);      | True                      | 
+ 512 |   G_filter.rth = &rth;                   | True                      | 
+ 513 |                                          | True                      | 
+ 514 |   for (;;) {                             | True                      | 
+ 515 |    xrtnl_wilddump_request(&rth, G_filter | True                      | 
+ 516 |    G_filter.flushed = 0;                 | True                      | 
+ 517 |    xrtnl_dump_filter(&rth, print_addrinf | True                      | 
+ 518 |    if (G_filter.flushed == 0) {          | True                      | 
+ 519 |     return 0;                            | True                      | 
+ 520 |    }                                     | True                      | 
+ 521 |    if (flush_update() < 0) {             | True                      | 
+ 522 |     return 1;                            | True                      | 
+ 523 |    }                                     | True                      | 
+ 524 |   }                                      | True                      | 
+ 525 |  }                                       | True                      | 
+ 526 |                                          | True                      | 
+ 527 |  if (G_filter.family != AF_PACKET) {     | True                      | 
+ 528 |   xrtnl_wilddump_request(&rth, G_filter. | True                      | 
+ 529 |   xrtnl_dump_filter(&rth, store_nlmsg, & | True                      | 
+ 530 |  }                                       | True                      | 
+ 531 |                                          | True                      | 
+ 532 |  if (G_filter.family && G_filter.family  | True                      | 
+ 533 |   struct nlmsg_list **lp;                | True                      | 
+ 534 |   lp = &linfo;                           | True                      | 
+ 535 |                                          | True                      | 
+ 536 |   while ((l = *lp) != NULL) {            | True                      | 
+ 537 |    int ok = 0;                           | True                      | 
+ 538 |    struct ifinfomsg *ifi = NLMSG_DATA(&l | True                      | 
+ 539 |    struct nlmsg_list *a;                 | True                      | 
+ 540 |                                          | True                      | 
+ 541 |    for (a = ainfo; a; a = a->next) {     | True                      | 
+ 542 |     struct nlmsghdr *n = &a->h;          | True                      | 
+ 543 |     struct ifaddrmsg *ifa = NLMSG_DATA(n | True                      | 
+ 544 |                                          | True                      | 
+ 545 |     if (ifa->ifa_index != ifi->ifi_index | True                      | 
+ 546 |      || (G_filter.family && G_filter.fam | True                      | 
+ 547 |     ) {                                  | True                      | 
+ 548 |      continue;                           | True                      | 
+ 549 |     }                                    | True                      | 
+ 550 |     if ((G_filter.scope ^ ifa->ifa_scope | True                      | 
+ 551 |      continue;                           | True                      | 
+ 552 |     if ((G_filter.flags ^ ifa->ifa_flags | True                      | 
+ 553 |      continue;                           | True                      | 
+ 554 |     if (G_filter.pfx.family || G_filter. | True                      | 
+ 555 |      struct rtattr *tb[IFA_MAX+1];       | True                      | 
+ 556 |      //memset(tb, 0, sizeof(tb)); - pars | True                      | 
+ 557 |      parse_rtattr(tb, IFA_MAX, IFA_RTA(i | True                      | 
+ 558 |      if (!tb[IFA_LOCAL])                 | True                      | 
+ 559 |       tb[IFA_LOCAL] = tb[IFA_ADDRESS];   | True                      | 
+ 560 |                                          | True                      | 
+ 561 |      if (G_filter.pfx.family && tb[IFA_L | True                      | 
+ 562 |       inet_prefix dst;                   | True                      | 
+ 563 |       memset(&dst, 0, sizeof(dst));      | True                      | 
+ 564 |       dst.family = ifa->ifa_family;      | True                      | 
+ 565 |       memcpy(&dst.data, RTA_DATA(tb[IFA_ | True                      | 
+ 566 |       if (inet_addr_match(&dst, &G_filte | True                      | 
+ 567 |        continue;                         | True                      | 
+ 568 |      }                                   | True                      | 
+ 569 |      if (G_filter.label) {               | True                      | 
+ 570 |       const char *label;                 | True                      | 
+ 571 |       if (tb[IFA_LABEL])                 | True                      | 
+ 572 |        label = RTA_DATA(tb[IFA_LABEL]);  | True                      | 
+ 573 |       else                               | True                      | 
+ 574 |        label = ll_index_to_name(ifa->ifa | True                      | 
+ 575 |       if (fnmatch(G_filter.label, label, | True                      | 
+ 576 |        continue;                         | True                      | 
+ 577 |      }                                   | True                      | 
+ 578 |     }                                    | True                      | 
+ 579 |                                          | True                      | 
+ 580 |     ok = 1;                              | True                      | 
+ 581 |     break;                               | True                      | 
+ 582 |    }                                     | True                      | 
+ 583 |    if (!ok)                              | True                      | 
+ 584 |     *lp = l->next;                       | True                      | 
+ 585 |    else                                  | True                      | 
+ 586 |     lp = &l->next;                       | True                      | 
+ 587 |   }                                      | True                      | 
+ 588 |  }                                       | True                      | 
+ 589 |                                          | True                      | 
+ 590 |  for (l = linfo; l; l = l->next) {       | True                      | 
+ 591 |   if ((oneline && G_filter.family != AF_ | True                      | 
+ 592 |   /* ^^^^^^^^^ "ip -oneline a" does not  | True                      | 
+ 593 |    || (print_linkinfo(&l->h) == 0)       | True                      | 
+ 594 |   ) {                                    | True                      | 
+ 595 |    struct ifinfomsg *ifi = NLMSG_DATA(&l | True                      | 
+ 596 |    if (G_filter.family != AF_PACKET)     | True                      | 
+ 597 |     print_selected_addrinfo(ifi->ifi_ind | True                      | 
+ 598 |   }                                      | True                      | 
+ 599 |  }                                       | True                      | 
+ 600 |                                          | True                      | 
+ 601 |  return 0;                               | True                      | 
+ 602 | }                                        | True                      | 
+ 603 |                                          | True                      | 
+ 604 | static void set_lifetime(unsigned int *l | True                      | 
+ 605 | {                                        | True                      | 
+ 606 |  if (strcmp(argv, "forever") == 0)       | True                      | 
+ 607 |   *lifetime = INFINITY_LIFE_TIME;        | True                      | 
+ 608 |  else                                    | True                      | 
+ 609 |   *lifetime = get_u32(argv, errmsg);     | True                      | 
+ 610 | }                                        | True                      | 
+ 611 |                                          | True                      | 
+ 612 | static int default_scope(inet_prefix *lc | True                      | 
+ 613 | {                                        | True                      | 
+ 614 |  if (lcl->family == AF_INET) {           | True                      | 
+ 615 |   if (lcl->bytelen >= 1 && *(uint8_t*)&l | True                      | 
+ 616 |    return RT_SCOPE_HOST;                 | True                      | 
+ 617 |  }                                       | True                      | 
+ 618 |  return 0;                               | True                      | 
+ 619 | }                                        | True                      | 
+ 620 |                                          | True                      | 
+ 621 | /* Return value becomes exitcode. It's o | True                      | 
+ 622 | static int ipaddr_modify(int cmd, int fl | True                      | 
+ 623 | {                                        | True                      | 
+ 624 |  /* If you add stuff here, update ipaddr | True                      | 
+ 625 |  static const char option[] ALIGN1 =     | True                      | 
+ 626 |   "peer\0""remote\0""broadcast\0""brd\0" | True                      | 
+ 627 |   "anycast\0""valid_lft\0""preferred_lft | True                      | 
+ 628 |   "scope\0""dev\0""label\0""noprefixrout | True                      | 
+ 629 | #define option_peer      option          | True                      | 
+ 630 | #define option_broadcast (option         | True                      | 
+ 631 | #define option_anycast   (option_broadca | True                      | 
+ 632 | #define option_valid_lft (option_anycast | True                      | 
+ 633 | #define option_pref_lft  (option_valid_l | True                      | 
+ 634 |  struct rtnl_handle rth;                 | True                      | 
+ 635 |  struct {                                | True                      | 
+ 636 |   struct nlmsghdr  n;                    | True                      | 
+ 637 |   struct ifaddrmsg ifa;                  | True                      | 
+ 638 |   char             buf[256];             | True                      | 
+ 639 |  } req;                                  | True                      | 
+ 640 |  char *d = NULL;                         | True                      | 
+ 641 |  char *l = NULL;                         | True                      | 
+ 642 |  char *valid_lftp = NULL;                | True                      | 
+ 643 |  char *preferred_lftp = NULL;            | True                      | 
+ 644 |  inet_prefix lcl;                        | True                      | 
+ 645 |  inet_prefix peer;                       | True                      | 
+ 646 |  int local_len = 0;                      | True                      | 
+ 647 |  int peer_len = 0;                       | True                      | 
+ 648 |  int brd_len = 0;                        | True                      | 
+ 649 |  int any_len = 0;                        | True                      | 
+ 650 |  bool scoped = 0;                        | True                      | 
+ 651 |  __u32 valid_lft = INFINITY_LIFE_TIME;   | True                      | 
+ 652 |  __u32 preferred_lft = INFINITY_LIFE_TIM | True                      | 
+ 653 |  unsigned int ifa_flags = 0;             | True                      | 
+ 654 |                                          | True                      | 
+ 655 |  memset(&req, 0, sizeof(req));           | True                      | 
+ 656 |                                          | True                      | 
+ 657 |  req.n.nlmsg_len = NLMSG_LENGTH(sizeof(s | True                      | 
+ 658 |  req.n.nlmsg_flags = NLM_F_REQUEST | fla | True                      | 
+ 659 |  req.n.nlmsg_type = cmd;                 | True                      | 
+ 660 |  req.ifa.ifa_family = preferred_family;  | True                      | 
+ 661 |                                          | True                      | 
+ 662 |  while (*argv) {                         | True                      | 
+ 663 |   unsigned arg = index_in_strings(option | True                      | 
+ 664 |   /* if search fails, "local" is assumed | True                      | 
+ 665 |                                          | True                      | 
+ 666 |   if (arg <= 1) { /* peer, remote */     | True                      | 
+ 667 |    NEXT_ARG();                           | True                      | 
+ 668 |    if (peer_len) {                       | True                      | 
+ 669 |     duparg(option_peer, *argv);          | True                      | 
+ 670 |    }                                     | True                      | 
+ 671 |    get_prefix(&peer, *argv, req.ifa.ifa_ | True                      | 
+ 672 |    peer_len = peer.bytelen;              | True                      | 
+ 673 |    if (req.ifa.ifa_family == AF_UNSPEC)  | True                      | 
+ 674 |     req.ifa.ifa_family = peer.family;    | True                      | 
+ 675 |    }                                     | True                      | 
+ 676 |    addattr_l(&req.n, sizeof(req), IFA_AD | True                      | 
+ 677 |    req.ifa.ifa_prefixlen = peer.bitlen;  | True                      | 
+ 678 |   } else if (arg <= 3) { /* broadcast, b | True                      | 
+ 679 |    inet_prefix addr;                     | True                      | 
+ 680 |    NEXT_ARG();                           | True                      | 
+ 681 |    if (brd_len) {                        | True                      | 
+ 682 |     duparg(option_broadcast, *argv);     | True                      | 
+ 683 |    }                                     | True                      | 
+ 684 |    if (LONE_CHAR(*argv, '+')) {          | True                      | 
+ 685 |     brd_len = -1;                        | True                      | 
+ 686 |    } else if (LONE_DASH(*argv)) {        | True                      | 
+ 687 |     brd_len = -2;                        | True                      | 
+ 688 |    } else {                              | True                      | 
+ 689 |     get_addr(&addr, *argv, req.ifa.ifa_f | True                      | 
+ 690 |     if (req.ifa.ifa_family == AF_UNSPEC) | True                      | 
+ 691 |      req.ifa.ifa_family = addr.family;   | True                      | 
+ 692 |     addattr_l(&req.n, sizeof(req), IFA_B | True                      | 
+ 693 |     brd_len = addr.bytelen;              | True                      | 
+ 694 |    }                                     | True                      | 
+ 695 |   } else if (arg == 4) { /* anycast */   | True                      | 
+ 696 |    inet_prefix addr;                     | True                      | 
+ 697 |    NEXT_ARG();                           | True                      | 
+ 698 |    if (any_len) {                        | True                      | 
+ 699 |     duparg(option_anycast, *argv);       | True                      | 
+ 700 |    }                                     | True                      | 
+ 701 |    get_addr(&addr, *argv, req.ifa.ifa_fa | True                      | 
+ 702 |    if (req.ifa.ifa_family == AF_UNSPEC)  | True                      | 
+ 703 |     req.ifa.ifa_family = addr.family;    | True                      | 
+ 704 |    }                                     | True                      | 
+ 705 |    addattr_l(&req.n, sizeof(req), IFA_AN | True                      | 
+ 706 |    any_len = addr.bytelen;               | True                      | 
+ 707 |   } else if (arg == 5) { /* valid_lft */ | True                      | 
+ 708 |    if (valid_lftp)                       | True                      | 
+ 709 |     duparg(option_valid_lft, *argv);     | True                      | 
+ 710 |    NEXT_ARG();                           | True                      | 
+ 711 |    valid_lftp = *argv;                   | True                      | 
+ 712 |    set_lifetime(&valid_lft, *argv, optio | True                      | 
+ 713 |   } else if (arg == 6) { /* preferred_lf | True                      | 
+ 714 |    if (preferred_lftp)                   | True                      | 
+ 715 |     duparg(option_pref_lft, *argv);      | True                      | 
+ 716 |    NEXT_ARG();                           | True                      | 
+ 717 |    preferred_lftp = *argv;               | True                      | 
+ 718 |    set_lifetime(&preferred_lft, *argv, o | True                      | 
+ 719 |   } else if (arg == 7) { /* scope */     | True                      | 
+ 720 |    uint32_t scope = 0;                   | True                      | 
+ 721 |    NEXT_ARG();                           | True                      | 
+ 722 |    if (rtnl_rtscope_a2n(&scope, *argv))  | True                      | 
+ 723 |     invarg_1_to_2(*argv, "scope");       | True                      | 
+ 724 |    }                                     | True                      | 
+ 725 |    req.ifa.ifa_scope = scope;            | True                      | 
+ 726 |    scoped = 1;                           | True                      | 
+ 727 |   } else if (arg == 8) { /* dev */       | True                      | 
+ 728 |    NEXT_ARG();                           | True                      | 
+ 729 |    d = *argv;                            | True                      | 
+ 730 |   } else if (arg == 9) { /* label */     | True                      | 
+ 731 |    NEXT_ARG();                           | True                      | 
+ 732 |    l = *argv;                            | True                      | 
+ 733 |    addattr_l(&req.n, sizeof(req), IFA_LA | True                      | 
+ 734 |   } else if (arg == 10) { /* noprefixrou | True                      | 
+ 735 |    ifa_flags |= IFA_F_NOPREFIXROUTE;     | True                      | 
+ 736 |   } else {                               | True                      | 
+ 737 |    /* local (specified or assumed) */    | True                      | 
+ 738 |    if ((int)arg >= 0)                    | True                      | 
+ 739 |     NEXT_ARG();                          | True                      | 
+ 740 |    if (local_len) {                      | True                      | 
+ 741 |     duparg2("local", *argv);             | True                      | 
+ 742 |    }                                     | True                      | 
+ 743 |    get_prefix(&lcl, *argv, req.ifa.ifa_f | True                      | 
+ 744 |    if (req.ifa.ifa_family == AF_UNSPEC)  | True                      | 
+ 745 |     req.ifa.ifa_family = lcl.family;     | True                      | 
+ 746 |    }                                     | True                      | 
+ 747 |    addattr_l(&req.n, sizeof(req), IFA_LO | True                      | 
+ 748 |    local_len = lcl.bytelen;              | True                      | 
+ 749 |   }                                      | True                      | 
+ 750 |   argv++;                                | True                      | 
+ 751 |  }                                       | True                      | 
+ 752 |                                          | True                      | 
+ 753 |  if (ifa_flags <= 0xff)                  | True                      | 
+ 754 |   req.ifa.ifa_flags = ifa_flags;         | True                      | 
+ 755 |  else                                    | True                      | 
+ 756 |   addattr32(&req.n, sizeof(req), IFA_FLA | True                      | 
+ 757 |                                          | True                      | 
+ 758 |  if (!d) {                               | True                      | 
+ 759 |   /* There was no "dev IFACE", but we ne | True                      | 
+ 760 |   bb_simple_error_msg_and_die("need \"de | True                      | 
+ 761 |  }                                       | True                      | 
+ 762 |  if (l && !is_prefixed_with(l, d)) {     | True                      | 
+ 763 |   bb_error_msg_and_die("\"dev\" (%s) mus | True                      | 
+ 764 |  }                                       | True                      | 
+ 765 |                                          | True                      | 
+ 766 |  if (peer_len == 0 && local_len && cmd ! | True                      | 
+ 767 |   peer = lcl;                            | True                      | 
+ 768 |   addattr_l(&req.n, sizeof(req), IFA_ADD | True                      | 
+ 769 |  }                                       | True                      | 
+ 770 |  if (req.ifa.ifa_prefixlen == 0)         | True                      | 
+ 771 |   req.ifa.ifa_prefixlen = lcl.bitlen;    | True                      | 
+ 772 |                                          | True                      | 
+ 773 |  if (brd_len < 0 && cmd != RTM_DELADDR)  | True                      | 
+ 774 |   inet_prefix brd;                       | True                      | 
+ 775 |   int i;                                 | True                      | 
+ 776 |   if (req.ifa.ifa_family != AF_INET) {   | True                      | 
+ 777 |    bb_simple_error_msg_and_die("broadcas | True                      | 
+ 778 |   }                                      | True                      | 
+ 779 |   brd = peer;                            | True                      | 
+ 780 |   if (brd.bitlen <= 30) {                | True                      | 
+ 781 |    for (i = 31; i >= brd.bitlen; i--) {  | True                      | 
+ 782 |     if (brd_len == -1)                   | True                      | 
+ 783 |      brd.data[0] |= htonl(1<<(31-i));    | True                      | 
+ 784 |     else                                 | True                      | 
+ 785 |      brd.data[0] &= ~htonl(1<<(31-i));   | True                      | 
+ 786 |    }                                     | True                      | 
+ 787 |    addattr_l(&req.n, sizeof(req), IFA_BR | True                      | 
+ 788 |    brd_len = brd.bytelen;                | True                      | 
+ 789 |   }                                      | True                      | 
+ 790 |  }                                       | True                      | 
+ 791 |  if (!scoped && cmd != RTM_DELADDR)      | True                      | 
+ 792 |   req.ifa.ifa_scope = default_scope(&lcl | True                      | 
+ 793 |                                          | True                      | 
+ 794 |  xrtnl_open(&rth);                       | True                      | 
+ 795 |                                          | True                      | 
+ 796 |  ll_init_map(&rth);                      | True                      | 
+ 797 |                                          | True                      | 
+ 798 |  req.ifa.ifa_index = xll_name_to_index(d | True                      | 
+ 799 |                                          | True                      | 
+ 800 |  if (valid_lftp || preferred_lftp) {     | True                      | 
+ 801 |   struct ifa_cacheinfo cinfo = {};       | True                      | 
+ 802 |                                          | True                      | 
+ 803 |   if (!valid_lft) {                      | True                      | 
+ 804 |    fprintf(stderr, "valid_lft is zero\n" | True                      | 
+ 805 |    return 1;                             | True                      | 
+ 806 |   }                                      | True                      | 
+ 807 |   if (valid_lft < preferred_lft) {       | True                      | 
+ 808 |    fprintf(stderr, "preferred_lft is gre | True                      | 
+ 809 |    return 1;                             | True                      | 
+ 810 |   }                                      | True                      | 
+ 811 |                                          | True                      | 
+ 812 |   cinfo.ifa_prefered = preferred_lft;    | True                      | 
+ 813 |   cinfo.ifa_valid = valid_lft;           | True                      | 
+ 814 |   addattr_l(&req.n, sizeof(req), IFA_CAC | True                      | 
+ 815 |      sizeof(cinfo));                     | True                      | 
+ 816 |  }                                       | True                      | 
+ 817 |                                          | True                      | 
+ 818 |  if (rtnl_talk(&rth, &req.n, 0, 0, NULL, | True                      | 
+ 819 |   return 2;                              | True                      | 
+ 820 |                                          | True                      | 
+ 821 |  return 0;                               | True                      | 
+ 822 | }                                        | True                      | 
+ 823 |                                          | True                      | 
+ 824 | /* Return value becomes exitcode. It's o | True                      | 
+ 825 | int FAST_FUNC do_ipaddr(char **argv)     | True                      | 
+ 826 | {                                        | True                      | 
+ 827 |  static const char commands[] ALIGN1 =   | True                      | 
+ 828 |   /* 0    1         2      3          4  | True                      | 
+ 829 |   "add\0""change\0""chg\0""replace\0""de | True                      | 
+ 830 |  int cmd = 2;                            | True                      | 
+ 831 |                                          | True                      | 
+ 832 |  INIT_G();                               | True                      | 
+ 833 |                                          | True                      | 
+ 834 |  if (*argv) {                            | True                      | 
+ 835 |   cmd = index_in_substrings(commands, *a | True                      | 
+ 836 |   if (cmd < 0)                           | True                      | 
+ 837 |    invarg_1_to_2(*argv, applet_name);    | True                      | 
+ 838 |   argv++;                                | True                      | 
+ 839 |   if (cmd <= 4) {                        | True                      | 
+ 840 |    return ipaddr_modify(                 | True                      | 
+ 841 |     /*cmd:*/ cmd == 4 ? RTM_DELADDR : RT | True                      | 
+ 842 |     /*flags:*/                           | True                      | 
+ 843 |      cmd == 0 ? NLM_F_CREATE|NLM_F_EXCL  | True                      | 
+ 844 |      cmd == 1 || cmd == 2 ? NLM_F_REPLAC | True                      | 
+ 845 |      cmd == 3 ? NLM_F_CREATE|NLM_F_REPLA | True                      | 
+ 846 |      0 /* delete */                      | True                      | 
+ 847 |    , argv);                              | True                      | 
+ 848 |   }                                      | True                      | 
+ 849 |  }                                       | True                      | 
+ 850 |  return ipaddr_list_or_flush(argv, cmd = | True                      | 
+ 851 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +144MB, 422ms             | 

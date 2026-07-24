@@ -1,0 +1,129 @@
+FILE: data/raw/busybox-1.38.0/util-linux/uevent.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * Copyright 2015 Denys Vlasenko         | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   5 |  */                                      | True                      | 
+   6 | //config:config UEVENT                   | True                      | 
+   7 | //config: bool "uevent (3.5 kb)"         | True                      | 
+   8 | //config: default y                      | True                      | 
+   9 | //config: help                           | True                      | 
+  10 | //config: uevent is a netlink listener f | True                      | 
+  11 | //config: sent via netlink. It is usuall | True                      | 
+  12 |                                          | True                      | 
+  13 | //applet:IF_UEVENT(APPLET(uevent, BB_DIR | True                      | 
+  14 |                                          | True                      | 
+  15 | //kbuild:lib-$(CONFIG_UEVENT) += uevent. | True                      | 
+  16 |                                          | True                      | 
+  17 | //usage:#define uevent_trivial_usage     | True                      | 
+  18 | //usage:       "[PROG ARGS]"             | True                      | 
+  19 | //usage:#define uevent_full_usage "\n\n" | True                      | 
+  20 | //usage:       "uevent runs PROG for eve | True                      | 
+  21 | //usage:   "\n""PROG's environment conta | True                      | 
+  22 | //usage:   "\n""Typical usage (daemon fo | True                      | 
+  23 | //usage:   "\n"" # uevent mdev & mdev -s | True                      | 
+  24 |                                          | True                      | 
+  25 | #include "libbb.h"                       | True                      | 
+  26 | #include "common_bufsiz.h"               | True                      | 
+  27 | #include <linux/netlink.h>               | True                      | 
+  28 |                                          | True                      | 
+  29 | #define env ((char **)bb_common_bufsiz1) | True                      | 
+  30 | #define INIT_G() do { setup_common_bufsi | True                      | 
+  31 | enum {                                   | True                      | 
+  32 |  MAX_ENV = COMMON_BUFSIZE / sizeof(char* | True                      | 
+  33 |  // ^^^sizeof(env[0]) instead of sizeof( | True                      | 
+  34 |  // makes gcc-6.3.0 emit "strict-aliasin | True                      | 
+  35 |                                          | True                      | 
+  36 |  // socket receive buffer of 2MiB proved | True                      | 
+  37 |  //  http://lists.busybox.net/pipermail/ | True                      | 
+  38 |  // udevd seems to use a whooping 128MiB | True                      | 
+  39 |  // The socket receive buffer size is ju | True                      | 
+  40 |  // The buffers are allocated lazily so  | True                      | 
+  41 |  KERN_RCVBUF = 128 * 1024 * 1024,        | True                      | 
+  42 |                                          | True                      | 
+  43 |  // Might be made smaller: the kernel v5 | True                      | 
+  44 |  // variables with a total of 2kb on eac | True                      | 
+  45 |  // On top of that the action string and | True                      | 
+  46 |  USER_RCVBUF = 16 * 1024,                | True                      | 
+  47 | };                                       | True                      | 
+  48 |                                          | True                      | 
+  49 | int uevent_main(int argc, char **argv) M | True                      | 
+  50 | int uevent_main(int argc UNUSED_PARAM, c | True                      | 
+  51 | {                                        | True                      | 
+  52 |  int fd;                                 | True                      | 
+  53 |                                          | True                      | 
+  54 |  INIT_G();                               | True                      | 
+  55 |                                          | True                      | 
+  56 |  argv++;                                 | True                      | 
+  57 |                                          | True                      | 
+  58 |  // Subscribe for UEVENT kernel messages | True                      | 
+  59 |  // Without a sufficiently big RCVBUF, a | True                      | 
+  60 |  // can trigger ENOBUFS on read, which i | True                      | 
+  61 |  // Reproducer:                          | True                      | 
+  62 |  // uevent mdev &                        | True                      | 
+  63 |  //  find /sys -name uevent -exec sh -c  | True                      | 
+  64 |  reopen:                                 | True                      | 
+  65 |  fd = create_and_bind_to_netlink(NETLINK | True                      | 
+  66 |                                          | True                      | 
+  67 |  for (;;) {                              | True                      | 
+  68 |   char *netbuf;                          | True                      | 
+  69 |   char *s, *end;                         | True                      | 
+  70 |   ssize_t len;                           | True                      | 
+  71 |   int idx;                               | True                      | 
+  72 |                                          | True                      | 
+  73 |   // In many cases, a system sits for *d | True                      | 
+  74 |   // for a new uevent notification to co | True                      | 
+  75 |   // We use a fresh mmap so that buffer  | True                      | 
+  76 |   // until kernel actually starts fillin | True                      | 
+  77 |   netbuf = xmmap_anon(USER_RCVBUF);      | True                      | 
+  78 |                                          | True                      | 
+  79 |   // Here we block, possibly for a very  | True                      | 
+  80 |   len = safe_read(fd, netbuf, USER_RCVBU | True                      | 
+  81 |   if (len < 0) {                         | True                      | 
+  82 |    if (errno == ENOBUFS) {               | True                      | 
+  83 |     // Ran out of socket receive buffer  | True                      | 
+  84 |     bb_simple_error_msg("uevent overrun" | True                      | 
+  85 |     close(fd);                           | True                      | 
+  86 |     munmap(netbuf, USER_RCVBUF);         | True                      | 
+  87 |     goto reopen;                         | True                      | 
+  88 |    }                                     | True                      | 
+  89 |    bb_simple_perror_msg_and_die("read"); | True                      | 
+  90 |   }                                      | True                      | 
+  91 |   end = netbuf + len;                    | True                      | 
+  92 |   *end = '\0';                           | True                      | 
+  93 |                                          | True                      | 
+  94 |   // Each netlink message starts with "A | True                      | 
+  95 |   // (which we currently ignore),        | True                      | 
+  96 |   // followed by environment variables.  | True                      | 
+  97 |   if (!argv[0])                          | True                      | 
+  98 |    putchar('\n');                        | True                      | 
+  99 |   idx = 0;                               | True                      | 
+ 100 |   s = netbuf;                            | True                      | 
+ 101 |   while (s < end) {                      | True                      | 
+ 102 |    if (!argv[0])                         | True                      | 
+ 103 |     puts(s);                             | True                      | 
+ 104 |    if (strchr(s, '=') && idx < MAX_ENV)  | True                      | 
+ 105 |     env[idx++] = s;                      | True                      | 
+ 106 |    s += strlen(s) + 1;                   | True                      | 
+ 107 |   }                                      | True                      | 
+ 108 |   env[idx] = NULL;                       | True                      | 
+ 109 |                                          | True                      | 
+ 110 |   if (argv[0]) {                         | True                      | 
+ 111 |    idx = 0;                              | True                      | 
+ 112 |    while (env[idx])                      | True                      | 
+ 113 |     putenv(env[idx++]);                  | True                      | 
+ 114 |    spawn_and_wait(argv);                 | True                      | 
+ 115 |    idx = 0;                              | True                      | 
+ 116 |    while (env[idx])                      | True                      | 
+ 117 |     bb_unsetenv(env[idx++]);             | True                      | 
+ 118 |   }                                      | True                      | 
+ 119 |   munmap(netbuf, USER_RCVBUF);           | True                      | 
+ 120 |  }                                       | True                      | 
+ 121 |                                          | True                      | 
+ 122 |  return 0; // not reached                | True                      | 
+ 123 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +14MB, 231ms              | 

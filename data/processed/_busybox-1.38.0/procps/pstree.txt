@@ -1,0 +1,422 @@
+FILE: data/raw/busybox-1.38.0/procps/pstree.c
+Resultado PCLocator:
+   # | line of code                             | Merge                        | 
+-----+------------------------------------------+------------------------------+
+   1 | /*                                       | True                         | 
+   2 |  * pstree.c - display process tree       | True                         | 
+   3 |  *                                       | True                         | 
+   4 |  * Copyright (C) 1993-2002 Werner Almesb | True                         | 
+   5 |  * Copyright (C) 2002-2009 Craig Small   | True                         | 
+   6 |  * Copyright (C) 2010 Lauri Kasanen      | True                         | 
+   7 |  *                                       | True                         | 
+   8 |  * Based on pstree (PSmisc) 22.13.       | True                         | 
+   9 |  *                                       | True                         | 
+  10 |  * Licensed under GPLv2, see file LICENS | True                         | 
+  11 |  */                                      | True                         | 
+  12 | //config:config PSTREE                   | True                         | 
+  13 | //config: bool "pstree (9.4 kb)"         | True                         | 
+  14 | //config: default y                      | True                         | 
+  15 | //config: help                           | True                         | 
+  16 | //config: Display a tree of processes.   | True                         | 
+  17 |                                          | True                         | 
+  18 | //applet:IF_PSTREE(APPLET_NOEXEC(pstree, | True                         | 
+  19 |                                          | True                         | 
+  20 | //kbuild:lib-$(CONFIG_PSTREE) += pstree. | True                         | 
+  21 |                                          | True                         | 
+  22 | //usage:#define pstree_trivial_usage     | True                         | 
+  23 | //usage: "[-p] [PID|USER]"               | True                         | 
+  24 | //usage:#define pstree_full_usage "\n\n" | True                         | 
+  25 | //usage:       "Display process tree, op | True                         | 
+  26 | //usage:     "\n -p Show pids"           | True                         | 
+  27 |                                          | True                         | 
+  28 | #include "libbb.h"                       | True                         | 
+  29 |                                          | True                         | 
+  30 | #define PROC_BASE "/proc"                | True                         | 
+  31 |                                          | True                         | 
+  32 | #define OPT_PID  (1 << 0)                | True                         | 
+  33 |                                          | True                         | 
+  34 | struct child;                            | True                         | 
+  35 |                                          | True                         | 
+  36 | #if ENABLE_FEATURE_SHOW_THREADS          | True                         | 
+  37 | /* For threads, we add {...} around the  | ENABLE_FEATURE_SHOW_THREADS  | 
+  38 | # define COMM_DISP_LEN (COMM_LEN + 2)    | ENABLE_FEATURE_SHOW_THREADS  | 
+  39 | #else                                    | True                         | 
+  40 | # define COMM_DISP_LEN COMM_LEN          | !ENABLE_FEATURE_SHOW_THREADS | 
+  41 | #endif                                   | True                         | 
+  42 |                                          | True                         | 
+  43 | typedef struct proc {                    | True                         | 
+  44 |  char comm[COMM_DISP_LEN + 1];           | True                         | 
+  45 | // char flags; - unused, delete?         | True                         | 
+  46 |  pid_t pid;                              | True                         | 
+  47 |  uid_t uid;                              | True                         | 
+  48 |  struct child *children;                 | True                         | 
+  49 |  struct proc *parent;                    | True                         | 
+  50 |  struct proc *next;                      | True                         | 
+  51 | } PROC;                                  | True                         | 
+  52 |                                          | True                         | 
+  53 | /* For flags above */                    | True                         | 
+  54 | //#define PFLAG_THREAD  0x01             | True                         | 
+  55 |                                          | True                         | 
+  56 | typedef struct child {                   | True                         | 
+  57 |  PROC *child;                            | True                         | 
+  58 |  struct child *next;                     | True                         | 
+  59 | } CHILD;                                 | True                         | 
+  60 |                                          | True                         | 
+  61 | #define empty_2  "  "                    | True                         | 
+  62 | #define branch_2 "|-"                    | True                         | 
+  63 | #define vert_2   "| "                    | True                         | 
+  64 | #define last_2   "`-"                    | True                         | 
+  65 | #define single_3 "---"                   | True                         | 
+  66 | #define first_3  "-+-"                   | True                         | 
+  67 |                                          | True                         | 
+  68 | struct globals {                         | True                         | 
+  69 |  /* 0-based. IOW: the number of chars we | True                         | 
+  70 |  unsigned cur_x;                         | True                         | 
+  71 |  unsigned output_width;                  | True                         | 
+  72 |                                          | True                         | 
+  73 |  /* The buffers will be dynamically incr | True                         | 
+  74 |  unsigned capacity;                      | True                         | 
+  75 |  unsigned *width;                        | True                         | 
+  76 |  uint8_t *more;                          | True                         | 
+  77 |                                          | True                         | 
+  78 |  PROC *list;                             | True                         | 
+  79 |                                          | True                         | 
+  80 |  smallint dumped; /* used by dump_by_use | True                         | 
+  81 | };                                       | True                         | 
+  82 | #define G (*ptr_to_globals)              | True                         | 
+  83 | #define INIT_G() do { \                  | True                         | 
+  84 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                         | 
+  85 | } while (0)                              | True                         | 
+  86 |                                          | True                         | 
+  87 |                                          | True                         | 
+  88 | /*                                       | True                         | 
+  89 |  * Allocates additional buffer space for | True                         | 
+  90 |  * The first call will allocate the firs | True                         | 
+  91 |  *                                       | True                         | 
+  92 |  * bufindex  the index that will be used | True                         | 
+  93 |  */                                      | True                         | 
+  94 | static void ensure_buffer_capacity(int b | True                         | 
+  95 | {                                        | True                         | 
+  96 |  if (bufindex >= G.capacity) {           | True                         | 
+  97 |   G.capacity += 0x100;                   | True                         | 
+  98 |   G.width = xrealloc(G.width, G.capacity | True                         | 
+  99 |   G.more = xrealloc(G.more, G.capacity * | True                         | 
+ 100 |  }                                       | True                         | 
+ 101 | }                                        | True                         | 
+ 102 |                                          | True                         | 
+ 103 | /* NB: this function is never called wit | True                         | 
+ 104 |  * (control chars or chars >= 0x7f)      | True                         | 
+ 105 |  */                                      | True                         | 
+ 106 | static void out_char(char c)             | True                         | 
+ 107 | {                                        | True                         | 
+ 108 |  G.cur_x++;                              | True                         | 
+ 109 |  if (G.cur_x > G.output_width)           | True                         | 
+ 110 |   return;                                | True                         | 
+ 111 |  if (G.cur_x == G.output_width)          | True                         | 
+ 112 |   c = '+';                               | True                         | 
+ 113 |  putchar(c);                             | True                         | 
+ 114 | }                                        | True                         | 
+ 115 |                                          | True                         | 
+ 116 | /* NB: this function is never called wit | True                         | 
+ 117 |  * (control chars or chars >= 0x7f)      | True                         | 
+ 118 |  */                                      | True                         | 
+ 119 | static void out_string(const char *str)  | True                         | 
+ 120 | {                                        | True                         | 
+ 121 |  while (*str)                            | True                         | 
+ 122 |   out_char(*str++);                      | True                         | 
+ 123 | }                                        | True                         | 
+ 124 |                                          | True                         | 
+ 125 | static void out_newline(void)            | True                         | 
+ 126 | {                                        | True                         | 
+ 127 |  putchar('\n');                          | True                         | 
+ 128 |  G.cur_x = 0;                            | True                         | 
+ 129 | }                                        | True                         | 
+ 130 |                                          | True                         | 
+ 131 | static PROC *find_proc(pid_t pid)        | True                         | 
+ 132 | {                                        | True                         | 
+ 133 |  PROC *walk;                             | True                         | 
+ 134 |                                          | True                         | 
+ 135 |  for (walk = G.list; walk; walk = walk-> | True                         | 
+ 136 |   if (walk->pid == pid)                  | True                         | 
+ 137 |    break;                                | True                         | 
+ 138 |                                          | True                         | 
+ 139 |  return walk;                            | True                         | 
+ 140 | }                                        | True                         | 
+ 141 |                                          | True                         | 
+ 142 | static PROC *new_proc(const char *comm,  | True                         | 
+ 143 | {                                        | True                         | 
+ 144 |  PROC *new = xzalloc(sizeof(*new));      | True                         | 
+ 145 |                                          | True                         | 
+ 146 |  strcpy(new->comm, comm);                | True                         | 
+ 147 |  new->pid = pid;                         | True                         | 
+ 148 |  new->uid = uid;                         | True                         | 
+ 149 |  new->next = G.list;                     | True                         | 
+ 150 |                                          | True                         | 
+ 151 |  G.list = new;                           | True                         | 
+ 152 |  return G.list;                          | True                         | 
+ 153 | }                                        | True                         | 
+ 154 |                                          | True                         | 
+ 155 | static void add_child(PROC *parent, PROC | True                         | 
+ 156 | {                                        | True                         | 
+ 157 |  CHILD *new, **walk;                     | True                         | 
+ 158 |  int cmp;                                | True                         | 
+ 159 |                                          | True                         | 
+ 160 |  new = xmalloc(sizeof(*new));            | True                         | 
+ 161 |                                          | True                         | 
+ 162 |  new->child = child;                     | True                         | 
+ 163 |  for (walk = &parent->children; *walk; w | True                         | 
+ 164 |   cmp = strcmp((*walk)->child->comm, chi | True                         | 
+ 165 |   if (cmp > 0)                           | True                         | 
+ 166 |    break;                                | True                         | 
+ 167 |   if (cmp == 0 && (*walk)->child->uid >  | True                         | 
+ 168 |    break;                                | True                         | 
+ 169 |  }                                       | True                         | 
+ 170 |  new->next = *walk;                      | True                         | 
+ 171 |  *walk = new;                            | True                         | 
+ 172 | }                                        | True                         | 
+ 173 |                                          | True                         | 
+ 174 | static void add_proc(const char *comm, p | True                         | 
+ 175 |    uid_t uid /*, char isthread*/)        | True                         | 
+ 176 | {                                        | True                         | 
+ 177 |  PROC *this, *parent;                    | True                         | 
+ 178 |                                          | True                         | 
+ 179 |  this = find_proc(pid);                  | True                         | 
+ 180 |  if (!this)                              | True                         | 
+ 181 |   this = new_proc(comm, pid, uid);       | True                         | 
+ 182 |  else {                                  | True                         | 
+ 183 |   strcpy(this->comm, comm);              | True                         | 
+ 184 |   this->uid = uid;                       | True                         | 
+ 185 |  }                                       | True                         | 
+ 186 |                                          | True                         | 
+ 187 |  if (pid == ppid)                        | True                         | 
+ 188 |   ppid = 0;                              | True                         | 
+ 189 | // if (isthread)                         | True                         | 
+ 190 | //  this->flags |= PFLAG_THREAD;         | True                         | 
+ 191 |                                          | True                         | 
+ 192 |  parent = find_proc(ppid);               | True                         | 
+ 193 |  if (!parent)                            | True                         | 
+ 194 |   parent = new_proc("?", ppid, 0);       | True                         | 
+ 195 |                                          | True                         | 
+ 196 |  add_child(parent, this);                | True                         | 
+ 197 |  this->parent = parent;                  | True                         | 
+ 198 | }                                        | True                         | 
+ 199 |                                          | True                         | 
+ 200 | static int tree_equal(const PROC *a, con | True                         | 
+ 201 | {                                        | True                         | 
+ 202 |  const CHILD *walk_a, *walk_b;           | True                         | 
+ 203 |                                          | True                         | 
+ 204 |  if (strcmp(a->comm, b->comm) != 0)      | True                         | 
+ 205 |   return 0;                              | True                         | 
+ 206 |  if ((option_mask32 /*& OPT_PID*/) && a- | True                         | 
+ 207 |   return 0;                              | True                         | 
+ 208 |                                          | True                         | 
+ 209 |  for (walk_a = a->children, walk_b = b-> | True                         | 
+ 210 |    walk_a && walk_b;                     | True                         | 
+ 211 |    walk_a = walk_a->next, walk_b = walk_ | True                         | 
+ 212 |  ) {                                     | True                         | 
+ 213 |   if (!tree_equal(walk_a->child, walk_b- | True                         | 
+ 214 |    return 0;                             | True                         | 
+ 215 |  }                                       | True                         | 
+ 216 |                                          | True                         | 
+ 217 |  return !(walk_a || walk_b);             | True                         | 
+ 218 | }                                        | True                         | 
+ 219 |                                          | True                         | 
+ 220 | static int out_args(const char *mystr)   | True                         | 
+ 221 | {                                        | True                         | 
+ 222 |  const char *here;                       | True                         | 
+ 223 |  int strcount = 0;                       | True                         | 
+ 224 |  char tmpstr[5];                         | True                         | 
+ 225 |                                          | True                         | 
+ 226 |  for (here = mystr; *here; here++) {     | True                         | 
+ 227 |   if (*here == '\\') {                   | True                         | 
+ 228 |    out_string("\\\\");                   | True                         | 
+ 229 |    strcount += 2;                        | True                         | 
+ 230 |   } else if (*here >= ' ' && *here < 0x7 | True                         | 
+ 231 |    out_char(*here);                      | True                         | 
+ 232 |    strcount++;                           | True                         | 
+ 233 |   } else {                               | True                         | 
+ 234 |    sprintf(tmpstr, "\\%03o", (unsigned c | True                         | 
+ 235 |    out_string(tmpstr);                   | True                         | 
+ 236 |    strcount += 4;                        | True                         | 
+ 237 |   }                                      | True                         | 
+ 238 |  }                                       | True                         | 
+ 239 |                                          | True                         | 
+ 240 |  return strcount;                        | True                         | 
+ 241 | }                                        | True                         | 
+ 242 |                                          | True                         | 
+ 243 | static void                              | True                         | 
+ 244 | dump_tree(PROC *current, int level, int  | True                         | 
+ 245 | {                                        | True                         | 
+ 246 |  CHILD *walk, *next, **scan;             | True                         | 
+ 247 |  int lvl, i, add, offset, count, comm_le | True                         | 
+ 248 |  char tmp[sizeof(int)*3 + 4];            | True                         | 
+ 249 |                                          | True                         | 
+ 250 |  if (!current)                           | True                         | 
+ 251 |   return;                                | True                         | 
+ 252 |                                          | True                         | 
+ 253 |  if (!leaf) {                            | True                         | 
+ 254 |   for (lvl = 0; lvl < level; lvl++) {    | True                         | 
+ 255 |    i = G.width[lvl] + 1;                 | True                         | 
+ 256 |    while (--i >= 0)                      | True                         | 
+ 257 |     out_char(' ');                       | True                         | 
+ 258 |                                          | True                         | 
+ 259 |    if (lvl == level - 1) {               | True                         | 
+ 260 |     if (last) {                          | True                         | 
+ 261 |      out_string(last_2);                 | True                         | 
+ 262 |     } else {                             | True                         | 
+ 263 |      out_string(branch_2);               | True                         | 
+ 264 |     }                                    | True                         | 
+ 265 |    } else {                              | True                         | 
+ 266 |     if (G.more[lvl + 1]) {               | True                         | 
+ 267 |      out_string(vert_2);                 | True                         | 
+ 268 |     } else {                             | True                         | 
+ 269 |      out_string(empty_2);                | True                         | 
+ 270 |     }                                    | True                         | 
+ 271 |    }                                     | True                         | 
+ 272 |   }                                      | True                         | 
+ 273 |  }                                       | True                         | 
+ 274 |                                          | True                         | 
+ 275 |  add = 0;                                | True                         | 
+ 276 |  if (rep > 1) {                          | True                         | 
+ 277 |   add += sprintf(tmp, "%d*[", rep);      | True                         | 
+ 278 |   out_string(tmp);                       | True                         | 
+ 279 |  }                                       | True                         | 
+ 280 |  comm_len = out_args(current->comm);     | True                         | 
+ 281 |  if (option_mask32 /*& OPT_PID*/) {      | True                         | 
+ 282 |   comm_len += sprintf(tmp, "(%d)", (int) | True                         | 
+ 283 |   out_string(tmp);                       | True                         | 
+ 284 |  }                                       | True                         | 
+ 285 |  offset = G.cur_x;                       | True                         | 
+ 286 |                                          | True                         | 
+ 287 |  if (!current->children) {               | True                         | 
+ 288 |   while (closing--)                      | True                         | 
+ 289 |    out_char(']');                        | True                         | 
+ 290 |   out_newline();                         | True                         | 
+ 291 |  }                                       | True                         | 
+ 292 |  ensure_buffer_capacity(level);          | True                         | 
+ 293 |  G.more[level] = !last;                  | True                         | 
+ 294 |                                          | True                         | 
+ 295 |  G.width[level] = comm_len + G.cur_x - o | True                         | 
+ 296 |  if (G.cur_x >= G.output_width) {        | True                         | 
+ 297 |   //out_string(first_3); - why? it won't | True                         | 
+ 298 |   //out_char('+');                       | True                         | 
+ 299 |   out_newline();                         | True                         | 
+ 300 |   return;                                | True                         | 
+ 301 |  }                                       | True                         | 
+ 302 |                                          | True                         | 
+ 303 |  first = 1;                              | True                         | 
+ 304 |  for (walk = current->children; walk; wa | True                         | 
+ 305 |   count = 0;                             | True                         | 
+ 306 |   next = walk->next;                     | True                         | 
+ 307 |   scan = &walk->next;                    | True                         | 
+ 308 |   while (*scan) {                        | True                         | 
+ 309 |    if (!tree_equal(walk->child, (*scan)- | True                         | 
+ 310 |     scan = &(*scan)->next;               | True                         | 
+ 311 |    else {                                | True                         | 
+ 312 |     if (next == *scan)                   | True                         | 
+ 313 |      next = (*scan)->next;               | True                         | 
+ 314 |     count++;                             | True                         | 
+ 315 |     *scan = (*scan)->next;               | True                         | 
+ 316 |    }                                     | True                         | 
+ 317 |   }                                      | True                         | 
+ 318 |   if (first) {                           | True                         | 
+ 319 |    out_string(next ? first_3 : single_3) | True                         | 
+ 320 |    first = 0;                            | True                         | 
+ 321 |   }                                      | True                         | 
+ 322 |                                          | True                         | 
+ 323 |   dump_tree(walk->child, level + 1, coun | True                         | 
+ 324 |     walk == current->children, !next,    | True                         | 
+ 325 |     closing + (count ? 1 : 0));          | True                         | 
+ 326 |  }                                       | True                         | 
+ 327 | }                                        | True                         | 
+ 328 |                                          | True                         | 
+ 329 | static void dump_by_user(PROC *current,  | True                         | 
+ 330 | {                                        | True                         | 
+ 331 |  const CHILD *walk;                      | True                         | 
+ 332 |                                          | True                         | 
+ 333 |  if (!current)                           | True                         | 
+ 334 |   return;                                | True                         | 
+ 335 |                                          | True                         | 
+ 336 |  if (current->uid == uid) {              | True                         | 
+ 337 |   if (G.dumped)                          | True                         | 
+ 338 |    putchar('\n');                        | True                         | 
+ 339 |   dump_tree(current, 0, 1, 1, 1, 0);     | True                         | 
+ 340 |   G.dumped = 1;                          | True                         | 
+ 341 |   return;                                | True                         | 
+ 342 |  }                                       | True                         | 
+ 343 |  for (walk = current->children; walk; wa | True                         | 
+ 344 |   dump_by_user(walk->child, uid);        | True                         | 
+ 345 | }                                        | True                         | 
+ 346 |                                          | True                         | 
+ 347 | #if ENABLE_FEATURE_SHOW_THREADS          | True                         | 
+ 348 | static void handle_thread(const char *co | ENABLE_FEATURE_SHOW_THREADS  | 
+ 349 | {                                        | ENABLE_FEATURE_SHOW_THREADS  | 
+ 350 |  char threadname[COMM_DISP_LEN + 1];     | ENABLE_FEATURE_SHOW_THREADS  | 
+ 351 |  sprintf(threadname, "{%.*s}", (int)size | ENABLE_FEATURE_SHOW_THREADS  | 
+ 352 |  add_proc(threadname, pid, ppid, uid/*,  | ENABLE_FEATURE_SHOW_THREADS  | 
+ 353 | }                                        | ENABLE_FEATURE_SHOW_THREADS  | 
+ 354 | #endif                                   | True                         | 
+ 355 |                                          | True                         | 
+ 356 | static void mread_proc(void)             | True                         | 
+ 357 | {                                        | True                         | 
+ 358 |  procps_status_t *p = NULL;              | True                         | 
+ 359 | #if ENABLE_FEATURE_SHOW_THREADS          | True                         | 
+ 360 |  pid_t parent = 0;                       | ENABLE_FEATURE_SHOW_THREADS  | 
+ 361 | #endif                                   | True                         | 
+ 362 |  int flags = PSSCAN_COMM | PSSCAN_PID |  | True                         | 
+ 363 |                                          | True                         | 
+ 364 |  while ((p = procps_scan(p, flags)) != N | True                         | 
+ 365 | #if ENABLE_FEATURE_SHOW_THREADS          | True                         | 
+ 366 |   if (p->pid != p->main_thread_pid)      | ENABLE_FEATURE_SHOW_THREADS  | 
+ 367 |    handle_thread(p->comm, p->pid, parent | ENABLE_FEATURE_SHOW_THREADS  | 
+ 368 |   else                                   | ENABLE_FEATURE_SHOW_THREADS  | 
+ 369 | #endif                                   | True                         | 
+ 370 |   {                                      | True                         | 
+ 371 |    add_proc(p->comm, p->pid, p->ppid, p- | True                         | 
+ 372 | #if ENABLE_FEATURE_SHOW_THREADS          | True                         | 
+ 373 |    parent = p->pid;                      | ENABLE_FEATURE_SHOW_THREADS  | 
+ 374 | #endif                                   | True                         | 
+ 375 |   }                                      | True                         | 
+ 376 |  }                                       | True                         | 
+ 377 | }                                        | True                         | 
+ 378 |                                          | True                         | 
+ 379 | int pstree_main(int argc, char **argv) M | True                         | 
+ 380 | int pstree_main(int argc UNUSED_PARAM, c | True                         | 
+ 381 | {                                        | True                         | 
+ 382 |  pid_t pid = 1;                          | True                         | 
+ 383 |  long uid = 0;                           | True                         | 
+ 384 |                                          | True                         | 
+ 385 |  INIT_G();                               | True                         | 
+ 386 |                                          | True                         | 
+ 387 |  G.output_width = get_terminal_width(0); | True                         | 
+ 388 |                                          | True                         | 
+ 389 |  getopt32(argv, "^" "p" "\0" "?1");      | True                         | 
+ 390 |  argv += optind;                         | True                         | 
+ 391 |                                          | True                         | 
+ 392 |  if (argv[0]) {                          | True                         | 
+ 393 |   if (argv[0][0] >= '0' && argv[0][0] <= | True                         | 
+ 394 |    pid = xatoi(argv[0]);                 | True                         | 
+ 395 |   } else {                               | True                         | 
+ 396 |    uid = xuname2uid(argv[0]);            | True                         | 
+ 397 |   }                                      | True                         | 
+ 398 |  }                                       | True                         | 
+ 399 |                                          | True                         | 
+ 400 |  mread_proc();                           | True                         | 
+ 401 |                                          | True                         | 
+ 402 |  if (!uid)                               | True                         | 
+ 403 |   dump_tree(find_proc(pid), 0, 1, 1, 1,  | True                         | 
+ 404 |  else {                                  | True                         | 
+ 405 |   dump_by_user(find_proc(1), uid);       | True                         | 
+ 406 |   if (!G.dumped) {                       | True                         | 
+ 407 |    bb_simple_error_msg_and_die("no proce | True                         | 
+ 408 |   }                                      | True                         | 
+ 409 |  }                                       | True                         | 
+ 410 |                                          | True                         | 
+ 411 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                         | 
+ 412 |   free(G.width);                         | True                         | 
+ 413 |   free(G.more);                          | True                         | 
+ 414 |  }                                       | True                         | 
+ 415 |  return 0;                               | True                         | 
+ 416 | }                                        | True                         | 
+-----+------------------------------------------+------------------------------+
+     |                                          | +111MB, 269ms                | 

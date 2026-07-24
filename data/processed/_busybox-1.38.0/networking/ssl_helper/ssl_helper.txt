@@ -1,0 +1,412 @@
+FILE: data/raw/busybox-1.38.0/networking/ssl_helper/ssl_helper.c
+Resultado PCLocator:
+   # | line of code                             | Merge                       | 
+-----+------------------------------------------+-----------------------------+
+   1 | /*                                       | True                        | 
+   2 |  * Copyright (c) 2013 INSIDE Secure Corp | True                        | 
+   3 |  * Copyright (c) PeerSec Networks, 2002- | True                        | 
+   4 |  * All Rights Reserved                   | True                        | 
+   5 |  *                                       | True                        | 
+   6 |  * The latest version of this code is av | True                        | 
+   7 |  *                                       | True                        | 
+   8 |  * This software is open source; you can | True                        | 
+   9 |  * it under the terms of the GNU General | True                        | 
+  10 |  * the Free Software Foundation; either  | True                        | 
+  11 |  * (at your option) any later version.   | True                        | 
+  12 |  *                                       | True                        | 
+  13 |  * This program is distributed in WITHOU | True                        | 
+  14 |  * implied warranty of MERCHANTABILITY o | True                        | 
+  15 |  * See the GNU General Public License fo | True                        | 
+  16 |  *                                       | True                        | 
+  17 |  * You should have received a copy of th | True                        | 
+  18 |  * along with this program; if not, writ | True                        | 
+  19 |  * Foundation, Inc., 59 Temple Place, Su | True                        | 
+  20 |  * http://www.gnu.org/copyleft/gpl.html  | True                        | 
+  21 |  */                                      | True                        | 
+  22 | #include <errno.h>                       | True                        | 
+  23 | #include <stdlib.h>                      | True                        | 
+  24 | #include <unistd.h>                      | True                        | 
+  25 | #include <stdarg.h>                      | True                        | 
+  26 | #include <fcntl.h>                       | True                        | 
+  27 | #include <stdio.h>                       | True                        | 
+  28 | #include <time.h>                        | True                        | 
+  29 | #include <poll.h>                        | True                        | 
+  30 | #include <sys/socket.h>                  | True                        | 
+  31 |                                          | True                        | 
+  32 | #include "matrixssl/matrixsslApi.h"      | True                        | 
+  33 |                                          | True                        | 
+  34 | //#warning "DO NOT USE THESE DEFAULT KEY | True                        | 
+  35 |                                          | True                        | 
+  36 | /*                                       | True                        | 
+  37 |  * If supporting client authentication,  | True                        | 
+  38 |  * certificate and private key that supp | True                        | 
+  39 |  */                                      | True                        | 
+  40 | #define ID_RSA /* RSA Certificate and Ke | True                        | 
+  41 |                                          | True                        | 
+  42 | #define USE_HEADER_KEYS                  | True                        | 
+  43 |                                          | True                        | 
+  44 | /* If the algorithm type is supported, l | True                        | 
+  45 | #ifdef USE_HEADER_KEYS                   | True                        | 
+  46 | /* CAs */                                | (USE_HEADER_KEYS)           | 
+  47 | # include "sampleCerts/RSA/ALL_RSA_CAS.h | (USE_HEADER_KEYS)           | 
+  48 | /* Identity Certs and Keys for use with  | (USE_HEADER_KEYS)           | 
+  49 | # ifdef ID_RSA                           | (USE_HEADER_KEYS)           | 
+  50 | #  define EXAMPLE_RSA_KEYS               | (USE_HEADER_KEYS)&&(ID_RSA) | 
+  51 | #  include "sampleCerts/RSA/2048_RSA.h"  | (USE_HEADER_KEYS)&&(ID_RSA) | 
+  52 | #  include "sampleCerts/RSA/2048_RSA_KEY | (USE_HEADER_KEYS)&&(ID_RSA) | 
+  53 | # endif                                  | (USE_HEADER_KEYS)           | 
+  54 | #endif                                   | True                        | 
+  55 |                                          | True                        | 
+  56 | static ssize_t safe_write(int fd, const  | True                        | 
+  57 | {                                        | True                        | 
+  58 |  ssize_t n;                              | True                        | 
+  59 |                                          | True                        | 
+  60 |  do {                                    | True                        | 
+  61 |   n = write(fd, buf, count);             | True                        | 
+  62 |  } while (n < 0 && errno == EINTR);      | True                        | 
+  63 |                                          | True                        | 
+  64 |  return n;                               | True                        | 
+  65 | }                                        | True                        | 
+  66 |                                          | True                        | 
+  67 | static ssize_t full_write(int fd, const  | True                        | 
+  68 | {                                        | True                        | 
+  69 |  ssize_t cc;                             | True                        | 
+  70 |  ssize_t total;                          | True                        | 
+  71 |                                          | True                        | 
+  72 |  total = 0;                              | True                        | 
+  73 |                                          | True                        | 
+  74 |  while (len) {                           | True                        | 
+  75 |   cc = safe_write(fd, buf, len);         | True                        | 
+  76 |                                          | True                        | 
+  77 |   if (cc < 0) {                          | True                        | 
+  78 |    if (total) {                          | True                        | 
+  79 |     /* we already wrote some! */         | True                        | 
+  80 |     /* user can do another write to know | True                        | 
+  81 |     return total;                        | True                        | 
+  82 |    }                                     | True                        | 
+  83 |    return cc;  /* write() returns -1 on  | True                        | 
+  84 |   }                                      | True                        | 
+  85 |                                          | True                        | 
+  86 |   total += cc;                           | True                        | 
+  87 |   buf = ((const char *)buf) + cc;        | True                        | 
+  88 |   len -= cc;                             | True                        | 
+  89 |  }                                       | True                        | 
+  90 |                                          | True                        | 
+  91 |  return total;                           | True                        | 
+  92 | }                                        | True                        | 
+  93 |                                          | True                        | 
+  94 | static void say(const char *s, ...)      | True                        | 
+  95 | {                                        | True                        | 
+  96 |  char buf[256];                          | True                        | 
+  97 |  va_list p;                              | True                        | 
+  98 |  int sz;                                 | True                        | 
+  99 |                                          | True                        | 
+ 100 |  va_start(p, s);                         | True                        | 
+ 101 |  sz = vsnprintf(buf, sizeof(buf), s, p); | True                        | 
+ 102 |  full_write(STDERR_FILENO, buf, sz >= 0  | True                        | 
+ 103 |  va_end(p);                              | True                        | 
+ 104 | }                                        | True                        | 
+ 105 |                                          | True                        | 
+ 106 | static void die(const char *s, ...)      | True                        | 
+ 107 | {                                        | True                        | 
+ 108 |  char buf[256];                          | True                        | 
+ 109 |  va_list p;                              | True                        | 
+ 110 |  int sz;                                 | True                        | 
+ 111 |                                          | True                        | 
+ 112 |  va_start(p, s);                         | True                        | 
+ 113 |  sz = vsnprintf(buf, sizeof(buf), s, p); | True                        | 
+ 114 |  full_write(STDERR_FILENO, buf, sz >= 0  | True                        | 
+ 115 |  exit(1);                                | True                        | 
+ 116 |  va_end(p);                              | True                        | 
+ 117 | }                                        | True                        | 
+ 118 |                                          | True                        | 
+ 119 | #if 0                                    | True                        | 
+ 120 | # define dbg(...) say(__VA_ARGS__)       | 0                           | 
+ 121 | #else                                    | True                        | 
+ 122 | # define dbg(...) ((void)0)              | !0                          | 
+ 123 | #endif                                   | True                        | 
+ 124 |                                          | True                        | 
+ 125 | static struct pollfd pfd[2] = {          | True                        | 
+ 126 |  { -1, POLLIN|POLLERR|POLLHUP, 0 },      | True                        | 
+ 127 |  { -1, POLLIN|POLLERR|POLLHUP, 0 },      | True                        | 
+ 128 | };                                       | True                        | 
+ 129 | #define STDIN           pfd[0]           | True                        | 
+ 130 | #define NETWORK         pfd[1]           | True                        | 
+ 131 | #define STDIN_READY()   (pfd[0].revents  | True                        | 
+ 132 | #define NETWORK_READY() (pfd[1].revents  | True                        | 
+ 133 |                                          | True                        | 
+ 134 | static int wait_for_input(void)          | True                        | 
+ 135 | {                                        | True                        | 
+ 136 |  if (STDIN.fd == NETWORK.fd) /* means bo | True                        | 
+ 137 |   exit(0);                               | True                        | 
+ 138 |  dbg("polling\n");                       | True                        | 
+ 139 |  STDIN.revents = NETWORK.revents = 0;    | True                        | 
+ 140 |  return poll(pfd, 2, -1);                | True                        | 
+ 141 | }                                        | True                        | 
+ 142 |                                          | True                        | 
+ 143 | static int32 certCb(ssl_t *ssl, psX509Ce | True                        | 
+ 144 | {                                        | True                        | 
+ 145 |  /* Example to allow anonymous connectio | True                        | 
+ 146 |  if (alert > 0) {                        | True                        | 
+ 147 |   return SSL_ALLOW_ANON_CONNECTION; // = | True                        | 
+ 148 |  }                                       | True                        | 
+ 149 | #if 0                                    | True                        | 
+ 150 |  /* Validate the 'not before' and 'not a | 0                           | 
+ 151 |  return PS_FAILURE; /* if we don't like  | 0                           | 
+ 152 | #endif                                   | True                        | 
+ 153 |  return PS_SUCCESS;                      | True                        | 
+ 154 | }                                        | True                        | 
+ 155 |                                          | True                        | 
+ 156 | static void close_conn_and_exit(ssl_t *s | True                        | 
+ 157 | {                                        | True                        | 
+ 158 |  unsigned char *buf;                     | True                        | 
+ 159 |  int len;                                | True                        | 
+ 160 |                                          | True                        | 
+ 161 |  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | | True                        | 
+ 162 |  /* Quick attempt to send a closure aler | True                        | 
+ 163 |  if (matrixSslEncodeClosureAlert(ssl) >= | True                        | 
+ 164 |   len = matrixSslGetOutdata(ssl, &buf);  | True                        | 
+ 165 |   if (len > 0) {                         | True                        | 
+ 166 |    len = safe_write(fd, buf, len);       | True                        | 
+ 167 |    //if (len > 0) {                      | True                        | 
+ 168 |    // matrixSslSentData(ssl, len);       | True                        | 
+ 169 |    //}                                   | True                        | 
+ 170 |   }                                      | True                        | 
+ 171 |  }                                       | True                        | 
+ 172 |  //matrixSslDeleteSession(ssl);          | True                        | 
+ 173 |  shutdown(fd, SHUT_WR);                  | True                        | 
+ 174 |  exit(0);                                | True                        | 
+ 175 | }                                        | True                        | 
+ 176 |                                          | True                        | 
+ 177 | static int encode_data(ssl_t *ssl, const | True                        | 
+ 178 | {                                        | True                        | 
+ 179 |  unsigned char *buf;                     | True                        | 
+ 180 |  int available;                          | True                        | 
+ 181 |                                          | True                        | 
+ 182 |  available = matrixSslGetWritebuf(ssl, & | True                        | 
+ 183 |  if (available < 0)                      | True                        | 
+ 184 |   die("matrixSslGetWritebuf\n");         | True                        | 
+ 185 |  if (len > available)                    | True                        | 
+ 186 |   die("len > available\n");              | True                        | 
+ 187 |  memcpy(buf, data, len);                 | True                        | 
+ 188 |  if (matrixSslEncodeWritebuf(ssl, len) < | True                        | 
+ 189 |   die("matrixSslEncodeWritebuf\n");      | True                        | 
+ 190 |  return len;                             | True                        | 
+ 191 | }                                        | True                        | 
+ 192 |                                          | True                        | 
+ 193 | static void flush_to_net(ssl_t *ssl, int | True                        | 
+ 194 | {                                        | True                        | 
+ 195 |  int rc;                                 | True                        | 
+ 196 |  int len;                                | True                        | 
+ 197 |  unsigned char *buf;                     | True                        | 
+ 198 |                                          | True                        | 
+ 199 |  while ((len = matrixSslGetOutdata(ssl,  | True                        | 
+ 200 |   dbg("writing net %d bytes\n", len);    | True                        | 
+ 201 |   if (full_write(fd, buf, len) != len)   | True                        | 
+ 202 |    die("write to network\n");            | True                        | 
+ 203 |   rc = matrixSslSentData(ssl, len);      | True                        | 
+ 204 |   if (rc < 0)                            | True                        | 
+ 205 |    die("matrixSslSentData\n");           | True                        | 
+ 206 |  }                                       | True                        | 
+ 207 | }                                        | True                        | 
+ 208 |                                          | True                        | 
+ 209 | static void do_io_until_eof_and_exit(int | True                        | 
+ 210 | {                                        | True                        | 
+ 211 |  int rc;                                 | True                        | 
+ 212 |  int len;                                | True                        | 
+ 213 |  uint32_t len32u;                        | True                        | 
+ 214 |  sslSessionId_t *sid;                    | True                        | 
+ 215 |  ssl_t *ssl;                             | True                        | 
+ 216 |  unsigned char *buf;                     | True                        | 
+ 217 |                                          | True                        | 
+ 218 |  NETWORK.fd = fd;                        | True                        | 
+ 219 |  /* Note! STDIN.fd is disabled (-1) unti | True                        | 
+ 220 |   * we do not attempt to feed any user d | True                        | 
+ 221 |   * before it is ready.                  | True                        | 
+ 222 |   */                                     | True                        | 
+ 223 |                                          | True                        | 
+ 224 |  matrixSslNewSessionId(&sid);            | True                        | 
+ 225 |  rc = matrixSslNewClientSession(&ssl, ke | True                        | 
+ 226 | dbg("matrixSslNewClientSession:rc=%d\n", | True                        | 
+ 227 |  if (rc != MATRIXSSL_REQUEST_SEND)       | True                        | 
+ 228 |   die("matrixSslNewClientSession\n");    | True                        | 
+ 229 |                                          | True                        | 
+ 230 |  len = 0; /* only to suppress compiler w | True                        | 
+ 231 |  again:                                  | True                        | 
+ 232 |  switch (rc) {                           | True                        | 
+ 233 |  case MATRIXSSL_REQUEST_SEND:            | True                        | 
+ 234 |   dbg("MATRIXSSL_REQUEST_SEND\n");       | True                        | 
+ 235 |   flush_to_net(ssl, fd);                 | True                        | 
+ 236 |   goto poll_input;                       | True                        | 
+ 237 |                                          | True                        | 
+ 238 |  case 0:                                 | True                        | 
+ 239 |   dbg("rc==0\n");                        | True                        | 
+ 240 |   flush_to_net(ssl, fd);                 | True                        | 
+ 241 |   goto poll_input;                       | True                        | 
+ 242 |                                          | True                        | 
+ 243 |  case MATRIXSSL_REQUEST_CLOSE:           | True                        | 
+ 244 |   /* what does this mean if we are here? | True                        | 
+ 245 |   dbg("MATRIXSSL_REQUEST_CLOSE\n");      | True                        | 
+ 246 |   close_conn_and_exit(ssl, fd);          | True                        | 
+ 247 |                                          | True                        | 
+ 248 |  case MATRIXSSL_HANDSHAKE_COMPLETE:      | True                        | 
+ 249 |   dbg("MATRIXSSL_HANDSHAKE_COMPLETE\n"); | True                        | 
+ 250 |   /* Init complete, can start reading lo | True                        | 
+ 251 |   STDIN.fd = STDIN_FILENO;               | True                        | 
+ 252 |  poll_input:                             | True                        | 
+ 253 |   wait_for_input();                      | True                        | 
+ 254 |   if (STDIN_READY()) {                   | True                        | 
+ 255 |    char ibuf[4 * 1024];                  | True                        | 
+ 256 |    dbg("reading stdin\n");               | True                        | 
+ 257 |    len = read(STDIN_FILENO, ibuf, sizeof | True                        | 
+ 258 |    if (len < 0)                          | True                        | 
+ 259 |     die("read error on stdin\n");        | True                        | 
+ 260 |    if (len == 0)                         | True                        | 
+ 261 |     STDIN.fd = -1;                       | True                        | 
+ 262 |    else {                                | True                        | 
+ 263 |     len = encode_data(ssl, ibuf, len);   | True                        | 
+ 264 |     if (len) {                           | True                        | 
+ 265 |      rc = MATRIXSSL_REQUEST_SEND;        | True                        | 
+ 266 | dbg("rc=%d\n", rc);                      | True                        | 
+ 267 |      goto again;                         | True                        | 
+ 268 |     }                                    | True                        | 
+ 269 |    }                                     | True                        | 
+ 270 |   }                                      | True                        | 
+ 271 |  read_network:                           | True                        | 
+ 272 |   if (NETWORK_READY()) {                 | True                        | 
+ 273 |    dbg("%s%s%s\n",                       | True                        | 
+ 274 |     (pfd[1].revents & POLLIN)  ? "POLLIN | True                        | 
+ 275 |     (pfd[1].revents & POLLERR) ? "|POLLE | True                        | 
+ 276 |     (pfd[1].revents & POLLHUP) ? "|POLLH | True                        | 
+ 277 |    );                                    | True                        | 
+ 278 |    len = matrixSslGetReadbuf(ssl, &buf); | True                        | 
+ 279 |    if (len <= 0)                         | True                        | 
+ 280 |     die("matrixSslGetReadbuf\n");        | True                        | 
+ 281 |    dbg("reading net up to %d\n", len);   | True                        | 
+ 282 |    len = read(fd, buf, len);             | True                        | 
+ 283 |    dbg("reading net:%d\n", len);         | True                        | 
+ 284 |    if (len < 0)                          | True                        | 
+ 285 |     die("read error on network\n");      | True                        | 
+ 286 |    if (len == 0) /*eof*/                 | True                        | 
+ 287 |     NETWORK.fd = -1;                     | True                        | 
+ 288 |    len32u = len;                         | True                        | 
+ 289 |    rc = matrixSslReceivedData(ssl, len,  | True                        | 
+ 290 | dbg("matrixSslReceivedData:rc=%d\n", rc) | True                        | 
+ 291 |    len = len32u;                         | True                        | 
+ 292 |    if (rc < 0)                           | True                        | 
+ 293 |     die("matrixSslReceivedData\n");      | True                        | 
+ 294 |   }                                      | True                        | 
+ 295 |   goto again;                            | True                        | 
+ 296 |                                          | True                        | 
+ 297 |  case MATRIXSSL_APP_DATA:                | True                        | 
+ 298 |   dbg("MATRIXSSL_APP_DATA: writing stdou | True                        | 
+ 299 |   do {                                   | True                        | 
+ 300 |    if (full_write(STDOUT_FILENO, buf, le | True                        | 
+ 301 |     die("write to stdout\n");            | True                        | 
+ 302 |    len32u = len;                         | True                        | 
+ 303 |    rc = matrixSslProcessedData(ssl, &buf | True                        | 
+ 304 | //this was seen returning rc=0:          | True                        | 
+ 305 | dbg("matrixSslProcessedData:rc=%d\n", rc | True                        | 
+ 306 |    len = len32u;                         | True                        | 
+ 307 |   } while (rc == MATRIXSSL_APP_DATA);    | True                        | 
+ 308 |   if (pfd[1].fd == -1) {                 | True                        | 
+ 309 |    /* Already saw EOF on network, and we | True                        | 
+ 310 |     * and wrote out all ssl data. Signal | True                        | 
+ 311 |     */                                   | True                        | 
+ 312 |    close(STDOUT_FILENO);                 | True                        | 
+ 313 |   }                                      | True                        | 
+ 314 |   goto again;                            | True                        | 
+ 315 |                                          | True                        | 
+ 316 |  case MATRIXSSL_REQUEST_RECV:            | True                        | 
+ 317 |   dbg("MATRIXSSL_REQUEST_RECV\n");       | True                        | 
+ 318 |   wait_for_input();                      | True                        | 
+ 319 |   goto read_network;                     | True                        | 
+ 320 |                                          | True                        | 
+ 321 |  case MATRIXSSL_RECEIVED_ALERT:          | True                        | 
+ 322 |   dbg("MATRIXSSL_RECEIVED_ALERT\n");     | True                        | 
+ 323 |   /* The first byte of the buffer is the | True                        | 
+ 324 |   /* The second byte is the description  | True                        | 
+ 325 |   if (buf[0] == SSL_ALERT_LEVEL_FATAL)   | True                        | 
+ 326 |    die("Fatal alert\n");                 | True                        | 
+ 327 |   /* Closure alert is normal (and best)  | True                        | 
+ 328 |   if (buf[1] == SSL_ALERT_CLOSE_NOTIFY)  | True                        | 
+ 329 |    close_conn_and_exit(ssl, fd);         | True                        | 
+ 330 |   die("Warning alert\n");                | True                        | 
+ 331 |   len32u = len;                          | True                        | 
+ 332 |   rc = matrixSslProcessedData(ssl, &buf, | True                        | 
+ 333 | dbg("matrixSslProcessedData:rc=%d\n", rc | True                        | 
+ 334 |   len = len32u;                          | True                        | 
+ 335 |   goto again;                            | True                        | 
+ 336 |                                          | True                        | 
+ 337 |  default:                                | True                        | 
+ 338 |   /* If rc < 0 it is an error */         | True                        | 
+ 339 |   die("bad rc:%d\n", rc);                | True                        | 
+ 340 |  }                                       | True                        | 
+ 341 | }                                        | True                        | 
+ 342 |                                          | True                        | 
+ 343 | static sslKeys_t* make_keys(void)        | True                        | 
+ 344 | {                                        | True                        | 
+ 345 |  int rc, CAstreamLen;                    | True                        | 
+ 346 |  char *CAstream;                         | True                        | 
+ 347 |  sslKeys_t *keys;                        | True                        | 
+ 348 |                                          | True                        | 
+ 349 |  if (matrixSslNewKeys(&keys) < 0)        | True                        | 
+ 350 |   die("matrixSslNewKeys\n");             | True                        | 
+ 351 |                                          | True                        | 
+ 352 | #ifdef USE_HEADER_KEYS                   | True                        | 
+ 353 |  /*                                      | True                        | 
+ 354 |   * In-memory based keys                 | True                        | 
+ 355 |   * Build the CA list first for potentia | True                        | 
+ 356 |   */                                     | True                        | 
+ 357 |  CAstream = NULL;                        | True                        | 
+ 358 |  CAstreamLen = sizeof(RSACAS);           | True                        | 
+ 359 |  if (CAstreamLen > 0) {                  | True                        | 
+ 360 |   CAstream = psMalloc(NULL, CAstreamLen) | True                        | 
+ 361 |   memcpy(CAstream, RSACAS, sizeof(RSACAS | True                        | 
+ 362 |  }                                       | True                        | 
+ 363 |                                          | True                        | 
+ 364 |  #ifdef ID_RSA                           | True                        | 
+ 365 |  rc = matrixSslLoadRsaKeysMem(keys, RSA2 | True                        | 
+ 366 |    RSA2048KEY, sizeof(RSA2048KEY), (unsi | True                        | 
+ 367 |    CAstreamLen);                         | True                        | 
+ 368 |  if (rc < 0)                             | True                        | 
+ 369 |   die("matrixSslLoadRsaKeysMem\n");      | True                        | 
+ 370 |  #endif                                  | True                        | 
+ 371 |                                          | True                        | 
+ 372 |  if (CAstream)                           | True                        | 
+ 373 |   psFree(CAstream);                      | True                        | 
+ 374 | #endif /* USE_HEADER_KEYS */             | True                        | 
+ 375 |  return keys;                            | True                        | 
+ 376 | }                                        | True                        | 
+ 377 |                                          | True                        | 
+ 378 | int main(int argc, char **argv)          | True                        | 
+ 379 | {                                        | True                        | 
+ 380 |  int fd;                                 | True                        | 
+ 381 |  char *fd_str;                           | True                        | 
+ 382 |                                          | True                        | 
+ 383 |  if (!argv[1])                           | True                        | 
+ 384 |   die("Syntax error\n");                 | True                        | 
+ 385 |  if (argv[1][0] != '-')                  | True                        | 
+ 386 |   die("Syntax error\n");                 | True                        | 
+ 387 |  if (argv[1][1] != 'd')                  | True                        | 
+ 388 |   die("Syntax error\n");                 | True                        | 
+ 389 |  fd_str = argv[1] + 2;                   | True                        | 
+ 390 |  if (!fd_str[0])                         | True                        | 
+ 391 |   fd_str = argv[2];                      | True                        | 
+ 392 |  if (!fd_str || fd_str[0] < '0' || fd_st | True                        | 
+ 393 |   die("Syntax error\n");                 | True                        | 
+ 394 |                                          | True                        | 
+ 395 |  fd = atoi(fd_str);                      | True                        | 
+ 396 |  if (fd < 3)                             | True                        | 
+ 397 |   die("Syntax error\n");                 | True                        | 
+ 398 |                                          | True                        | 
+ 399 |  if (matrixSslOpen() < 0)                | True                        | 
+ 400 |   die("matrixSslOpen\n");                | True                        | 
+ 401 |                                          | True                        | 
+ 402 |  do_io_until_eof_and_exit(fd, make_keys( | True                        | 
+ 403 |  /* does not return */                   | True                        | 
+ 404 |                                          | True                        | 
+ 405 |  return 0;                               | True                        | 
+ 406 | }                                        | True                        | 
+-----+------------------------------------------+-----------------------------+
+     |                                          | +115MB, 304ms               | 

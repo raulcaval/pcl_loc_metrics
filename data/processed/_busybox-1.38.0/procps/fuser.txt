@@ -1,0 +1,339 @@
+FILE: data/raw/busybox-1.38.0/procps/fuser.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * tiny fuser implementation             | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright 2004 Tony J. White          | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config FUSER                    | True                      | 
+  10 | //config: bool "fuser (7.3 kb)"          | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: fuser lists all PIDs (Process  | True                      | 
+  14 | //config: file open. fuser can also list | True                      | 
+  15 | //config: (TCP or UDP) port open.        | True                      | 
+  16 |                                          | True                      | 
+  17 | //applet:IF_FUSER(APPLET(fuser, BB_DIR_U | True                      | 
+  18 |                                          | True                      | 
+  19 | //kbuild:lib-$(CONFIG_FUSER) += fuser.o  | True                      | 
+  20 |                                          | True                      | 
+  21 | //usage:#define fuser_trivial_usage      | True                      | 
+  22 | //usage:       "[-msk46] [-SIGNAL] FILE  | True                      | 
+  23 | //usage:#define fuser_full_usage "\n\n"  | True                      | 
+  24 | //usage:       "Find processes which use | True                      | 
+  25 | //usage:     "\n -m Find processes which | True                      | 
+  26 | //usage:     "\n -4,-6 Search only IPv4/ | True                      | 
+  27 | //usage:     "\n -s Don't display PIDs"  | True                      | 
+  28 | //usage:     "\n -k Kill found processes | True                      | 
+  29 | //usage:     "\n -SIGNAL Signal to send  | True                      | 
+  30 |                                          | True                      | 
+  31 | #include "libbb.h"                       | True                      | 
+  32 | #include "common_bufsiz.h"               | True                      | 
+  33 |                                          | True                      | 
+  34 | #define MAX_LINE 255                     | True                      | 
+  35 |                                          | True                      | 
+  36 | #define OPTION_STRING "mks64"            | True                      | 
+  37 | enum {                                   | True                      | 
+  38 |  OPT_MOUNT  = (1 << 0),                  | True                      | 
+  39 |  OPT_KILL   = (1 << 1),                  | True                      | 
+  40 |  OPT_SILENT = (1 << 2),                  | True                      | 
+  41 |  OPT_IP6    = (1 << 3),                  | True                      | 
+  42 |  OPT_IP4    = (1 << 4),                  | True                      | 
+  43 | };                                       | True                      | 
+  44 |                                          | True                      | 
+  45 | typedef struct inode_list {              | True                      | 
+  46 |  struct inode_list *next;                | True                      | 
+  47 |  ino_t inode;                            | True                      | 
+  48 |  dev_t dev;                              | True                      | 
+  49 | } inode_list;                            | True                      | 
+  50 |                                          | True                      | 
+  51 | struct globals {                         | True                      | 
+  52 |  int recursion_depth;                    | True                      | 
+  53 |  pid_t mypid;                            | True                      | 
+  54 |  inode_list *inode_list_head;            | True                      | 
+  55 |  smallint kill_failed;                   | True                      | 
+  56 |  int killsig;                            | True                      | 
+  57 | } FIX_ALIASING;                          | True                      | 
+  58 | #define G (*(struct globals*)bb_common_b | True                      | 
+  59 | #define INIT_G() do { \                  | True                      | 
+  60 |  setup_common_bufsiz(); \                | True                      | 
+  61 |  G.mypid = getpid(); \                   | True                      | 
+  62 |  G.killsig = SIGKILL; \                  | True                      | 
+  63 | } while (0)                              | True                      | 
+  64 |                                          | True                      | 
+  65 | static void add_inode(const struct stat  | True                      | 
+  66 | {                                        | True                      | 
+  67 |  inode_list **curr = &G.inode_list_head; | True                      | 
+  68 |                                          | True                      | 
+  69 |  while (*curr) {                         | True                      | 
+  70 |   if ((*curr)->dev == st->st_dev         | True                      | 
+  71 |    && (*curr)->inode == st->st_ino       | True                      | 
+  72 |   ) {                                    | True                      | 
+  73 |    return;                               | True                      | 
+  74 |   }                                      | True                      | 
+  75 |   curr = &(*curr)->next;                 | True                      | 
+  76 |  }                                       | True                      | 
+  77 |                                          | True                      | 
+  78 |  *curr = xzalloc(sizeof(inode_list));    | True                      | 
+  79 |  (*curr)->dev = st->st_dev;              | True                      | 
+  80 |  (*curr)->inode = st->st_ino;            | True                      | 
+  81 | }                                        | True                      | 
+  82 |                                          | True                      | 
+  83 | static smallint search_dev_inode(const s | True                      | 
+  84 | {                                        | True                      | 
+  85 |  inode_list *ilist = G.inode_list_head;  | True                      | 
+  86 |                                          | True                      | 
+  87 |  while (ilist) {                         | True                      | 
+  88 |   if (ilist->dev == st->st_dev) {        | True                      | 
+  89 |    if (option_mask32 & OPT_MOUNT)        | True                      | 
+  90 |     return 1;                            | True                      | 
+  91 |    if (ilist->inode == st->st_ino)       | True                      | 
+  92 |     return 1;                            | True                      | 
+  93 |   }                                      | True                      | 
+  94 |   ilist = ilist->next;                   | True                      | 
+  95 |  }                                       | True                      | 
+  96 |  return 0;                               | True                      | 
+  97 | }                                        | True                      | 
+  98 |                                          | True                      | 
+  99 | enum {                                   | True                      | 
+ 100 |  PROC_NET = 0,                           | True                      | 
+ 101 |  PROC_DIR,                               | True                      | 
+ 102 |  PROC_DIR_LINKS,                         | True                      | 
+ 103 |  PROC_SUBDIR_LINKS,                      | True                      | 
+ 104 | };                                       | True                      | 
+ 105 |                                          | True                      | 
+ 106 | static smallint scan_proc_net_or_maps(co | True                      | 
+ 107 | {                                        | True                      | 
+ 108 |  FILE *f;                                | True                      | 
+ 109 |  char line[MAX_LINE + 1], addr[68];      | True                      | 
+ 110 |  int major, minor, r;                    | True                      | 
+ 111 |  long long uint64_inode;                 | True                      | 
+ 112 |  unsigned tmp_port;                      | True                      | 
+ 113 |  smallint retval;                        | True                      | 
+ 114 |  struct stat statbuf;                    | True                      | 
+ 115 |  const char *fmt;                        | True                      | 
+ 116 |  void *fag, *sag;                        | True                      | 
+ 117 |                                          | True                      | 
+ 118 |  f = fopen_for_read(path);               | True                      | 
+ 119 |  if (!f)                                 | True                      | 
+ 120 |   return 0;                              | True                      | 
+ 121 |                                          | True                      | 
+ 122 |  if (G.recursion_depth == PROC_NET) {    | True                      | 
+ 123 |   int fd;                                | True                      | 
+ 124 |                                          | True                      | 
+ 125 |   /* find socket dev */                  | True                      | 
+ 126 |   statbuf.st_dev = 0;                    | True                      | 
+ 127 |   fd = socket(AF_INET, SOCK_DGRAM, 0);   | True                      | 
+ 128 |   if (fd >= 0) {                         | True                      | 
+ 129 |    fstat(fd, &statbuf);                  | True                      | 
+ 130 |    close(fd);                            | True                      | 
+ 131 |   }                                      | True                      | 
+ 132 |                                          | True                      | 
+ 133 |   fmt = "%*d: %64[0-9A-Fa-f]:%x %*x:%*x  | True                      | 
+ 134 |    "%*x:%*x %*x:%*x %*x %*d %*d %llu";   | True                      | 
+ 135 |   fag = addr;                            | True                      | 
+ 136 |   sag = &tmp_port;                       | True                      | 
+ 137 |  } else {                                | True                      | 
+ 138 |   fmt = "%*s %*s %*s %x:%x %llu";        | True                      | 
+ 139 |   fag = &major;                          | True                      | 
+ 140 |   sag = &minor;                          | True                      | 
+ 141 |  }                                       | True                      | 
+ 142 |                                          | True                      | 
+ 143 |  retval = 0;                             | True                      | 
+ 144 |  while (fgets(line, MAX_LINE, f)) {      | True                      | 
+ 145 |   r = sscanf(line, fmt, fag, sag, &uint6 | True                      | 
+ 146 |   if (r != 3)                            | True                      | 
+ 147 |    continue;                             | True                      | 
+ 148 |                                          | True                      | 
+ 149 |   statbuf.st_ino = uint64_inode;         | True                      | 
+ 150 |   if (G.recursion_depth == PROC_NET) {   | True                      | 
+ 151 |    r = strlen(addr);                     | True                      | 
+ 152 |    if (r == 8 && (option_mask32 & OPT_IP | True                      | 
+ 153 |     continue;                            | True                      | 
+ 154 |    if (r > 8 && (option_mask32 & OPT_IP4 | True                      | 
+ 155 |     continue;                            | True                      | 
+ 156 |    if (tmp_port == port)                 | True                      | 
+ 157 |     add_inode(&statbuf);                 | True                      | 
+ 158 |   } else {                               | True                      | 
+ 159 |    if (major != 0 && minor != 0 && statb | True                      | 
+ 160 |     statbuf.st_dev = makedev(major, mino | True                      | 
+ 161 |     retval = search_dev_inode(&statbuf); | True                      | 
+ 162 |     if (retval)                          | True                      | 
+ 163 |      break;                              | True                      | 
+ 164 |    }                                     | True                      | 
+ 165 |   }                                      | True                      | 
+ 166 |  }                                       | True                      | 
+ 167 |  fclose(f);                              | True                      | 
+ 168 |                                          | True                      | 
+ 169 |  return retval;                          | True                      | 
+ 170 | }                                        | True                      | 
+ 171 |                                          | True                      | 
+ 172 | static smallint scan_recursive(const cha | True                      | 
+ 173 | {                                        | True                      | 
+ 174 |  DIR *d;                                 | True                      | 
+ 175 |  struct dirent *d_ent;                   | True                      | 
+ 176 |  smallint stop_scan;                     | True                      | 
+ 177 |  smallint retval;                        | True                      | 
+ 178 |                                          | True                      | 
+ 179 |  d = opendir(path);                      | True                      | 
+ 180 |  if (d == NULL)                          | True                      | 
+ 181 |   return 0;                              | True                      | 
+ 182 |                                          | True                      | 
+ 183 |  G.recursion_depth++;                    | True                      | 
+ 184 |  retval = 0;                             | True                      | 
+ 185 |  stop_scan = 0;                          | True                      | 
+ 186 |  while (!stop_scan && (d_ent = readdir(d | True                      | 
+ 187 |   struct stat statbuf;                   | True                      | 
+ 188 |   pid_t pid;                             | True                      | 
+ 189 |   char *subpath;                         | True                      | 
+ 190 |                                          | True                      | 
+ 191 |   subpath = concat_subpath_file(path, d_ | True                      | 
+ 192 |   if (subpath == NULL)                   | True                      | 
+ 193 |    continue; /* . or .. */               | True                      | 
+ 194 |                                          | True                      | 
+ 195 |   switch (G.recursion_depth) {           | True                      | 
+ 196 |   case PROC_DIR:                         | True                      | 
+ 197 |    pid = (pid_t)bb_strtou(d_ent->d_name, | True                      | 
+ 198 |    if (errno != 0                        | True                      | 
+ 199 |     || pid == G.mypid                    | True                      | 
+ 200 |    /* "this PID doesn't use specified FI | True                      | 
+ 201 |     || scan_recursive(subpath) == 0      | True                      | 
+ 202 |    ) {                                   | True                      | 
+ 203 |     break;                               | True                      | 
+ 204 |    }                                     | True                      | 
+ 205 |    if (option_mask32 & OPT_KILL) {       | True                      | 
+ 206 |     if (kill(pid, G.killsig) != 0) {     | True                      | 
+ 207 |      bb_perror_msg("kill pid %s", d_ent- | True                      | 
+ 208 |      G.kill_failed = 1;                  | True                      | 
+ 209 |     }                                    | True                      | 
+ 210 |    }                                     | True                      | 
+ 211 |    if (!(option_mask32 & OPT_SILENT))    | True                      | 
+ 212 |     printf("%s ", d_ent->d_name);        | True                      | 
+ 213 |    retval = 1;                           | True                      | 
+ 214 |    break;                                | True                      | 
+ 215 |                                          | True                      | 
+ 216 |   case PROC_DIR_LINKS:                   | True                      | 
+ 217 |    switch (                              | True                      | 
+ 218 |     index_in_substrings(                 | True                      | 
+ 219 |      "cwd"  "\0" "exe"  "\0"             | True                      | 
+ 220 |      "root" "\0" "fd"   "\0"             | True                      | 
+ 221 |      "lib"  "\0" "mmap" "\0"             | True                      | 
+ 222 |      "maps" "\0",                        | True                      | 
+ 223 |      d_ent->d_name                       | True                      | 
+ 224 |     )                                    | True                      | 
+ 225 |    ) {                                   | True                      | 
+ 226 |    enum {                                | True                      | 
+ 227 |     CWD_LINK,                            | True                      | 
+ 228 |     EXE_LINK,                            | True                      | 
+ 229 |     ROOT_LINK,                           | True                      | 
+ 230 |     FD_DIR_LINKS,                        | True                      | 
+ 231 |     LIB_DIR_LINKS,                       | True                      | 
+ 232 |     MMAP_DIR_LINKS,                      | True                      | 
+ 233 |     MAPS,                                | True                      | 
+ 234 |    };                                    | True                      | 
+ 235 |    case CWD_LINK:                        | True                      | 
+ 236 |    case EXE_LINK:                        | True                      | 
+ 237 |    case ROOT_LINK:                       | True                      | 
+ 238 |     goto scan_link;                      | True                      | 
+ 239 |    case FD_DIR_LINKS:                    | True                      | 
+ 240 |    case LIB_DIR_LINKS:                   | True                      | 
+ 241 |    case MMAP_DIR_LINKS:                  | True                      | 
+ 242 |     stop_scan = scan_recursive(subpath); | True                      | 
+ 243 |     if (stop_scan)                       | True                      | 
+ 244 |      retval = stop_scan;                 | True                      | 
+ 245 |     break;                               | True                      | 
+ 246 |    case MAPS:                            | True                      | 
+ 247 |     stop_scan = scan_proc_net_or_maps(su | True                      | 
+ 248 |     if (stop_scan)                       | True                      | 
+ 249 |      retval = stop_scan;                 | True                      | 
+ 250 |    default:                              | True                      | 
+ 251 |     break;                               | True                      | 
+ 252 |    }                                     | True                      | 
+ 253 |    break;                                | True                      | 
+ 254 |   case PROC_SUBDIR_LINKS:                | True                      | 
+ 255 |   scan_link:                             | True                      | 
+ 256 |    if (stat(subpath, &statbuf) < 0)      | True                      | 
+ 257 |     break;                               | True                      | 
+ 258 |    stop_scan = search_dev_inode(&statbuf | True                      | 
+ 259 |    if (stop_scan)                        | True                      | 
+ 260 |     retval = stop_scan;                  | True                      | 
+ 261 |   default:                               | True                      | 
+ 262 |    break;                                | True                      | 
+ 263 |   }                                      | True                      | 
+ 264 |   free(subpath);                         | True                      | 
+ 265 |  }                                       | True                      | 
+ 266 |  closedir(d);                            | True                      | 
+ 267 |  G.recursion_depth--;                    | True                      | 
+ 268 |  return retval;                          | True                      | 
+ 269 | }                                        | True                      | 
+ 270 |                                          | True                      | 
+ 271 | int fuser_main(int argc, char **argv) MA | True                      | 
+ 272 | int fuser_main(int argc UNUSED_PARAM, ch | True                      | 
+ 273 | {                                        | True                      | 
+ 274 |  char **pp;                              | True                      | 
+ 275 |                                          | True                      | 
+ 276 |  INIT_G();                               | True                      | 
+ 277 |                                          | True                      | 
+ 278 |  /* Handle -SIGNAL. Oh my... */          | True                      | 
+ 279 |  pp = argv;                              | True                      | 
+ 280 |  while (*++pp) {                         | True                      | 
+ 281 |   int sig;                               | True                      | 
+ 282 |   char *arg = *pp;                       | True                      | 
+ 283 |                                          | True                      | 
+ 284 |   if (arg[0] != '-')                     | True                      | 
+ 285 |    continue;                             | True                      | 
+ 286 |   if (arg[1] == '-' && arg[2] == '\0') / | True                      | 
+ 287 |    break;                                | True                      | 
+ 288 |   if ((arg[1] == '4' || arg[1] == '6') & | True                      | 
+ 289 |    continue; /* it's "-4" or "-6" */     | True                      | 
+ 290 |   sig = get_signum(&arg[1]);             | True                      | 
+ 291 |   if (sig < 0)                           | True                      | 
+ 292 |    continue;                             | True                      | 
+ 293 |   /* "-SIGNAL" option found. Remove it a | True                      | 
+ 294 |   G.killsig = sig;                       | True                      | 
+ 295 |   do {                                   | True                      | 
+ 296 |    pp[0] = arg = pp[1];                  | True                      | 
+ 297 |    pp++;                                 | True                      | 
+ 298 |   } while (arg);                         | True                      | 
+ 299 |   break;                                 | True                      | 
+ 300 |  }                                       | True                      | 
+ 301 |                                          | True                      | 
+ 302 |  getopt32(argv, "^" OPTION_STRING "\0" " | True                      | 
+ 303 |  argv += optind;                         | True                      | 
+ 304 |                                          | True                      | 
+ 305 |  pp = argv;                              | True                      | 
+ 306 |  while (*pp) {                           | True                      | 
+ 307 |   /* parse net arg */                    | True                      | 
+ 308 |   unsigned port;                         | True                      | 
+ 309 |   char path[sizeof("/proc/net/TCP6")];   | True                      | 
+ 310 |                                          | True                      | 
+ 311 |   strcpy(path, "/proc/net/");            | True                      | 
+ 312 |   if (sscanf(*pp, "%u/%4s", &port, path  | True                      | 
+ 313 |    && access(path, R_OK) == 0            | True                      | 
+ 314 |   ) {                                    | True                      | 
+ 315 |    /* PORT/PROTO */                      | True                      | 
+ 316 |    scan_proc_net_or_maps(path, port);    | True                      | 
+ 317 |   } else {                               | True                      | 
+ 318 |    /* FILE */                            | True                      | 
+ 319 |    struct stat statbuf;                  | True                      | 
+ 320 |    xstat(*pp, &statbuf);                 | True                      | 
+ 321 |    add_inode(&statbuf);                  | True                      | 
+ 322 |   }                                      | True                      | 
+ 323 |   pp++;                                  | True                      | 
+ 324 |  }                                       | True                      | 
+ 325 |                                          | True                      | 
+ 326 |  if (scan_recursive("/proc")) {          | True                      | 
+ 327 |   if (!(option_mask32 & OPT_SILENT))     | True                      | 
+ 328 |    bb_putchar('\n');                     | True                      | 
+ 329 |   return G.kill_failed;                  | True                      | 
+ 330 |  }                                       | True                      | 
+ 331 |                                          | True                      | 
+ 332 |  return EXIT_FAILURE;                    | True                      | 
+ 333 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +113MB, 241ms             | 

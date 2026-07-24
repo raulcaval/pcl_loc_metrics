@@ -1,0 +1,720 @@
+FILE: data/raw/busybox-1.38.0/shell/shell_common.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Adapted from ash applet code          | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * This code is derived from software co | True                      | 
+   6 |  * Kenneth Almquist.                     | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Copyright (c) 1989, 1991, 1993, 1994  | True                      | 
+   9 |  *      The Regents of the University of | True                      | 
+  10 |  *                                       | True                      | 
+  11 |  * Copyright (c) 1997-2005 Herbert Xu <h | True                      | 
+  12 |  * was re-ported from NetBSD and debiani | True                      | 
+  13 |  *                                       | True                      | 
+  14 |  * Copyright (c) 2010 Denys Vlasenko     | True                      | 
+  15 |  * Split from ash.c                      | True                      | 
+  16 |  *                                       | True                      | 
+  17 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  18 |  */                                      | True                      | 
+  19 | #include "libbb.h"                       | True                      | 
+  20 | #include "shell_common.h"                | True                      | 
+  21 |                                          | True                      | 
+  22 | const char defifsvar[] ALIGN1 = "IFS= \t | True                      | 
+  23 | const char defoptindvar[] ALIGN1 = "OPTI | True                      | 
+  24 |                                          | True                      | 
+  25 | /* Compare two strings up to the first ' | True                      | 
+  26 | int FAST_FUNC varcmp(const char *p, cons | True                      | 
+  27 | {                                        | True                      | 
+  28 |  int c, d;                               | True                      | 
+  29 |                                          | True                      | 
+  30 |  while ((c = *p) == (d = *q)) {          | True                      | 
+  31 |   if (c == '\0' || c == '=')             | True                      | 
+  32 |    goto out;                             | True                      | 
+  33 |   p++;                                   | True                      | 
+  34 |   q++;                                   | True                      | 
+  35 |  }                                       | True                      | 
+  36 |  if (c == '=')                           | True                      | 
+  37 |   c = '\0';                              | True                      | 
+  38 |  if (d == '=')                           | True                      | 
+  39 |   d = '\0';                              | True                      | 
+  40 |  out:                                    | True                      | 
+  41 |  return c - d;                           | True                      | 
+  42 | }                                        | True                      | 
+  43 |                                          | True                      | 
+  44 | /* read builtin */                       | True                      | 
+  45 |                                          | True                      | 
+  46 | /* Needs to be interruptible: shell must | True                      | 
+  47 |  * while inside read. To implement this, | True                      | 
+  48 |  * and return errno == EINTR reliably.   | True                      | 
+  49 |  */                                      | True                      | 
+  50 | //TODO: use more efficient setvar() whic | True                      | 
+  51 | //string. hush naturally has it, and ash | True                      | 
+  52 | //Here we can simply store "VAR=" at buf | True                      | 
+  53 | //after "=", then pass buffer to setvar( | True                      | 
+  54 | const char* FAST_FUNC                    | True                      | 
+  55 | shell_builtin_read(struct builtin_read_p | True                      | 
+  56 | {                                        | True                      | 
+  57 |  struct pollfd pfd[1];                   | True                      | 
+  58 | #define fd (pfd->fd) /* -u FD */         | True                      | 
+  59 |  unsigned err;                           | True                      | 
+  60 |  unsigned end_ms; /* -t TIMEOUT */       | True                      | 
+  61 |  int nchars; /* -n NUM */                | True                      | 
+  62 |  char **pp;                              | True                      | 
+  63 |  char *buffer;                           | True                      | 
+  64 |  char delim;                             | True                      | 
+  65 |  struct termios tty, old_tty;            | True                      | 
+  66 |  const char *retval;                     | True                      | 
+  67 |  int bufpos; /* need to be able to hold  | True                      | 
+  68 |  int startword;                          | True                      | 
+  69 |  smallint backslash;                     | True                      | 
+  70 |  char **argv;                            | True                      | 
+  71 |  const char *ifs;                        | True                      | 
+  72 |  int read_flags;                         | True                      | 
+  73 |                                          | True                      | 
+  74 |  errno = err = 0;                        | True                      | 
+  75 |                                          | True                      | 
+  76 |  argv = params->argv;                    | True                      | 
+  77 |  pp = argv;                              | True                      | 
+  78 |  while (*pp) {                           | True                      | 
+  79 |   if (!*pp[0] || endofname(*pp)[0] != '\ | True                      | 
+  80 |    /* Mimic bash message */              | True                      | 
+  81 |    bb_error_msg("read: '%s': bad variabl | True                      | 
+  82 |    return (const char *)(uintptr_t)1;    | True                      | 
+  83 |   }                                      | True                      | 
+  84 |   pp++;                                  | True                      | 
+  85 |  }                                       | True                      | 
+  86 |                                          | True                      | 
+  87 |  nchars = 0; /* if != 0, -n is in effect | True                      | 
+  88 |  if (params->opt_n) {                    | True                      | 
+  89 |   nchars = bb_strtou(params->opt_n, NULL | True                      | 
+  90 |   if (nchars < 0 || errno)               | True                      | 
+  91 |    return "invalid count";               | True                      | 
+  92 |   /* note: "-n 0": off (bash 3.2 does th | True                      | 
+  93 |  }                                       | True                      | 
+  94 |                                          | True                      | 
+  95 |  end_ms = 0;                             | True                      | 
+  96 |  if (params->opt_t && !ENABLE_FEATURE_SH | True                      | 
+  97 |   end_ms = bb_strtou(params->opt_t, NULL | True                      | 
+  98 |   if (errno)                             | True                      | 
+  99 |    return "invalid timeout";             | True                      | 
+ 100 |   if (end_ms > UINT_MAX / 2048) /* be sa | True                      | 
+ 101 |    end_ms = UINT_MAX / 2048;             | True                      | 
+ 102 |   end_ms *= 1000;                        | True                      | 
+ 103 |  }                                       | True                      | 
+ 104 |  if (params->opt_t && ENABLE_FEATURE_SH_ | True                      | 
+ 105 |   /* bash 4.3 (maybe earlier) supports - | True                      | 
+ 106 |   char *p;                               | True                      | 
+ 107 |   /* Eat up to three fractional digits * | True                      | 
+ 108 |   int frac_digits = 3 + 1;               | True                      | 
+ 109 |                                          | True                      | 
+ 110 |   end_ms = bb_strtou(params->opt_t, &p,  | True                      | 
+ 111 |   if (end_ms > UINT_MAX / 2048) /* be sa | True                      | 
+ 112 |    end_ms = UINT_MAX / 2048;             | True                      | 
+ 113 |                                          | True                      | 
+ 114 |   if (errno) {                           | True                      | 
+ 115 |    /* EINVAL = number is ok, but not NUL | True                      | 
+ 116 |    if (errno != EINVAL || *p != '.')     | True                      | 
+ 117 |     return "invalid timeout";            | True                      | 
+ 118 |    /* Do not check the rest: bash allows | True                      | 
+ 119 |    while (*++p && --frac_digits) {       | True                      | 
+ 120 |     end_ms *= 10;                        | True                      | 
+ 121 |     end_ms += (*p - '0');                | True                      | 
+ 122 |     if ((unsigned char)(*p - '0') > 9)   | True                      | 
+ 123 |      return "invalid timeout";           | True                      | 
+ 124 |    }                                     | True                      | 
+ 125 |   }                                      | True                      | 
+ 126 |   while (--frac_digits > 0) {            | True                      | 
+ 127 |    end_ms *= 10;                         | True                      | 
+ 128 |   }                                      | True                      | 
+ 129 |  }                                       | True                      | 
+ 130 |                                          | True                      | 
+ 131 |  fd = STDIN_FILENO;                      | True                      | 
+ 132 |  if (params->opt_u) {                    | True                      | 
+ 133 |   fd = bb_strtou(params->opt_u, NULL, 10 | True                      | 
+ 134 |   if (fd < 0 || errno)                   | True                      | 
+ 135 |    return "invalid file descriptor";     | True                      | 
+ 136 |  }                                       | True                      | 
+ 137 |                                          | True                      | 
+ 138 |  if (params->opt_t && end_ms == 0) {     | True                      | 
+ 139 |   /* "If timeout is 0, read returns imme | True                      | 
+ 140 |    * to read any data. The exit status i | True                      | 
+ 141 |    * on the specified file descriptor, n | True                      | 
+ 142 |    * bash seems to ignore -p PROMPT for  | True                      | 
+ 143 |    */                                    | True                      | 
+ 144 |   int r;                                 | True                      | 
+ 145 |   pfd->events = POLLIN;                  | True                      | 
+ 146 |   r = poll(pfd, 1, /*timeout:*/ 0);      | True                      | 
+ 147 |   /* Return 0 only if poll returns 1 ("o | True                      | 
+ 148 |   return (const char *)(uintptr_t)(r <=  | True                      | 
+ 149 |  }                                       | True                      | 
+ 150 |                                          | True                      | 
+ 151 |  if (params->opt_p && isatty(fd)) {      | True                      | 
+ 152 |   fputs(params->opt_p, stderr);          | True                      | 
+ 153 |   fflush_all();                          | True                      | 
+ 154 |  }                                       | True                      | 
+ 155 |                                          | True                      | 
+ 156 |  ifs = params->ifs;                      | True                      | 
+ 157 |  if (ifs == NULL)                        | True                      | 
+ 158 |   ifs = defifs;                          | True                      | 
+ 159 |                                          | True                      | 
+ 160 |  read_flags = params->read_flags;        | True                      | 
+ 161 |  if (nchars || (read_flags & BUILTIN_REA | True                      | 
+ 162 |   tcgetattr(fd, &tty);                   | True                      | 
+ 163 |   old_tty = tty;                         | True                      | 
+ 164 |   if (nchars) {                          | True                      | 
+ 165 |    tty.c_lflag &= ~ICANON;               | True                      | 
+ 166 |    // Setting it to more than 1 breaks p | True                      | 
+ 167 |    // it blocks even if there's data. !? | True                      | 
+ 168 |    //tty.c_cc[VMIN] = nchars < 256 ? nch | True                      | 
+ 169 |    /* reads will block only if < 1 char  | True                      | 
+ 170 |    tty.c_cc[VMIN] = 1;                   | True                      | 
+ 171 |    /* no timeout (reads block forever) * | True                      | 
+ 172 |    tty.c_cc[VTIME] = 0;                  | True                      | 
+ 173 |   }                                      | True                      | 
+ 174 |   if (read_flags & BUILTIN_READ_SILENT)  | True                      | 
+ 175 |    tty.c_lflag &= ~(ECHO | ECHOK | ECHON | True                      | 
+ 176 |   }                                      | True                      | 
+ 177 |   /* This forces execution of "restoring | True                      | 
+ 178 |   read_flags |= BUILTIN_READ_SILENT;     | True                      | 
+ 179 |   /* if tcgetattr failed, tcsetattr will | True                      | 
+ 180 |    * Ignoring, it's harmless. */         | True                      | 
+ 181 |   tcsetattr(fd, TCSANOW, &tty);          | True                      | 
+ 182 |  }                                       | True                      | 
+ 183 |                                          | True                      | 
+ 184 |  retval = (const char *)(uintptr_t)0;    | True                      | 
+ 185 |  startword = 1;                          | True                      | 
+ 186 |  backslash = 0;                          | True                      | 
+ 187 |  if (params->opt_t)                      | True                      | 
+ 188 |   end_ms += (unsigned)monotonic_ms();    | True                      | 
+ 189 |  buffer = NULL;                          | True                      | 
+ 190 |  bufpos = 0;                             | True                      | 
+ 191 |  delim = params->opt_d ? params->opt_d[0 | True                      | 
+ 192 |  do {                                    | True                      | 
+ 193 |   char c;                                | True                      | 
+ 194 |   int timeout;                           | True                      | 
+ 195 |                                          | True                      | 
+ 196 |   if ((bufpos & 0xff) == 0)              | True                      | 
+ 197 |    buffer = xrealloc(buffer, bufpos + 0x | True                      | 
+ 198 |                                          | True                      | 
+ 199 |   timeout = -1;                          | True                      | 
+ 200 |   if (params->opt_t) {                   | True                      | 
+ 201 |    timeout = end_ms - (unsigned)monotoni | True                      | 
+ 202 |    /* ^^^^^^^^^^^^^ all values are unsig | True                      | 
+ 203 |     * wrapping math is used here, good e | True                      | 
+ 204 |     * 32-bit unix time wrapped (year 203 | True                      | 
+ 205 |     */                                   | True                      | 
+ 206 |    if (timeout <= 0) { /* already late?  | True                      | 
+ 207 |     retval = (const char *)(uintptr_t)2; | True                      | 
+ 208 |     break;                               | True                      | 
+ 209 |    }                                     | True                      | 
+ 210 |   }                                      | True                      | 
+ 211 |                                          | True                      | 
+ 212 |   /* We must poll even if timeout is -1: | True                      | 
+ 213 |    * we want to be interrupted if signal | True                      | 
+ 214 |    * regardless of SA_RESTART-ness of th | True                      | 
+ 215 |    */                                    | True                      | 
+ 216 |   errno = 0;                             | True                      | 
+ 217 |   pfd->events = POLLIN;                  | True                      | 
+ 218 |                                          | True                      | 
+ 219 |   /* test bb_got_signal, then poll(), at | True                      | 
+ 220 |   if (check_got_signal_and_poll(pfd, tim | True                      | 
+ 221 |    /* timed out, or some error */        | True                      | 
+ 222 |    err = errno;                          | True                      | 
+ 223 |    if (!err) { /* timed out */           | True                      | 
+ 224 |     retval = (const char *)(uintptr_t)2; | True                      | 
+ 225 |     break;                               | True                      | 
+ 226 |    }                                     | True                      | 
+ 227 |    retval = (const char *)(uintptr_t)1;  | True                      | 
+ 228 |    goto ret;                             | True                      | 
+ 229 |   }                                      | True                      | 
+ 230 |   if (read(fd, &buffer[bufpos], 1) != 1) | True                      | 
+ 231 |    err = errno;                          | True                      | 
+ 232 |    retval = (const char *)(uintptr_t)1;  | True                      | 
+ 233 |    break;                                | True                      | 
+ 234 |   }                                      | True                      | 
+ 235 |                                          | True                      | 
+ 236 |   c = buffer[bufpos];                    | True                      | 
+ 237 |   if (!(read_flags & BUILTIN_READ_RAW))  | True                      | 
+ 238 |    if (backslash) {                      | True                      | 
+ 239 |     backslash = 0;                       | True                      | 
+ 240 |     if (c != '\n')                       | True                      | 
+ 241 |      goto put;                           | True                      | 
+ 242 |     continue;                            | True                      | 
+ 243 |    }                                     | True                      | 
+ 244 |    if (c == '\\') {                      | True                      | 
+ 245 |     backslash = 1;                       | True                      | 
+ 246 |     continue;                            | True                      | 
+ 247 |    }                                     | True                      | 
+ 248 |   }                                      | True                      | 
+ 249 |   if (c == delim) /* '\n' or -d CHAR */  | True                      | 
+ 250 |    break;                                | True                      | 
+ 251 |   if (c == '\0')                         | True                      | 
+ 252 |    continue;                             | True                      | 
+ 253 |                                          | True                      | 
+ 254 |   /* $IFS splitting. NOT done if we run  | True                      | 
+ 255 |    * without variable names (bash compat | True                      | 
+ 256 |    * Thus, "read" and "read REPLY" are n | True                      | 
+ 257 |    */                                    | True                      | 
+ 258 |   if (argv[0]) {                         | True                      | 
+ 259 | /* http://www.opengroup.org/onlinepubs/9 | True                      | 
+ 260 |    const char *is_ifs = strchr(ifs, c);  | True                      | 
+ 261 |    if (startword && is_ifs) {            | True                      | 
+ 262 |     if (isspace(c))                      | True                      | 
+ 263 |      continue;                           | True                      | 
+ 264 |     /* it is a non-space ifs char */     | True                      | 
+ 265 |     startword--;                         | True                      | 
+ 266 |     if (startword == 1) /* first one? */ | True                      | 
+ 267 |      continue; /* yes, it is not next wo | True                      | 
+ 268 |    }                                     | True                      | 
+ 269 |    startword = 0;                        | True                      | 
+ 270 |    if (argv[1] != NULL && is_ifs) {      | True                      | 
+ 271 |     buffer[bufpos] = '\0';               | True                      | 
+ 272 |     bufpos = 0;                          | True                      | 
+ 273 |     params->setvar(*argv, buffer);       | True                      | 
+ 274 |     argv++;                              | True                      | 
+ 275 |     /* can we skip one non-space ifs cha | True                      | 
+ 276 |     startword = isspace(c) ? 2 : 1;      | True                      | 
+ 277 |     continue;                            | True                      | 
+ 278 |    }                                     | True                      | 
+ 279 |   }                                      | True                      | 
+ 280 |  put:                                    | True                      | 
+ 281 |   bufpos++;                              | True                      | 
+ 282 |  } while (--nchars);                     | True                      | 
+ 283 |                                          | True                      | 
+ 284 |  if (argv[0]) {                          | True                      | 
+ 285 |   /* Remove trailing space $IFS chars */ | True                      | 
+ 286 |   while (--bufpos >= 0                   | True                      | 
+ 287 |    && isspace(buffer[bufpos])            | True                      | 
+ 288 |    && strchr(ifs, buffer[bufpos]) != NUL | True                      | 
+ 289 |   ) {                                    | True                      | 
+ 290 |    continue;                             | True                      | 
+ 291 |   }                                      | True                      | 
+ 292 |   buffer[bufpos + 1] = '\0';             | True                      | 
+ 293 |                                          | True                      | 
+ 294 |   /* Last variable takes the entire rema | True                      | 
+ 295 |    * (sans trailing whitespace $IFS),    | True                      | 
+ 296 |    * but ***only "if there are fewer var | True                      | 
+ 297 |    * The "X:Y:" case below: there are tw | True                      | 
+ 298 |    * and therefore last delimiter (:) is | True                      | 
+ 299 |    * IFS=": "                            | True                      | 
+ 300 |    * echo "X:Y:Z:"  | (read x y; echo "| | True                      | 
+ 301 |    * echo "X:Y:Z"   | (read x y; echo "| | True                      | 
+ 302 |    * echo "X:Y:"    | (read x y; echo "| | True                      | 
+ 303 |    * echo "X:Y  : " | (read x y; echo "| | True                      | 
+ 304 |    */                                    | True                      | 
+ 305 |   if (bufpos >= 0                        | True                      | 
+ 306 |    && strchr(ifs, buffer[bufpos]) != NUL | True                      | 
+ 307 |   ) {                                    | True                      | 
+ 308 |    /* There _is_ a non-whitespace IFS ch | True                      | 
+ 309 |    /* Skip whitespace IFS char before it | True                      | 
+ 310 |    while (--bufpos >= 0                  | True                      | 
+ 311 |     && isspace(buffer[bufpos])           | True                      | 
+ 312 |     && strchr(ifs, buffer[bufpos]) != NU | True                      | 
+ 313 |    ) {                                   | True                      | 
+ 314 |     continue;                            | True                      | 
+ 315 |    }                                     | True                      | 
+ 316 |    /* Are there $IFS chars? */           | True                      | 
+ 317 |    if (strcspn(buffer, ifs) >= ++bufpos) | True                      | 
+ 318 |     /* No: last var takes one field, not | True                      | 
+ 319 |     /* So, drop trailing IFS delims */   | True                      | 
+ 320 |     buffer[bufpos] = '\0';               | True                      | 
+ 321 |    }                                     | True                      | 
+ 322 |   }                                      | True                      | 
+ 323 |                                          | True                      | 
+ 324 |   /* Use the remainder as a value for th | True                      | 
+ 325 |   params->setvar(*argv, buffer);         | True                      | 
+ 326 |   /* Set the rest to "" */               | True                      | 
+ 327 |   while (*++argv)                        | True                      | 
+ 328 |    params->setvar(*argv, "");            | True                      | 
+ 329 |  } else {                                | True                      | 
+ 330 |   /* Note: no $IFS removal */            | True                      | 
+ 331 |   buffer[bufpos] = '\0';                 | True                      | 
+ 332 |   params->setvar("REPLY", buffer);       | True                      | 
+ 333 |  }                                       | True                      | 
+ 334 |                                          | True                      | 
+ 335 |  ret:                                    | True                      | 
+ 336 |  free(buffer);                           | True                      | 
+ 337 |  if (read_flags & BUILTIN_READ_SILENT)   | True                      | 
+ 338 |   tcsetattr(fd, TCSANOW, &old_tty);      | True                      | 
+ 339 |                                          | True                      | 
+ 340 |  errno = err;                            | True                      | 
+ 341 |  return retval;                          | True                      | 
+ 342 | #undef fd                                | True                      | 
+ 343 | }                                        | True                      | 
+ 344 |                                          | True                      | 
+ 345 | /* ulimit builtin */                     | True                      | 
+ 346 |                                          | True                      | 
+ 347 | struct limits {                          | True                      | 
+ 348 |  uint8_t cmd;            /* RLIMIT_xxx f | True                      | 
+ 349 |  uint8_t factor_shift;   /* shift by to  | True                      | 
+ 350 | };                                       | True                      | 
+ 351 |                                          | True                      | 
+ 352 | /* Order of entries matches order in whi | True                      | 
+ 353 | static const struct limits limits_tbl[]  | True                      | 
+ 354 |  { RLIMIT_CORE,  9, }, // -c             | True                      | 
+ 355 |  { RLIMIT_DATA,  10, }, // -d            | True                      | 
+ 356 | #ifdef RLIMIT_NICE                       | True                      | 
+ 357 |  { RLIMIT_NICE,  0, }, // -e             | (RLIMIT_NICE)             | 
+ 358 | #define LIMIT_F_IDX     3                | (RLIMIT_NICE)             | 
+ 359 | #else                                    | True                      | 
+ 360 | /* for example, Hurd */                  | !(RLIMIT_NICE)            | 
+ 361 | #define LIMIT_F_IDX     2                | !(RLIMIT_NICE)            | 
+ 362 | #endif                                   | True                      | 
+ 363 |  { RLIMIT_FSIZE,  9, }, // -f            | True                      | 
+ 364 | #ifdef RLIMIT_SIGPENDING                 | True                      | 
+ 365 |  { RLIMIT_SIGPENDING, 0, }, // -i        | (RLIMIT_SIGPENDING)       | 
+ 366 | #endif                                   | True                      | 
+ 367 | #ifdef RLIMIT_MEMLOCK                    | True                      | 
+ 368 |  { RLIMIT_MEMLOCK, 10, }, // -l          | (RLIMIT_MEMLOCK)          | 
+ 369 | #endif                                   | True                      | 
+ 370 | #ifdef RLIMIT_RSS                        | True                      | 
+ 371 |  { RLIMIT_RSS,  10, }, // -m             | (RLIMIT_RSS)              | 
+ 372 | #endif                                   | True                      | 
+ 373 | #ifdef RLIMIT_NOFILE                     | True                      | 
+ 374 |  { RLIMIT_NOFILE, 0, }, // -n            | (RLIMIT_NOFILE)           | 
+ 375 | #endif                                   | True                      | 
+ 376 | #ifdef RLIMIT_MSGQUEUE                   | True                      | 
+ 377 |  { RLIMIT_MSGQUEUE, 0, }, // -q          | (RLIMIT_MSGQUEUE)         | 
+ 378 | #endif                                   | True                      | 
+ 379 | #ifdef RLIMIT_RTPRIO                     | True                      | 
+ 380 |  { RLIMIT_RTPRIO, 0, }, // -r            | (RLIMIT_RTPRIO)           | 
+ 381 | #endif                                   | True                      | 
+ 382 | #ifdef RLIMIT_STACK                      | True                      | 
+ 383 |  { RLIMIT_STACK,  10, }, // -s           | (RLIMIT_STACK)            | 
+ 384 | #endif                                   | True                      | 
+ 385 | #ifdef RLIMIT_CPU                        | True                      | 
+ 386 |  { RLIMIT_CPU,  0, }, // -t              | (RLIMIT_CPU)              | 
+ 387 | #endif                                   | True                      | 
+ 388 | #ifdef RLIMIT_NPROC                      | True                      | 
+ 389 |  { RLIMIT_NPROC,  0, }, // -u            | (RLIMIT_NPROC)            | 
+ 390 | #endif                                   | True                      | 
+ 391 | #ifdef RLIMIT_AS                         | True                      | 
+ 392 |  { RLIMIT_AS,  10, }, // -v              | (RLIMIT_AS)               | 
+ 393 | #endif                                   | True                      | 
+ 394 | #ifdef RLIMIT_LOCKS                      | True                      | 
+ 395 |  { RLIMIT_LOCKS,  0, }, // -x            | (RLIMIT_LOCKS)            | 
+ 396 | #endif                                   | True                      | 
+ 397 | };                                       | True                      | 
+ 398 | // 1) bash also shows:                   | True                      | 
+ 399 | //pipe size            (512 bytes, -p) 8 | True                      | 
+ 400 | // 2) RLIMIT_RTTIME ("timeout for RT tas | True                      | 
+ 401 |                                          | True                      | 
+ 402 | static const char limits_help[] ALIGN1 = | True                      | 
+ 403 |  "core file size (blocks)"          // - | True                      | 
+ 404 |  "\0""data seg size (kb)"           // - | True                      | 
+ 405 | #ifdef RLIMIT_NICE                       | True                      | 
+ 406 |  "\0""scheduling priority"          // - | (RLIMIT_NICE)             | 
+ 407 | #endif                                   | True                      | 
+ 408 |  "\0""file size (blocks)"           // - | True                      | 
+ 409 | #ifdef RLIMIT_SIGPENDING                 | True                      | 
+ 410 |  "\0""pending signals"              // - | (RLIMIT_SIGPENDING)       | 
+ 411 | #endif                                   | True                      | 
+ 412 | #ifdef RLIMIT_MEMLOCK                    | True                      | 
+ 413 |  "\0""max locked memory (kb)"       // - | (RLIMIT_MEMLOCK)          | 
+ 414 | #endif                                   | True                      | 
+ 415 | #ifdef RLIMIT_RSS                        | True                      | 
+ 416 |  "\0""max memory size (kb)"         // - | (RLIMIT_RSS)              | 
+ 417 | #endif                                   | True                      | 
+ 418 | #ifdef RLIMIT_NOFILE                     | True                      | 
+ 419 |  "\0""open files"                   // - | (RLIMIT_NOFILE)           | 
+ 420 | #endif                                   | True                      | 
+ 421 | #ifdef RLIMIT_MSGQUEUE                   | True                      | 
+ 422 |  "\0""POSIX message queues (bytes)" // - | (RLIMIT_MSGQUEUE)         | 
+ 423 | #endif                                   | True                      | 
+ 424 | #ifdef RLIMIT_RTPRIO                     | True                      | 
+ 425 |  "\0""real-time priority"           // - | (RLIMIT_RTPRIO)           | 
+ 426 | #endif                                   | True                      | 
+ 427 | #ifdef RLIMIT_STACK                      | True                      | 
+ 428 |  "\0""stack size (kb)"              // - | (RLIMIT_STACK)            | 
+ 429 | #endif                                   | True                      | 
+ 430 | #ifdef RLIMIT_CPU                        | True                      | 
+ 431 |  "\0""cpu time (seconds)"           // - | (RLIMIT_CPU)              | 
+ 432 | #endif                                   | True                      | 
+ 433 | #ifdef RLIMIT_NPROC                      | True                      | 
+ 434 |  "\0""max user processes"           // - | (RLIMIT_NPROC)            | 
+ 435 | #endif                                   | True                      | 
+ 436 | #ifdef RLIMIT_AS                         | True                      | 
+ 437 |  "\0""virtual memory (kb)"          // - | (RLIMIT_AS)               | 
+ 438 | #endif                                   | True                      | 
+ 439 | #ifdef RLIMIT_LOCKS                      | True                      | 
+ 440 |  "\0""file locks"                   // - | (RLIMIT_LOCKS)            | 
+ 441 | #endif                                   | True                      | 
+ 442 | ;                                        | True                      | 
+ 443 |                                          | True                      | 
+ 444 | static const char limit_chars[] ALIGN1 = | True                      | 
+ 445 |    "c"                                   | True                      | 
+ 446 |    "d"                                   | True                      | 
+ 447 | #ifdef RLIMIT_NICE                       | True                      | 
+ 448 |    "e"                                   | (RLIMIT_NICE)             | 
+ 449 | #endif                                   | True                      | 
+ 450 |    "f"                                   | True                      | 
+ 451 | #ifdef RLIMIT_SIGPENDING                 | True                      | 
+ 452 |    "i"                                   | (RLIMIT_SIGPENDING)       | 
+ 453 | #endif                                   | True                      | 
+ 454 | #ifdef RLIMIT_MEMLOCK                    | True                      | 
+ 455 |    "l"                                   | (RLIMIT_MEMLOCK)          | 
+ 456 | #endif                                   | True                      | 
+ 457 | #ifdef RLIMIT_RSS                        | True                      | 
+ 458 |    "m"                                   | (RLIMIT_RSS)              | 
+ 459 | #endif                                   | True                      | 
+ 460 | #ifdef RLIMIT_NOFILE                     | True                      | 
+ 461 |    "n"                                   | (RLIMIT_NOFILE)           | 
+ 462 | #endif                                   | True                      | 
+ 463 | #ifdef RLIMIT_MSGQUEUE                   | True                      | 
+ 464 |    "q"                                   | (RLIMIT_MSGQUEUE)         | 
+ 465 | #endif                                   | True                      | 
+ 466 | #ifdef RLIMIT_RTPRIO                     | True                      | 
+ 467 |    "r"                                   | (RLIMIT_RTPRIO)           | 
+ 468 | #endif                                   | True                      | 
+ 469 | #ifdef RLIMIT_STACK                      | True                      | 
+ 470 |    "s"                                   | (RLIMIT_STACK)            | 
+ 471 | #endif                                   | True                      | 
+ 472 | #ifdef RLIMIT_CPU                        | True                      | 
+ 473 |    "t"                                   | (RLIMIT_CPU)              | 
+ 474 | #endif                                   | True                      | 
+ 475 | #ifdef RLIMIT_NPROC                      | True                      | 
+ 476 |    "u"                                   | (RLIMIT_NPROC)            | 
+ 477 | #endif                                   | True                      | 
+ 478 | #ifdef RLIMIT_AS                         | True                      | 
+ 479 |    "v"                                   | (RLIMIT_AS)               | 
+ 480 | #endif                                   | True                      | 
+ 481 | #ifdef RLIMIT_LOCKS                      | True                      | 
+ 482 |    "x"                                   | (RLIMIT_LOCKS)            | 
+ 483 | #endif                                   | True                      | 
+ 484 | ;                                        | True                      | 
+ 485 |                                          | True                      | 
+ 486 | /* "-": treat args as parameters of opti | True                      | 
+ 487 | static const char ulimit_opt_string[] AL | True                      | 
+ 488 |    "c::"                                 | True                      | 
+ 489 |    "d::"                                 | True                      | 
+ 490 | #ifdef RLIMIT_NICE                       | True                      | 
+ 491 |    "e::"                                 | (RLIMIT_NICE)             | 
+ 492 | #endif                                   | True                      | 
+ 493 |    "f::"                                 | True                      | 
+ 494 | #ifdef RLIMIT_SIGPENDING                 | True                      | 
+ 495 |    "i::"                                 | (RLIMIT_SIGPENDING)       | 
+ 496 | #endif                                   | True                      | 
+ 497 | #ifdef RLIMIT_MEMLOCK                    | True                      | 
+ 498 |    "l::"                                 | (RLIMIT_MEMLOCK)          | 
+ 499 | #endif                                   | True                      | 
+ 500 | #ifdef RLIMIT_RSS                        | True                      | 
+ 501 |    "m::"                                 | (RLIMIT_RSS)              | 
+ 502 | #endif                                   | True                      | 
+ 503 | #ifdef RLIMIT_NOFILE                     | True                      | 
+ 504 |    "n::"                                 | (RLIMIT_NOFILE)           | 
+ 505 | #endif                                   | True                      | 
+ 506 | #ifdef RLIMIT_MSGQUEUE                   | True                      | 
+ 507 |    "q::"                                 | (RLIMIT_MSGQUEUE)         | 
+ 508 | #endif                                   | True                      | 
+ 509 | #ifdef RLIMIT_RTPRIO                     | True                      | 
+ 510 |    "r::"                                 | (RLIMIT_RTPRIO)           | 
+ 511 | #endif                                   | True                      | 
+ 512 | #ifdef RLIMIT_STACK                      | True                      | 
+ 513 |    "s::"                                 | (RLIMIT_STACK)            | 
+ 514 | #endif                                   | True                      | 
+ 515 | #ifdef RLIMIT_CPU                        | True                      | 
+ 516 |    "t::"                                 | (RLIMIT_CPU)              | 
+ 517 | #endif                                   | True                      | 
+ 518 | #ifdef RLIMIT_NPROC                      | True                      | 
+ 519 |    "u::"                                 | (RLIMIT_NPROC)            | 
+ 520 | #endif                                   | True                      | 
+ 521 | #ifdef RLIMIT_AS                         | True                      | 
+ 522 |    "v::"                                 | (RLIMIT_AS)               | 
+ 523 | #endif                                   | True                      | 
+ 524 | #ifdef RLIMIT_LOCKS                      | True                      | 
+ 525 |    "x::"                                 | (RLIMIT_LOCKS)            | 
+ 526 | #endif                                   | True                      | 
+ 527 | ;                                        | True                      | 
+ 528 |                                          | True                      | 
+ 529 | enum {                                   | True                      | 
+ 530 |  OPT_hard = (1 << 0),                    | True                      | 
+ 531 |  OPT_soft = (1 << 1),                    | True                      | 
+ 532 |  OPT_all  = (1 << 2),                    | True                      | 
+ 533 | };                                       | True                      | 
+ 534 |                                          | True                      | 
+ 535 | static void printlim(unsigned opts, cons | True                      | 
+ 536 |    const struct limits *l)               | True                      | 
+ 537 | {                                        | True                      | 
+ 538 |  rlim_t val;                             | True                      | 
+ 539 |                                          | True                      | 
+ 540 |  val = limit->rlim_max;                  | True                      | 
+ 541 |  if (opts & OPT_soft)                    | True                      | 
+ 542 |   val = limit->rlim_cur;                 | True                      | 
+ 543 |                                          | True                      | 
+ 544 |  if (val == RLIM_INFINITY)               | True                      | 
+ 545 |   puts("unlimited");                     | True                      | 
+ 546 |  else {                                  | True                      | 
+ 547 |   val >>= l->factor_shift;               | True                      | 
+ 548 |   printf("%llu\n", (long long) val);     | True                      | 
+ 549 |  }                                       | True                      | 
+ 550 | }                                        | True                      | 
+ 551 |                                          | True                      | 
+ 552 | int FAST_FUNC                            | True                      | 
+ 553 | shell_builtin_ulimit(char **argv)        | True                      | 
+ 554 | {                                        | True                      | 
+ 555 |  struct rlimit limit;                    | True                      | 
+ 556 |  unsigned opt_cnt;                       | True                      | 
+ 557 |  unsigned opts;                          | True                      | 
+ 558 |  unsigned argc;                          | True                      | 
+ 559 |  unsigned i;                             | True                      | 
+ 560 |                                          | True                      | 
+ 561 |  /* We can't use getopt32: need to handl | True                      | 
+ 562 |   * ulimit 123 -c2 -l 456                | True                      | 
+ 563 |   */                                     | True                      | 
+ 564 |                                          | True                      | 
+ 565 |  /* In case getopt() was already called: | True                      | 
+ 566 |   * reset libc getopt() internal state.  | True                      | 
+ 567 |   */                                     | True                      | 
+ 568 |  GETOPT_RESET();                         | True                      | 
+ 569 |                                          | True                      | 
+ 570 | // bash 4.4.23:                          | True                      | 
+ 571 | //                                       | True                      | 
+ 572 | // -H and/or -S change meaning even of o | True                      | 
+ 573 | // sets hard limit, ulimit -a -H prints  | True                      | 
+ 574 | //                                       | True                      | 
+ 575 | // -a is equivalent for requesting all l | True                      | 
+ 576 | //                                       | True                      | 
+ 577 | // If -a is specified, attempts to set l | True                      | 
+ 578 | //  ulimit -m 1000; ulimit -m 2000 -a    | True                      | 
+ 579 | // shows 1000, not 2000. HOWEVER, *impli | True                      | 
+ 580 | // DOES set -f limit [we don't implement | True                      | 
+ 581 | // Options are still parsed: ulimit -az  | True                      | 
+ 582 | //                                       | True                      | 
+ 583 | // -a is not cumulative: "ulimit -a -a"  | True                      | 
+ 584 | //                                       | True                      | 
+ 585 | // -HSa can be combined in one argument  | True                      | 
+ 586 | // but other options can't: limit value  | True                      | 
+ 587 | // thus "-mf" means "-m f", f is the par | True                      | 
+ 588 | //                                       | True                      | 
+ 589 | // Limit can be set and then printed: ul | True                      | 
+ 590 | // If set more than once, they are set a | True                      | 
+ 591 | // try ulimit -m -m 1000 -m -m 2000 -m - | True                      | 
+ 592 | //                                       | True                      | 
+ 593 | // Limits are shown in the order of opti | True                      | 
+ 594 | // ulimit -m -f is not the same as ulimi | True                      | 
+ 595 | //                                       | True                      | 
+ 596 | // If both -S and -H are given, show sof | True                      | 
+ 597 | //                                       | True                      | 
+ 598 | // Short printout (limit value only) is  | True                      | 
+ 599 | // is given: ulimit -m. ulimit -f -m pri | True                      | 
+ 600 | // ulimit -f -f prints same verbose line | True                      | 
+ 601 | // ulimit -m 10000 -f prints verbose lin | True                      | 
+ 602 |                                          | True                      | 
+ 603 |  argc = string_array_len(argv);          | True                      | 
+ 604 |                                          | True                      | 
+ 605 |  /* First pass over options: detect -H/- | True                      | 
+ 606 |   * and "bare ulimit" and "only one opti | True                      | 
+ 607 |   * by counting other opts.              | True                      | 
+ 608 |   */                                     | True                      | 
+ 609 |  opt_cnt = 0;                            | True                      | 
+ 610 |  opts = 0;                               | True                      | 
+ 611 |  while (1) {                             | True                      | 
+ 612 |   int opt_char = getopt(argc, argv, ulim | True                      | 
+ 613 |                                          | True                      | 
+ 614 |   if (opt_char == -1)                    | True                      | 
+ 615 |    break;                                | True                      | 
+ 616 |   if (opt_char == 'H') {                 | True                      | 
+ 617 |    opts |= OPT_hard;                     | True                      | 
+ 618 |    continue;                             | True                      | 
+ 619 |   }                                      | True                      | 
+ 620 |   if (opt_char == 'S') {                 | True                      | 
+ 621 |    opts |= OPT_soft;                     | True                      | 
+ 622 |    continue;                             | True                      | 
+ 623 |   }                                      | True                      | 
+ 624 |   if (opt_char == 'a') {                 | True                      | 
+ 625 |    opts |= OPT_all;                      | True                      | 
+ 626 |    continue;                             | True                      | 
+ 627 |   }                                      | True                      | 
+ 628 |   if (opt_char == '?') {                 | True                      | 
+ 629 |    /* bad option. getopt already complai | True                      | 
+ 630 |    return EXIT_FAILURE;                  | True                      | 
+ 631 |   }                                      | True                      | 
+ 632 |   opt_cnt++;                             | True                      | 
+ 633 |  } /* while (there are options) */       | True                      | 
+ 634 |                                          | True                      | 
+ 635 |  if (!(opts & (OPT_hard | OPT_soft)))    | True                      | 
+ 636 |   opts |= (OPT_hard | OPT_soft);         | True                      | 
+ 637 |  if (opts & OPT_all) {                   | True                      | 
+ 638 |   const char *help = limits_help;        | True                      | 
+ 639 |   for (i = 0; i < ARRAY_SIZE(limits_tbl) | True                      | 
+ 640 |    getrlimit(limits_tbl[i].cmd, &limit); | True                      | 
+ 641 |    printf("%-32s(-%c) ", help, limit_cha | True                      | 
+ 642 |    printlim(opts, &limit, &limits_tbl[i] | True                      | 
+ 643 |    help += strlen(help) + 1;             | True                      | 
+ 644 |   }                                      | True                      | 
+ 645 |   return EXIT_SUCCESS;                   | True                      | 
+ 646 |  }                                       | True                      | 
+ 647 |                                          | True                      | 
+ 648 |  /* Second pass: set or print limits, in | True                      | 
+ 649 |  GETOPT_RESET();                         | True                      | 
+ 650 |  while (1) {                             | True                      | 
+ 651 |   char *val_str;                         | True                      | 
+ 652 |   int opt_char = getopt(argc, argv, ulim | True                      | 
+ 653 |                                          | True                      | 
+ 654 |   if (opt_char == -1)                    | True                      | 
+ 655 |    break;                                | True                      | 
+ 656 |   if (opt_char == 'H')                   | True                      | 
+ 657 |    continue;                             | True                      | 
+ 658 |   if (opt_char == 'S')                   | True                      | 
+ 659 |    continue;                             | True                      | 
+ 660 |   //if (opt_char == 'a') - impossible    | True                      | 
+ 661 |                                          | True                      | 
+ 662 |   if (opt_char == 1) /* if "ulimit NNN", | True                      | 
+ 663 |    opt_char = 'f';                       | True                      | 
+ 664 |   i = strchrnul(limit_chars, opt_char) - | True                      | 
+ 665 |   //if (i >= ARRAY_SIZE(limits_tbl)) - b | True                      | 
+ 666 |                                          | True                      | 
+ 667 |   val_str = optarg;                      | True                      | 
+ 668 |   if (!val_str && argv[optind] && argv[o | True                      | 
+ 669 |    val_str = argv[optind++]; /* ++ skips | True                      | 
+ 670 |                                          | True                      | 
+ 671 |   getrlimit(limits_tbl[i].cmd, &limit);  | True                      | 
+ 672 |   if (!val_str) {                        | True                      | 
+ 673 |    if (opt_cnt > 1)                      | True                      | 
+ 674 |     printf("%-32s(-%c) ", nth_string(lim | True                      | 
+ 675 |    printlim(opts, &limit, &limits_tbl[i] | True                      | 
+ 676 |   } else {                               | True                      | 
+ 677 |    rlim_t val = RLIM_INFINITY;           | True                      | 
+ 678 |    if (strcmp(val_str, "unlimited") != 0 | True                      | 
+ 679 |     if (sizeof(val) == sizeof(int))      | True                      | 
+ 680 |      val = bb_strtou(val_str, NULL, 10); | True                      | 
+ 681 |     else if (sizeof(val) == sizeof(long) | True                      | 
+ 682 |      val = bb_strtoul(val_str, NULL, 10) | True                      | 
+ 683 |     else                                 | True                      | 
+ 684 |      val = bb_strtoull(val_str, NULL, 10 | True                      | 
+ 685 |     if (errno) {                         | True                      | 
+ 686 |      bb_error_msg("invalid number '%s'", | True                      | 
+ 687 |      return EXIT_FAILURE;                | True                      | 
+ 688 |     }                                    | True                      | 
+ 689 |     val <<= limits_tbl[i].factor_shift;  | True                      | 
+ 690 |    }                                     | True                      | 
+ 691 | //bb_error_msg("opt %c val_str:'%s' val: | True                      | 
+ 692 |    /* from man bash: "If neither -H nor  | True                      | 
+ 693 |     * is specified, both the soft and ha | True                      | 
+ 694 |     * limits are set. */                 | True                      | 
+ 695 |    if (opts & OPT_hard)                  | True                      | 
+ 696 |     limit.rlim_max = val;                | True                      | 
+ 697 |    if (opts & OPT_soft)                  | True                      | 
+ 698 |     limit.rlim_cur = val;                | True                      | 
+ 699 | //bb_error_msg("setrlimit(%d, %lld, %lld | True                      | 
+ 700 |    if (setrlimit(limits_tbl[i].cmd, &lim | True                      | 
+ 701 |     bb_simple_perror_msg("error setting  | True                      | 
+ 702 |     return EXIT_FAILURE;                 | True                      | 
+ 703 |    }                                     | True                      | 
+ 704 |   }                                      | True                      | 
+ 705 |  } /* while (there are options) */       | True                      | 
+ 706 |                                          | True                      | 
+ 707 |  if (opt_cnt == 0) {                     | True                      | 
+ 708 |   /* "bare ulimit": treat it as if it wa | True                      | 
+ 709 |   getrlimit(RLIMIT_FSIZE, &limit);       | True                      | 
+ 710 |   printlim(opts, &limit, &limits_tbl[LIM | True                      | 
+ 711 |  }                                       | True                      | 
+ 712 |                                          | True                      | 
+ 713 |  return EXIT_SUCCESS;                    | True                      | 
+ 714 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +125MB, 279ms             | 

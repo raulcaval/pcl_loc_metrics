@@ -1,0 +1,652 @@
+FILE: data/raw/busybox-1.38.0/util-linux/mkfs_vfat.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * mkfs_vfat: utility to create FAT32 fi | True                      | 
+   4 |  * inspired by dosfstools                | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Busybox'ed (2009) by Vladimir Dronnik | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   9 |  */                                      | True                      | 
+  10 | //config:config MKDOSFS                  | True                      | 
+  11 | //config: bool "mkdosfs (7.6 kb)"        | True                      | 
+  12 | //config: default y                      | True                      | 
+  13 | //config: help                           | True                      | 
+  14 | //config: Utility to create FAT32 filesy | True                      | 
+  15 | //config:                                | True                      | 
+  16 | //config:config MKFS_VFAT                | True                      | 
+  17 | //config: bool "mkfs.vfat (7.6 kb)"      | True                      | 
+  18 | //config: default y                      | True                      | 
+  19 | //config: help                           | True                      | 
+  20 | //config: Alias to "mkdosfs".            | True                      | 
+  21 |                                          | True                      | 
+  22 | //                    APPLET_ODDNAME:nam | True                      | 
+  23 | //applet:IF_MKDOSFS(  APPLET_ODDNAME(mkd | True                      | 
+  24 | //applet:IF_MKFS_VFAT(APPLET_ODDNAME(mkf | True                      | 
+  25 |                                          | True                      | 
+  26 | //kbuild:lib-$(CONFIG_MKDOSFS) += mkfs_v | True                      | 
+  27 | //kbuild:lib-$(CONFIG_MKFS_VFAT) += mkfs | True                      | 
+  28 |                                          | True                      | 
+  29 | //usage:#define mkfs_vfat_trivial_usage  | True                      | 
+  30 | //usage:       "[-v] [-n LABEL] BLOCKDEV | True                      | 
+  31 | /* Accepted but ignored:                 | True                      | 
+  32 |        "[-c] [-C] [-I] [-l bad-block-fil | True                      | 
+  33 |        "[-m boot-msg-file] [-i volume-id | True                      | 
+  34 |        "[-s sectors-per-cluster] [-S log | True                      | 
+  35 |        "[-h hidden-sectors] [-F fat-size | True                      | 
+  36 | */                                       | True                      | 
+  37 | //usage:#define mkfs_vfat_full_usage "\n | True                      | 
+  38 | //usage:       "Make a FAT32 filesystem\ | True                      | 
+  39 | /* //usage:  "\n -c Check device for bad | True                      | 
+  40 | //usage:     "\n -v Verbose"             | True                      | 
+  41 | /* //usage:  "\n -I Allow to use entire  | True                      | 
+  42 | //usage:     "\n -n LBL Volume label"    | True                      | 
+  43 |                                          | True                      | 
+  44 | #include "libbb.h"                       | True                      | 
+  45 |                                          | True                      | 
+  46 | #include <linux/hdreg.h> /* HDIO_GETGEO  | True                      | 
+  47 | #include <linux/fd.h>    /* FDGETPRM */  | True                      | 
+  48 | #include <sys/mount.h>   /* BLKSSZGET */ | True                      | 
+  49 | #if !defined(BLKSSZGET)                  | True                      | 
+  50 | # define BLKSSZGET _IO(0x12, 104)        | !(BLKSSZGET)              | 
+  51 | #endif                                   | True                      | 
+  52 | //#include <linux/msdos_fs.h>            | True                      | 
+  53 |                                          | True                      | 
+  54 | #define SECTOR_SIZE             512      | True                      | 
+  55 |                                          | True                      | 
+  56 | #define SECTORS_PER_BLOCK (BLOCK_SIZE /  | True                      | 
+  57 |                                          | True                      | 
+  58 | // M$ says the high 4 bits of a FAT32 FA | True                      | 
+  59 | #define EOF_FAT32       0x0FFFFFF8       | True                      | 
+  60 | #define BAD_FAT32       0x0FFFFFF7       | True                      | 
+  61 | #define MAX_CLUST_32    0x0FFFFFF0       | True                      | 
+  62 |                                          | True                      | 
+  63 | #define ATTR_VOLUME     8                | True                      | 
+  64 |                                          | True                      | 
+  65 | #define NUM_FATS        2                | True                      | 
+  66 |                                          | True                      | 
+  67 | /* FAT32 filesystem looks like this:     | True                      | 
+  68 |  * sector -nn...-1: "hidden" sectors, al | True                      | 
+  69 |  * (-h hidden-sectors sets it. Useful on | True                      | 
+  70 |  *  they need to know _disk_ offset in o | True                      | 
+  71 |  *  address sectors relative to start of | True                      | 
+  72 |  * sector 0: boot sector                 | True                      | 
+  73 |  * sector 1: info sector                 | True                      | 
+  74 |  * sector 2: set aside for boot code whi | True                      | 
+  75 |  * ...(zero-filled sectors)...           | True                      | 
+  76 |  * sector B: backup copy of sector 0 [B  | True                      | 
+  77 |  * sector B+1: backup copy of sector 1   | True                      | 
+  78 |  * sector B+2: backup copy of sector 2   | True                      | 
+  79 |  * ...(zero-filled sectors)...           | True                      | 
+  80 |  * sector R: FAT#1 [R set by -R reserved | True                      | 
+  81 |  * ...(FAT#1)...                         | True                      | 
+  82 |  * sector R+fat_size: FAT#2              | True                      | 
+  83 |  * ...(FAT#2)...                         | True                      | 
+  84 |  * sector R+fat_size*2: cluster #2       | True                      | 
+  85 |  * ...(cluster #2)...                    | True                      | 
+  86 |  * sector R+fat_size*2+clust_size: clust | True                      | 
+  87 |  * ...(the rest is filled by clusters ti | True                      | 
+  88 |  */                                      | True                      | 
+  89 |                                          | True                      | 
+  90 | enum {                                   | True                      | 
+  91 | // Perhaps this should remain constant   | True                      | 
+  92 |  info_sector_number = 1,                 | True                      | 
+  93 | // TODO: make these cmdline options      | True                      | 
+  94 | // dont forget sanity check: backup_boot | True                      | 
+  95 |  backup_boot_sector = 3,                 | True                      | 
+  96 |  reserved_sect      = 6,                 | True                      | 
+  97 | };                                       | True                      | 
+  98 |                                          | True                      | 
+  99 | // how many blocks we try to read while  | True                      | 
+ 100 | #define TEST_BUFFER_BLOCKS      16       | True                      | 
+ 101 |                                          | True                      | 
+ 102 | struct msdos_dir_entry {                 | True                      | 
+ 103 |  char     name[11];       /* 000 name an | True                      | 
+ 104 |  uint8_t  attr;           /* 00b attribu | True                      | 
+ 105 |  uint8_t  lcase;          /* 00c case fo | True                      | 
+ 106 |  uint8_t  ctime_cs;       /* 00d creatio | True                      | 
+ 107 |  uint16_t ctime;          /* 00e creatio | True                      | 
+ 108 |  uint16_t cdate;          /* 010 creatio | True                      | 
+ 109 |  uint16_t adate;          /* 012 last ac | True                      | 
+ 110 |  uint16_t starthi;        /* 014 high 16 | True                      | 
+ 111 |  uint16_t time;           /* 016 time */ | True                      | 
+ 112 |  uint16_t date;           /* 018 date */ | True                      | 
+ 113 |  uint16_t start;          /* 01a first c | True                      | 
+ 114 |  uint32_t size;           /* 01c file si | True                      | 
+ 115 | } PACKED;                                | True                      | 
+ 116 |                                          | True                      | 
+ 117 | /* Example of boot sector's beginning:   | True                      | 
+ 118 | 0000  eb 58 90 4d 53 57 49 4e  34 2e 31  | True                      | 
+ 119 | 0010  02 00 00 00 00 f8 00 00  3f 00 ff  | True                      | 
+ 120 | 0020  54 9b d0 00 0d 34 00 00  00 00 00  | True                      | 
+ 121 | 0030  01 00 06 00 00 00 00 00  00 00 00  | True                      | 
+ 122 | 0040  80 00 29 71 df 51 e0 4e  4f 20 4e  | True                      | 
+ 123 | 0050  20 20 46 41 54 33 32 20  20 20 33  | True                      | 
+ 124 | */                                       | True                      | 
+ 125 | struct msdos_volume_info { /* (offsets a | True                      | 
+ 126 |  uint8_t  drive_number;    /* 040 BIOS d | True                      | 
+ 127 |  uint8_t  reserved;        /* 041 unused | True                      | 
+ 128 |  uint8_t  ext_boot_sign;   /* 042 0x29 i | True                      | 
+ 129 |  uint32_t volume_id32;     /* 043 volume | True                      | 
+ 130 |  char     volume_label[11];/* 047 volume | True                      | 
+ 131 |  char     fs_type[8];      /* 052 typica | True                      | 
+ 132 | } PACKED;                         /* 05a | True                      | 
+ 133 |                                          | True                      | 
+ 134 | struct msdos_boot_sector {               | True                      | 
+ 135 |  /* We use strcpy to fill both, and gcc- | True                      | 
+ 136 |  char     boot_jump_and_sys_id[3+8]; /*  | True                      | 
+ 137 |  /*char   system_id[8];*/     /* 003 nam | True                      | 
+ 138 |  uint16_t bytes_per_sect;     /* 00b byt | True                      | 
+ 139 |  uint8_t  sect_per_clust;     /* 00d sec | True                      | 
+ 140 |  uint16_t reserved_sect;      /* 00e res | True                      | 
+ 141 |  uint8_t  fats;               /* 010 num | True                      | 
+ 142 |  uint16_t dir_entries;        /* 011 roo | True                      | 
+ 143 |  uint16_t volume_size_sect;   /* 013 vol | True                      | 
+ 144 |  uint8_t  media_byte;         /* 015 med | True                      | 
+ 145 |  uint16_t sect_per_fat;       /* 016 sec | True                      | 
+ 146 |  uint16_t sect_per_track;     /* 018 sec | True                      | 
+ 147 |  uint16_t heads;              /* 01a num | True                      | 
+ 148 |  uint32_t hidden;             /* 01c hid | True                      | 
+ 149 |  uint32_t fat32_volume_size_sect; /* 020 | True                      | 
+ 150 |  uint32_t fat32_sect_per_fat; /* 024 sec | True                      | 
+ 151 |  uint16_t fat32_flags;        /* 028 bit | True                      | 
+ 152 |  uint8_t  fat32_version[2];   /* 02a maj | True                      | 
+ 153 |  uint32_t fat32_root_cluster; /* 02c fir | True                      | 
+ 154 |  uint16_t fat32_info_sector;  /* 030 fil | True                      | 
+ 155 |  uint16_t fat32_backup_boot;  /* 032 bac | True                      | 
+ 156 |  uint32_t reserved2[3];       /* 034 unu | True                      | 
+ 157 |  struct msdos_volume_info vi; /* 040 */  | True                      | 
+ 158 |  char     boot_code[0x200 - 0x5a - 2]; / | True                      | 
+ 159 | #define BOOT_SIGN 0xAA55                 | True                      | 
+ 160 |  uint16_t boot_sign;          /* 1fe */  | True                      | 
+ 161 | } PACKED;                                | True                      | 
+ 162 |                                          | True                      | 
+ 163 | #define FAT_FSINFO_SIG1 0x41615252       | True                      | 
+ 164 | #define FAT_FSINFO_SIG2 0x61417272       | True                      | 
+ 165 | struct fat32_fsinfo {                    | True                      | 
+ 166 |  uint32_t signature1;         /* 0x52,0x | True                      | 
+ 167 |  uint32_t reserved1[128 - 8];            | True                      | 
+ 168 |  uint32_t signature2;         /* 0x72,0x | True                      | 
+ 169 |  uint32_t free_clusters;      /* free cl | True                      | 
+ 170 |  uint32_t next_cluster;       /* most re | True                      | 
+ 171 |  uint32_t reserved2[3];                  | True                      | 
+ 172 |  uint16_t reserved3;          /* 1fc */  | True                      | 
+ 173 |  uint16_t boot_sign;          /* 1fe */  | True                      | 
+ 174 | } PACKED;                                | True                      | 
+ 175 |                                          | True                      | 
+ 176 | struct bug_check {                       | True                      | 
+ 177 |  char BUG1[sizeof(struct msdos_dir_entry | True                      | 
+ 178 |  char BUG2[sizeof(struct msdos_volume_in | True                      | 
+ 179 |  char BUG3[sizeof(struct msdos_boot_sect | True                      | 
+ 180 |  char BUG4[sizeof(struct fat32_fsinfo    | True                      | 
+ 181 | };                                       | True                      | 
+ 182 |                                          | True                      | 
+ 183 | static const char boot_code[] ALIGN1 =   | True                      | 
+ 184 |  "\x0e"          /* 05a:         push  c | True                      | 
+ 185 |  "\x1f"          /* 05b:         pop   d | True                      | 
+ 186 |  "\xbe\x77\x7c"  /*  write_msg:  mov   s | True                      | 
+ 187 |  "\xac"          /* 05f:         lodsb * | True                      | 
+ 188 |  "\x22\xc0"      /* 060:         and   a | True                      | 
+ 189 |  "\x74\x0b"      /* 062:         jz    k | True                      | 
+ 190 |  "\x56"          /* 064:         push  s | True                      | 
+ 191 |  "\xb4\x0e"      /* 065:         mov   a | True                      | 
+ 192 |  "\xbb\x07\x00"  /* 067:         mov   b | True                      | 
+ 193 |  "\xcd\x10"      /* 06a:         int   1 | True                      | 
+ 194 |  "\x5e"          /* 06c:         pop   s | True                      | 
+ 195 |  "\xeb\xf0"      /* 06d:         jmp   w | True                      | 
+ 196 |  "\x32\xe4"      /*  key_press:  xor   a | True                      | 
+ 197 |  "\xcd\x16"      /* 071:         int   1 | True                      | 
+ 198 |  "\xcd\x19"      /* 073:         int   1 | True                      | 
+ 199 |  "\xeb\xfe"      /*  foo:        jmp   f | True                      | 
+ 200 |  /* 077: message_txt: */                 | True                      | 
+ 201 |  "This is not a bootable disk\r\n";      | True                      | 
+ 202 |                                          | True                      | 
+ 203 |                                          | True                      | 
+ 204 | #define MARK_CLUSTER(cluster, value) \   | True                      | 
+ 205 |  ((uint32_t *)fat)[cluster] = SWAP_LE32( | True                      | 
+ 206 |                                          | True                      | 
+ 207 | /* compat:                               | True                      | 
+ 208 |  * mkdosfs 2.11 (12 Mar 2005)            | True                      | 
+ 209 |  * Usage: mkdosfs [-A] [-c] [-C] [-v] [- | True                      | 
+ 210 |  *        [-b backup-boot-sector]        | True                      | 
+ 211 |  *        [-m boot-msg-file] [-n volume- | True                      | 
+ 212 |  *        [-s sectors-per-cluster] [-S l | True                      | 
+ 213 |  *        [-f number-of-FATs]            | True                      | 
+ 214 |  *        [-h hidden-sectors] [-F fat-si | True                      | 
+ 215 |  *        [-R reserved-sectors]          | True                      | 
+ 216 |  *        /dev/name [blocks]             | True                      | 
+ 217 |  */                                      | True                      | 
+ 218 | int mkfs_vfat_main(int argc, char **argv | True                      | 
+ 219 | int mkfs_vfat_main(int argc UNUSED_PARAM | True                      | 
+ 220 | {                                        | True                      | 
+ 221 |  static const char NO_NAME_11[] = "NO NA | True                      | 
+ 222 |                                          | True                      | 
+ 223 |  struct stat st;                         | True                      | 
+ 224 |  const char *arg_volume_label = NO_NAME_ | True                      | 
+ 225 |  char volume_label11[12];                | True                      | 
+ 226 |  char *buf;                              | True                      | 
+ 227 |  char *device_name;                      | True                      | 
+ 228 |  uoff_t volume_size_bytes;               | True                      | 
+ 229 |  uoff_t volume_size_sect;                | True                      | 
+ 230 |  uint32_t total_clust;                   | True                      | 
+ 231 |  uint32_t volume_id;                     | True                      | 
+ 232 |  int dev;                                | True                      | 
+ 233 |  unsigned bytes_per_sect;                | True                      | 
+ 234 |  unsigned sect_per_fat;                  | True                      | 
+ 235 |  unsigned opts;                          | True                      | 
+ 236 |  uint16_t sect_per_track;                | True                      | 
+ 237 |  uint8_t media_byte;                     | True                      | 
+ 238 |  uint8_t sect_per_clust;                 | True                      | 
+ 239 |  uint8_t heads;                          | True                      | 
+ 240 |  enum {                                  | True                      | 
+ 241 |   OPT_A = 1 << 0,  // [IGNORED] atari fo | True                      | 
+ 242 |   OPT_b = 1 << 1,  // [IGNORED] location | True                      | 
+ 243 |   OPT_c = 1 << 2,  // [IGNORED] check fi | True                      | 
+ 244 |   OPT_C = 1 << 3,  // [IGNORED] create a | True                      | 
+ 245 |   OPT_f = 1 << 4,  // [IGNORED] number o | True                      | 
+ 246 |   OPT_F = 1 << 5,  // [IGNORED, implied  | True                      | 
+ 247 |   OPT_h = 1 << 6,  // [IGNORED] number o | True                      | 
+ 248 |   OPT_I = 1 << 7,  // [IGNORED] don't ba | True                      | 
+ 249 |   OPT_i = 1 << 8,  // [IGNORED] volume I | True                      | 
+ 250 |   OPT_l = 1 << 9,  // [IGNORED] bad bloc | True                      | 
+ 251 |   OPT_m = 1 << 10, // [IGNORED] message  | True                      | 
+ 252 |   OPT_n = 1 << 11, // volume label       | True                      | 
+ 253 |   OPT_r = 1 << 12, // [IGNORED] root dir | True                      | 
+ 254 |   OPT_R = 1 << 13, // [IGNORED] number o | True                      | 
+ 255 |   OPT_s = 1 << 14, // [IGNORED] sectors  | True                      | 
+ 256 |   OPT_S = 1 << 15, // [IGNORED] sector s | True                      | 
+ 257 |   OPT_v = 1 << 16, // verbose            | True                      | 
+ 258 |  };                                      | True                      | 
+ 259 |                                          | True                      | 
+ 260 |  opts = getopt32(argv, "^"               | True                      | 
+ 261 |   "Ab:cCf:F:h:Ii:l:m:n:r:R:s:S:v"        | True                      | 
+ 262 |   "\0" "-1", //:b+:f+:F+:h+:r+:R+:s+:S+: | True                      | 
+ 263 |   /*b*/NULL, /*f*/NULL, /*F*/NULL, /*h*/ | True                      | 
+ 264 |   /*l*/NULL, /*m*/NULL, /*n*/&arg_volume | True                      | 
+ 265 |   /*r*/NULL, /*R*/NULL, /*s*/NULL, /*S*/ | True                      | 
+ 266 |  argv += optind;                         | True                      | 
+ 267 |                                          | True                      | 
+ 268 |  // cache device name                    | True                      | 
+ 269 |  device_name = argv[0];                  | True                      | 
+ 270 |  // default volume ID: somewhat random ( | True                      | 
+ 271 |  // (mix in pid to avoid same IDs when r | True                      | 
+ 272 |  volume_id = time(NULL) ^ getpid();      | True                      | 
+ 273 |  // truncate to exactly 11 chars, pad wi | True                      | 
+ 274 |  sprintf(volume_label11, "%-11.11s", arg | True                      | 
+ 275 |                                          | True                      | 
+ 276 |  dev = xopen(device_name, O_RDWR);       | True                      | 
+ 277 |  xfstat(dev, &st, device_name);          | True                      | 
+ 278 |                                          | True                      | 
+ 279 |  //                                      | True                      | 
+ 280 |  // Get image size and sector size       | True                      | 
+ 281 |  //                                      | True                      | 
+ 282 |  bytes_per_sect = SECTOR_SIZE;           | True                      | 
+ 283 |  if (!S_ISBLK(st.st_mode)) {             | True                      | 
+ 284 |   if (!S_ISREG(st.st_mode)) {            | True                      | 
+ 285 |    if (!argv[1])                         | True                      | 
+ 286 |     bb_simple_error_msg_and_die("image s | True                      | 
+ 287 |   }                                      | True                      | 
+ 288 |   // not a block device, skip bad sector | True                      | 
+ 289 |   opts &= ~OPT_c;                        | True                      | 
+ 290 |  } else {                                | True                      | 
+ 291 |   int min_bytes_per_sect;                | True                      | 
+ 292 | #if 0                                    | True                      | 
+ 293 |   unsigned device_num;                   | 0                         | 
+ 294 |   // for true block devices we do check  | 0                         | 
+ 295 |   device_num = st.st_rdev & 0xff3f;      | 0                         | 
+ 296 |   // do we allow to format the whole dis | 0                         | 
+ 297 |   if (!(opts & OPT_I) && (               | 0                         | 
+ 298 |    device_num == 0x0300 || // hda, hdb   | 0                         | 
+ 299 |    (device_num & 0xff0f) == 0x0800 || // | 0                         | 
+ 300 |    device_num == 0x0d00 || // xd         | 0                         | 
+ 301 |    device_num == 0x1600 )  // hdc, hdd   | 0                         | 
+ 302 |   )                                      | 0                         | 
+ 303 |    bb_error_msg_and_die("will not try to | 0                         | 
+ 304 |   // can't work on mounted filesystems   | 0                         | 
+ 305 |   if (find_mount_point(device_name, 0))  | 0                         | 
+ 306 |    bb_error_msg_and_die("can't format mo | 0                         | 
+ 307 | #endif                                   | True                      | 
+ 308 |   // get true sector size                | True                      | 
+ 309 |   // (parameter must be int*, not long*  | True                      | 
+ 310 |   xioctl(dev, BLKSSZGET, &min_bytes_per_ | True                      | 
+ 311 |   if (min_bytes_per_sect > SECTOR_SIZE)  | True                      | 
+ 312 |    bytes_per_sect = min_bytes_per_sect;  | True                      | 
+ 313 |    bb_error_msg("for this device sector  | True                      | 
+ 314 |   }                                      | True                      | 
+ 315 |  }                                       | True                      | 
+ 316 |  volume_size_bytes = get_volume_size_in_ | True                      | 
+ 317 |  volume_size_sect = volume_size_bytes /  | True                      | 
+ 318 |                                          | True                      | 
+ 319 |  //                                      | True                      | 
+ 320 |  // Find out or guess media parameters   | True                      | 
+ 321 |  //                                      | True                      | 
+ 322 |  media_byte = 0xf8;                      | True                      | 
+ 323 |  heads = 255;                            | True                      | 
+ 324 |  sect_per_track = 63;                    | True                      | 
+ 325 |  sect_per_clust = 1;                     | True                      | 
+ 326 |  {                                       | True                      | 
+ 327 |   struct hd_geometry geometry;           | True                      | 
+ 328 |   // size (in sectors), sect (per track) | True                      | 
+ 329 |   struct floppy_struct param;            | True                      | 
+ 330 |                                          | True                      | 
+ 331 |   // N.B. whether to use HDIO_GETGEO or  | True                      | 
+ 332 |   if (ioctl(dev, HDIO_GETGEO, &geometry) | True                      | 
+ 333 |    && geometry.sectors                   | True                      | 
+ 334 |    && geometry.heads                     | True                      | 
+ 335 |   ) {                                    | True                      | 
+ 336 |    // hard drive                         | True                      | 
+ 337 |    sect_per_track = geometry.sectors;    | True                      | 
+ 338 |    heads = geometry.heads;               | True                      | 
+ 339 |                                          | True                      | 
+ 340 |  set_cluster_size:                       | True                      | 
+ 341 |    /* For FAT32, try to do the same as M | True                      | 
+ 342 |     * (see http://www.win.tue.nl/~aeb/li | True                      | 
+ 343 |     * fs size <= 260M: 0.5k clusters     | True                      | 
+ 344 |     * fs size <=   8G: 4k clusters       | True                      | 
+ 345 |     * fs size <=  16G: 8k clusters       | True                      | 
+ 346 |     * fs size >   16G: 16k clusters      | True                      | 
+ 347 |     */                                   | True                      | 
+ 348 |    sect_per_clust = 1;                   | True                      | 
+ 349 |    if (volume_size_bytes >= 260*1024*102 | True                      | 
+ 350 |     sect_per_clust = 8;                  | True                      | 
+ 351 |     /* fight gcc: */                     | True                      | 
+ 352 |     /* "error: integer overflow in expre | True                      | 
+ 353 |     /* "error: right shift count >= widt | True                      | 
+ 354 |     if (sizeof(off_t) > 4) {             | True                      | 
+ 355 |      unsigned t = (volume_size_bytes >>  | True                      | 
+ 356 |      if (t >= 8/4)                       | True                      | 
+ 357 |       sect_per_clust = 16;               | True                      | 
+ 358 |      if (t >= 16/4)                      | True                      | 
+ 359 |       sect_per_clust = 32;               | True                      | 
+ 360 |     }                                    | True                      | 
+ 361 |    }                                     | True                      | 
+ 362 |   } else {                               | True                      | 
+ 363 |    // floppy, loop, or regular file      | True                      | 
+ 364 |    int not_floppy = ioctl(dev, FDGETPRM, | True                      | 
+ 365 |    if (not_floppy == 0) {                | True                      | 
+ 366 |     // floppy disk                       | True                      | 
+ 367 |     sect_per_track = param.sect;         | True                      | 
+ 368 |     heads = param.head;                  | True                      | 
+ 369 |     volume_size_sect = param.size;       | True                      | 
+ 370 |     volume_size_bytes = param.size * SEC | True                      | 
+ 371 |    }                                     | True                      | 
+ 372 |    // setup the media descriptor byte    | True                      | 
+ 373 |    switch (volume_size_sect) {           | True                      | 
+ 374 |    case 2*360: // 5.25", 2, 9, 40 - 360K | True                      | 
+ 375 |     media_byte = 0xfd;                   | True                      | 
+ 376 |     break;                               | True                      | 
+ 377 |    case 2*720: // 3.5", 2, 9, 80 - 720K  | True                      | 
+ 378 |    case 2*1200: // 5.25", 2, 15, 80 - 12 | True                      | 
+ 379 |     media_byte = 0xf9;                   | True                      | 
+ 380 |     break;                               | True                      | 
+ 381 |    default: // anything else             | True                      | 
+ 382 |     if (not_floppy)                      | True                      | 
+ 383 |      goto set_cluster_size;              | True                      | 
+ 384 |    case 2*1440: // 3.5", 2, 18, 80 - 144 | True                      | 
+ 385 |    case 2*2880: // 3.5", 2, 36, 80 - 288 | True                      | 
+ 386 |     media_byte = 0xf0;                   | True                      | 
+ 387 |     break;                               | True                      | 
+ 388 |    }                                     | True                      | 
+ 389 |    // not floppy, but size matches flopp | True                      | 
+ 390 |    // perhaps it is a floppy image.      | True                      | 
+ 391 |    // we already set media_byte as if it | True                      | 
+ 392 |    // now set sect_per_track and heads.  | True                      | 
+ 393 |    heads = 2;                            | True                      | 
+ 394 |    sect_per_track = (unsigned)volume_siz | True                      | 
+ 395 |    if (sect_per_track < 9)               | True                      | 
+ 396 |     sect_per_track = 9;                  | True                      | 
+ 397 |   }                                      | True                      | 
+ 398 |  }                                       | True                      | 
+ 399 |                                          | True                      | 
+ 400 |  //                                      | True                      | 
+ 401 |  // Calculate number of clusters, sector | True                      | 
+ 402 |  // (an initial guess for sect_per_clust | True                      | 
+ 403 |  //                                      | True                      | 
+ 404 |  // "mkdosfs -v -F 32 image5k 5" is the  | True                      | 
+ 405 |  // 2 sectors for FATs and 2 data sector | True                      | 
+ 406 |  if ((off_t)(volume_size_sect - reserved | True                      | 
+ 407 |   bb_simple_error_msg_and_die("the image | True                      | 
+ 408 |  sect_per_fat = 1;                       | True                      | 
+ 409 |  while (1) {                             | True                      | 
+ 410 |   while (1) {                            | True                      | 
+ 411 |    int spf_adj;                          | True                      | 
+ 412 |    uoff_t tcl = (volume_size_sect - rese | True                      | 
+ 413 |    // tcl may be > MAX_CLUST_32 here, bu | True                      | 
+ 414 |    // because sect_per_fat is underestim | True                      | 
+ 415 |    // and with increased sect_per_fat it | True                      | 
+ 416 |    // <= MAX_CLUST_32. Therefore, we do  | True                      | 
+ 417 |    // against MAX_CLUST_32, but against  | True                      | 
+ 418 |    if (tcl > 0x80ffffff)                 | True                      | 
+ 419 |     goto next;                           | True                      | 
+ 420 |    total_clust = tcl; // fits in uint32_ | True                      | 
+ 421 |    // Every cluster needs 4 bytes in FAT | True                      | 
+ 422 |    // FAT has space for non-existent clu | True                      | 
+ 423 |    // Let's see how many sectors that ne | True                      | 
+ 424 |    //May overflow at "*4":               | True                      | 
+ 425 |    //spf_adj = ((total_clust+2) * 4 + by | True                      | 
+ 426 |    //Same in the more obscure, non-overf | True                      | 
+ 427 |    spf_adj = ((total_clust+2) + (bytes_p | True                      | 
+ 428 | #if 0                                    | True                      | 
+ 429 |    bb_error_msg("sect_per_clust:%u sect_ | 0                         | 
+ 430 |      sect_per_clust, sect_per_fat, (int) | 0                         | 
+ 431 |    bb_error_msg("adjust to sect_per_fat: | 0                         | 
+ 432 | #endif                                   | True                      | 
+ 433 |    if (spf_adj <= 0) {                   | True                      | 
+ 434 |     // do not need to adjust sect_per_fa | True                      | 
+ 435 |     // so, was total_clust too big after | True                      | 
+ 436 |     if (total_clust <= MAX_CLUST_32)     | True                      | 
+ 437 |      goto found_total_clust; // no       | True                      | 
+ 438 |     // yes, total_clust is _a bit_ too b | True                      | 
+ 439 |     goto next;                           | True                      | 
+ 440 |    }                                     | True                      | 
+ 441 |    // adjust sect_per_fat, go back and r | True                      | 
+ 442 |    // (note: just "sect_per_fat += spf_a | True                      | 
+ 443 |    sect_per_fat += ((unsigned)spf_adj /  | True                      | 
+ 444 |   }                                      | True                      | 
+ 445 |  next:                                   | True                      | 
+ 446 |   if (sect_per_clust == 128)             | True                      | 
+ 447 |    bb_simple_error_msg_and_die("can't ma | True                      | 
+ 448 |   sect_per_clust *= 2;                   | True                      | 
+ 449 |   sect_per_fat = (sect_per_fat / 2) | 1; | True                      | 
+ 450 |  }                                       | True                      | 
+ 451 |  found_total_clust:                      | True                      | 
+ 452 |                                          | True                      | 
+ 453 |  //                                      | True                      | 
+ 454 |  // Print info                           | True                      | 
+ 455 |  //                                      | True                      | 
+ 456 |  if (opts & OPT_v) {                     | True                      | 
+ 457 |   fprintf(stderr,                        | True                      | 
+ 458 |    "Device '%s':\n"                      | True                      | 
+ 459 |    "heads:%u, sectors/track:%u, bytes/se | True                      | 
+ 460 |    "media descriptor:%02x\n"             | True                      | 
+ 461 |    "total sectors:%"OFF_FMT"u, clusters: | True                      | 
+ 462 |    "FATs:2, sectors/FAT:%u\n"            | True                      | 
+ 463 |    "volumeID:%08x, label:'%s'\n",        | True                      | 
+ 464 |    device_name,                          | True                      | 
+ 465 |    heads, sect_per_track, bytes_per_sect | True                      | 
+ 466 |    (int)media_byte,                      | True                      | 
+ 467 |    volume_size_sect, (int)total_clust, ( | True                      | 
+ 468 |    sect_per_fat,                         | True                      | 
+ 469 |    (int)volume_id, volume_label11        | True                      | 
+ 470 |   );                                     | True                      | 
+ 471 |  }                                       | True                      | 
+ 472 |                                          | True                      | 
+ 473 |  //                                      | True                      | 
+ 474 |  // Write filesystem image sequentially  | True                      | 
+ 475 |  //                                      | True                      | 
+ 476 |  {                                       | True                      | 
+ 477 |   // (a | b) is poor man's max(a, b)     | True                      | 
+ 478 |   unsigned bufsize = reserved_sect;      | True                      | 
+ 479 |   //bufsize |= sect_per_fat; // can be q | True                      | 
+ 480 |   bufsize |= 2; // use this instead      | True                      | 
+ 481 |   bufsize |= sect_per_clust;             | True                      | 
+ 482 |   buf = xzalloc(bufsize * bytes_per_sect | True                      | 
+ 483 |  }                                       | True                      | 
+ 484 |                                          | True                      | 
+ 485 |  { // boot and fsinfo sectors, and their | True                      | 
+ 486 |   struct msdos_boot_sector *boot_blk = ( | True                      | 
+ 487 |   struct fat32_fsinfo *info = (void*)(bu | True                      | 
+ 488 |                                          | True                      | 
+ 489 |   strcpy(boot_blk->boot_jump_and_sys_id, | True                      | 
+ 490 |   STORE_LE(boot_blk->bytes_per_sect, byt | True                      | 
+ 491 |   STORE_LE(boot_blk->sect_per_clust, sec | True                      | 
+ 492 |   // cast in needed on big endian to sup | True                      | 
+ 493 |   STORE_LE(boot_blk->reserved_sect, (uin | True                      | 
+ 494 |   STORE_LE(boot_blk->fats, 2);           | True                      | 
+ 495 |   //STORE_LE(boot_blk->dir_entries, 0);  | True                      | 
+ 496 |   if (volume_size_sect <= 0xffff)        | True                      | 
+ 497 |    STORE_LE(boot_blk->volume_size_sect,  | True                      | 
+ 498 |   STORE_LE(boot_blk->media_byte, media_b | True                      | 
+ 499 |   // wrong: this would make Linux think  | True                      | 
+ 500 |   //if (sect_per_fat <= 0xffff)          | True                      | 
+ 501 |   // STORE_LE(boot_blk->sect_per_fat, se | True                      | 
+ 502 |   // works:                              | True                      | 
+ 503 |   //STORE_LE(boot_blk->sect_per_fat, 0); | True                      | 
+ 504 |   STORE_LE(boot_blk->sect_per_track, sec | True                      | 
+ 505 |   STORE_LE(boot_blk->heads, heads);      | True                      | 
+ 506 |   //STORE_LE(boot_blk->hidden, 0);       | True                      | 
+ 507 |   STORE_LE(boot_blk->fat32_volume_size_s | True                      | 
+ 508 |   STORE_LE(boot_blk->fat32_sect_per_fat, | True                      | 
+ 509 |   //STORE_LE(boot_blk->fat32_flags, 0);  | True                      | 
+ 510 |   //STORE_LE(boot_blk->fat32_version[2], | True                      | 
+ 511 |   STORE_LE(boot_blk->fat32_root_cluster, | True                      | 
+ 512 |   STORE_LE(boot_blk->fat32_info_sector,  | True                      | 
+ 513 |   STORE_LE(boot_blk->fat32_backup_boot,  | True                      | 
+ 514 |   //STORE_LE(boot_blk->reserved2[3], 0,0 | True                      | 
+ 515 |   STORE_LE(boot_blk->vi.ext_boot_sign, 0 | True                      | 
+ 516 |   STORE_LE(boot_blk->vi.volume_id32, vol | True                      | 
+ 517 |   memcpy(boot_blk->vi.fs_type, "FAT32    | True                      | 
+ 518 |   memcpy(boot_blk->vi.volume_label, volu | True                      | 
+ 519 |   memcpy(boot_blk->boot_code, boot_code, | True                      | 
+ 520 |   STORE_LE(boot_blk->boot_sign, BOOT_SIG | True                      | 
+ 521 |                                          | True                      | 
+ 522 |   STORE_LE(info->signature1, FAT_FSINFO_ | True                      | 
+ 523 |   STORE_LE(info->signature2, FAT_FSINFO_ | True                      | 
+ 524 |   // we've allocated cluster 2 for the r | True                      | 
+ 525 |   STORE_LE(info->free_clusters, (total_c | True                      | 
+ 526 |   STORE_LE(info->next_cluster, 2);       | True                      | 
+ 527 |   STORE_LE(info->boot_sign, BOOT_SIGN);  | True                      | 
+ 528 |                                          | True                      | 
+ 529 |   // 1st copy                            | True                      | 
+ 530 |   xwrite(dev, buf, bytes_per_sect * back | True                      | 
+ 531 |   // 2nd copy and possibly zero sectors  | True                      | 
+ 532 |   xwrite(dev, buf, bytes_per_sect * (res | True                      | 
+ 533 |  }                                       | True                      | 
+ 534 |                                          | True                      | 
+ 535 |  { // file allocation tables             | True                      | 
+ 536 |   unsigned i,j;                          | True                      | 
+ 537 |   unsigned char *fat = (void*)buf;       | True                      | 
+ 538 |                                          | True                      | 
+ 539 |   memset(buf, 0, bytes_per_sect * 2);    | True                      | 
+ 540 |   // initial FAT entries                 | True                      | 
+ 541 |   MARK_CLUSTER(0, 0x0fffff00 | media_byt | True                      | 
+ 542 |   MARK_CLUSTER(1, 0xffffffff);           | True                      | 
+ 543 |   // mark cluster 2 as EOF (used for roo | True                      | 
+ 544 |   MARK_CLUSTER(2, EOF_FAT32);            | True                      | 
+ 545 |   for (i = 0; i < NUM_FATS; i++) {       | True                      | 
+ 546 |    xwrite(dev, buf, bytes_per_sect);     | True                      | 
+ 547 |    for (j = 1; j < sect_per_fat; j++)    | True                      | 
+ 548 |     xwrite(dev, buf + bytes_per_sect, by | True                      | 
+ 549 |   }                                      | True                      | 
+ 550 |  }                                       | True                      | 
+ 551 |                                          | True                      | 
+ 552 |  // root directory                       | True                      | 
+ 553 |  // empty directory is just a set of zer | True                      | 
+ 554 |  memset(buf, 0, sect_per_clust * bytes_p | True                      | 
+ 555 |  // not "NO NAME", "NO NAME  " etc?      | True                      | 
+ 556 |  // (mkfs.fat 4.1 won't create dir entry | True                      | 
+ 557 |  // but will create one with e.g. -n '', | True                      | 
+ 558 |  if (strcmp(volume_label11, NO_NAME_11)  | True                      | 
+ 559 |   // create dir entry for volume label   | True                      | 
+ 560 |   struct msdos_dir_entry *de;            | True                      | 
+ 561 | #if 0                                    | True                      | 
+ 562 |   struct tm tm_time;                     | 0                         | 
+ 563 |   uint16_t t, d;                         | 0                         | 
+ 564 | #endif                                   | True                      | 
+ 565 |   de = (void*)buf;                       | True                      | 
+ 566 |   memcpy(de->name, volume_label11, 11);  | True                      | 
+ 567 |   STORE_LE(de->attr, ATTR_VOLUME);       | True                      | 
+ 568 | #if 0                                    | True                      | 
+ 569 |   localtime_r(&create_time, &tm_time);   | 0                         | 
+ 570 |   t = (tm_time.tm_sec >> 1) + (tm_time.t | 0                         | 
+ 571 |   d = tm_time.tm_mday + ((tm_time.tm_mon | 0                         | 
+ 572 |   STORE_LE(de->time, t);                 | 0                         | 
+ 573 |   STORE_LE(de->date, d);                 | 0                         | 
+ 574 |   //STORE_LE(de->ctime_cs, 0);           | 0                         | 
+ 575 |   de->ctime = de->time;                  | 0                         | 
+ 576 |   de->cdate = de->date;                  | 0                         | 
+ 577 |   de->adate = de->date;                  | 0                         | 
+ 578 | #endif                                   | True                      | 
+ 579 |  }                                       | True                      | 
+ 580 |  xwrite(dev, buf, sect_per_clust * bytes | True                      | 
+ 581 |                                          | True                      | 
+ 582 | #if 0                                    | True                      | 
+ 583 |  if (opts & OPT_c) {                     | 0                         | 
+ 584 |   uoff_t volume_size_blocks;             | 0                         | 
+ 585 |   unsigned start_data_sector;            | 0                         | 
+ 586 |   unsigned start_data_block;             | 0                         | 
+ 587 |   unsigned badblocks = 0;                | 0                         | 
+ 588 |   int try, got;                          | 0                         | 
+ 589 |   off_t currently_testing;               | 0                         | 
+ 590 |   char *blkbuf = xmalloc(BLOCK_SIZE * TE | 0                         | 
+ 591 |                                          | 0                         | 
+ 592 |   volume_size_blocks = (volume_size_byte | 0                         | 
+ 593 |   // N.B. the two following vars are in  | 0                         | 
+ 594 |   start_data_sector = (reserved_sect + N | 0                         | 
+ 595 |   start_data_block = (start_data_sector  | 0                         | 
+ 596 |                                          | 0                         | 
+ 597 |   bb_error_msg("searching for bad blocks | 0                         | 
+ 598 |   currently_testing = 0;                 | 0                         | 
+ 599 |   try = TEST_BUFFER_BLOCKS;              | 0                         | 
+ 600 |   while (currently_testing < volume_size | 0                         | 
+ 601 |    if (currently_testing + try > volume_ | 0                         | 
+ 602 |     try = volume_size_blocks - currently | 0                         | 
+ 603 |    // perform a test on a block. return  | 0                         | 
+ 604 |    // that could be read successfully.   | 0                         | 
+ 605 |    // seek to the correct location       | 0                         | 
+ 606 |    xlseek(dev, currently_testing * BLOCK | 0                         | 
+ 607 |    // try reading                        | 0                         | 
+ 608 |    got = read(dev, blkbuf, try * BLOCK_S | 0                         | 
+ 609 |    if (got < 0)                          | 0                         | 
+ 610 |     got = 0;                             | 0                         | 
+ 611 |    if (got & (BLOCK_SIZE - 1))           | 0                         | 
+ 612 |     bb_error_msg("unexpected values in d | 0                         | 
+ 613 |    got /= BLOCK_SIZE;                    | 0                         | 
+ 614 |    currently_testing += got;             | 0                         | 
+ 615 |    if (got == try) {                     | 0                         | 
+ 616 |     try = TEST_BUFFER_BLOCKS;            | 0                         | 
+ 617 |     continue;                            | 0                         | 
+ 618 |    }                                     | 0                         | 
+ 619 |    try = 1;                              | 0                         | 
+ 620 |    if (currently_testing < start_data_bl | 0                         | 
+ 621 |     bb_error_msg_and_die("bad blocks bef | 0                         | 
+ 622 |                                          | 0                         | 
+ 623 |    // mark all of the sectors in the blo | 0                         | 
+ 624 |    for (i = 0; i < SECTORS_PER_BLOCK; i+ | 0                         | 
+ 625 |     int cluster = (currently_testing * S | 0                         | 
+ 626 |     if (cluster < 0)                     | 0                         | 
+ 627 |      bb_error_msg_and_die("invalid clust | 0                         | 
+ 628 |     MARK_CLUSTER(cluster, BAD_FAT32);    | 0                         | 
+ 629 |    }                                     | 0                         | 
+ 630 |    badblocks++;                          | 0                         | 
+ 631 |    currently_testing++;                  | 0                         | 
+ 632 |   }                                      | 0                         | 
+ 633 |   free(blkbuf);                          | 0                         | 
+ 634 |   if (badblocks)                         | 0                         | 
+ 635 |    bb_error_msg("%d bad block(s)", badbl | 0                         | 
+ 636 |  }                                       | 0                         | 
+ 637 | #endif                                   | True                      | 
+ 638 |                                          | True                      | 
+ 639 |  // cleanup                              | True                      | 
+ 640 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 641 |   free(buf);                             | True                      | 
+ 642 |   close(dev);                            | True                      | 
+ 643 |  }                                       | True                      | 
+ 644 |                                          | True                      | 
+ 645 |  return 0;                               | True                      | 
+ 646 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +121MB, 303ms             | 

@@ -1,0 +1,1420 @@
+FILE: data/raw/busybox-1.38.0/coreutils/od_bloaty.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* od -- dump files in octal and other f | True                      | 
+   2 |    Copyright (C) 92, 1995-2004 Free Soft | True                      | 
+   3 |                                          | True                      | 
+   4 |    This program is free software; you ca | True                      | 
+   5 |    it under the terms of the GNU General | True                      | 
+   6 |    the Free Software Foundation; either  | True                      | 
+   7 |    any later version.                    | True                      | 
+   8 |                                          | True                      | 
+   9 |    This program is distributed in the ho | True                      | 
+  10 |    but WITHOUT ANY WARRANTY; without eve | True                      | 
+  11 |    MERCHANTABILITY or FITNESS FOR A PART | True                      | 
+  12 |    GNU General Public License for more d | True                      | 
+  13 |                                          | True                      | 
+  14 |    You should have received a copy of th | True                      | 
+  15 |    along with this program; if not, writ | True                      | 
+  16 |    Inc., 59 Temple Place - Suite 330, Bo | True                      | 
+  17 |  */                                      | True                      | 
+  18 | /* Written by Jim Meyering.  */          | True                      | 
+  19 | /* Busyboxed by Denys Vlasenko, based on | True                      | 
+  20 |                                          | True                      | 
+  21 |                                          | True                      | 
+  22 | /* #include "libbb.h" - done in od.c */  | True                      | 
+  23 | #include "common_bufsiz.h"               | True                      | 
+  24 | #define assert(a) ((void)0)              | True                      | 
+  25 |                                          | True                      | 
+  26 |                                          | True                      | 
+  27 | //usage:#if ENABLE_DESKTOP               | True                      | 
+  28 | //usage:#define od_trivial_usage         | True                      | 
+  29 | //usage:       "[-abcdfhilovxs] [-t TYPE | True                      | 
+  30 | // We also support -BDOHXIL, but they ar | True                      | 
+  31 | // manpage/help, so don't show them eith | True                      | 
+  32 | // We don't support:                     | True                      | 
+  33 | // ... [FILE] [[+]OFFSET[.][b]]          | True                      | 
+  34 | // Support is buggy for:                 | True                      | 
+  35 | // od --traditional [OPTION]... [FILE] [ | True                      | 
+  36 |                                          | True                      | 
+  37 | //usage:#define od_full_usage "\n\n"     | True                      | 
+  38 | //usage:       "Print FILEs (or stdin) u | True                      | 
+  39 | //usage:#endif                           | True                      | 
+  40 |                                          | True                      | 
+  41 | enum {                                   | True                      | 
+  42 |  OPT_A = 1 << 0,                         | True                      | 
+  43 |  OPT_N = 1 << 1,                         | True                      | 
+  44 |  OPT_a = 1 << 2,                         | True                      | 
+  45 |  OPT_b = 1 << 3,                         | True                      | 
+  46 |  OPT_c = 1 << 4,                         | True                      | 
+  47 |  OPT_d = 1 << 5,                         | True                      | 
+  48 |  OPT_D = 1 << 6, /* undocumented in core | True                      | 
+  49 |  OPT_f = 1 << 7,                         | True                      | 
+  50 |  OPT_h = 1 << 8,                         | True                      | 
+  51 |  OPT_H = 1 << 9, /* undocumented in core | True                      | 
+  52 |  OPT_i = 1 << 10,                        | True                      | 
+  53 |  OPT_I = 1 << 11, /* undocumented in cor | True                      | 
+  54 |  OPT_j = 1 << 12,                        | True                      | 
+  55 |  OPT_l = 1 << 13,                        | True                      | 
+  56 |  OPT_L = 1 << 14, /* undocumented in cor | True                      | 
+  57 |  OPT_o = 1 << 15,                        | True                      | 
+  58 |  OPT_O = 1 << 16, /* undocumented in cor | True                      | 
+  59 |  OPT_B = 1 << 17, /* undocumented synony | True                      | 
+  60 |  OPT_t = 1 << 18,                        | True                      | 
+  61 |  /* When zero and two or more consecutiv | True                      | 
+  62 |     only the first block and output an a | True                      | 
+  63 |     line to indicate that identical bloc | True                      | 
+  64 |  OPT_v = 1 << 19,                        | True                      | 
+  65 |  OPT_x = 1 << 20,                        | True                      | 
+  66 |  OPT_X = 1 << 21, /* undocumented in cor | True                      | 
+  67 |  OPT_s = 1 << 22,                        | True                      | 
+  68 |  OPT_S = 1 << 23,                        | True                      | 
+  69 |  OPT_w = 1 << 24,                        | True                      | 
+  70 |  OPT_traditional = (1 << 25) * ENABLE_LO | True                      | 
+  71 | };                                       | True                      | 
+  72 |                                          | True                      | 
+  73 | #define OD_GETOPT32() getopt32long(argv, | True                      | 
+  74 |  "A:N:abcdDfhHiIj:lLoOBt:*vxXsS:w:+:", o | True                      | 
+  75 |  /* -w with optional param */ \          | True                      | 
+  76 |  /* -S was -s and also had optional para | True                      | 
+  77 |  /* but in coreutils 6.3 it was renamed  | True                      | 
+  78 |  /* _mandatory_ parameter */ \           | True                      | 
+  79 |  &str_A, &str_N, &str_j, &lst_t, &str_S, | True                      | 
+  80 |                                          | True                      | 
+  81 |                                          | True                      | 
+  82 | /* Check for 0x7f is a coreutils 6.3 add | True                      | 
+  83 | #define ISPRINT(c) (((c) >= ' ') && (c)  | True                      | 
+  84 |                                          | True                      | 
+  85 | typedef long double longdouble_t;        | True                      | 
+  86 | typedef unsigned long long ulonglong_t;  | True                      | 
+  87 | typedef long long llong;                 | True                      | 
+  88 |                                          | True                      | 
+  89 | #if ENABLE_LFS                           | True                      | 
+  90 | # define xstrtooff_sfx xstrtoull_sfx     | ENABLE_LFS                | 
+  91 | #else                                    | True                      | 
+  92 | # define xstrtooff_sfx xstrtoul_sfx      | !ENABLE_LFS               | 
+  93 | #endif                                   | True                      | 
+  94 |                                          | True                      | 
+  95 | /* The default number of input bytes per | True                      | 
+  96 | #define DEFAULT_BYTES_PER_BLOCK 16       | True                      | 
+  97 |                                          | True                      | 
+  98 | /* The number of decimal digits of preci | True                      | 
+  99 | #ifndef FLT_DIG                          | True                      | 
+ 100 | # define FLT_DIG 7                       | !(FLT_DIG)                | 
+ 101 | #endif                                   | True                      | 
+ 102 |                                          | True                      | 
+ 103 | /* The number of decimal digits of preci | True                      | 
+ 104 | #ifndef DBL_DIG                          | True                      | 
+ 105 | # define DBL_DIG 15                      | !(DBL_DIG)                | 
+ 106 | #endif                                   | True                      | 
+ 107 |                                          | True                      | 
+ 108 | /* The number of decimal digits of preci | True                      | 
+ 109 | #ifndef LDBL_DIG                         | True                      | 
+ 110 | # define LDBL_DIG DBL_DIG                | !(LDBL_DIG)               | 
+ 111 | #endif                                   | True                      | 
+ 112 |                                          | True                      | 
+ 113 | enum size_spec {                         | True                      | 
+ 114 |  NO_SIZE,                                | True                      | 
+ 115 |  CHAR,                                   | True                      | 
+ 116 |  SHORT,                                  | True                      | 
+ 117 |  INT,                                    | True                      | 
+ 118 |  LONG,                                   | True                      | 
+ 119 |  LONG_LONG,                              | True                      | 
+ 120 |  FLOAT_SINGLE,                           | True                      | 
+ 121 |  FLOAT_DOUBLE,                           | True                      | 
+ 122 |  FLOAT_LONG_DOUBLE,                      | True                      | 
+ 123 |  N_SIZE_SPECS                            | True                      | 
+ 124 | };                                       | True                      | 
+ 125 |                                          | True                      | 
+ 126 | enum output_format {                     | True                      | 
+ 127 |  SIGNED_DECIMAL,                         | True                      | 
+ 128 |  UNSIGNED_DECIMAL,                       | True                      | 
+ 129 |  OCTAL,                                  | True                      | 
+ 130 |  HEXADECIMAL,                            | True                      | 
+ 131 |  FLOATING_POINT,                         | True                      | 
+ 132 |  NAMED_CHARACTER,                        | True                      | 
+ 133 |  CHARACTER                               | True                      | 
+ 134 | };                                       | True                      | 
+ 135 |                                          | True                      | 
+ 136 | /* Each output format specification (fro | True                      | 
+ 137 |    old-style options) is represented by  | True                      | 
+ 138 | struct tspec {                           | True                      | 
+ 139 |  enum output_format fmt;                 | True                      | 
+ 140 |  enum size_spec size;                    | True                      | 
+ 141 |  void (*print_function) (size_t, const c | True                      | 
+ 142 |  char *fmt_string;                       | True                      | 
+ 143 |  int hexl_mode_trailer;                  | True                      | 
+ 144 |  int field_width;                        | True                      | 
+ 145 | };                                       | True                      | 
+ 146 |                                          | True                      | 
+ 147 | /* Convert the number of 8-bit bytes of  | True                      | 
+ 148 |    the number of characters (digits + si | True                      | 
+ 149 |    required to represent the same quanti | True                      | 
+ 150 |    For example, a 32-bit (4-byte) quanti | True                      | 
+ 151 |    as wide as the following for these ty | True                      | 
+ 152 |    11 unsigned octal                     | True                      | 
+ 153 |    11 signed decimal                     | True                      | 
+ 154 |    10 unsigned decimal                   | True                      | 
+ 155 |    8 unsigned hexadecimal  */            | True                      | 
+ 156 |                                          | True                      | 
+ 157 | static const uint8_t bytes_to_oct_digits | True                      | 
+ 158 | {0, 3, 6, 8, 11, 14, 16, 19, 22, 25, 27, | True                      | 
+ 159 |                                          | True                      | 
+ 160 | static const uint8_t bytes_to_signed_dec | True                      | 
+ 161 | {1, 4, 6, 8, 11, 13, 16, 18, 20, 23, 25, | True                      | 
+ 162 |                                          | True                      | 
+ 163 | static const uint8_t bytes_to_unsigned_d | True                      | 
+ 164 | {0, 3, 5, 8, 10, 13, 15, 17, 20, 22, 25, | True                      | 
+ 165 |                                          | True                      | 
+ 166 | static const uint8_t bytes_to_hex_digits | True                      | 
+ 167 | {0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20,  | True                      | 
+ 168 |                                          | True                      | 
+ 169 | /* Convert enum size_spec to the size of | True                      | 
+ 170 | static const signed char width_bytes[] A | True                      | 
+ 171 |  -1,                                     | True                      | 
+ 172 |  sizeof(char),                           | True                      | 
+ 173 |  sizeof(short),                          | True                      | 
+ 174 |  sizeof(int),                            | True                      | 
+ 175 |  sizeof(long),                           | True                      | 
+ 176 |  sizeof(ulonglong_t),                    | True                      | 
+ 177 |  sizeof(float),                          | True                      | 
+ 178 |  sizeof(double),                         | True                      | 
+ 179 |  sizeof(longdouble_t)                    | True                      | 
+ 180 | };                                       | True                      | 
+ 181 | /* Ensure that for each member of 'enum  | True                      | 
+ 182 |    initializer in the width_bytes array. | True                      | 
+ 183 | struct ERR_width_bytes_has_bad_size {    | True                      | 
+ 184 |  char ERR_width_bytes_has_bad_size[ARRAY | True                      | 
+ 185 | };                                       | True                      | 
+ 186 |                                          | True                      | 
+ 187 | struct globals {                         | True                      | 
+ 188 |  smallint exit_code;                     | True                      | 
+ 189 |                                          | True                      | 
+ 190 |  unsigned string_min;                    | True                      | 
+ 191 |                                          | True                      | 
+ 192 |  /* An array of specs describing how to  | True                      | 
+ 193 |  unsigned n_specs;                       | True                      | 
+ 194 |  struct tspec *spec;                     | True                      | 
+ 195 |                                          | True                      | 
+ 196 |  /* Function that accepts an address and | True                      | 
+ 197 |     and prints the address and char to s | True                      | 
+ 198 |  void (*format_address)(off_t, char);    | True                      | 
+ 199 |                                          | True                      | 
+ 200 |  /* The difference between the old-style | True                      | 
+ 201 |     the number of bytes to skip.  */     | True                      | 
+ 202 | #if ENABLE_LONG_OPTS                     | True                      | 
+ 203 |  off_t pseudo_offset;                    | ENABLE_LONG_OPTS          | 
+ 204 | # define G_pseudo_offset G.pseudo_offset | ENABLE_LONG_OPTS          | 
+ 205 | #endif                                   | True                      | 
+ 206 |  /* When zero, MAX_BYTES_TO_FORMAT and E | True                      | 
+ 207 |     input is formatted.  */              | True                      | 
+ 208 |                                          | True                      | 
+ 209 |  /* The number of input bytes formatted  | True                      | 
+ 210 |     a multiple of the least common multi | True                      | 
+ 211 |     the specified output types.  It shou | True                      | 
+ 212 |     no larger than 16 -- unless specifie | True                      | 
+ 213 |  unsigned bytes_per_block; /* have to us | True                      | 
+ 214 |                                          | True                      | 
+ 215 |  /* A NULL-terminated list of the file-a | True                      | 
+ 216 |  const char *const *file_list;           | True                      | 
+ 217 |                                          | True                      | 
+ 218 |  /* The input stream associated with the | True                      | 
+ 219 |  FILE *in_stream;                        | True                      | 
+ 220 |                                          | True                      | 
+ 221 |  bool not_first;                         | True                      | 
+ 222 |  bool prev_pair_equal;                   | True                      | 
+ 223 |                                          | True                      | 
+ 224 |  char address_fmt[sizeof("%0n"OFF_FMT"xc | True                      | 
+ 225 | } FIX_ALIASING;                          | True                      | 
+ 226 | /* Corresponds to 'x' above */           | True                      | 
+ 227 | #define address_base_char G.address_fmt[ | True                      | 
+ 228 | /* Corresponds to 'n' above */           | True                      | 
+ 229 | #define address_pad_len_char G.address_f | True                      | 
+ 230 |                                          | True                      | 
+ 231 | #if !ENABLE_LONG_OPTS                    | True                      | 
+ 232 | enum { G_pseudo_offset = 0 };            | !ENABLE_LONG_OPTS         | 
+ 233 | #endif                                   | True                      | 
+ 234 | #define G (*(struct globals*)bb_common_b | True                      | 
+ 235 | #define INIT_G() do { \                  | True                      | 
+ 236 |  setup_common_bufsiz(); \                | True                      | 
+ 237 |  BUILD_BUG_ON(sizeof(G) > COMMON_BUFSIZE | True                      | 
+ 238 |  G.bytes_per_block = 32; \               | True                      | 
+ 239 |  strcpy(G.address_fmt, "%0n"OFF_FMT"xc") | True                      | 
+ 240 | } while (0)                              | True                      | 
+ 241 |                                          | True                      | 
+ 242 |                                          | True                      | 
+ 243 | #define MAX_INTEGRAL_TYPE_SIZE sizeof(ul | True                      | 
+ 244 | static const unsigned char integral_type | True                      | 
+ 245 |  [sizeof(char)] = CHAR,                  | True                      | 
+ 246 | #if USHRT_MAX != UCHAR_MAX               | True                      | 
+ 247 |  [sizeof(short)] = SHORT,                | (USHRT_MAX!=UCHAR_MAX)    | 
+ 248 | #endif                                   | True                      | 
+ 249 | #if UINT_MAX != USHRT_MAX                | True                      | 
+ 250 |  [sizeof(int)] = INT,                    | (UINT_MAX!=USHRT_MAX)     | 
+ 251 | #endif                                   | True                      | 
+ 252 | #if ULONG_MAX != UINT_MAX                | True                      | 
+ 253 |  [sizeof(long)] = LONG,                  | (ULONG_MAX!=UINT_MAX)     | 
+ 254 | #endif                                   | True                      | 
+ 255 | #if ULLONG_MAX != ULONG_MAX              | True                      | 
+ 256 |  [sizeof(ulonglong_t)] = LONG_LONG,      | (ULLONG_MAX!=ULONG_MAX)   | 
+ 257 | #endif                                   | True                      | 
+ 258 | };                                       | True                      | 
+ 259 |                                          | True                      | 
+ 260 | #define MAX_FP_TYPE_SIZE sizeof(longdoub | True                      | 
+ 261 | static const unsigned char fp_type_size[ | True                      | 
+ 262 |  /* gcc seems to allow repeated indexes. | True                      | 
+ 263 |  [sizeof(longdouble_t)] = FLOAT_LONG_DOU | True                      | 
+ 264 |  [sizeof(double)] = FLOAT_DOUBLE,        | True                      | 
+ 265 |  [sizeof(float)] = FLOAT_SINGLE          | True                      | 
+ 266 | };                                       | True                      | 
+ 267 |                                          | True                      | 
+ 268 |                                          | True                      | 
+ 269 | static unsigned                          | True                      | 
+ 270 | gcd(unsigned u, unsigned v)              | True                      | 
+ 271 | {                                        | True                      | 
+ 272 |  unsigned t;                             | True                      | 
+ 273 |  while (v != 0) {                        | True                      | 
+ 274 |   t = u % v;                             | True                      | 
+ 275 |   u = v;                                 | True                      | 
+ 276 |   v = t;                                 | True                      | 
+ 277 |  }                                       | True                      | 
+ 278 |  return u;                               | True                      | 
+ 279 | }                                        | True                      | 
+ 280 |                                          | True                      | 
+ 281 | /* Compute the least common multiple of  | True                      | 
+ 282 | static unsigned                          | True                      | 
+ 283 | lcm(unsigned u, unsigned v) {            | True                      | 
+ 284 |  unsigned t = gcd(u, v);                 | True                      | 
+ 285 |  if (t == 0)                             | True                      | 
+ 286 |   return 0;                              | True                      | 
+ 287 |  return u * v / t;                       | True                      | 
+ 288 | }                                        | True                      | 
+ 289 |                                          | True                      | 
+ 290 | static void                              | True                      | 
+ 291 | print_s_char(size_t n_bytes, const char  | True                      | 
+ 292 | {                                        | True                      | 
+ 293 |  while (n_bytes--) {                     | True                      | 
+ 294 |   int tmp = *(signed char *) block;      | True                      | 
+ 295 |   printf(fmt_string, tmp);               | True                      | 
+ 296 |   block += sizeof(unsigned char);        | True                      | 
+ 297 |  }                                       | True                      | 
+ 298 | }                                        | True                      | 
+ 299 |                                          | True                      | 
+ 300 | static void                              | True                      | 
+ 301 | print_char(size_t n_bytes, const char *b | True                      | 
+ 302 | {                                        | True                      | 
+ 303 |  while (n_bytes--) {                     | True                      | 
+ 304 |   unsigned tmp = *(unsigned char *) bloc | True                      | 
+ 305 |   printf(fmt_string, tmp);               | True                      | 
+ 306 |   block += sizeof(unsigned char);        | True                      | 
+ 307 |  }                                       | True                      | 
+ 308 | }                                        | True                      | 
+ 309 |                                          | True                      | 
+ 310 | static void                              | True                      | 
+ 311 | print_s_short(size_t n_bytes, const char | True                      | 
+ 312 | {                                        | True                      | 
+ 313 |  n_bytes /= sizeof(signed short);        | True                      | 
+ 314 |  while (n_bytes--) {                     | True                      | 
+ 315 |   int tmp = *(signed short *) block;     | True                      | 
+ 316 |   printf(fmt_string, tmp);               | True                      | 
+ 317 |   block += sizeof(unsigned short);       | True                      | 
+ 318 |  }                                       | True                      | 
+ 319 | }                                        | True                      | 
+ 320 |                                          | True                      | 
+ 321 | static void                              | True                      | 
+ 322 | print_short(size_t n_bytes, const char * | True                      | 
+ 323 | {                                        | True                      | 
+ 324 |  n_bytes /= sizeof(unsigned short);      | True                      | 
+ 325 |  while (n_bytes--) {                     | True                      | 
+ 326 |   unsigned tmp = *(unsigned short *) blo | True                      | 
+ 327 |   printf(fmt_string, tmp);               | True                      | 
+ 328 |   block += sizeof(unsigned short);       | True                      | 
+ 329 |  }                                       | True                      | 
+ 330 | }                                        | True                      | 
+ 331 |                                          | True                      | 
+ 332 | static void                              | True                      | 
+ 333 | print_int(size_t n_bytes, const char *bl | True                      | 
+ 334 | {                                        | True                      | 
+ 335 |  n_bytes /= sizeof(unsigned);            | True                      | 
+ 336 |  while (n_bytes--) {                     | True                      | 
+ 337 |   unsigned tmp = *(unsigned *) block;    | True                      | 
+ 338 |   printf(fmt_string, tmp);               | True                      | 
+ 339 |   block += sizeof(unsigned);             | True                      | 
+ 340 |  }                                       | True                      | 
+ 341 | }                                        | True                      | 
+ 342 |                                          | True                      | 
+ 343 | #if UINT_MAX == ULONG_MAX                | True                      | 
+ 344 | # define print_long print_int            | UINT_MAX==ULONG_MAX       | 
+ 345 | #else                                    | True                      | 
+ 346 | static void                              | !(UINT_MAX==ULONG_MAX)    | 
+ 347 | print_long(size_t n_bytes, const char *b | !(UINT_MAX==ULONG_MAX)    | 
+ 348 | {                                        | !(UINT_MAX==ULONG_MAX)    | 
+ 349 |  n_bytes /= sizeof(unsigned long);       | !(UINT_MAX==ULONG_MAX)    | 
+ 350 |  while (n_bytes--) {                     | !(UINT_MAX==ULONG_MAX)    | 
+ 351 |   unsigned long tmp = *(unsigned long *) | !(UINT_MAX==ULONG_MAX)    | 
+ 352 |   printf(fmt_string, tmp);               | !(UINT_MAX==ULONG_MAX)    | 
+ 353 |   block += sizeof(unsigned long);        | !(UINT_MAX==ULONG_MAX)    | 
+ 354 |  }                                       | !(UINT_MAX==ULONG_MAX)    | 
+ 355 | }                                        | !(UINT_MAX==ULONG_MAX)    | 
+ 356 | #endif                                   | True                      | 
+ 357 |                                          | True                      | 
+ 358 | #if ULONG_MAX == ULLONG_MAX              | True                      | 
+ 359 | # define print_long_long print_long      | ULONG_MAX==ULLONG_MAX     | 
+ 360 | #else                                    | True                      | 
+ 361 | static void                              | !(ULONG_MAX==ULLONG_MAX)  | 
+ 362 | print_long_long(size_t n_bytes, const ch | !(ULONG_MAX==ULLONG_MAX)  | 
+ 363 | {                                        | !(ULONG_MAX==ULLONG_MAX)  | 
+ 364 |  n_bytes /= sizeof(ulonglong_t);         | !(ULONG_MAX==ULLONG_MAX)  | 
+ 365 |  while (n_bytes--) {                     | !(ULONG_MAX==ULLONG_MAX)  | 
+ 366 |   ulonglong_t tmp = *(ulonglong_t *) blo | !(ULONG_MAX==ULLONG_MAX)  | 
+ 367 |   printf(fmt_string, tmp);               | !(ULONG_MAX==ULLONG_MAX)  | 
+ 368 |   block += sizeof(ulonglong_t);          | !(ULONG_MAX==ULLONG_MAX)  | 
+ 369 |  }                                       | !(ULONG_MAX==ULLONG_MAX)  | 
+ 370 | }                                        | !(ULONG_MAX==ULLONG_MAX)  | 
+ 371 | #endif                                   | True                      | 
+ 372 |                                          | True                      | 
+ 373 | static void                              | True                      | 
+ 374 | print_float(size_t n_bytes, const char * | True                      | 
+ 375 | {                                        | True                      | 
+ 376 |  n_bytes /= sizeof(float);               | True                      | 
+ 377 |  while (n_bytes--) {                     | True                      | 
+ 378 |   float tmp = *(float *) block;          | True                      | 
+ 379 |   printf(fmt_string, tmp);               | True                      | 
+ 380 |   block += sizeof(float);                | True                      | 
+ 381 |  }                                       | True                      | 
+ 382 | }                                        | True                      | 
+ 383 |                                          | True                      | 
+ 384 | static void                              | True                      | 
+ 385 | print_double(size_t n_bytes, const char  | True                      | 
+ 386 | {                                        | True                      | 
+ 387 |  n_bytes /= sizeof(double);              | True                      | 
+ 388 |  while (n_bytes--) {                     | True                      | 
+ 389 |   double tmp = *(double *) block;        | True                      | 
+ 390 |   printf(fmt_string, tmp);               | True                      | 
+ 391 |   block += sizeof(double);               | True                      | 
+ 392 |  }                                       | True                      | 
+ 393 | }                                        | True                      | 
+ 394 |                                          | True                      | 
+ 395 | static void                              | True                      | 
+ 396 | print_long_double(size_t n_bytes, const  | True                      | 
+ 397 | {                                        | True                      | 
+ 398 |  n_bytes /= sizeof(longdouble_t);        | True                      | 
+ 399 |  while (n_bytes--) {                     | True                      | 
+ 400 |   longdouble_t tmp = *(longdouble_t *) b | True                      | 
+ 401 |   printf(fmt_string, tmp);               | True                      | 
+ 402 |   block += sizeof(longdouble_t);         | True                      | 
+ 403 |  }                                       | True                      | 
+ 404 | }                                        | True                      | 
+ 405 |                                          | True                      | 
+ 406 | /* print_[named]_ascii are optimized for | True                      | 
+ 407 |  * Remember, someday you may want to pum | True                      | 
+ 408 |  * Saving a dozen of .text bytes here is | True                      | 
+ 409 |                                          | True                      | 
+ 410 | static void                              | True                      | 
+ 411 | print_named_ascii(size_t n_bytes, const  | True                      | 
+ 412 |   const char *unused_fmt_string UNUSED_P | True                      | 
+ 413 | {                                        | True                      | 
+ 414 |  /* Names for some non-printing characte | True                      | 
+ 415 |  static const char charname[33][3] ALIGN | True                      | 
+ 416 |   "nul", "soh", "stx", "etx", "eot", "en | True                      | 
+ 417 |   " bs", " ht", " nl", " vt", " ff", " c | True                      | 
+ 418 |   "dle", "dc1", "dc2", "dc3", "dc4", "na | True                      | 
+ 419 |   "can", " em", "sub", "esc", " fs", " g | True                      | 
+ 420 |   " sp"                                  | True                      | 
+ 421 |  };                                      | True                      | 
+ 422 |  // buf[N] pos:  01234 56789             | True                      | 
+ 423 |  char buf[12] = "   x\0 xxx\0";          | True                      | 
+ 424 |  // [12] because we take three 32bit sta | True                      | 
+ 425 |  // gcc is too dumb to initialize with c | True                      | 
+ 426 |  // it copies initializer from rodata. O | True                      | 
+ 427 |  // https://gcc.gnu.org/bugzilla/show_bu | True                      | 
+ 428 |                                          | True                      | 
+ 429 |  while (n_bytes--) {                     | True                      | 
+ 430 |   unsigned masked_c = *(unsigned char *) | True                      | 
+ 431 |                                          | True                      | 
+ 432 |   masked_c &= 0x7f;                      | True                      | 
+ 433 |   if (masked_c == 0x7f) {                | True                      | 
+ 434 |    fputs_stdout(" del");                 | True                      | 
+ 435 |    continue;                             | True                      | 
+ 436 |   }                                      | True                      | 
+ 437 |   if (masked_c > ' ') {                  | True                      | 
+ 438 |    buf[3] = masked_c;                    | True                      | 
+ 439 |    fputs_stdout(buf);                    | True                      | 
+ 440 |    continue;                             | True                      | 
+ 441 |   }                                      | True                      | 
+ 442 |   /* Why? Because printf(" %3.3s") is mu | True                      | 
+ 443 |   buf[6] = charname[masked_c][0];        | True                      | 
+ 444 |   buf[7] = charname[masked_c][1];        | True                      | 
+ 445 |   buf[8] = charname[masked_c][2];        | True                      | 
+ 446 |   fputs_stdout(buf+5);                   | True                      | 
+ 447 |  }                                       | True                      | 
+ 448 | }                                        | True                      | 
+ 449 |                                          | True                      | 
+ 450 | static void                              | True                      | 
+ 451 | print_ascii(size_t n_bytes, const char * | True                      | 
+ 452 |   const char *unused_fmt_string UNUSED_P | True                      | 
+ 453 | {                                        | True                      | 
+ 454 |  // buf[N] pos:  01234 56789             | True                      | 
+ 455 |  char buf[12] = "   x\0 xxx\0";          | True                      | 
+ 456 |                                          | True                      | 
+ 457 |  while (n_bytes--) {                     | True                      | 
+ 458 |   const char *s;                         | True                      | 
+ 459 |   unsigned c = *(unsigned char *) block+ | True                      | 
+ 460 |                                          | True                      | 
+ 461 |   if (ISPRINT(c)) {                      | True                      | 
+ 462 |    buf[3] = c;                           | True                      | 
+ 463 |    fputs_stdout(buf);                    | True                      | 
+ 464 |    continue;                             | True                      | 
+ 465 |   }                                      | True                      | 
+ 466 |   switch (c) {                           | True                      | 
+ 467 |   case '\0':                             | True                      | 
+ 468 |    s = "  \\0";                          | True                      | 
+ 469 |    break;                                | True                      | 
+ 470 |   case '\007':                           | True                      | 
+ 471 |    s = "  \\a";                          | True                      | 
+ 472 |    break;                                | True                      | 
+ 473 |   case '\b':                             | True                      | 
+ 474 |    s = "  \\b";                          | True                      | 
+ 475 |    break;                                | True                      | 
+ 476 |   case '\f':                             | True                      | 
+ 477 |    s = "  \\f";                          | True                      | 
+ 478 |    break;                                | True                      | 
+ 479 |   case '\n':                             | True                      | 
+ 480 |    s = "  \\n";                          | True                      | 
+ 481 |    break;                                | True                      | 
+ 482 |   case '\r':                             | True                      | 
+ 483 |    s = "  \\r";                          | True                      | 
+ 484 |    break;                                | True                      | 
+ 485 |   case '\t':                             | True                      | 
+ 486 |    s = "  \\t";                          | True                      | 
+ 487 |    break;                                | True                      | 
+ 488 |   case '\v':                             | True                      | 
+ 489 |    s = "  \\v";                          | True                      | 
+ 490 |    break;                                | True                      | 
+ 491 |   default:                               | True                      | 
+ 492 |    buf[6] = (c >> 6 & 3) + '0';          | True                      | 
+ 493 |    buf[7] = (c >> 3 & 7) + '0';          | True                      | 
+ 494 |    buf[8] = (c & 7) + '0';               | True                      | 
+ 495 |    s = buf + 5;                          | True                      | 
+ 496 |   }                                      | True                      | 
+ 497 |   fputs_stdout(s);                       | True                      | 
+ 498 |  }                                       | True                      | 
+ 499 | }                                        | True                      | 
+ 500 |                                          | True                      | 
+ 501 | /* Given a list of one or more input fil | True                      | 
+ 502 |    file pointer IN_STREAM and the global | True                      | 
+ 503 |    first one that can be successfully op | True                      | 
+ 504 |    reference the next filename in the li | True                      | 
+ 505 |    interpreted as standard input.  If an | True                      | 
+ 506 |    message and return nonzero.  */       | True                      | 
+ 507 |                                          | True                      | 
+ 508 | static void                              | True                      | 
+ 509 | open_next_file(void)                     | True                      | 
+ 510 | {                                        | True                      | 
+ 511 |  while (1) {                             | True                      | 
+ 512 |   if (!*G.file_list)                     | True                      | 
+ 513 |    return;                               | True                      | 
+ 514 |   G.in_stream = fopen_or_warn_stdin(*G.f | True                      | 
+ 515 |   if (G.in_stream) {                     | True                      | 
+ 516 |    break;                                | True                      | 
+ 517 |   }                                      | True                      | 
+ 518 |   G.exit_code = 1;                       | True                      | 
+ 519 |  }                                       | True                      | 
+ 520 |                                          | True                      | 
+ 521 |  if ((option_mask32 & (OPT_N|OPT_S)) ==  | True                      | 
+ 522 |   setbuf(G.in_stream, NULL);             | True                      | 
+ 523 | }                                        | True                      | 
+ 524 |                                          | True                      | 
+ 525 | /* Test whether there have been errors o | True                      | 
+ 526 |    it is not standard input.  Return non | True                      | 
+ 527 |    on in_stream or stdout; return zero o | True                      | 
+ 528 |    report more than one error only if bo | True                      | 
+ 529 |    have occurred.  IN_ERRNO, if nonzero, | True                      | 
+ 530 |    corresponding to the most recent acti | True                      | 
+ 531 |                                          | True                      | 
+ 532 | static void                              | True                      | 
+ 533 | check_and_close(void)                    | True                      | 
+ 534 | {                                        | True                      | 
+ 535 |  if (G.in_stream) {                      | True                      | 
+ 536 |   if (ferror(G.in_stream)) {             | True                      | 
+ 537 |    bb_error_msg("%s: read error", (G.in_ | True                      | 
+ 538 |      ? bb_msg_standard_input             | True                      | 
+ 539 |      : G.file_list[-1]                   | True                      | 
+ 540 |    );                                    | True                      | 
+ 541 |    G.exit_code = 1;                      | True                      | 
+ 542 |   }                                      | True                      | 
+ 543 |   fclose_if_not_stdin(G.in_stream);      | True                      | 
+ 544 |   G.in_stream = NULL;                    | True                      | 
+ 545 |  }                                       | True                      | 
+ 546 |                                          | True                      | 
+ 547 |  if (ferror(stdout)) {                   | True                      | 
+ 548 |   bb_simple_error_msg_and_die(bb_msg_wri | True                      | 
+ 549 |  }                                       | True                      | 
+ 550 | }                                        | True                      | 
+ 551 |                                          | True                      | 
+ 552 | /* If S points to a single valid modern  | True                      | 
+ 553 |    a description of that format in *TSPE | True                      | 
+ 554 |    character following the just-decoded  | True                      | 
+ 555 |    For example, if S were "d4afL", we wi | True                      | 
+ 556 |    and *TSPEC would be                   | True                      | 
+ 557 |  {                                       | True                      | 
+ 558 |   fmt = SIGNED_DECIMAL;                  | True                      | 
+ 559 |   size = INT or LONG; (whichever integra | True                      | 
+ 560 |   print_function = print_int; (assuming  | True                      | 
+ 561 |   fmt_string = "%011d%c";                | True                      | 
+ 562 |  }                                       | True                      | 
+ 563 |    S_ORIG is solely for reporting errors | True                      | 
+ 564 |    string argument. */                   | True                      | 
+ 565 |                                          | True                      | 
+ 566 | static NOINLINE const char *             | True                      | 
+ 567 | decode_one_format(const char *s_orig, co | True                      | 
+ 568 | {                                        | True                      | 
+ 569 |  enum size_spec size_spec;               | True                      | 
+ 570 |  unsigned size;                          | True                      | 
+ 571 |  enum output_format fmt;                 | True                      | 
+ 572 |  const char *p;                          | True                      | 
+ 573 |  char *end;                              | True                      | 
+ 574 |  char *fmt_string = NULL;                | True                      | 
+ 575 |  void (*print_function) (size_t, const c | True                      | 
+ 576 |  unsigned c;                             | True                      | 
+ 577 |  unsigned field_width = 0;               | True                      | 
+ 578 |  int pos;                                | True                      | 
+ 579 |                                          | True                      | 
+ 580 |  switch (*s) {                           | True                      | 
+ 581 |  case 'd':                               | True                      | 
+ 582 |  case 'o':                               | True                      | 
+ 583 |  case 'u':                               | True                      | 
+ 584 |  case 'x': {                             | True                      | 
+ 585 |   static const char CSIL[] ALIGN1 = "CSI | True                      | 
+ 586 |                                          | True                      | 
+ 587 |   c = *s++;                              | True                      | 
+ 588 |   p = strchr(CSIL, *s);                  | True                      | 
+ 589 |   /* if *s == NUL, p != NULL! Testcase:  | True                      | 
+ 590 |   if (!p || *p == '\0') {                | True                      | 
+ 591 |    size = sizeof(int);                   | True                      | 
+ 592 |    if (isdigit(s[0])) {                  | True                      | 
+ 593 |     size = bb_strtou(s, &end, 0);        | True                      | 
+ 594 |     if (errno == ERANGE                  | True                      | 
+ 595 |      || MAX_INTEGRAL_TYPE_SIZE < size    | True                      | 
+ 596 |      || integral_type_size[size] == NO_S | True                      | 
+ 597 |     ) {                                  | True                      | 
+ 598 |      bb_error_msg_and_die("invalid type  | True                      | 
+ 599 |       "%u-byte %s type is not supported" | True                      | 
+ 600 |       s_orig, size, "integral");         | True                      | 
+ 601 |     }                                    | True                      | 
+ 602 |     s = end;                             | True                      | 
+ 603 |    }                                     | True                      | 
+ 604 |   } else {                               | True                      | 
+ 605 |    static const uint8_t CSIL_sizeof[4] = | True                      | 
+ 606 |     sizeof(char),                        | True                      | 
+ 607 |     sizeof(short),                       | True                      | 
+ 608 |     sizeof(int),                         | True                      | 
+ 609 |     sizeof(long),                        | True                      | 
+ 610 |    };                                    | True                      | 
+ 611 |    size = CSIL_sizeof[p - CSIL];         | True                      | 
+ 612 |    s++; /* skip C/S/I/L */               | True                      | 
+ 613 |   }                                      | True                      | 
+ 614 |                                          | True                      | 
+ 615 | #define ISPEC_TO_FORMAT(Spec, Min_format | True                      | 
+ 616 |  ((Spec) == LONG_LONG ? (Max_format) \   | True                      | 
+ 617 |  : ((Spec) == LONG ? (Long_format) : (Mi | True                      | 
+ 618 |                                          | True                      | 
+ 619 | #define FMT_BYTES_ALLOCATED 9            | True                      | 
+ 620 |   size_spec = integral_type_size[size];  | True                      | 
+ 621 |                                          | True                      | 
+ 622 |   {                                      | True                      | 
+ 623 |    static const char doux[] ALIGN1 = "do | True                      | 
+ 624 |    static const char doux_fmt_letter[][4 | True                      | 
+ 625 |     "lld", "llo", "llu", "llx"           | True                      | 
+ 626 |    };                                    | True                      | 
+ 627 |    static const enum output_format doux_ | True                      | 
+ 628 |     SIGNED_DECIMAL,                      | True                      | 
+ 629 |     OCTAL,                               | True                      | 
+ 630 |     UNSIGNED_DECIMAL,                    | True                      | 
+ 631 |     HEXADECIMAL,                         | True                      | 
+ 632 |    };                                    | True                      | 
+ 633 |    static const uint8_t *const doux_byte | True                      | 
+ 634 |     bytes_to_signed_dec_digits,          | True                      | 
+ 635 |     bytes_to_oct_digits,                 | True                      | 
+ 636 |     bytes_to_unsigned_dec_digits,        | True                      | 
+ 637 |     bytes_to_hex_digits,                 | True                      | 
+ 638 |    };                                    | True                      | 
+ 639 |    static const char doux_fmtstring[][si | True                      | 
+ 640 |     " %%%u%s",                           | True                      | 
+ 641 |     " %%0%u%s",                          | True                      | 
+ 642 |     " %%%u%s",                           | True                      | 
+ 643 |     " %%0%u%s",                          | True                      | 
+ 644 |    };                                    | True                      | 
+ 645 |                                          | True                      | 
+ 646 |    pos = strchr(doux, c) - doux;         | True                      | 
+ 647 |    fmt = doux_fmt[pos];                  | True                      | 
+ 648 |    field_width = doux_bytes_to_XXX[pos][ | True                      | 
+ 649 |    p = doux_fmt_letter[pos] + 2;         | True                      | 
+ 650 |    if (size_spec == LONG) p--;           | True                      | 
+ 651 |    if (size_spec == LONG_LONG) p -= 2;   | True                      | 
+ 652 |    fmt_string = xasprintf(doux_fmtstring | True                      | 
+ 653 |   }                                      | True                      | 
+ 654 |                                          | True                      | 
+ 655 |   switch (size_spec) {                   | True                      | 
+ 656 |   case CHAR:                             | True                      | 
+ 657 |    print_function = (fmt == SIGNED_DECIM | True                      | 
+ 658 |         ? print_s_char                   | True                      | 
+ 659 |         : print_char);                   | True                      | 
+ 660 |    break;                                | True                      | 
+ 661 |   case SHORT:                            | True                      | 
+ 662 |    print_function = (fmt == SIGNED_DECIM | True                      | 
+ 663 |         ? print_s_short                  | True                      | 
+ 664 |         : print_short);                  | True                      | 
+ 665 |    break;                                | True                      | 
+ 666 |   case INT:                              | True                      | 
+ 667 |    print_function = print_int;           | True                      | 
+ 668 |    break;                                | True                      | 
+ 669 |   case LONG:                             | True                      | 
+ 670 |    print_function = print_long;          | True                      | 
+ 671 |    break;                                | True                      | 
+ 672 |   default: /* case LONG_LONG: */         | True                      | 
+ 673 |    print_function = print_long_long;     | True                      | 
+ 674 |    break;                                | True                      | 
+ 675 |   }                                      | True                      | 
+ 676 |   break;                                 | True                      | 
+ 677 |  }                                       | True                      | 
+ 678 |                                          | True                      | 
+ 679 |  case 'f': {                             | True                      | 
+ 680 |   static const char FDL[] ALIGN1 = "FDL" | True                      | 
+ 681 |                                          | True                      | 
+ 682 |   fmt = FLOATING_POINT;                  | True                      | 
+ 683 |   ++s;                                   | True                      | 
+ 684 |   p = strchr(FDL, *s);                   | True                      | 
+ 685 |   if (!p || *p == '\0') {                | True                      | 
+ 686 |    size = sizeof(double);                | True                      | 
+ 687 |    if (isdigit(s[0])) {                  | True                      | 
+ 688 |     size = bb_strtou(s, &end, 0);        | True                      | 
+ 689 |     if (errno == ERANGE || size > MAX_FP | True                      | 
+ 690 |      || fp_type_size[size] == NO_SIZE    | True                      | 
+ 691 |     ) {                                  | True                      | 
+ 692 |      bb_error_msg_and_die("invalid type  | True                      | 
+ 693 |       "%u-byte %s type is not supported" | True                      | 
+ 694 |       s_orig, size, "floating point");   | True                      | 
+ 695 |     }                                    | True                      | 
+ 696 |     s = end;                             | True                      | 
+ 697 |    }                                     | True                      | 
+ 698 |   } else {                               | True                      | 
+ 699 |    static const uint8_t FDL_sizeof[] = { | True                      | 
+ 700 |     sizeof(float),                       | True                      | 
+ 701 |     sizeof(double),                      | True                      | 
+ 702 |     sizeof(longdouble_t),                | True                      | 
+ 703 |    };                                    | True                      | 
+ 704 |                                          | True                      | 
+ 705 |    size = FDL_sizeof[p - FDL];           | True                      | 
+ 706 |    s++; /* skip F/D/L */                 | True                      | 
+ 707 |   }                                      | True                      | 
+ 708 |                                          | True                      | 
+ 709 |   size_spec = fp_type_size[size];        | True                      | 
+ 710 |                                          | True                      | 
+ 711 |   switch (size_spec) {                   | True                      | 
+ 712 |   case FLOAT_SINGLE:                     | True                      | 
+ 713 |    print_function = print_float;         | True                      | 
+ 714 |    field_width = FLT_DIG + 8;            | True                      | 
+ 715 |    /* Don't use %#e; not all systems sup | True                      | 
+ 716 |    fmt_string = xasprintf(" %%%d.%de", f | True                      | 
+ 717 |    break;                                | True                      | 
+ 718 |   case FLOAT_DOUBLE:                     | True                      | 
+ 719 |    print_function = print_double;        | True                      | 
+ 720 |    field_width = DBL_DIG + 8;            | True                      | 
+ 721 |    fmt_string = xasprintf(" %%%d.%de", f | True                      | 
+ 722 |    break;                                | True                      | 
+ 723 |   default: /* case FLOAT_LONG_DOUBLE: */ | True                      | 
+ 724 |    print_function = print_long_double;   | True                      | 
+ 725 |    field_width = LDBL_DIG + 8;           | True                      | 
+ 726 |    fmt_string = xasprintf(" %%%d.%dLe",  | True                      | 
+ 727 |    break;                                | True                      | 
+ 728 |   }                                      | True                      | 
+ 729 |   break;                                 | True                      | 
+ 730 |  }                                       | True                      | 
+ 731 |                                          | True                      | 
+ 732 |  case 'a':                               | True                      | 
+ 733 |   ++s;                                   | True                      | 
+ 734 |   fmt = NAMED_CHARACTER;                 | True                      | 
+ 735 |   size_spec = CHAR;                      | True                      | 
+ 736 |   print_function = print_named_ascii;    | True                      | 
+ 737 |   field_width = 3;                       | True                      | 
+ 738 |   break;                                 | True                      | 
+ 739 |  case 'c':                               | True                      | 
+ 740 |   ++s;                                   | True                      | 
+ 741 |   fmt = CHARACTER;                       | True                      | 
+ 742 |   size_spec = CHAR;                      | True                      | 
+ 743 |   print_function = print_ascii;          | True                      | 
+ 744 |   field_width = 3;                       | True                      | 
+ 745 |   break;                                 | True                      | 
+ 746 |  default:                                | True                      | 
+ 747 |   bb_error_msg_and_die("invalid characte | True                      | 
+ 748 |     "in type string '%s'", *s, s_orig);  | True                      | 
+ 749 |  }                                       | True                      | 
+ 750 |                                          | True                      | 
+ 751 |  tspec->size = size_spec;                | True                      | 
+ 752 |  tspec->fmt = fmt;                       | True                      | 
+ 753 |  tspec->print_function = print_function; | True                      | 
+ 754 |  tspec->fmt_string = fmt_string;         | True                      | 
+ 755 |                                          | True                      | 
+ 756 |  tspec->field_width = field_width;       | True                      | 
+ 757 |  tspec->hexl_mode_trailer = (*s == 'z'); | True                      | 
+ 758 |  if (tspec->hexl_mode_trailer)           | True                      | 
+ 759 |   s++;                                   | True                      | 
+ 760 |                                          | True                      | 
+ 761 |  return s;                               | True                      | 
+ 762 | }                                        | True                      | 
+ 763 |                                          | True                      | 
+ 764 | /* Decode the modern od format string S. | True                      | 
+ 765 |    representation to the global array SP | True                      | 
+ 766 |    necessary.  */                        | True                      | 
+ 767 |                                          | True                      | 
+ 768 | static void                              | True                      | 
+ 769 | decode_format_string(const char *s)      | True                      | 
+ 770 | {                                        | True                      | 
+ 771 |  const char *s_orig = s;                 | True                      | 
+ 772 |                                          | True                      | 
+ 773 |  while (*s != '\0') {                    | True                      | 
+ 774 |   struct tspec tspec;                    | True                      | 
+ 775 |   const char *next;                      | True                      | 
+ 776 |                                          | True                      | 
+ 777 |   next = decode_one_format(s_orig, s, &t | True                      | 
+ 778 |                                          | True                      | 
+ 779 |   assert(s != next);                     | True                      | 
+ 780 |   s = next;                              | True                      | 
+ 781 |   G.spec = xrealloc_vector(G.spec, 4, G. | True                      | 
+ 782 |   memcpy(&G.spec[G.n_specs], &tspec, siz | True                      | 
+ 783 |   G.n_specs++;                           | True                      | 
+ 784 |  }                                       | True                      | 
+ 785 | }                                        | True                      | 
+ 786 |                                          | True                      | 
+ 787 | /* Given a list of one or more input fil | True                      | 
+ 788 |    file pointer IN_STREAM to position N_ | True                      | 
+ 789 |    those files.  If any file operation f | True                      | 
+ 790 |    N_SKIP bytes in the combined input, g | True                      | 
+ 791 |    nonzero.  When possible, use seek rat | True                      | 
+ 792 |    advance IN_STREAM.  */                | True                      | 
+ 793 |                                          | True                      | 
+ 794 | static void                              | True                      | 
+ 795 | skip(off_t n_skip)                       | True                      | 
+ 796 | {                                        | True                      | 
+ 797 |  if (n_skip == 0)                        | True                      | 
+ 798 |   return;                                | True                      | 
+ 799 |                                          | True                      | 
+ 800 |  while (G.in_stream) { /* !EOF */        | True                      | 
+ 801 |   struct stat file_stats;                | True                      | 
+ 802 |                                          | True                      | 
+ 803 |   /* First try seeking.  For large offse | True                      | 
+ 804 |      worthwhile.  If the offset is below | True                      | 
+ 805 |      more efficient to move the pointer  | True                      | 
+ 806 |      issues when trying to seek:         | True                      | 
+ 807 |    - the file must be seekable.          | True                      | 
+ 808 |    - before seeking to the specified pos | True                      | 
+ 809 |      that the new position is in the cur | True                      | 
+ 810 |      Try to do that by getting file's si | True                      | 
+ 811 |      But that will work only for regular | True                      | 
+ 812 |                                          | True                      | 
+ 813 |    /* The st_size field is valid only fo | True                      | 
+ 814 |       (and for symbolic links, which can | True                      | 
+ 815 |       If the number of bytes left to ski | True                      | 
+ 816 |       as large as the size of the curren | True                      | 
+ 817 |       decrement n_skip and go on to the  | True                      | 
+ 818 |   if (fstat(fileno(G.in_stream), &file_s | True                      | 
+ 819 |    && S_ISREG(file_stats.st_mode) && fil | True                      | 
+ 820 |   ) {                                    | True                      | 
+ 821 |    if (file_stats.st_size < n_skip) {    | True                      | 
+ 822 |     n_skip -= file_stats.st_size;        | True                      | 
+ 823 |     /* take "check & close / open_next"  | True                      | 
+ 824 |    } else {                              | True                      | 
+ 825 |     if (fseeko(G.in_stream, n_skip, SEEK | True                      | 
+ 826 |      G.exit_code = 1;                    | True                      | 
+ 827 |     return;                              | True                      | 
+ 828 |    }                                     | True                      | 
+ 829 |   } else {                               | True                      | 
+ 830 |    /* If it's not a regular file with po | True                      | 
+ 831 |       position the file pointer by readi | True                      | 
+ 832 |    char buf[1024];                       | True                      | 
+ 833 |    size_t n_bytes_to_read = 1024;        | True                      | 
+ 834 |    size_t n_bytes_read;                  | True                      | 
+ 835 |                                          | True                      | 
+ 836 |    while (n_skip > 0) {                  | True                      | 
+ 837 |     if (n_skip < n_bytes_to_read)        | True                      | 
+ 838 |      n_bytes_to_read = n_skip;           | True                      | 
+ 839 |     n_bytes_read = fread(buf, 1, n_bytes | True                      | 
+ 840 |     n_skip -= n_bytes_read;              | True                      | 
+ 841 |     if (n_bytes_read != n_bytes_to_read) | True                      | 
+ 842 |      break; /* EOF on this file or error | True                      | 
+ 843 |    }                                     | True                      | 
+ 844 |   }                                      | True                      | 
+ 845 |   if (n_skip == 0)                       | True                      | 
+ 846 |    return;                               | True                      | 
+ 847 |                                          | True                      | 
+ 848 |   check_and_close();                     | True                      | 
+ 849 |   open_next_file();                      | True                      | 
+ 850 |  }                                       | True                      | 
+ 851 |                                          | True                      | 
+ 852 |  if (n_skip)                             | True                      | 
+ 853 |   bb_simple_error_msg_and_die("can't ski | True                      | 
+ 854 | }                                        | True                      | 
+ 855 |                                          | True                      | 
+ 856 |                                          | True                      | 
+ 857 | typedef void FN_format_address(off_t add | True                      | 
+ 858 |                                          | True                      | 
+ 859 | static void                              | True                      | 
+ 860 | format_address_none(off_t address UNUSED | True                      | 
+ 861 | {                                        | True                      | 
+ 862 | }                                        | True                      | 
+ 863 |                                          | True                      | 
+ 864 | static void                              | True                      | 
+ 865 | format_address_std(off_t address, char c | True                      | 
+ 866 | {                                        | True                      | 
+ 867 |  /* Corresponds to 'c' */                | True                      | 
+ 868 |  G.address_fmt[sizeof(G.address_fmt)-2]  | True                      | 
+ 869 |  printf(G.address_fmt, address);         | True                      | 
+ 870 | }                                        | True                      | 
+ 871 |                                          | True                      | 
+ 872 | #if ENABLE_LONG_OPTS                     | True                      | 
+ 873 | /* only used with --traditional */       | ENABLE_LONG_OPTS          | 
+ 874 | static void                              | ENABLE_LONG_OPTS          | 
+ 875 | format_address_paren(off_t address, char | ENABLE_LONG_OPTS          | 
+ 876 | {                                        | ENABLE_LONG_OPTS          | 
+ 877 |  putchar('(');                           | ENABLE_LONG_OPTS          | 
+ 878 |  format_address_std(address, ')');       | ENABLE_LONG_OPTS          | 
+ 879 |  if (c) putchar(c);                      | ENABLE_LONG_OPTS          | 
+ 880 | }                                        | ENABLE_LONG_OPTS          | 
+ 881 |                                          | ENABLE_LONG_OPTS          | 
+ 882 | static void                              | ENABLE_LONG_OPTS          | 
+ 883 | format_address_label(off_t address, char | ENABLE_LONG_OPTS          | 
+ 884 | {                                        | ENABLE_LONG_OPTS          | 
+ 885 |  format_address_std(address, ' ');       | ENABLE_LONG_OPTS          | 
+ 886 |  format_address_paren(address + G_pseudo | ENABLE_LONG_OPTS          | 
+ 887 | }                                        | ENABLE_LONG_OPTS          | 
+ 888 | #endif                                   | True                      | 
+ 889 |                                          | True                      | 
+ 890 | static void                              | True                      | 
+ 891 | dump_hexl_mode_trailer(size_t n_bytes, c | True                      | 
+ 892 | {                                        | True                      | 
+ 893 |  fputs_stdout("  >");                    | True                      | 
+ 894 |  while (n_bytes--) {                     | True                      | 
+ 895 |   unsigned c = *(unsigned char *) block+ | True                      | 
+ 896 |   c = (ISPRINT(c) ? c : '.');            | True                      | 
+ 897 |   putchar(c);                            | True                      | 
+ 898 |  }                                       | True                      | 
+ 899 |  putchar('<');                           | True                      | 
+ 900 | }                                        | True                      | 
+ 901 |                                          | True                      | 
+ 902 | /* Write N_BYTES bytes from CURR_BLOCK t | True                      | 
+ 903 |    of the N_SPEC format specs.  CURRENT_ | True                      | 
+ 904 |    CURR_BLOCK in the concatenation of in | True                      | 
+ 905 |    (optionally) only before the output l | True                      | 
+ 906 |    format spec.  When duplicate blocks a | True                      | 
+ 907 |    for a sequence of identical input blo | True                      | 
+ 908 |    block followed by an asterisk alone o | True                      | 
+ 909 |    the blocks PREV_BLOCK and CURR_BLOCK  | True                      | 
+ 910 |    That condition may be false only for  | True                      | 
+ 911 |    only when it has not been padded to l | True                      | 
+ 912 |                                          | True                      | 
+ 913 | static void                              | True                      | 
+ 914 | write_block(off_t current_offset, size_t | True                      | 
+ 915 |   const char *prev_block, const char *cu | True                      | 
+ 916 | {                                        | True                      | 
+ 917 |  unsigned i;                             | True                      | 
+ 918 |                                          | True                      | 
+ 919 |  if (!(option_mask32 & OPT_v)            | True                      | 
+ 920 |   && G.not_first                         | True                      | 
+ 921 |   && n_bytes == G.bytes_per_block        | True                      | 
+ 922 |   && memcmp(prev_block, curr_block, G.by | True                      | 
+ 923 |  ) {                                     | True                      | 
+ 924 |   if (G.prev_pair_equal) {               | True                      | 
+ 925 |    /* The two preceding blocks were equa | True                      | 
+ 926 |       block is the same as the last one, | True                      | 
+ 927 |   } else {                               | True                      | 
+ 928 |    puts("*");                            | True                      | 
+ 929 |    G.prev_pair_equal = 1;                | True                      | 
+ 930 |   }                                      | True                      | 
+ 931 |  } else {                                | True                      | 
+ 932 |   G.not_first = 1;                       | True                      | 
+ 933 |   G.prev_pair_equal = 0;                 | True                      | 
+ 934 |   for (i = 0; i < G.n_specs; i++) {      | True                      | 
+ 935 |    if (i == 0)                           | True                      | 
+ 936 |     G.format_address(current_offset, '\0 | True                      | 
+ 937 |    else                                  | True                      | 
+ 938 |     printf("%*s", address_pad_len_char - | True                      | 
+ 939 |    (*G.spec[i].print_function) (n_bytes, | True                      | 
+ 940 |    if (G.spec[i].hexl_mode_trailer) {    | True                      | 
+ 941 |     /* space-pad out to full line width, | True                      | 
+ 942 |     unsigned datum_width = width_bytes[G | True                      | 
+ 943 |     unsigned blank_fields = (G.bytes_per | True                      | 
+ 944 |     unsigned field_width = G.spec[i].fie | True                      | 
+ 945 |     printf("%*s", blank_fields * field_w | True                      | 
+ 946 |     dump_hexl_mode_trailer(n_bytes, curr | True                      | 
+ 947 |    }                                     | True                      | 
+ 948 |    putchar('\n');                        | True                      | 
+ 949 |   }                                      | True                      | 
+ 950 |  }                                       | True                      | 
+ 951 | }                                        | True                      | 
+ 952 |                                          | True                      | 
+ 953 | static void                              | True                      | 
+ 954 | read_block(size_t n, char *block, size_t | True                      | 
+ 955 | {                                        | True                      | 
+ 956 |  assert(0 < n && n <= G.bytes_per_block) | True                      | 
+ 957 |                                          | True                      | 
+ 958 |  *n_bytes_in_buffer = 0;                 | True                      | 
+ 959 |                                          | True                      | 
+ 960 |  if (n == 0)                             | True                      | 
+ 961 |   return;                                | True                      | 
+ 962 |                                          | True                      | 
+ 963 |  while (G.in_stream != NULL) { /* EOF.   | True                      | 
+ 964 |   size_t n_needed;                       | True                      | 
+ 965 |   size_t n_read;                         | True                      | 
+ 966 |                                          | True                      | 
+ 967 |   n_needed = n - *n_bytes_in_buffer;     | True                      | 
+ 968 |   n_read = fread(block + *n_bytes_in_buf | True                      | 
+ 969 |   *n_bytes_in_buffer += n_read;          | True                      | 
+ 970 |   if (n_read == n_needed)                | True                      | 
+ 971 |    break;                                | True                      | 
+ 972 |   /* error check is done in check_and_cl | True                      | 
+ 973 |   check_and_close();                     | True                      | 
+ 974 |   open_next_file();                      | True                      | 
+ 975 |  }                                       | True                      | 
+ 976 | }                                        | True                      | 
+ 977 |                                          | True                      | 
+ 978 | /* Return the least common multiple of t | True                      | 
+ 979 |    with the format specs.  */            | True                      | 
+ 980 |                                          | True                      | 
+ 981 | static int                               | True                      | 
+ 982 | get_lcm(void)                            | True                      | 
+ 983 | {                                        | True                      | 
+ 984 |  size_t i;                               | True                      | 
+ 985 |  int l_c_m = 1;                          | True                      | 
+ 986 |                                          | True                      | 
+ 987 |  for (i = 0; i < G.n_specs; i++)         | True                      | 
+ 988 |   l_c_m = lcm(l_c_m, width_bytes[(int) G | True                      | 
+ 989 |  return l_c_m;                           | True                      | 
+ 990 | }                                        | True                      | 
+ 991 |                                          | True                      | 
+ 992 | /* Read a chunk of size BYTES_PER_BLOCK  | True                      | 
+ 993 |    formatted block to standard output, a | True                      | 
+ 994 |    maximum number of bytes has been read | True                      | 
+ 995 |    processed.  If the last block read is | True                      | 
+ 996 |    and its size is not a multiple of the | True                      | 
+ 997 |    spec, extend the input block with zer | True                      | 
+ 998 |    multiple of all format spec sizes.  W | True                      | 
+ 999 |    write on a line by itself the offset  | True                      | 
+1000 |    read.  */                             | True                      | 
+1001 |                                          | True                      | 
+1002 | static void                              | True                      | 
+1003 | dump(off_t current_offset, off_t end_off | True                      | 
+1004 | {                                        | True                      | 
+1005 |  char *block[2];                         | True                      | 
+1006 |  int idx;                                | True                      | 
+1007 |  size_t n_bytes_read;                    | True                      | 
+1008 |                                          | True                      | 
+1009 |  block[0] = xmalloc(2 * G.bytes_per_bloc | True                      | 
+1010 |  block[1] = block[0] + G.bytes_per_block | True                      | 
+1011 |                                          | True                      | 
+1012 |  idx = 0;                                | True                      | 
+1013 |  if (option_mask32 & OPT_N) {            | True                      | 
+1014 |   while (1) {                            | True                      | 
+1015 |    size_t n_needed;                      | True                      | 
+1016 |    if (current_offset >= end_offset) {   | True                      | 
+1017 |     n_bytes_read = 0;                    | True                      | 
+1018 |     break;                               | True                      | 
+1019 |    }                                     | True                      | 
+1020 |    n_needed = MIN(end_offset - current_o | True                      | 
+1021 |    read_block(n_needed, block[idx], &n_b | True                      | 
+1022 |    if (n_bytes_read < G.bytes_per_block) | True                      | 
+1023 |     break;                               | True                      | 
+1024 |    assert(n_bytes_read == G.bytes_per_bl | True                      | 
+1025 |    write_block(current_offset, n_bytes_r | True                      | 
+1026 |    current_offset += n_bytes_read;       | True                      | 
+1027 |    idx ^= 1;                             | True                      | 
+1028 |   }                                      | True                      | 
+1029 |  } else {                                | True                      | 
+1030 |   while (1) {                            | True                      | 
+1031 |    read_block(G.bytes_per_block, block[i | True                      | 
+1032 |    if (n_bytes_read < G.bytes_per_block) | True                      | 
+1033 |     break;                               | True                      | 
+1034 |    assert(n_bytes_read == G.bytes_per_bl | True                      | 
+1035 |    write_block(current_offset, n_bytes_r | True                      | 
+1036 |    current_offset += n_bytes_read;       | True                      | 
+1037 |    idx ^= 1;                             | True                      | 
+1038 |   }                                      | True                      | 
+1039 |  }                                       | True                      | 
+1040 |                                          | True                      | 
+1041 |  if (n_bytes_read > 0) {                 | True                      | 
+1042 |   int l_c_m;                             | True                      | 
+1043 |   size_t bytes_to_write;                 | True                      | 
+1044 |                                          | True                      | 
+1045 |   l_c_m = get_lcm();                     | True                      | 
+1046 |                                          | True                      | 
+1047 |   /* Make bytes_to_write the smallest mu | True                      | 
+1048 |      is at least as large as n_bytes_rea | True                      | 
+1049 |   bytes_to_write = l_c_m * ((n_bytes_rea | True                      | 
+1050 |                                          | True                      | 
+1051 |   memset(block[idx] + n_bytes_read, 0, b | True                      | 
+1052 |   write_block(current_offset, bytes_to_w | True                      | 
+1053 |     block[idx ^ 1], block[idx]);         | True                      | 
+1054 |   current_offset += n_bytes_read;        | True                      | 
+1055 |  }                                       | True                      | 
+1056 |                                          | True                      | 
+1057 |  G.format_address(current_offset, '\n'); | True                      | 
+1058 |                                          | True                      | 
+1059 |  if ((option_mask32 & OPT_N) && current_ | True                      | 
+1060 |   check_and_close();                     | True                      | 
+1061 |                                          | True                      | 
+1062 |  free(block[0]);                         | True                      | 
+1063 | }                                        | True                      | 
+1064 |                                          | True                      | 
+1065 | /* Read N bytes into BLOCK from the conc | True                      | 
+1066 |    named in the global array FILE_LIST.  | True                      | 
+1067 |    function, the global variable IN_STRE | True                      | 
+1068 |    stream associated with the input file | True                      | 
+1069 |    bytes cannot be read from IN_STREAM,  | True                      | 
+1070 |    the global variables IN_STREAM and IN | True                      | 
+1071 |    read the remaining bytes from the new | True                      | 
+1072 |    necessary until EOF is reached for th | True                      | 
+1073 |    On subsequent calls, don't modify BLO | True                      | 
+1074 |    *N_BYTES_IN_BUFFER to the number of b | True                      | 
+1075 |    it will be detected through ferror wh | True                      | 
+1076 |    closed.  If there is an error, give a | True                      | 
+1077 |    as usual and return nonzero.  Otherwi | True                      | 
+1078 |                                          | True                      | 
+1079 | /* STRINGS mode.  Find each "string cons | True                      | 
+1080 |    A string constant is a run of at leas | True                      | 
+1081 |    graphic (or formatting) characters te | True                      | 
+1082 |    Based on a function written by Richar | True                      | 
+1083 |    traditional version of od.  */        | True                      | 
+1084 |                                          | True                      | 
+1085 | static void                              | True                      | 
+1086 | dump_strings(off_t address, off_t end_of | True                      | 
+1087 | {                                        | True                      | 
+1088 |  unsigned bufsize = MAX(100, G.string_mi | True                      | 
+1089 |  unsigned char *buf = xmalloc(bufsize);  | True                      | 
+1090 |                                          | True                      | 
+1091 |  while (1) {                             | True                      | 
+1092 |   size_t i;                              | True                      | 
+1093 |   int c;                                 | True                      | 
+1094 |                                          | True                      | 
+1095 |   /* See if the next 'G.string_min' char | True                      | 
+1096 |  tryline:                                | True                      | 
+1097 |   if ((option_mask32 & OPT_N) && (end_of | True                      | 
+1098 |    break;                                | True                      | 
+1099 |   i = 0;                                 | True                      | 
+1100 |   while (!(option_mask32 & OPT_N) || add | True                      | 
+1101 |    if (i == bufsize) {                   | True                      | 
+1102 |     bufsize += bufsize/8;                | True                      | 
+1103 |     buf = xrealloc(buf, bufsize);        | True                      | 
+1104 |    }                                     | True                      | 
+1105 |                                          | True                      | 
+1106 |    while (G.in_stream) { /* !EOF */      | True                      | 
+1107 |     c = fgetc(G.in_stream);              | True                      | 
+1108 |     if (c != EOF)                        | True                      | 
+1109 |      goto got_char;                      | True                      | 
+1110 |     check_and_close();                   | True                      | 
+1111 |     open_next_file();                    | True                      | 
+1112 |    }                                     | True                      | 
+1113 |    /* EOF */                             | True                      | 
+1114 |    goto ret;                             | True                      | 
+1115 |  got_char:                               | True                      | 
+1116 |    address++;                            | True                      | 
+1117 |    if (!c)                               | True                      | 
+1118 |     break;                               | True                      | 
+1119 |    if (!ISPRINT(c))                      | True                      | 
+1120 |     goto tryline; /* It isn't; give up o | True                      | 
+1121 |    buf[i++] = c;  /* String continues; s | True                      | 
+1122 |   }                                      | True                      | 
+1123 |                                          | True                      | 
+1124 |   if (i < G.string_min)  /* Too short! * | True                      | 
+1125 |    goto tryline;                         | True                      | 
+1126 |                                          | True                      | 
+1127 |   /* If we get here, the string is all p | True                      | 
+1128 |   buf[i] = 0;                            | True                      | 
+1129 |   G.format_address(address - i - 1, ' ') | True                      | 
+1130 |                                          | True                      | 
+1131 |   for (i = 0; (c = buf[i]); i++) {       | True                      | 
+1132 |    switch (c) {                          | True                      | 
+1133 |    case '\007': fputs_stdout("\\a"); bre | True                      | 
+1134 |    case '\b': fputs_stdout("\\b"); break | True                      | 
+1135 |    case '\f': fputs_stdout("\\f"); break | True                      | 
+1136 |    case '\n': fputs_stdout("\\n"); break | True                      | 
+1137 |    case '\r': fputs_stdout("\\r"); break | True                      | 
+1138 |    case '\t': fputs_stdout("\\t"); break | True                      | 
+1139 |    case '\v': fputs_stdout("\\v"); break | True                      | 
+1140 |    default: putchar(c);                  | True                      | 
+1141 |    }                                     | True                      | 
+1142 |   }                                      | True                      | 
+1143 |   putchar('\n');                         | True                      | 
+1144 |  }                                       | True                      | 
+1145 |                                          | True                      | 
+1146 |  /* We reach this point only if we searc | True                      | 
+1147 |     (max_bytes_to_format - G.string_min) | True                      | 
+1148 |  check_and_close();                      | True                      | 
+1149 |  ret:                                    | True                      | 
+1150 |  free(buf);                              | True                      | 
+1151 | }                                        | True                      | 
+1152 |                                          | True                      | 
+1153 | #if ENABLE_LONG_OPTS                     | True                      | 
+1154 | /* If S is a valid traditional offset sp | ENABLE_LONG_OPTS          | 
+1155 |    leading '+' return nonzero and set *O | ENABLE_LONG_OPTS          | 
+1156 |                                          | ENABLE_LONG_OPTS          | 
+1157 | static int                               | ENABLE_LONG_OPTS          | 
+1158 | parse_old_offset(char *s, off_t *offset) | ENABLE_LONG_OPTS          | 
+1159 | {                                        | ENABLE_LONG_OPTS          | 
+1160 |  static const struct suffix_mult Bb[] AL | ENABLE_LONG_OPTS          | 
+1161 |   { "B", 1024 },                         | ENABLE_LONG_OPTS          | 
+1162 |   { "b", 512 },                          | ENABLE_LONG_OPTS          | 
+1163 |   { "", 0 }                              | ENABLE_LONG_OPTS          | 
+1164 |  };                                      | ENABLE_LONG_OPTS          | 
+1165 |  char *p;                                | ENABLE_LONG_OPTS          | 
+1166 |  int radix;                              | ENABLE_LONG_OPTS          | 
+1167 |                                          | ENABLE_LONG_OPTS          | 
+1168 |  /* Skip over any leading '+'. */        | ENABLE_LONG_OPTS          | 
+1169 |  if (s[0] == '+') ++s;                   | ENABLE_LONG_OPTS          | 
+1170 |  if (!isdigit(s[0])) return 0; /* not a  | ENABLE_LONG_OPTS          | 
+1171 |                                          | ENABLE_LONG_OPTS          | 
+1172 |  /* Determine the radix we'll use to int | ENABLE_LONG_OPTS          | 
+1173 |   * it's decimal, otherwise, if the stri | ENABLE_LONG_OPTS          | 
+1174 |   * it's hexadecimal, else octal.  */    | ENABLE_LONG_OPTS          | 
+1175 |  p = strchr(s, '.');                     | ENABLE_LONG_OPTS          | 
+1176 |  radix = 8;                              | ENABLE_LONG_OPTS          | 
+1177 |  if (p) {                                | ENABLE_LONG_OPTS          | 
+1178 |   p[0] = '\0'; /* cheating */            | ENABLE_LONG_OPTS          | 
+1179 |   radix = 10;                            | ENABLE_LONG_OPTS          | 
+1180 |  } else if (s[0] == '0' && (s[1] == 'x'  | ENABLE_LONG_OPTS          | 
+1181 |   radix = 16;                            | ENABLE_LONG_OPTS          | 
+1182 |                                          | ENABLE_LONG_OPTS          | 
+1183 |  *offset = xstrtooff_sfx(s, radix, Bb);  | ENABLE_LONG_OPTS          | 
+1184 |  if (p)                                  | ENABLE_LONG_OPTS          | 
+1185 |   p[0] = '.'; /* undo cheating */        | ENABLE_LONG_OPTS          | 
+1186 |                                          | ENABLE_LONG_OPTS          | 
+1187 |  return (*offset >= 0);                  | ENABLE_LONG_OPTS          | 
+1188 | }                                        | ENABLE_LONG_OPTS          | 
+1189 | #endif                                   | True                      | 
+1190 |                                          | True                      | 
+1191 | int od_main(int argc, char **argv) MAIN_ | True                      | 
+1192 | int od_main(int argc UNUSED_PARAM, char  | True                      | 
+1193 | {                                        | True                      | 
+1194 | #if ENABLE_LONG_OPTS                     | True                      | 
+1195 |  static const char od_longopts[] ALIGN1  | ENABLE_LONG_OPTS          | 
+1196 |   "skip-bytes\0"        Required_argumen | ENABLE_LONG_OPTS          | 
+1197 |   "address-radix\0"     Required_argumen | ENABLE_LONG_OPTS          | 
+1198 |   "read-bytes\0"        Required_argumen | ENABLE_LONG_OPTS          | 
+1199 |   "format\0"            Required_argumen | ENABLE_LONG_OPTS          | 
+1200 |   "output-duplicates\0" No_argument      | ENABLE_LONG_OPTS          | 
+1201 |   /* Yes, it's true: -S NUM, but --strin | ENABLE_LONG_OPTS          | 
+1202 |    * that is, NUM is mandatory for -S bu | ENABLE_LONG_OPTS          | 
+1203 |    */                                    | ENABLE_LONG_OPTS          | 
+1204 |   "strings\0"           Optional_argumen | ENABLE_LONG_OPTS          | 
+1205 |   "width\0"             Optional_argumen | ENABLE_LONG_OPTS          | 
+1206 |   "traditional\0"       No_argument      | ENABLE_LONG_OPTS          | 
+1207 |   ;                                      | ENABLE_LONG_OPTS          | 
+1208 | #endif                                   | True                      | 
+1209 |  const char *str_A, *str_N, *str_j, *str | True                      | 
+1210 |  llist_t *lst_t = NULL;                  | True                      | 
+1211 |  unsigned opt;                           | True                      | 
+1212 |  int l_c_m;                              | True                      | 
+1213 |  /* The number of input bytes to skip be | True                      | 
+1214 |  off_t n_bytes_to_skip = 0;              | True                      | 
+1215 |  /* The offset of the first byte after t | True                      | 
+1216 |  off_t end_offset = 0;                   | True                      | 
+1217 |  /* The maximum number of bytes that wil | True                      | 
+1218 |  off_t max_bytes_to_format = 0;          | True                      | 
+1219 |                                          | True                      | 
+1220 |  INIT_G();                               | True                      | 
+1221 |                                          | True                      | 
+1222 |  /*G.spec = NULL; - already is */        | True                      | 
+1223 |  G.format_address = format_address_std;  | True                      | 
+1224 |  address_base_char = 'o';                | True                      | 
+1225 |  address_pad_len_char = '7';             | True                      | 
+1226 |                                          | True                      | 
+1227 |  /* Parse command line */                | True                      | 
+1228 |  opt = OD_GETOPT32();                    | True                      | 
+1229 |  argv += optind;                         | True                      | 
+1230 |  if (opt & OPT_A) {                      | True                      | 
+1231 |   static const char doxn[] ALIGN1 = "dox | True                      | 
+1232 |   static const char doxn_address_base_ch | True                      | 
+1233 |    'u', 'o', 'x', /* '?' fourth one is n | True                      | 
+1234 |   };                                     | True                      | 
+1235 |   static const uint8_t doxn_address_pad_ | True                      | 
+1236 |    '7', '7', '6', /* '?' */              | True                      | 
+1237 |   };                                     | True                      | 
+1238 |   const char *p;                         | True                      | 
+1239 |   int pos;                               | True                      | 
+1240 |   p = strchr(doxn, str_A[0]);            | True                      | 
+1241 |   if (!p)                                | True                      | 
+1242 |    bb_error_msg_and_die("bad output addr | True                      | 
+1243 |     "'%c' (must be [doxn])", str_A[0]);  | True                      | 
+1244 |   pos = p - doxn;                        | True                      | 
+1245 |   if (pos == 3) G.format_address = forma | True                      | 
+1246 |   address_base_char = doxn_address_base_ | True                      | 
+1247 |   address_pad_len_char = doxn_address_pa | True                      | 
+1248 |  }                                       | True                      | 
+1249 |  if (opt & OPT_N) {                      | True                      | 
+1250 |   max_bytes_to_format = xstrtooff_sfx(st | True                      | 
+1251 |  }                                       | True                      | 
+1252 |                                          | True                      | 
+1253 |  if (opt & OPT_a) decode_format_string(" | True                      | 
+1254 |  if (opt & OPT_b) decode_format_string(" | True                      | 
+1255 |  if (opt & OPT_c) decode_format_string(" | True                      | 
+1256 |  if (opt & OPT_d) decode_format_string(" | True                      | 
+1257 |  if (opt & OPT_D) decode_format_string(" | True                      | 
+1258 |  if (opt & OPT_f) decode_format_string(" | True                      | 
+1259 |  if (opt & (OPT_h|OPT_x)) decode_format_ | True                      | 
+1260 |  if (opt & (OPT_H|OPT_X)) decode_format_ | True                      | 
+1261 |  /* -I,L,l: depend on word width of the  | True                      | 
+1262 | #if ULONG_MAX > 0xffffffff               | True                      | 
+1263 |  if (opt & OPT_i) decode_format_string(" | (ULONG_MAX>4294967295)    | 
+1264 |  if (opt & (OPT_I|OPT_l|OPT_L)) decode_f | (ULONG_MAX>4294967295)    | 
+1265 | #else                                    | True                      | 
+1266 |  /* 32-bit arch: -I,L,l are the same as  | !(ULONG_MAX>4294967295)   | 
+1267 |  if (opt & (OPT_i|OPT_I|OPT_l|OPT_L)) de | !(ULONG_MAX>4294967295)   | 
+1268 | #endif                                   | True                      | 
+1269 |  if (opt & OPT_j) n_bytes_to_skip = xstr | True                      | 
+1270 |  if (opt & (OPT_o|OPT_B)) decode_format_ | True                      | 
+1271 |  if (opt & OPT_O) decode_format_string(" | True                      | 
+1272 |  while (lst_t) {                         | True                      | 
+1273 |   decode_format_string(llist_pop(&lst_t) | True                      | 
+1274 |  }                                       | True                      | 
+1275 |  if (opt & OPT_s) decode_format_string(" | True                      | 
+1276 |  if (opt & OPT_S) {                      | True                      | 
+1277 |   G.string_min = xstrtou_sfx(str_S, 0, b | True                      | 
+1278 |  }                                       | True                      | 
+1279 |                                          | True                      | 
+1280 |  // Bloat:                               | True                      | 
+1281 |  //if ((option_mask32 & OPT_S) && G.n_sp | True                      | 
+1282 |  // bb_error_msg_and_die("no type may be | True                      | 
+1283 |                                          | True                      | 
+1284 |  /* If the --traditional option is used, | True                      | 
+1285 |   * 0 to 3 remaining command line argume | True                      | 
+1286 |   * separately.                          | True                      | 
+1287 |   * od [FILE] [[+]OFFSET[.][b] [[+]LABEL | True                      | 
+1288 |   * The offset and pseudo_start have the | True                      | 
+1289 |   *                                      | True                      | 
+1290 |   * FIXME: POSIX 1003.1-2001 with XSI re | True                      | 
+1291 |   * traditional syntax even if --traditi | True                      | 
+1292 |                                          | True                      | 
+1293 | #if ENABLE_LONG_OPTS                     | True                      | 
+1294 |  if (opt & OPT_traditional) {            | ENABLE_LONG_OPTS          | 
+1295 |   if (argv[0]) {                         | ENABLE_LONG_OPTS          | 
+1296 |    off_t pseudo_start = -1;              | ENABLE_LONG_OPTS          | 
+1297 |    off_t o1, o2;                         | ENABLE_LONG_OPTS          | 
+1298 |                                          | ENABLE_LONG_OPTS          | 
+1299 |    if (!argv[1]) { /* one arg */         | ENABLE_LONG_OPTS          | 
+1300 |     if (parse_old_offset(argv[0], &o1))  | ENABLE_LONG_OPTS          | 
+1301 |      /* od --traditional OFFSET */       | ENABLE_LONG_OPTS          | 
+1302 |      n_bytes_to_skip = o1;               | ENABLE_LONG_OPTS          | 
+1303 |      argv++;                             | ENABLE_LONG_OPTS          | 
+1304 |     }                                    | ENABLE_LONG_OPTS          | 
+1305 |     /* od --traditional FILE */          | ENABLE_LONG_OPTS          | 
+1306 |    } else if (!argv[2]) { /* two args */ | ENABLE_LONG_OPTS          | 
+1307 |     if (parse_old_offset(argv[0], &o1)   | ENABLE_LONG_OPTS          | 
+1308 |      && parse_old_offset(argv[1], &o2)   | ENABLE_LONG_OPTS          | 
+1309 |     ) {                                  | ENABLE_LONG_OPTS          | 
+1310 |      /* od --traditional OFFSET LABEL */ | ENABLE_LONG_OPTS          | 
+1311 |      n_bytes_to_skip = o1;               | ENABLE_LONG_OPTS          | 
+1312 |      pseudo_start = o2;                  | ENABLE_LONG_OPTS          | 
+1313 |      argv += 2;                          | ENABLE_LONG_OPTS          | 
+1314 |     } else if (parse_old_offset(argv[1], | ENABLE_LONG_OPTS          | 
+1315 |      /* od --traditional FILE OFFSET */  | ENABLE_LONG_OPTS          | 
+1316 |      n_bytes_to_skip = o2;               | ENABLE_LONG_OPTS          | 
+1317 |      argv[1] = NULL;                     | ENABLE_LONG_OPTS          | 
+1318 |     } else {                             | ENABLE_LONG_OPTS          | 
+1319 |      bb_error_msg_and_die("invalid secon | ENABLE_LONG_OPTS          | 
+1320 |     }                                    | ENABLE_LONG_OPTS          | 
+1321 |    } else if (!argv[3]) { /* three args  | ENABLE_LONG_OPTS          | 
+1322 |     if (parse_old_offset(argv[1], &o1)   | ENABLE_LONG_OPTS          | 
+1323 |      && parse_old_offset(argv[2], &o2)   | ENABLE_LONG_OPTS          | 
+1324 |     ) {                                  | ENABLE_LONG_OPTS          | 
+1325 |      /* od --traditional FILE OFFSET LAB | ENABLE_LONG_OPTS          | 
+1326 |      n_bytes_to_skip = o1;               | ENABLE_LONG_OPTS          | 
+1327 |      pseudo_start = o2;                  | ENABLE_LONG_OPTS          | 
+1328 |      argv[1] = NULL;                     | ENABLE_LONG_OPTS          | 
+1329 |     } else {                             | ENABLE_LONG_OPTS          | 
+1330 |      bb_simple_error_msg_and_die("the la | ENABLE_LONG_OPTS          | 
+1331 |     }                                    | ENABLE_LONG_OPTS          | 
+1332 |    } else { /* >3 args */                | ENABLE_LONG_OPTS          | 
+1333 |     bb_simple_error_msg_and_die("too man | ENABLE_LONG_OPTS          | 
+1334 |    }                                     | ENABLE_LONG_OPTS          | 
+1335 |                                          | ENABLE_LONG_OPTS          | 
+1336 |    if (pseudo_start >= 0) {              | ENABLE_LONG_OPTS          | 
+1337 |     if (G.format_address == format_addre | ENABLE_LONG_OPTS          | 
+1338 |      address_base_char = 'o';            | ENABLE_LONG_OPTS          | 
+1339 |      address_pad_len_char = '7';         | ENABLE_LONG_OPTS          | 
+1340 |      G.format_address = format_address_p | ENABLE_LONG_OPTS          | 
+1341 |     } else {                             | ENABLE_LONG_OPTS          | 
+1342 |      G.format_address = format_address_l | ENABLE_LONG_OPTS          | 
+1343 |     }                                    | ENABLE_LONG_OPTS          | 
+1344 |     G_pseudo_offset = pseudo_start - n_b | ENABLE_LONG_OPTS          | 
+1345 |    }                                     | ENABLE_LONG_OPTS          | 
+1346 |   }                                      | ENABLE_LONG_OPTS          | 
+1347 |   /* else: od --traditional (without arg | ENABLE_LONG_OPTS          | 
+1348 |  }                                       | ENABLE_LONG_OPTS          | 
+1349 | #endif                                   | True                      | 
+1350 |                                          | True                      | 
+1351 |  if (option_mask32 & OPT_N) {            | True                      | 
+1352 |   end_offset = n_bytes_to_skip + max_byt | True                      | 
+1353 |   if (end_offset < n_bytes_to_skip)      | True                      | 
+1354 |    bb_simple_error_msg_and_die("SKIP + S | True                      | 
+1355 |  }                                       | True                      | 
+1356 |                                          | True                      | 
+1357 |  if (G.n_specs == 0) {                   | True                      | 
+1358 |   decode_format_string("o2");            | True                      | 
+1359 |   /*G.n_specs = 1; - done by decode_form | True                      | 
+1360 |  }                                       | True                      | 
+1361 |                                          | True                      | 
+1362 |  /* If no files were listed on the comma | True                      | 
+1363 |     set the global pointer FILE_LIST so  | True                      | 
+1364 |     references the null-terminated list  | True                      | 
+1365 |  G.file_list = bb_argv_dash;             | True                      | 
+1366 |  if (argv[0]) {                          | True                      | 
+1367 |   /* Set the global pointer FILE_LIST so | True                      | 
+1368 |      references the first file-argument  | True                      | 
+1369 |   G.file_list = (char const *const *) ar | True                      | 
+1370 |  }                                       | True                      | 
+1371 |                                          | True                      | 
+1372 |  /* Open the first input file */         | True                      | 
+1373 |  open_next_file();                       | True                      | 
+1374 |  /* Skip over any unwanted header bytes  | True                      | 
+1375 |  skip(n_bytes_to_skip);                  | True                      | 
+1376 |  if (!G.in_stream)                       | True                      | 
+1377 |   return EXIT_FAILURE;                   | True                      | 
+1378 |                                          | True                      | 
+1379 |  /* Compute output block length */       | True                      | 
+1380 |  l_c_m = get_lcm();                      | True                      | 
+1381 |                                          | True                      | 
+1382 |  if (opt & OPT_w) { /* -w: width */      | True                      | 
+1383 |   if (!G.bytes_per_block || G.bytes_per_ | True                      | 
+1384 |    bb_error_msg("warning: invalid width  | True                      | 
+1385 |      (unsigned)G.bytes_per_block, l_c_m) | True                      | 
+1386 |    G.bytes_per_block = l_c_m;            | True                      | 
+1387 |   }                                      | True                      | 
+1388 |  } else {                                | True                      | 
+1389 |   G.bytes_per_block = l_c_m;             | True                      | 
+1390 |   if (l_c_m < DEFAULT_BYTES_PER_BLOCK)   | True                      | 
+1391 |    G.bytes_per_block *= DEFAULT_BYTES_PE | True                      | 
+1392 |  }                                       | True                      | 
+1393 |                                          | True                      | 
+1394 | #ifdef DEBUG                             | True                      | 
+1395 |  {                                       | (DEBUG)                   | 
+1396 |   int i;                                 | (DEBUG)                   | 
+1397 |   for (i = 0; i < G.n_specs; i++) {      | (DEBUG)                   | 
+1398 |    printf("%d: fmt='%s' width=%d\n",     | (DEBUG)                   | 
+1399 |     i, G.spec[i].fmt_string,             | (DEBUG)                   | 
+1400 |     width_bytes[G.spec[i].size]);        | (DEBUG)                   | 
+1401 |   }                                      | (DEBUG)                   | 
+1402 |  }                                       | (DEBUG)                   | 
+1403 | #endif                                   | True                      | 
+1404 |                                          | True                      | 
+1405 |  if (option_mask32 & OPT_S)              | True                      | 
+1406 |   dump_strings(n_bytes_to_skip, end_offs | True                      | 
+1407 |  else                                    | True                      | 
+1408 |   dump(n_bytes_to_skip, end_offset);     | True                      | 
+1409 |                                          | True                      | 
+1410 |  if (fclose(stdin))                      | True                      | 
+1411 |   bb_simple_perror_msg_and_die(bb_msg_st | True                      | 
+1412 |                                          | True                      | 
+1413 |  return G.exit_code;                     | True                      | 
+1414 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +161MB, 281ms             | 

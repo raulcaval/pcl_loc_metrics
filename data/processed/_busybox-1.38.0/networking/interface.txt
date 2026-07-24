@@ -1,0 +1,1127 @@
+FILE: data/raw/busybox-1.38.0/networking/interface.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                | 
+-----+------------------------------------------+--------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                 | 
+   2 | /*                                       | True                                 | 
+   3 |  * stolen from net-tools-1.59 and stripp | True                                 | 
+   4 |  *   Erik Andersen <andersen@codepoet.or | True                                 | 
+   5 |  *                                       | True                                 | 
+   6 |  * Heavily modified by Manuel Novoa III  | True                                 | 
+   7 |  *                                       | True                                 | 
+   8 |  * Added print_bytes_scaled function to  | True                                 | 
+   9 |  * Added some (potentially) missing defi | True                                 | 
+  10 |  * Improved display support for -a and f | True                                 | 
+  11 |  *                                       | True                                 | 
+  12 |  * ------------------------------------- | True                                 | 
+  13 |  *                                       | True                                 | 
+  14 |  * ifconfig   This file contains an impl | True                                 | 
+  15 |  *              that either displays or  | True                                 | 
+  16 |  *              one or more of the syste | True                                 | 
+  17 |  *                                       | True                                 | 
+  18 |  *                                       | True                                 | 
+  19 |  * Author:      Fred N. van Kempen, <wal | True                                 | 
+  20 |  *              and others.  Copyright 1 | True                                 | 
+  21 |  *                                       | True                                 | 
+  22 |  * Licensed under GPLv2 or later, see fi | True                                 | 
+  23 |  *                                       | True                                 | 
+  24 |  * Patched to support 'add' and 'del' ke | True                                 | 
+  25 |  * by Mrs. Brisby <mrs.brisby@nimh.org>  | True                                 | 
+  26 |  *                                       | True                                 | 
+  27 |  * {1.34} - 19980630 - Arnaldo Carvalho  | True                                 | 
+  28 |  *                     - gettext instead | True                                 | 
+  29 |  *          10/1998  - Andi Kleen. Use i | True                                 | 
+  30 |  *          20001008 - Bernd Eckenfels,  | True                                 | 
+  31 |  *   (default AF was wrong)              | True                                 | 
+  32 |  */                                      | True                                 | 
+  33 | #include "libbb.h"                       | True                                 | 
+  34 | #include "inet_common.h"                 | True                                 | 
+  35 | #include <net/if.h>                      | True                                 | 
+  36 | #include <net/if_arp.h>                  | True                                 | 
+  37 | #ifdef HAVE_NET_ETHERNET_H               | True                                 | 
+  38 | # include <net/ethernet.h>               | (HAVE_NET_ETHERNET_H)                | 
+  39 | #endif                                   | True                                 | 
+  40 |                                          | True                                 | 
+  41 | #if ENABLE_FEATURE_HWIB                  | True                                 | 
+  42 | /* #include <linux/if_infiniband.h> */   | ENABLE_FEATURE_HWIB                  | 
+  43 | # undef INFINIBAND_ALEN                  | ENABLE_FEATURE_HWIB                  | 
+  44 | # define INFINIBAND_ALEN 20              | ENABLE_FEATURE_HWIB                  | 
+  45 | #endif                                   | True                                 | 
+  46 |                                          | True                                 | 
+  47 | #if ENABLE_FEATURE_IPV6                  | True                                 | 
+  48 | # define HAVE_AFINET6 1                  | ENABLE_FEATURE_IPV6                  | 
+  49 | #else                                    | True                                 | 
+  50 | # undef HAVE_AFINET6                     | !ENABLE_FEATURE_IPV6                 | 
+  51 | #endif                                   | True                                 | 
+  52 |                                          | True                                 | 
+  53 | #define _PATH_PROCNET_DEV                | True                                 | 
+  54 | #define _PATH_PROCNET_IFINET6            | True                                 | 
+  55 |                                          | True                                 | 
+  56 | #ifdef HAVE_AFINET6                      | True                                 | 
+  57 | # ifndef _LINUX_IN6_H                    | ?                                    | 
+  58 | /*                                       | ENABLE_FEATURE_IPV6&&!(_LINUX_IN6_H) | 
+  59 |  * This is from linux/include/net/ipv6.h | ENABLE_FEATURE_IPV6&&!(_LINUX_IN6_H) | 
+  60 |  */                                      | ENABLE_FEATURE_IPV6&&!(_LINUX_IN6_H) | 
+  61 | struct in6_ifreq {                       | ENABLE_FEATURE_IPV6&&!(_LINUX_IN6_H) | 
+  62 |  struct in6_addr ifr6_addr;              | ENABLE_FEATURE_IPV6&&!(_LINUX_IN6_H) | 
+  63 |  uint32_t ifr6_prefixlen;                | ENABLE_FEATURE_IPV6&&!(_LINUX_IN6_H) | 
+  64 |  unsigned int ifr6_ifindex;              | ENABLE_FEATURE_IPV6&&!(_LINUX_IN6_H) | 
+  65 | };                                       | ENABLE_FEATURE_IPV6&&!(_LINUX_IN6_H) | 
+  66 | # endif                                  | ?                                    | 
+  67 | #endif /* HAVE_AFINET6 */                | True                                 | 
+  68 |                                          | True                                 | 
+  69 | /* Defines for glibc2.0 users. */        | True                                 | 
+  70 | #ifndef SIOCSIFTXQLEN                    | True                                 | 
+  71 | # define SIOCSIFTXQLEN      0x8943       | !(SIOCSIFTXQLEN)                     | 
+  72 | # define SIOCGIFTXQLEN      0x8942       | !(SIOCSIFTXQLEN)                     | 
+  73 | #endif                                   | True                                 | 
+  74 |                                          | True                                 | 
+  75 | /* ifr_qlen is ifru_ivalue, but it isn't | True                                 | 
+  76 | #ifndef ifr_qlen                         | True                                 | 
+  77 | # define ifr_qlen        ifr_ifru.ifru_m | !(ifr_qlen)                          | 
+  78 | #endif                                   | True                                 | 
+  79 |                                          | True                                 | 
+  80 | #ifndef HAVE_TXQUEUELEN                  | True                                 | 
+  81 | # define HAVE_TXQUEUELEN 1               | !(HAVE_TXQUEUELEN)                   | 
+  82 | #endif                                   | True                                 | 
+  83 |                                          | True                                 | 
+  84 | #ifndef IFF_DYNAMIC                      | True                                 | 
+  85 | # define IFF_DYNAMIC     0x8000 /* dialu | !(IFF_DYNAMIC)                       | 
+  86 | #endif                                   | True                                 | 
+  87 |                                          | True                                 | 
+  88 | /* Display an Internet socket address. * | True                                 | 
+  89 | static const char* FAST_FUNC INET_sprint | True                                 | 
+  90 | {                                        | True                                 | 
+  91 |  if (sap->sa_family == 0xFFFF || sap->sa | True                                 | 
+  92 |   return "[NONE SET]";                   | True                                 | 
+  93 |  return auto_string(INET_rresolve((struc | True                                 | 
+  94 | }                                        | True                                 | 
+  95 |                                          | True                                 | 
+  96 | #ifdef UNUSED_AND_BUGGY                  | True                                 | 
+  97 | static int INET_getsock(char *bufp, stru | (UNUSED_AND_BUGGY)                   | 
+  98 | {                                        | (UNUSED_AND_BUGGY)                   | 
+  99 |  char *sp = bufp, *bp;                   | (UNUSED_AND_BUGGY)                   | 
+ 100 |  unsigned int i;                         | (UNUSED_AND_BUGGY)                   | 
+ 101 |  unsigned val;                           | (UNUSED_AND_BUGGY)                   | 
+ 102 |  struct sockaddr_in *sock_in;            | (UNUSED_AND_BUGGY)                   | 
+ 103 |                                          | (UNUSED_AND_BUGGY)                   | 
+ 104 |  sock_in = (struct sockaddr_in *) sap;   | (UNUSED_AND_BUGGY)                   | 
+ 105 |  sock_in->sin_family = AF_INET;          | (UNUSED_AND_BUGGY)                   | 
+ 106 |  sock_in->sin_port = 0;                  | (UNUSED_AND_BUGGY)                   | 
+ 107 |                                          | (UNUSED_AND_BUGGY)                   | 
+ 108 |  val = 0;                                | (UNUSED_AND_BUGGY)                   | 
+ 109 |  bp = (char *) &val;                     | (UNUSED_AND_BUGGY)                   | 
+ 110 |  for (i = 0; i < sizeof(sock_in->sin_add | (UNUSED_AND_BUGGY)                   | 
+ 111 |   *sp = toupper(*sp);                    | (UNUSED_AND_BUGGY)                   | 
+ 112 |                                          | (UNUSED_AND_BUGGY)                   | 
+ 113 |   if ((unsigned)(*sp - 'A') <= 5)        | (UNUSED_AND_BUGGY)                   | 
+ 114 |    bp[i] |= (int) (*sp - ('A' - 10));    | (UNUSED_AND_BUGGY)                   | 
+ 115 |   else if (isdigit(*sp))                 | (UNUSED_AND_BUGGY)                   | 
+ 116 |    bp[i] |= (int) (*sp - '0');           | (UNUSED_AND_BUGGY)                   | 
+ 117 |   else                                   | (UNUSED_AND_BUGGY)                   | 
+ 118 |    return -1;                            | (UNUSED_AND_BUGGY)                   | 
+ 119 |                                          | (UNUSED_AND_BUGGY)                   | 
+ 120 |   bp[i] <<= 4;                           | (UNUSED_AND_BUGGY)                   | 
+ 121 |   sp++;                                  | (UNUSED_AND_BUGGY)                   | 
+ 122 |   *sp = toupper(*sp);                    | (UNUSED_AND_BUGGY)                   | 
+ 123 |                                          | (UNUSED_AND_BUGGY)                   | 
+ 124 |   if ((unsigned)(*sp - 'A') <= 5)        | (UNUSED_AND_BUGGY)                   | 
+ 125 |    bp[i] |= (int) (*sp - ('A' - 10));    | (UNUSED_AND_BUGGY)                   | 
+ 126 |   else if (isdigit(*sp))                 | (UNUSED_AND_BUGGY)                   | 
+ 127 |    bp[i] |= (int) (*sp - '0');           | (UNUSED_AND_BUGGY)                   | 
+ 128 |   else                                   | (UNUSED_AND_BUGGY)                   | 
+ 129 |    return -1;                            | (UNUSED_AND_BUGGY)                   | 
+ 130 |                                          | (UNUSED_AND_BUGGY)                   | 
+ 131 |   sp++;                                  | (UNUSED_AND_BUGGY)                   | 
+ 132 |  }                                       | (UNUSED_AND_BUGGY)                   | 
+ 133 |  sock_in->sin_addr.s_addr = htonl(val);  | (UNUSED_AND_BUGGY)                   | 
+ 134 |                                          | (UNUSED_AND_BUGGY)                   | 
+ 135 |  return (sp - bufp);                     | (UNUSED_AND_BUGGY)                   | 
+ 136 | }                                        | (UNUSED_AND_BUGGY)                   | 
+ 137 | #endif                                   | True                                 | 
+ 138 |                                          | True                                 | 
+ 139 | static int FAST_FUNC INET_input(/*int ty | True                                 | 
+ 140 | {                                        | True                                 | 
+ 141 |  return INET_resolve(bufp, (struct socka | True                                 | 
+ 142 | /*                                       | True                                 | 
+ 143 |  switch (type) {                         | True                                 | 
+ 144 |  case 1:                                 | True                                 | 
+ 145 |   return (INET_getsock(bufp, sap));      | True                                 | 
+ 146 |  case 256:                               | True                                 | 
+ 147 |   return (INET_resolve(bufp, (struct soc | True                                 | 
+ 148 |  default:                                | True                                 | 
+ 149 |   return (INET_resolve(bufp, (struct soc | True                                 | 
+ 150 |  }                                       | True                                 | 
+ 151 | */                                       | True                                 | 
+ 152 | }                                        | True                                 | 
+ 153 |                                          | True                                 | 
+ 154 | static const struct aftype inet_aftype = | True                                 | 
+ 155 |  .name   = "inet",                       | True                                 | 
+ 156 |  .title  = "DARPA Internet",             | True                                 | 
+ 157 |  .af     = AF_INET,                      | True                                 | 
+ 158 |  .alen   = 4,                            | True                                 | 
+ 159 |  .sprint = INET_sprint,                  | True                                 | 
+ 160 |  .input  = INET_input,                   | True                                 | 
+ 161 | };                                       | True                                 | 
+ 162 |                                          | True                                 | 
+ 163 | #ifdef HAVE_AFINET6                      | True                                 | 
+ 164 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 165 | /* Display an Internet socket address. * | ENABLE_FEATURE_IPV6                  | 
+ 166 | /* dirty! struct sockaddr usually doesn' | ENABLE_FEATURE_IPV6                  | 
+ 167 | static const char* FAST_FUNC INET6_sprin | ENABLE_FEATURE_IPV6                  | 
+ 168 | {                                        | ENABLE_FEATURE_IPV6                  | 
+ 169 |  if (sap->sa_family == 0xFFFF || sap->sa | ENABLE_FEATURE_IPV6                  | 
+ 170 |   return "[NONE SET]";                   | ENABLE_FEATURE_IPV6                  | 
+ 171 |  return auto_string(INET6_rresolve((stru | ENABLE_FEATURE_IPV6                  | 
+ 172 | }                                        | ENABLE_FEATURE_IPV6                  | 
+ 173 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 174 | #ifdef UNUSED                            | ENABLE_FEATURE_IPV6                  | 
+ 175 | static int INET6_getsock(char *bufp, str | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 176 | {                                        | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 177 |  struct sockaddr_in6 *sin6;              | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 178 |                                          | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 179 |  sin6 = (struct sockaddr_in6 *) sap;     | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 180 |  sin6->sin6_family = AF_INET6;           | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 181 |  sin6->sin6_port = 0;                    | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 182 |                                          | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 183 |  if (inet_pton(AF_INET6, bufp, sin6->sin | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 184 |   return -1;                             | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 185 |                                          | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 186 |  return 16;   /* ?;) */                  | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 187 | }                                        | ENABLE_FEATURE_IPV6&&(UNUSED)        | 
+ 188 | #endif                                   | ENABLE_FEATURE_IPV6                  | 
+ 189 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 190 | static int FAST_FUNC INET6_input(/*int t | ENABLE_FEATURE_IPV6                  | 
+ 191 | {                                        | ENABLE_FEATURE_IPV6                  | 
+ 192 |  return INET6_resolve(bufp, (struct sock | ENABLE_FEATURE_IPV6                  | 
+ 193 | /*                                       | ENABLE_FEATURE_IPV6                  | 
+ 194 |  switch (type) {                         | ENABLE_FEATURE_IPV6                  | 
+ 195 |  case 1:                                 | ENABLE_FEATURE_IPV6                  | 
+ 196 |   return (INET6_getsock(bufp, sap));     | ENABLE_FEATURE_IPV6                  | 
+ 197 |  default:                                | ENABLE_FEATURE_IPV6                  | 
+ 198 |   return (INET6_resolve(bufp, (struct so | ENABLE_FEATURE_IPV6                  | 
+ 199 |  }                                       | ENABLE_FEATURE_IPV6                  | 
+ 200 | */                                       | ENABLE_FEATURE_IPV6                  | 
+ 201 | }                                        | ENABLE_FEATURE_IPV6                  | 
+ 202 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 203 | static const struct aftype inet6_aftype  | ENABLE_FEATURE_IPV6                  | 
+ 204 |  .name   = "inet6",                      | ENABLE_FEATURE_IPV6                  | 
+ 205 |  .title  = "IPv6",                       | ENABLE_FEATURE_IPV6                  | 
+ 206 |  .af     = AF_INET6,                     | ENABLE_FEATURE_IPV6                  | 
+ 207 |  .alen   = sizeof(struct in6_addr),      | ENABLE_FEATURE_IPV6                  | 
+ 208 |  .sprint = INET6_sprint,                 | ENABLE_FEATURE_IPV6                  | 
+ 209 |  .input  = INET6_input,                  | ENABLE_FEATURE_IPV6                  | 
+ 210 | };                                       | ENABLE_FEATURE_IPV6                  | 
+ 211 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 212 | #endif /* HAVE_AFINET6 */                | True                                 | 
+ 213 |                                          | True                                 | 
+ 214 | /* Display an UNSPEC address. */         | True                                 | 
+ 215 | static char* FAST_FUNC UNSPEC_print(unsi | True                                 | 
+ 216 | {                                        | True                                 | 
+ 217 |  char *buff;                             | True                                 | 
+ 218 |  char *pos;                              | True                                 | 
+ 219 |  unsigned int i;                         | True                                 | 
+ 220 |                                          | True                                 | 
+ 221 |  buff = auto_string(xmalloc(sizeof(struc | True                                 | 
+ 222 |  pos = buff;                             | True                                 | 
+ 223 |  for (i = 0; i < sizeof(struct sockaddr) | True                                 | 
+ 224 |   /* careful -- not every libc's sprintf | True                                 | 
+ 225 |   sprintf(pos, "%02X-", *ptr++);         | True                                 | 
+ 226 |   pos += 3;                              | True                                 | 
+ 227 |  }                                       | True                                 | 
+ 228 |  /* Erase trailing "-".  Works as long a | True                                 | 
+ 229 |  *--pos = '\0';                          | True                                 | 
+ 230 |  return buff;                            | True                                 | 
+ 231 | }                                        | True                                 | 
+ 232 |                                          | True                                 | 
+ 233 | /* Display an UNSPEC socket address. */  | True                                 | 
+ 234 | static const char* FAST_FUNC UNSPEC_spri | True                                 | 
+ 235 | {                                        | True                                 | 
+ 236 |  if (sap->sa_family == 0xFFFF || sap->sa | True                                 | 
+ 237 |   return "[NONE SET]";                   | True                                 | 
+ 238 |  return UNSPEC_print((unsigned char *)sa | True                                 | 
+ 239 | }                                        | True                                 | 
+ 240 |                                          | True                                 | 
+ 241 | static const struct aftype unspec_aftype | True                                 | 
+ 242 |  .name   = "unspec",                     | True                                 | 
+ 243 |  .title  = "UNSPEC",                     | True                                 | 
+ 244 |  .af     = AF_UNSPEC,                    | True                                 | 
+ 245 |  .alen   = 0,                            | True                                 | 
+ 246 |  .print  = UNSPEC_print,                 | True                                 | 
+ 247 |  .sprint = UNSPEC_sprint,                | True                                 | 
+ 248 | };                                       | True                                 | 
+ 249 |                                          | True                                 | 
+ 250 | static const struct aftype *const aftype | True                                 | 
+ 251 |  &inet_aftype,                           | True                                 | 
+ 252 | #ifdef HAVE_AFINET6                      | True                                 | 
+ 253 |  &inet6_aftype,                          | ENABLE_FEATURE_IPV6                  | 
+ 254 | #endif                                   | True                                 | 
+ 255 |  &unspec_aftype,                         | True                                 | 
+ 256 |  NULL                                    | True                                 | 
+ 257 | };                                       | True                                 | 
+ 258 |                                          | True                                 | 
+ 259 | /* Check our protocol family table for t | True                                 | 
+ 260 | const struct aftype* FAST_FUNC get_aftyp | True                                 | 
+ 261 | {                                        | True                                 | 
+ 262 |  const struct aftype *const *afp;        | True                                 | 
+ 263 |                                          | True                                 | 
+ 264 |  afp = aftypes;                          | True                                 | 
+ 265 |  while (*afp != NULL) {                  | True                                 | 
+ 266 |   if (strcmp((*afp)->name, name) == 0)   | True                                 | 
+ 267 |    return (*afp);                        | True                                 | 
+ 268 |   afp++;                                 | True                                 | 
+ 269 |  }                                       | True                                 | 
+ 270 |  return NULL;                            | True                                 | 
+ 271 | }                                        | True                                 | 
+ 272 |                                          | True                                 | 
+ 273 | /* Check our protocol family table for t | True                                 | 
+ 274 | static const struct aftype *get_afntype( | True                                 | 
+ 275 | {                                        | True                                 | 
+ 276 |  const struct aftype *const *afp;        | True                                 | 
+ 277 |                                          | True                                 | 
+ 278 |  afp = aftypes;                          | True                                 | 
+ 279 |  while (*afp != NULL) {                  | True                                 | 
+ 280 |   if ((*afp)->af == af)                  | True                                 | 
+ 281 |    return *afp;                          | True                                 | 
+ 282 |   afp++;                                 | True                                 | 
+ 283 |  }                                       | True                                 | 
+ 284 |  return NULL;                            | True                                 | 
+ 285 | }                                        | True                                 | 
+ 286 |                                          | True                                 | 
+ 287 | struct user_net_device_stats {           | True                                 | 
+ 288 |  unsigned long long rx_packets; /* total | True                                 | 
+ 289 |  unsigned long long tx_packets; /* total | True                                 | 
+ 290 |  unsigned long long rx_bytes; /* total b | True                                 | 
+ 291 |  unsigned long long tx_bytes; /* total b | True                                 | 
+ 292 |  unsigned long rx_errors; /* bad packets | True                                 | 
+ 293 |  unsigned long tx_errors; /* packet tran | True                                 | 
+ 294 |  unsigned long rx_dropped; /* no space i | True                                 | 
+ 295 |  unsigned long tx_dropped; /* no space a | True                                 | 
+ 296 |  unsigned long rx_multicast; /* multicas | True                                 | 
+ 297 |  unsigned long rx_compressed;            | True                                 | 
+ 298 |  unsigned long tx_compressed;            | True                                 | 
+ 299 |  unsigned long collisions;               | True                                 | 
+ 300 |                                          | True                                 | 
+ 301 |  /* detailed rx_errors: */               | True                                 | 
+ 302 |  unsigned long rx_length_errors;         | True                                 | 
+ 303 |  unsigned long rx_over_errors; /* receiv | True                                 | 
+ 304 |  unsigned long rx_crc_errors; /* recved  | True                                 | 
+ 305 |  unsigned long rx_frame_errors; /* recv' | True                                 | 
+ 306 |  unsigned long rx_fifo_errors; /* recv'r | True                                 | 
+ 307 |  unsigned long rx_missed_errors; /* rece | True                                 | 
+ 308 |  /* detailed tx_errors */                | True                                 | 
+ 309 |  unsigned long tx_aborted_errors;        | True                                 | 
+ 310 |  unsigned long tx_carrier_errors;        | True                                 | 
+ 311 |  unsigned long tx_fifo_errors;           | True                                 | 
+ 312 |  unsigned long tx_heartbeat_errors;      | True                                 | 
+ 313 |  unsigned long tx_window_errors;         | True                                 | 
+ 314 | };                                       | True                                 | 
+ 315 |                                          | True                                 | 
+ 316 | struct interface {                       | True                                 | 
+ 317 |  struct interface *next, *prev;          | True                                 | 
+ 318 |  char name[IFNAMSIZ];                    | True                                 | 
+ 319 |  short type;                             | True                                 | 
+ 320 |  short flags;                            | True                                 | 
+ 321 |  int tx_queue_len;                       | True                                 | 
+ 322 |                                          | True                                 | 
+ 323 |  /* these should be contiguous, zeroed i | True                                 | 
+ 324 | #define FIRST_TO_ZERO metric             | True                                 | 
+ 325 |  int metric;                             | True                                 | 
+ 326 |  int mtu;                                | True                                 | 
+ 327 |  struct ifmap map;                       | True                                 | 
+ 328 |  struct sockaddr addr;                   | True                                 | 
+ 329 |  struct sockaddr dstaddr;                | True                                 | 
+ 330 |  struct sockaddr broadaddr;              | True                                 | 
+ 331 |  struct sockaddr netmask;                | True                                 | 
+ 332 |  char hwaddr[32];                        | True                                 | 
+ 333 | #define LAST_TO_ZERO hwaddr              | True                                 | 
+ 334 |                                          | True                                 | 
+ 335 |  smallint has_ip;                        | True                                 | 
+ 336 |  smallint statistics_valid;              | True                                 | 
+ 337 |  struct user_net_device_stats stats;     | True                                 | 
+ 338 | #if 0 /* UNUSED */                       | True                                 | 
+ 339 |  int keepalive;                          | 0                                    | 
+ 340 |  int outfill;                            | 0                                    | 
+ 341 | #endif                                   | True                                 | 
+ 342 | };                                       | True                                 | 
+ 343 |                                          | True                                 | 
+ 344 | struct iface_list {                      | True                                 | 
+ 345 |  struct interface *int_list, *int_last;  | True                                 | 
+ 346 | };                                       | True                                 | 
+ 347 |                                          | True                                 | 
+ 348 |                                          | True                                 | 
+ 349 | #if 0                                    | True                                 | 
+ 350 | /* like strcmp(), but knows about number | 0                                    | 
+ 351 | except that the freshly added calls to x | 0                                    | 
+ 352 | uClibc with e.g.: ife->name='lo'  name=' | 0                                    | 
+ 353 | static int nstrcmp(const char *a, const  | 0                                    | 
+ 354 | {                                        | 0                                    | 
+ 355 |  const char *a_ptr = a;                  | 0                                    | 
+ 356 |  const char *b_ptr = b;                  | 0                                    | 
+ 357 |                                          | 0                                    | 
+ 358 |  while (*a == *b) {                      | 0                                    | 
+ 359 |   if (*a == '\0') {                      | 0                                    | 
+ 360 |    return 0;                             | 0                                    | 
+ 361 |   }                                      | 0                                    | 
+ 362 |   if (!isdigit(*a) && isdigit(*(a+1))) { | 0                                    | 
+ 363 |    a_ptr = a+1;                          | 0                                    | 
+ 364 |    b_ptr = b+1;                          | 0                                    | 
+ 365 |   }                                      | 0                                    | 
+ 366 |   a++;                                   | 0                                    | 
+ 367 |   b++;                                   | 0                                    | 
+ 368 |  }                                       | 0                                    | 
+ 369 |                                          | 0                                    | 
+ 370 |  if (isdigit(*a) && isdigit(*b)) {       | 0                                    | 
+ 371 |   return xatoul(a_ptr) > xatoul(b_ptr) ? | 0                                    | 
+ 372 |  }                                       | 0                                    | 
+ 373 |  return *a - *b;                         | 0                                    | 
+ 374 | }                                        | 0                                    | 
+ 375 | #endif                                   | True                                 | 
+ 376 |                                          | True                                 | 
+ 377 | static struct interface *add_interface(s | True                                 | 
+ 378 | {                                        | True                                 | 
+ 379 |  struct interface *ife, **nextp, *new;   | True                                 | 
+ 380 |                                          | True                                 | 
+ 381 |  for (ife = ilist->int_last; ife; ife =  | True                                 | 
+ 382 |   int n = /*n*/strcmp(ife->name, name);  | True                                 | 
+ 383 |                                          | True                                 | 
+ 384 |   if (n == 0)                            | True                                 | 
+ 385 |    return ife;                           | True                                 | 
+ 386 |   if (n < 0)                             | True                                 | 
+ 387 |    break;                                | True                                 | 
+ 388 |  }                                       | True                                 | 
+ 389 |                                          | True                                 | 
+ 390 |  new = xzalloc(sizeof(*new));            | True                                 | 
+ 391 |  strncpy_IFNAMSIZ(new->name, name);      | True                                 | 
+ 392 |                                          | True                                 | 
+ 393 |  nextp = ife ? &ife->next : &ilist->int_ | True                                 | 
+ 394 |  new->prev = ife;                        | True                                 | 
+ 395 |  new->next = *nextp;                     | True                                 | 
+ 396 |  if (new->next)                          | True                                 | 
+ 397 |   new->next->prev = new;                 | True                                 | 
+ 398 |  else                                    | True                                 | 
+ 399 |   ilist->int_last = new;                 | True                                 | 
+ 400 |  *nextp = new;                           | True                                 | 
+ 401 |  return new;                             | True                                 | 
+ 402 | }                                        | True                                 | 
+ 403 |                                          | True                                 | 
+ 404 | static char *get_name(char name[IFNAMSIZ | True                                 | 
+ 405 | {                                        | True                                 | 
+ 406 |  /* Extract NAME from nul-terminated p o | True                                 | 
+ 407 |   * If match is not made, set NAME to "" | True                                 | 
+ 408 |   */                                     | True                                 | 
+ 409 |  char *nameend;                          | True                                 | 
+ 410 |  char *namestart;                        | True                                 | 
+ 411 |                                          | True                                 | 
+ 412 |  nameend = namestart = skip_whitespace(p | True                                 | 
+ 413 |                                          | True                                 | 
+ 414 |  for (;;) {                              | True                                 | 
+ 415 |   if ((nameend - namestart) >= IFNAMSIZ) | True                                 | 
+ 416 |    break; /* interface name too large -  | True                                 | 
+ 417 |   if (*nameend == ':') {                 | True                                 | 
+ 418 |    memcpy(name, namestart, nameend - nam | True                                 | 
+ 419 |    name[nameend - namestart] = '\0';     | True                                 | 
+ 420 |    return nameend + 1;                   | True                                 | 
+ 421 |   }                                      | True                                 | 
+ 422 |   nameend++;                             | True                                 | 
+ 423 |   /* isspace, NUL, any control char? */  | True                                 | 
+ 424 |   if ((unsigned char)*nameend <= (unsign | True                                 | 
+ 425 |    break; /* trailing ':' not found - re | True                                 | 
+ 426 |  }                                       | True                                 | 
+ 427 |  name[0] = '\0';                         | True                                 | 
+ 428 |  return p;                               | True                                 | 
+ 429 | }                                        | True                                 | 
+ 430 |                                          | True                                 | 
+ 431 | /* If scanf supports size qualifiers for | True                                 | 
+ 432 |  * use a modified fmt that simply stores | True                                 | 
+ 433 |  * having no associated fields in the pr | True                                 | 
+ 434 |  * to zero them again when we're done.   | True                                 | 
+ 435 |  * old approach of multiple scanf occurr | True                                 | 
+ 436 |  * args. */                              | True                                 | 
+ 437 |                                          | True                                 | 
+ 438 | /* static const char *const ss_fmt[] = { | True                                 | 
+ 439 | /* "%lln%llu%lu%lu%lu%lu%ln%ln%lln%llu%l | True                                 | 
+ 440 | /* "%llu%llu%lu%lu%lu%lu%ln%ln%llu%llu%l | True                                 | 
+ 441 | /* "%llu%llu%lu%lu%lu%lu%lu%lu%llu%llu%l | True                                 | 
+ 442 | /* }; */                                 | True                                 | 
+ 443 |                                          | True                                 | 
+ 444 | /* We use %n for unavailable data in old | True                                 | 
+ 445 |  * This results in bogus stores to ife-> | True                                 | 
+ 446 |  * %n specifiers (even the size of integ | True                                 | 
+ 447 |  */                                      | True                                 | 
+ 448 | #if INT_MAX == LONG_MAX                  | True                                 | 
+ 449 | static const char *const ss_fmt[] ALIGN_ | (INT_MAX==LONG_MAX)                  | 
+ 450 |  "%n%llu%u%u%u%u%n%n%n%llu%u%u%u%u%u",   | (INT_MAX==LONG_MAX)                  | 
+ 451 |  "%llu%llu%u%u%u%u%n%n%llu%llu%u%u%u%u%u | (INT_MAX==LONG_MAX)                  | 
+ 452 |  "%llu%llu%u%u%u%u%u%u%llu%llu%u%u%u%u%u | (INT_MAX==LONG_MAX)                  | 
+ 453 | };                                       | (INT_MAX==LONG_MAX)                  | 
+ 454 | #else                                    | True                                 | 
+ 455 | static const char *const ss_fmt[] ALIGN_ | !(INT_MAX==LONG_MAX)                 | 
+ 456 |  "%n%llu%lu%lu%lu%lu%n%n%n%llu%lu%lu%lu% | !(INT_MAX==LONG_MAX)                 | 
+ 457 |  "%llu%llu%lu%lu%lu%lu%n%n%llu%llu%lu%lu | !(INT_MAX==LONG_MAX)                 | 
+ 458 |  "%llu%llu%lu%lu%lu%lu%lu%lu%llu%llu%lu% | !(INT_MAX==LONG_MAX)                 | 
+ 459 | };                                       | !(INT_MAX==LONG_MAX)                 | 
+ 460 | #endif                                   | True                                 | 
+ 461 |                                          | True                                 | 
+ 462 | static void get_dev_fields(char *bp, str | True                                 | 
+ 463 | {                                        | True                                 | 
+ 464 |  memset(&ife->stats, 0, sizeof(struct us | True                                 | 
+ 465 |                                          | True                                 | 
+ 466 |  sscanf(bp, ss_fmt[procnetdev_vsn],      | True                                 | 
+ 467 |      &ife->stats.rx_bytes, /* missing fo | True                                 | 
+ 468 |      &ife->stats.rx_packets,             | True                                 | 
+ 469 |      &ife->stats.rx_errors,              | True                                 | 
+ 470 |      &ife->stats.rx_dropped,             | True                                 | 
+ 471 |      &ife->stats.rx_fifo_errors,         | True                                 | 
+ 472 |      &ife->stats.rx_frame_errors,        | True                                 | 
+ 473 |      &ife->stats.rx_compressed, /* missi | True                                 | 
+ 474 |      &ife->stats.rx_multicast, /* missin | True                                 | 
+ 475 |      &ife->stats.tx_bytes, /* missing fo | True                                 | 
+ 476 |      &ife->stats.tx_packets,             | True                                 | 
+ 477 |      &ife->stats.tx_errors,              | True                                 | 
+ 478 |      &ife->stats.tx_dropped,             | True                                 | 
+ 479 |      &ife->stats.tx_fifo_errors,         | True                                 | 
+ 480 |      &ife->stats.collisions,             | True                                 | 
+ 481 |      &ife->stats.tx_carrier_errors,      | True                                 | 
+ 482 |      &ife->stats.tx_compressed /* missin | True                                 | 
+ 483 |      );                                  | True                                 | 
+ 484 |                                          | True                                 | 
+ 485 |  if (procnetdev_vsn <= 1) {              | True                                 | 
+ 486 |   if (procnetdev_vsn == 0) {             | True                                 | 
+ 487 |    ife->stats.rx_bytes = 0;              | True                                 | 
+ 488 |    ife->stats.tx_bytes = 0;              | True                                 | 
+ 489 |   }                                      | True                                 | 
+ 490 |   ife->stats.rx_multicast = 0;           | True                                 | 
+ 491 |   ife->stats.rx_compressed = 0;          | True                                 | 
+ 492 |   ife->stats.tx_compressed = 0;          | True                                 | 
+ 493 |  }                                       | True                                 | 
+ 494 | }                                        | True                                 | 
+ 495 |                                          | True                                 | 
+ 496 | static int procnetdev_version(char *buf) | True                                 | 
+ 497 | {                                        | True                                 | 
+ 498 |  if (strstr(buf, "compressed"))          | True                                 | 
+ 499 |   return 2;                              | True                                 | 
+ 500 |  if (strstr(buf, "bytes"))               | True                                 | 
+ 501 |   return 1;                              | True                                 | 
+ 502 |  return 0;                               | True                                 | 
+ 503 | }                                        | True                                 | 
+ 504 |                                          | True                                 | 
+ 505 | static void if_readconf(struct iface_lis | True                                 | 
+ 506 | {                                        | True                                 | 
+ 507 |  int numreqs = 30;                       | True                                 | 
+ 508 |  struct ifconf ifc;                      | True                                 | 
+ 509 |  struct ifreq *ifr;                      | True                                 | 
+ 510 |  int n;                                  | True                                 | 
+ 511 |  int skfd;                               | True                                 | 
+ 512 |                                          | True                                 | 
+ 513 |  ifc.ifc_buf = NULL;                     | True                                 | 
+ 514 |                                          | True                                 | 
+ 515 |  /* SIOCGIFCONF currently seems to only  | True                                 | 
+ 516 |     (as of 2.1.128) */                   | True                                 | 
+ 517 |  skfd = xsocket(AF_INET, SOCK_DGRAM, 0); | True                                 | 
+ 518 |                                          | True                                 | 
+ 519 |  for (;;) {                              | True                                 | 
+ 520 |   ifc.ifc_len = sizeof(struct ifreq) * n | True                                 | 
+ 521 |   ifc.ifc_buf = xrealloc(ifc.ifc_buf, if | True                                 | 
+ 522 |                                          | True                                 | 
+ 523 |   xioctl(skfd, SIOCGIFCONF, &ifc);       | True                                 | 
+ 524 |   if (ifc.ifc_len == (int)(sizeof(struct | True                                 | 
+ 525 |    /* assume it overflowed and try again | True                                 | 
+ 526 |    numreqs += 10;                        | True                                 | 
+ 527 |    continue;                             | True                                 | 
+ 528 |   }                                      | True                                 | 
+ 529 |   break;                                 | True                                 | 
+ 530 |  }                                       | True                                 | 
+ 531 |                                          | True                                 | 
+ 532 |  ifr = ifc.ifc_req;                      | True                                 | 
+ 533 |  for (n = 0; n < ifc.ifc_len; n += sizeo | True                                 | 
+ 534 |   add_interface(ilist, ifr->ifr_name);   | True                                 | 
+ 535 |   ifr++;                                 | True                                 | 
+ 536 |  }                                       | True                                 | 
+ 537 |                                          | True                                 | 
+ 538 |  close(skfd);                            | True                                 | 
+ 539 |  free(ifc.ifc_buf);                      | True                                 | 
+ 540 | }                                        | True                                 | 
+ 541 |                                          | True                                 | 
+ 542 | static int if_readlist_proc(struct iface | True                                 | 
+ 543 | {                                        | True                                 | 
+ 544 |  FILE *fh;                               | True                                 | 
+ 545 |  char buf[512];                          | True                                 | 
+ 546 |  struct interface *ife;                  | True                                 | 
+ 547 |  int procnetdev_vsn;                     | True                                 | 
+ 548 |  int ret;                                | True                                 | 
+ 549 |                                          | True                                 | 
+ 550 |  fh = fopen_or_warn(_PATH_PROCNET_DEV, " | True                                 | 
+ 551 |  if (!fh) {                              | True                                 | 
+ 552 |   return 0; /* "not found" */            | True                                 | 
+ 553 |  }                                       | True                                 | 
+ 554 |  fgets(buf, sizeof buf, fh); /* eat line | True                                 | 
+ 555 |  fgets(buf, sizeof buf, fh);             | True                                 | 
+ 556 |                                          | True                                 | 
+ 557 |  procnetdev_vsn = procnetdev_version(buf | True                                 | 
+ 558 |                                          | True                                 | 
+ 559 |  ret = 0;                                | True                                 | 
+ 560 |  while (fgets(buf, sizeof buf, fh)) {    | True                                 | 
+ 561 |   char *s, name[IFNAMSIZ];               | True                                 | 
+ 562 |                                          | True                                 | 
+ 563 |   s = get_name(name, buf);               | True                                 | 
+ 564 |   ife = add_interface(ilist, name);      | True                                 | 
+ 565 |   get_dev_fields(s, ife, procnetdev_vsn) | True                                 | 
+ 566 |   ife->statistics_valid = 1;             | True                                 | 
+ 567 |   if (ifname && strcmp(ifname, name) ==  | True                                 | 
+ 568 |    ret = 1; /* found */                  | True                                 | 
+ 569 |    break;                                | True                                 | 
+ 570 |   }                                      | True                                 | 
+ 571 |  }                                       | True                                 | 
+ 572 |  fclose(fh);                             | True                                 | 
+ 573 |  return ret;                             | True                                 | 
+ 574 | }                                        | True                                 | 
+ 575 |                                          | True                                 | 
+ 576 | static void if_readlist(struct iface_lis | True                                 | 
+ 577 | {                                        | True                                 | 
+ 578 |  int found = if_readlist_proc(ilist, ifn | True                                 | 
+ 579 |  /* Needed in order to get ethN:M aliase | True                                 | 
+ 580 |  if (!found)                             | True                                 | 
+ 581 |   if_readconf(ilist);                    | True                                 | 
+ 582 | }                                        | True                                 | 
+ 583 |                                          | True                                 | 
+ 584 | /* Fetch the interface configuration fro | True                                 | 
+ 585 | static int if_fetch(struct interface *if | True                                 | 
+ 586 | {                                        | True                                 | 
+ 587 |  struct ifreq ifr;                       | True                                 | 
+ 588 |  char *ifname = ife->name;               | True                                 | 
+ 589 |  int skfd;                               | True                                 | 
+ 590 |                                          | True                                 | 
+ 591 |  skfd = xsocket(AF_INET, SOCK_DGRAM, 0); | True                                 | 
+ 592 |                                          | True                                 | 
+ 593 |  strncpy_IFNAMSIZ(ifr.ifr_name, ifname); | True                                 | 
+ 594 |  if (ioctl(skfd, SIOCGIFFLAGS, &ifr) < 0 | True                                 | 
+ 595 |   close(skfd);                           | True                                 | 
+ 596 |   return -1;                             | True                                 | 
+ 597 |  }                                       | True                                 | 
+ 598 |  ife->flags = ifr.ifr_flags;             | True                                 | 
+ 599 |                                          | True                                 | 
+ 600 |  /* set up default values if ioctl's wou | True                                 | 
+ 601 |  ife->tx_queue_len = -1; /* unknown valu | True                                 | 
+ 602 |  memset(&ife->FIRST_TO_ZERO, 0,          | True                                 | 
+ 603 |   offsetof(struct interface, LAST_TO_ZER | True                                 | 
+ 604 |    - offsetof(struct interface, FIRST_TO | True                                 | 
+ 605 |   + sizeof(ife->LAST_TO_ZERO)            | True                                 | 
+ 606 |  );                                      | True                                 | 
+ 607 |                                          | True                                 | 
+ 608 |  strncpy_IFNAMSIZ(ifr.ifr_name, ifname); | True                                 | 
+ 609 |  if (ioctl(skfd, SIOCGIFHWADDR, &ifr) >= | True                                 | 
+ 610 |   memcpy(ife->hwaddr, ifr.ifr_hwaddr.sa_ | True                                 | 
+ 611 |                                          | True                                 | 
+ 612 | //er.... why this _isnt_ inside if()?    | True                                 | 
+ 613 |  ife->type = ifr.ifr_hwaddr.sa_family;   | True                                 | 
+ 614 |                                          | True                                 | 
+ 615 |  strncpy_IFNAMSIZ(ifr.ifr_name, ifname); | True                                 | 
+ 616 |  if (ioctl(skfd, SIOCGIFMETRIC, &ifr) >= | True                                 | 
+ 617 |   ife->metric = ifr.ifr_metric;          | True                                 | 
+ 618 |                                          | True                                 | 
+ 619 |  strncpy_IFNAMSIZ(ifr.ifr_name, ifname); | True                                 | 
+ 620 |  if (ioctl(skfd, SIOCGIFMTU, &ifr) >= 0) | True                                 | 
+ 621 |   ife->mtu = ifr.ifr_mtu;                | True                                 | 
+ 622 |                                          | True                                 | 
+ 623 | #ifdef SIOCGIFMAP                        | True                                 | 
+ 624 |  strncpy_IFNAMSIZ(ifr.ifr_name, ifname); | (SIOCGIFMAP)                         | 
+ 625 |  if (ioctl(skfd, SIOCGIFMAP, &ifr) == 0) | (SIOCGIFMAP)                         | 
+ 626 |   ife->map = ifr.ifr_map;                | (SIOCGIFMAP)                         | 
+ 627 | #endif                                   | True                                 | 
+ 628 |                                          | True                                 | 
+ 629 | #ifdef HAVE_TXQUEUELEN                   | True                                 | 
+ 630 |  strncpy_IFNAMSIZ(ifr.ifr_name, ifname); | True                                 | 
+ 631 |  if (ioctl(skfd, SIOCGIFTXQLEN, &ifr) >= | True                                 | 
+ 632 |   ife->tx_queue_len = ifr.ifr_qlen;      | True                                 | 
+ 633 | #endif                                   | True                                 | 
+ 634 |                                          | True                                 | 
+ 635 |  strncpy_IFNAMSIZ(ifr.ifr_name, ifname); | True                                 | 
+ 636 |  ifr.ifr_addr.sa_family = AF_INET;       | True                                 | 
+ 637 |  if (ioctl(skfd, SIOCGIFADDR, &ifr) == 0 | True                                 | 
+ 638 |   ife->has_ip = 1;                       | True                                 | 
+ 639 |   ife->addr = ifr.ifr_addr;              | True                                 | 
+ 640 |   strncpy_IFNAMSIZ(ifr.ifr_name, ifname) | True                                 | 
+ 641 |   if (ioctl(skfd, SIOCGIFDSTADDR, &ifr)  | True                                 | 
+ 642 |    ife->dstaddr = ifr.ifr_dstaddr;       | True                                 | 
+ 643 |                                          | True                                 | 
+ 644 |   strncpy_IFNAMSIZ(ifr.ifr_name, ifname) | True                                 | 
+ 645 |   if (ioctl(skfd, SIOCGIFBRDADDR, &ifr)  | True                                 | 
+ 646 |    ife->broadaddr = ifr.ifr_broadaddr;   | True                                 | 
+ 647 |                                          | True                                 | 
+ 648 |   strncpy_IFNAMSIZ(ifr.ifr_name, ifname) | True                                 | 
+ 649 |   if (ioctl(skfd, SIOCGIFNETMASK, &ifr)  | True                                 | 
+ 650 |    ife->netmask = ifr.ifr_netmask;       | True                                 | 
+ 651 |  }                                       | True                                 | 
+ 652 |                                          | True                                 | 
+ 653 |  close(skfd);                            | True                                 | 
+ 654 |  return 0;                               | True                                 | 
+ 655 | }                                        | True                                 | 
+ 656 |                                          | True                                 | 
+ 657 | static int do_if_fetch(struct interface  | True                                 | 
+ 658 | {                                        | True                                 | 
+ 659 |  if (if_fetch(ife) < 0) {                | True                                 | 
+ 660 |   const char *errmsg;                    | True                                 | 
+ 661 |                                          | True                                 | 
+ 662 |   if (errno == ENODEV) {                 | True                                 | 
+ 663 |    /* Give better error message for this | True                                 | 
+ 664 |    errmsg = "Device not found";          | True                                 | 
+ 665 |   } else {                               | True                                 | 
+ 666 |    errmsg = strerror(errno);             | True                                 | 
+ 667 |   }                                      | True                                 | 
+ 668 |   bb_error_msg("%s: error fetching inter | True                                 | 
+ 669 |     ife->name, errmsg);                  | True                                 | 
+ 670 |   return -1;                             | True                                 | 
+ 671 |  }                                       | True                                 | 
+ 672 |  return 0;                               | True                                 | 
+ 673 | }                                        | True                                 | 
+ 674 |                                          | True                                 | 
+ 675 | static const struct hwtype unspec_hwtype | True                                 | 
+ 676 |  .name =  "unspec",                      | True                                 | 
+ 677 |  .title = "UNSPEC",                      | True                                 | 
+ 678 |  .type =  -1,                            | True                                 | 
+ 679 |  .print = UNSPEC_print                   | True                                 | 
+ 680 | };                                       | True                                 | 
+ 681 |                                          | True                                 | 
+ 682 | static const struct hwtype loop_hwtype = | True                                 | 
+ 683 |  .name =  "loop",                        | True                                 | 
+ 684 |  .title = "Local Loopback",              | True                                 | 
+ 685 |  .type =  ARPHRD_LOOPBACK                | True                                 | 
+ 686 | };                                       | True                                 | 
+ 687 |                                          | True                                 | 
+ 688 | /* Display an Ethernet address in readab | True                                 | 
+ 689 | static char* FAST_FUNC ether_print(unsig | True                                 | 
+ 690 | {                                        | True                                 | 
+ 691 |  char *buff;                             | True                                 | 
+ 692 |  buff = xasprintf("%02X:%02X:%02X:%02X:% | True                                 | 
+ 693 |   ptr[0], ptr[1], ptr[2], ptr[3], ptr[4] | True                                 | 
+ 694 |  );                                      | True                                 | 
+ 695 |  return auto_string(buff);               | True                                 | 
+ 696 | }                                        | True                                 | 
+ 697 |                                          | True                                 | 
+ 698 | static const struct hwtype ether_hwtype  | True                                 | 
+ 699 |  .name  = "ether",                       | True                                 | 
+ 700 |  .title = "Ethernet",                    | True                                 | 
+ 701 |  .type  = ARPHRD_ETHER,                  | True                                 | 
+ 702 |  .alen  = ETH_ALEN,                      | True                                 | 
+ 703 |  .print = ether_print,                   | True                                 | 
+ 704 |  .input = in_ether                       | True                                 | 
+ 705 | };                                       | True                                 | 
+ 706 |                                          | True                                 | 
+ 707 | static const struct hwtype ppp_hwtype =  | True                                 | 
+ 708 |  .name =  "ppp",                         | True                                 | 
+ 709 |  .title = "Point-to-Point Protocol",     | True                                 | 
+ 710 |  .type =  ARPHRD_PPP                     | True                                 | 
+ 711 | };                                       | True                                 | 
+ 712 |                                          | True                                 | 
+ 713 | #if ENABLE_FEATURE_IPV6                  | True                                 | 
+ 714 | static const struct hwtype sit_hwtype =  | ENABLE_FEATURE_IPV6                  | 
+ 715 |  .name =   "sit",                        | ENABLE_FEATURE_IPV6                  | 
+ 716 |  .title =  "IPv6-in-IPv4",               | ENABLE_FEATURE_IPV6                  | 
+ 717 |  .type =   ARPHRD_SIT,                   | ENABLE_FEATURE_IPV6                  | 
+ 718 |  .print =  UNSPEC_print,                 | ENABLE_FEATURE_IPV6                  | 
+ 719 |  .suppress_null_addr = 1                 | ENABLE_FEATURE_IPV6                  | 
+ 720 | };                                       | ENABLE_FEATURE_IPV6                  | 
+ 721 | #endif                                   | True                                 | 
+ 722 | #if ENABLE_FEATURE_HWIB                  | True                                 | 
+ 723 | static const struct hwtype ib_hwtype = { | ENABLE_FEATURE_HWIB                  | 
+ 724 |  .name  = "infiniband",                  | ENABLE_FEATURE_HWIB                  | 
+ 725 |  .title = "InfiniBand",                  | ENABLE_FEATURE_HWIB                  | 
+ 726 |  .type  = ARPHRD_INFINIBAND,             | ENABLE_FEATURE_HWIB                  | 
+ 727 |  .alen  = INFINIBAND_ALEN,               | ENABLE_FEATURE_HWIB                  | 
+ 728 |  .print = UNSPEC_print,                  | ENABLE_FEATURE_HWIB                  | 
+ 729 |  .input = in_ib,                         | ENABLE_FEATURE_HWIB                  | 
+ 730 | };                                       | ENABLE_FEATURE_HWIB                  | 
+ 731 | #endif                                   | True                                 | 
+ 732 |                                          | True                                 | 
+ 733 |                                          | True                                 | 
+ 734 | static const struct hwtype *const hwtype | True                                 | 
+ 735 |  &loop_hwtype,                           | True                                 | 
+ 736 |  &ether_hwtype,                          | True                                 | 
+ 737 |  &ppp_hwtype,                            | True                                 | 
+ 738 |  &unspec_hwtype,                         | True                                 | 
+ 739 | #if ENABLE_FEATURE_IPV6                  | True                                 | 
+ 740 |  &sit_hwtype,                            | ENABLE_FEATURE_IPV6                  | 
+ 741 | #endif                                   | True                                 | 
+ 742 | #if ENABLE_FEATURE_HWIB                  | True                                 | 
+ 743 |  &ib_hwtype,                             | ENABLE_FEATURE_HWIB                  | 
+ 744 | #endif                                   | True                                 | 
+ 745 |  NULL                                    | True                                 | 
+ 746 | };                                       | True                                 | 
+ 747 |                                          | True                                 | 
+ 748 | #ifdef IFF_PORTSEL                       | True                                 | 
+ 749 | static const char *const if_port_text[]  | (IFF_PORTSEL)                        | 
+ 750 |  /* Keep in step with <linux/netdevice.h | (IFF_PORTSEL)                        | 
+ 751 |  "unknown",                              | (IFF_PORTSEL)                        | 
+ 752 |  "10base2",                              | (IFF_PORTSEL)                        | 
+ 753 |  "10baseT",                              | (IFF_PORTSEL)                        | 
+ 754 |  "AUI",                                  | (IFF_PORTSEL)                        | 
+ 755 |  "100baseT",                             | (IFF_PORTSEL)                        | 
+ 756 |  "100baseTX",                            | (IFF_PORTSEL)                        | 
+ 757 |  "100baseFX",                            | (IFF_PORTSEL)                        | 
+ 758 |  NULL                                    | (IFF_PORTSEL)                        | 
+ 759 | };                                       | (IFF_PORTSEL)                        | 
+ 760 | #endif                                   | True                                 | 
+ 761 |                                          | True                                 | 
+ 762 | /* Check our hardware type table for thi | True                                 | 
+ 763 | const struct hwtype* FAST_FUNC get_hwtyp | True                                 | 
+ 764 | {                                        | True                                 | 
+ 765 |  const struct hwtype *const *hwp;        | True                                 | 
+ 766 |                                          | True                                 | 
+ 767 |  hwp = hwtypes;                          | True                                 | 
+ 768 |  while (*hwp != NULL) {                  | True                                 | 
+ 769 |   if (strcmp((*hwp)->name, name) == 0)   | True                                 | 
+ 770 |    return (*hwp);                        | True                                 | 
+ 771 |   hwp++;                                 | True                                 | 
+ 772 |  }                                       | True                                 | 
+ 773 |  return NULL;                            | True                                 | 
+ 774 | }                                        | True                                 | 
+ 775 |                                          | True                                 | 
+ 776 | /* Check our hardware type table for thi | True                                 | 
+ 777 | const struct hwtype* FAST_FUNC get_hwnty | True                                 | 
+ 778 | {                                        | True                                 | 
+ 779 |  const struct hwtype *const *hwp;        | True                                 | 
+ 780 |                                          | True                                 | 
+ 781 |  hwp = hwtypes;                          | True                                 | 
+ 782 |  while (*hwp != NULL) {                  | True                                 | 
+ 783 |   if ((*hwp)->type == type)              | True                                 | 
+ 784 |    return *hwp;                          | True                                 | 
+ 785 |   hwp++;                                 | True                                 | 
+ 786 |  }                                       | True                                 | 
+ 787 |  return NULL;                            | True                                 | 
+ 788 | }                                        | True                                 | 
+ 789 |                                          | True                                 | 
+ 790 | /* return 1 if address is all zeros */   | True                                 | 
+ 791 | static int hw_null_address(const struct  | True                                 | 
+ 792 | {                                        | True                                 | 
+ 793 |  int i;                                  | True                                 | 
+ 794 |  unsigned char *address = (unsigned char | True                                 | 
+ 795 |                                          | True                                 | 
+ 796 |  for (i = 0; i < hw->alen; i++)          | True                                 | 
+ 797 |   if (address[i])                        | True                                 | 
+ 798 |    return 0;                             | True                                 | 
+ 799 |  return 1;                               | True                                 | 
+ 800 | }                                        | True                                 | 
+ 801 |                                          | True                                 | 
+ 802 | static const char TRext[] ALIGN1 = "\0\0 | True                                 | 
+ 803 |                                          | True                                 | 
+ 804 | static void print_bytes_scaled(unsigned  | True                                 | 
+ 805 | {                                        | True                                 | 
+ 806 |  unsigned long long int_part;            | True                                 | 
+ 807 |  const char *ext;                        | True                                 | 
+ 808 |  unsigned int frac_part;                 | True                                 | 
+ 809 |  int i;                                  | True                                 | 
+ 810 |                                          | True                                 | 
+ 811 |  frac_part = 0;                          | True                                 | 
+ 812 |  ext = TRext;                            | True                                 | 
+ 813 |  int_part = ull;                         | True                                 | 
+ 814 |  i = 4;                                  | True                                 | 
+ 815 |  do {                                    | True                                 | 
+ 816 |   if (int_part >= 1024) {                | True                                 | 
+ 817 |    frac_part = ((((unsigned int) int_par | True                                 | 
+ 818 |    int_part /= 1024;                     | True                                 | 
+ 819 |    ext += 3; /* KiB, MiB, GiB, TiB */    | True                                 | 
+ 820 |   }                                      | True                                 | 
+ 821 |   --i;                                   | True                                 | 
+ 822 |  } while (i);                            | True                                 | 
+ 823 |                                          | True                                 | 
+ 824 |  printf("X bytes:%llu (%llu.%u %sB)%s",  | True                                 | 
+ 825 | }                                        | True                                 | 
+ 826 |                                          | True                                 | 
+ 827 |                                          | True                                 | 
+ 828 | #ifdef HAVE_AFINET6                      | True                                 | 
+ 829 | #define IPV6_ADDR_ANY           0x0000U  | ENABLE_FEATURE_IPV6                  | 
+ 830 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 831 | #define IPV6_ADDR_UNICAST       0x0001U  | ENABLE_FEATURE_IPV6                  | 
+ 832 | #define IPV6_ADDR_MULTICAST     0x0002U  | ENABLE_FEATURE_IPV6                  | 
+ 833 | #define IPV6_ADDR_ANYCAST       0x0004U  | ENABLE_FEATURE_IPV6                  | 
+ 834 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 835 | #define IPV6_ADDR_LOOPBACK      0x0010U  | ENABLE_FEATURE_IPV6                  | 
+ 836 | #define IPV6_ADDR_LINKLOCAL     0x0020U  | ENABLE_FEATURE_IPV6                  | 
+ 837 | #define IPV6_ADDR_SITELOCAL     0x0040U  | ENABLE_FEATURE_IPV6                  | 
+ 838 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 839 | #define IPV6_ADDR_COMPATv4      0x0080U  | ENABLE_FEATURE_IPV6                  | 
+ 840 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 841 | #define IPV6_ADDR_SCOPE_MASK    0x00f0U  | ENABLE_FEATURE_IPV6                  | 
+ 842 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 843 | #define IPV6_ADDR_MAPPED        0x1000U  | ENABLE_FEATURE_IPV6                  | 
+ 844 | #define IPV6_ADDR_RESERVED      0x2000U  | ENABLE_FEATURE_IPV6                  | 
+ 845 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 846 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 847 | static void ife_print6(struct interface  | ENABLE_FEATURE_IPV6                  | 
+ 848 | {                                        | ENABLE_FEATURE_IPV6                  | 
+ 849 |  FILE *f;                                | ENABLE_FEATURE_IPV6                  | 
+ 850 |  char addr6[40], devname[21];            | ENABLE_FEATURE_IPV6                  | 
+ 851 |  struct sockaddr_in6 sap;                | ENABLE_FEATURE_IPV6                  | 
+ 852 |  int plen, scope, dad_status, if_idx;    | ENABLE_FEATURE_IPV6                  | 
+ 853 |  char addr6p[8][5];                      | ENABLE_FEATURE_IPV6                  | 
+ 854 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 855 |  f = fopen_for_read(_PATH_PROCNET_IFINET | ENABLE_FEATURE_IPV6                  | 
+ 856 |  if (f == NULL)                          | ENABLE_FEATURE_IPV6                  | 
+ 857 |   return;                                | ENABLE_FEATURE_IPV6                  | 
+ 858 |                                          | ENABLE_FEATURE_IPV6                  | 
+ 859 |  while (fscanf                           | ENABLE_FEATURE_IPV6                  | 
+ 860 |      (f, "%4s%4s%4s%4s%4s%4s%4s%4s %08x  | ENABLE_FEATURE_IPV6                  | 
+ 861 |    addr6p[0], addr6p[1], addr6p[2], addr | ENABLE_FEATURE_IPV6                  | 
+ 862 |    addr6p[5], addr6p[6], addr6p[7], &if_ | ENABLE_FEATURE_IPV6                  | 
+ 863 |    &dad_status, devname) != EOF          | ENABLE_FEATURE_IPV6                  | 
+ 864 |  ) {                                     | ENABLE_FEATURE_IPV6                  | 
+ 865 |   if (strcmp(devname, ptr->name) == 0) { | ENABLE_FEATURE_IPV6                  | 
+ 866 |    sprintf(addr6, "%s:%s:%s:%s:%s:%s:%s: | ENABLE_FEATURE_IPV6                  | 
+ 867 |      addr6p[0], addr6p[1], addr6p[2], ad | ENABLE_FEATURE_IPV6                  | 
+ 868 |      addr6p[4], addr6p[5], addr6p[6], ad | ENABLE_FEATURE_IPV6                  | 
+ 869 |    memset(&sap, 0, sizeof(sap));         | ENABLE_FEATURE_IPV6                  | 
+ 870 |    inet_pton(AF_INET6, addr6,            | ENABLE_FEATURE_IPV6                  | 
+ 871 |        (struct sockaddr *) &sap.sin6_add | ENABLE_FEATURE_IPV6                  | 
+ 872 |    sap.sin6_family = AF_INET6;           | ENABLE_FEATURE_IPV6                  | 
+ 873 |    printf("          inet6 addr: %s/%d", | ENABLE_FEATURE_IPV6                  | 
+ 874 |     INET6_sprint((struct sockaddr *) &sa | ENABLE_FEATURE_IPV6                  | 
+ 875 |     plen);                               | ENABLE_FEATURE_IPV6                  | 
+ 876 |    printf(" Scope:");                    | ENABLE_FEATURE_IPV6                  | 
+ 877 |    switch (scope & IPV6_ADDR_SCOPE_MASK) | ENABLE_FEATURE_IPV6                  | 
+ 878 |    case 0:                               | ENABLE_FEATURE_IPV6                  | 
+ 879 |     puts("Global");                      | ENABLE_FEATURE_IPV6                  | 
+ 880 |     break;                               | ENABLE_FEATURE_IPV6                  | 
+ 881 |    case IPV6_ADDR_LINKLOCAL:             | ENABLE_FEATURE_IPV6                  | 
+ 882 |     puts("Link");                        | ENABLE_FEATURE_IPV6                  | 
+ 883 |     break;                               | ENABLE_FEATURE_IPV6                  | 
+ 884 |    case IPV6_ADDR_SITELOCAL:             | ENABLE_FEATURE_IPV6                  | 
+ 885 |     puts("Site");                        | ENABLE_FEATURE_IPV6                  | 
+ 886 |     break;                               | ENABLE_FEATURE_IPV6                  | 
+ 887 |    case IPV6_ADDR_COMPATv4:              | ENABLE_FEATURE_IPV6                  | 
+ 888 |     puts("Compat");                      | ENABLE_FEATURE_IPV6                  | 
+ 889 |     break;                               | ENABLE_FEATURE_IPV6                  | 
+ 890 |    case IPV6_ADDR_LOOPBACK:              | ENABLE_FEATURE_IPV6                  | 
+ 891 |     puts("Host");                        | ENABLE_FEATURE_IPV6                  | 
+ 892 |     break;                               | ENABLE_FEATURE_IPV6                  | 
+ 893 |    default:                              | ENABLE_FEATURE_IPV6                  | 
+ 894 |     puts("Unknown");                     | ENABLE_FEATURE_IPV6                  | 
+ 895 |    }                                     | ENABLE_FEATURE_IPV6                  | 
+ 896 |   }                                      | ENABLE_FEATURE_IPV6                  | 
+ 897 |  }                                       | ENABLE_FEATURE_IPV6                  | 
+ 898 |  fclose(f);                              | ENABLE_FEATURE_IPV6                  | 
+ 899 | }                                        | ENABLE_FEATURE_IPV6                  | 
+ 900 | #else                                    | True                                 | 
+ 901 | #define ife_print6(a) ((void)0)          | !(HAVE_AFINET6)                      | 
+ 902 | #endif                                   | True                                 | 
+ 903 |                                          | True                                 | 
+ 904 | static void ife_print(struct interface * | True                                 | 
+ 905 | {                                        | True                                 | 
+ 906 |  const struct aftype *ap;                | True                                 | 
+ 907 |  const struct hwtype *hw;                | True                                 | 
+ 908 |  int hf;                                 | True                                 | 
+ 909 |  int can_compress = 0;                   | True                                 | 
+ 910 |                                          | True                                 | 
+ 911 |  ap = get_afntype(ptr->addr.sa_family);  | True                                 | 
+ 912 |  if (ap == NULL)                         | True                                 | 
+ 913 |   ap = get_afntype(0);                   | True                                 | 
+ 914 |                                          | True                                 | 
+ 915 |  hf = ptr->type;                         | True                                 | 
+ 916 |                                          | True                                 | 
+ 917 |  if (hf == ARPHRD_CSLIP || hf == ARPHRD_ | True                                 | 
+ 918 |   can_compress = 1;                      | True                                 | 
+ 919 |                                          | True                                 | 
+ 920 |  hw = get_hwntype(hf);                   | True                                 | 
+ 921 |  if (hw == NULL)                         | True                                 | 
+ 922 |   hw = get_hwntype(-1);                  | True                                 | 
+ 923 |                                          | True                                 | 
+ 924 |  printf("%-9s Link encap:%s  ", ptr->nam | True                                 | 
+ 925 |  /* For some hardware types (eg Ash, ATM | True                                 | 
+ 926 |     hardware address if it's null.  */   | True                                 | 
+ 927 |  if (hw->print != NULL                   | True                                 | 
+ 928 |   && !(hw_null_address(hw, ptr->hwaddr)  | True                                 | 
+ 929 |  ) {                                     | True                                 | 
+ 930 |   printf("HWaddr %s  ", hw->print((unsig | True                                 | 
+ 931 |  }                                       | True                                 | 
+ 932 | #ifdef IFF_PORTSEL                       | True                                 | 
+ 933 |  if (ptr->flags & IFF_PORTSEL) {         | (IFF_PORTSEL)                        | 
+ 934 |   printf("Media:%s", if_port_text[ptr->m | (IFF_PORTSEL)                        | 
+ 935 |   if (ptr->flags & IFF_AUTOMEDIA)        | (IFF_PORTSEL)                        | 
+ 936 |    printf("(auto)");                     | (IFF_PORTSEL)                        | 
+ 937 |  }                                       | (IFF_PORTSEL)                        | 
+ 938 | #endif                                   | True                                 | 
+ 939 |  bb_putchar('\n');                       | True                                 | 
+ 940 |                                          | True                                 | 
+ 941 |  if (ptr->has_ip) {                      | True                                 | 
+ 942 |   printf("          %s addr:%s ", ap->na | True                                 | 
+ 943 |    ap->sprint(&ptr->addr, 1));           | True                                 | 
+ 944 |   if (ptr->flags & IFF_POINTOPOINT) {    | True                                 | 
+ 945 |    printf(" P-t-P:%s ", ap->sprint(&ptr- | True                                 | 
+ 946 |   }                                      | True                                 | 
+ 947 |   if (ptr->flags & IFF_BROADCAST) {      | True                                 | 
+ 948 |    printf(" Bcast:%s ", ap->sprint(&ptr- | True                                 | 
+ 949 |   }                                      | True                                 | 
+ 950 |   printf(" Mask:%s\n", ap->sprint(&ptr-> | True                                 | 
+ 951 |  }                                       | True                                 | 
+ 952 |                                          | True                                 | 
+ 953 |  ife_print6(ptr);                        | ENABLE_FEATURE_IPV6                  | 
+ 954 |                                          | True                                 | 
+ 955 |  printf("          ");                   | True                                 | 
+ 956 |  /* DONT FORGET TO ADD THE FLAGS IN ife_ | True                                 | 
+ 957 |                                          | True                                 | 
+ 958 |  if (ptr->flags == 0) {                  | True                                 | 
+ 959 |   printf("[NO FLAGS] ");                 | True                                 | 
+ 960 |  } else {                                | True                                 | 
+ 961 |   static const char ife_print_flags_strs | True                                 | 
+ 962 |    "UP\0"                                | True                                 | 
+ 963 |    "BROADCAST\0"                         | True                                 | 
+ 964 |    "DEBUG\0"                             | True                                 | 
+ 965 |    "LOOPBACK\0"                          | True                                 | 
+ 966 |    "POINTOPOINT\0"                       | True                                 | 
+ 967 |    "NOTRAILERS\0"                        | True                                 | 
+ 968 |    "RUNNING\0"                           | True                                 | 
+ 969 |    "NOARP\0"                             | True                                 | 
+ 970 |    "PROMISC\0"                           | True                                 | 
+ 971 |    "ALLMULTI\0"                          | True                                 | 
+ 972 |    "SLAVE\0"                             | True                                 | 
+ 973 |    "MASTER\0"                            | True                                 | 
+ 974 |    "MULTICAST\0"                         | True                                 | 
+ 975 | #ifdef HAVE_DYNAMIC                      | True                                 | 
+ 976 |    "DYNAMIC\0"                           | (HAVE_DYNAMIC)                       | 
+ 977 | #endif                                   | True                                 | 
+ 978 |    ;                                     | True                                 | 
+ 979 |   static const unsigned short ife_print_ | True                                 | 
+ 980 |    IFF_UP,                               | True                                 | 
+ 981 |    IFF_BROADCAST,                        | True                                 | 
+ 982 |    IFF_DEBUG,                            | True                                 | 
+ 983 |    IFF_LOOPBACK,                         | True                                 | 
+ 984 |    IFF_POINTOPOINT,                      | True                                 | 
+ 985 |    IFF_NOTRAILERS,                       | True                                 | 
+ 986 |    IFF_RUNNING,                          | True                                 | 
+ 987 |    IFF_NOARP,                            | True                                 | 
+ 988 |    IFF_PROMISC,                          | True                                 | 
+ 989 |    IFF_ALLMULTI,                         | True                                 | 
+ 990 |    IFF_SLAVE,                            | True                                 | 
+ 991 |    IFF_MASTER,                           | True                                 | 
+ 992 |    IFF_MULTICAST                         | True                                 | 
+ 993 | #ifdef HAVE_DYNAMIC                      | True                                 | 
+ 994 |    ,IFF_DYNAMIC                          | (HAVE_DYNAMIC)                       | 
+ 995 | #endif                                   | True                                 | 
+ 996 |   };                                     | True                                 | 
+ 997 |   const unsigned short *mask = ife_print | True                                 | 
+ 998 |   const char *str = ife_print_flags_strs | True                                 | 
+ 999 |   do {                                   | True                                 | 
+1000 |    if (ptr->flags & *mask) {             | True                                 | 
+1001 |     printf("%s ", str);                  | True                                 | 
+1002 |    }                                     | True                                 | 
+1003 |    mask++;                               | True                                 | 
+1004 |    str += strlen(str) + 1;               | True                                 | 
+1005 |   } while (*str);                        | True                                 | 
+1006 |  }                                       | True                                 | 
+1007 |                                          | True                                 | 
+1008 |  /* DONT FORGET TO ADD THE FLAGS IN ife_ | True                                 | 
+1009 |  printf(" MTU:%d  Metric:%d", ptr->mtu,  | True                                 | 
+1010 | #if 0                                    | True                                 | 
+1011 | #ifdef SIOCSKEEPALIVE                    | ?                                    | 
+1012 |  if (ptr->outfill || ptr->keepalive)     | 0&&(SIOCSKEEPALIVE)                  | 
+1013 |   printf("  Outfill:%d  Keepalive:%d", p | 0&&(SIOCSKEEPALIVE)                  | 
+1014 | #endif                                   | ?                                    | 
+1015 | #endif                                   | True                                 | 
+1016 |  bb_putchar('\n');                       | True                                 | 
+1017 |                                          | True                                 | 
+1018 |  /* If needed, display the interface sta | True                                 | 
+1019 |                                          | True                                 | 
+1020 |  if (ptr->statistics_valid) {            | True                                 | 
+1021 |   /* XXX: statistics are currently only  | True                                 | 
+1022 |    *      not for the aliases, although  | True                                 | 
+1023 |    *      by all addresses.              | True                                 | 
+1024 |    */                                    | True                                 | 
+1025 |   printf("          ");                  | True                                 | 
+1026 |                                          | True                                 | 
+1027 |   printf("RX packets:%llu errors:%lu dro | True                                 | 
+1028 |    ptr->stats.rx_packets, ptr->stats.rx_ | True                                 | 
+1029 |    ptr->stats.rx_dropped, ptr->stats.rx_ | True                                 | 
+1030 |    ptr->stats.rx_frame_errors);          | True                                 | 
+1031 |   if (can_compress)                      | True                                 | 
+1032 |    printf("             compressed:%lu\n | True                                 | 
+1033 |     ptr->stats.rx_compressed);           | True                                 | 
+1034 |   printf("          ");                  | True                                 | 
+1035 |   printf("TX packets:%llu errors:%lu dro | True                                 | 
+1036 |    ptr->stats.tx_packets, ptr->stats.tx_ | True                                 | 
+1037 |    ptr->stats.tx_dropped, ptr->stats.tx_ | True                                 | 
+1038 |    ptr->stats.tx_carrier_errors);        | True                                 | 
+1039 |   printf("          collisions:%lu ", pt | True                                 | 
+1040 |   if (can_compress)                      | True                                 | 
+1041 |    printf("compressed:%lu ", ptr->stats. | True                                 | 
+1042 |   if (ptr->tx_queue_len != -1)           | True                                 | 
+1043 |    printf("txqueuelen:%d ", ptr->tx_queu | True                                 | 
+1044 |   printf("\n          R");               | True                                 | 
+1045 |   print_bytes_scaled(ptr->stats.rx_bytes | True                                 | 
+1046 |   print_bytes_scaled(ptr->stats.tx_bytes | True                                 | 
+1047 |  }                                       | True                                 | 
+1048 |                                          | True                                 | 
+1049 |  if (ptr->map.irq || ptr->map.mem_start  | True                                 | 
+1050 |   || ptr->map.dma || ptr->map.base_addr  | True                                 | 
+1051 |  ) {                                     | True                                 | 
+1052 |   printf("          ");                  | True                                 | 
+1053 |   if (ptr->map.irq)                      | True                                 | 
+1054 |    printf("Interrupt:%d ", ptr->map.irq) | True                                 | 
+1055 |   if (ptr->map.base_addr >= 0x100) /* On | True                                 | 
+1056 |    printf("Base address:0x%lx ",         | True                                 | 
+1057 |     (unsigned long) ptr->map.base_addr); | True                                 | 
+1058 |   if (ptr->map.mem_start) {              | True                                 | 
+1059 |    printf("Memory:%lx-%lx ", ptr->map.me | True                                 | 
+1060 |     ptr->map.mem_end);                   | True                                 | 
+1061 |   }                                      | True                                 | 
+1062 |   if (ptr->map.dma)                      | True                                 | 
+1063 |    printf("DMA chan:%x ", ptr->map.dma); | True                                 | 
+1064 |   bb_putchar('\n');                      | True                                 | 
+1065 |  }                                       | True                                 | 
+1066 |  bb_putchar('\n');                       | True                                 | 
+1067 | }                                        | True                                 | 
+1068 |                                          | True                                 | 
+1069 | static int do_if_print(struct interface  | True                                 | 
+1070 | {                                        | True                                 | 
+1071 |  int res;                                | True                                 | 
+1072 |                                          | True                                 | 
+1073 |  res = do_if_fetch(ife);                 | True                                 | 
+1074 |  if (res >= 0) {                         | True                                 | 
+1075 |   if ((ife->flags & IFF_UP) || show_down | True                                 | 
+1076 |    ife_print(ife);                       | True                                 | 
+1077 |  }                                       | True                                 | 
+1078 |  return res;                             | True                                 | 
+1079 | }                                        | True                                 | 
+1080 |                                          | True                                 | 
+1081 | int FAST_FUNC display_interfaces(char *i | True                                 | 
+1082 | {                                        | True                                 | 
+1083 |  struct interface *ife;                  | True                                 | 
+1084 |  int res;                                | True                                 | 
+1085 |  struct iface_list ilist;                | True                                 | 
+1086 |                                          | True                                 | 
+1087 |  ilist.int_list = NULL;                  | True                                 | 
+1088 |  ilist.int_last = NULL;                  | True                                 | 
+1089 |  if_readlist(&ilist, ifname != IFNAME_SH | True                                 | 
+1090 |                                          | True                                 | 
+1091 |  if (!ifname || ifname == IFNAME_SHOW_DO | True                                 | 
+1092 |   for (ife = ilist.int_list; ife; ife =  | True                                 | 
+1093 |                                          | True                                 | 
+1094 |    BUILD_BUG_ON((int)(intptr_t)IFNAME_SH | True                                 | 
+1095 |                                          | True                                 | 
+1096 |    res = do_if_print(ife, (int)(intptr_t | True                                 | 
+1097 |    if (res < 0)                          | True                                 | 
+1098 |     goto ret;                            | True                                 | 
+1099 |   }                                      | True                                 | 
+1100 |   return 0;                              | True                                 | 
+1101 |  }                                       | True                                 | 
+1102 |                                          | True                                 | 
+1103 |  ife = add_interface(&ilist, ifname);    | True                                 | 
+1104 |  res = do_if_print(ife, /*show_downed_to | True                                 | 
+1105 |  ret:                                    | True                                 | 
+1106 |  return (res < 0); /* status < 0 == 1 -- | True                                 | 
+1107 | }                                        | True                                 | 
+1108 |                                          | True                                 | 
+1109 | #if ENABLE_FEATURE_HWIB                  | True                                 | 
+1110 | /* Input an Infiniband address and conve | ENABLE_FEATURE_HWIB                  | 
+1111 | int FAST_FUNC in_ib(const char *bufp, st | ENABLE_FEATURE_HWIB                  | 
+1112 | {                                        | ENABLE_FEATURE_HWIB                  | 
+1113 |  sap->sa_family = ib_hwtype.type;        | ENABLE_FEATURE_HWIB                  | 
+1114 | //TODO: error check?                     | ENABLE_FEATURE_HWIB                  | 
+1115 |  hex2bin((char*)sap->sa_data, bufp, INFI | ENABLE_FEATURE_HWIB                  | 
+1116 | # ifdef HWIB_DEBUG                       | ENABLE_FEATURE_HWIB                  | 
+1117 |  fprintf(stderr, "in_ib(%s): %s\n", bufp | ENABLE_FEATURE_HWIB&&(HWIB_DEBUG)    | 
+1118 | # endif                                  | ENABLE_FEATURE_HWIB                  | 
+1119 |  return 0;                               | ENABLE_FEATURE_HWIB                  | 
+1120 | }                                        | ENABLE_FEATURE_HWIB                  | 
+1121 | #endif                                   | True                                 | 
+-----+------------------------------------------+--------------------------------------+
+     |                                          | +147MB, 353ms                        | 

@@ -1,0 +1,534 @@
+FILE: data/raw/busybox-1.38.0/procps/iostat.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Report CPU and I/O stats, based on sy | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2010 Marek Polacek <mmp | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config IOSTAT                   | True                      | 
+  10 | //config: bool "iostat (8 kb)"           | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Report CPU and I/O statistics  | True                      | 
+  14 |                                          | True                      | 
+  15 | //applet:IF_IOSTAT(APPLET(iostat, BB_DIR | True                      | 
+  16 |                                          | True                      | 
+  17 | //kbuild:lib-$(CONFIG_IOSTAT) += iostat. | True                      | 
+  18 |                                          | True                      | 
+  19 | #include "libbb.h"                       | True                      | 
+  20 | #include <sys/utsname.h>  /* struct utsn | True                      | 
+  21 |                                          | True                      | 
+  22 | //#define debug(fmt, ...) fprintf(stderr | True                      | 
+  23 | #define debug(fmt, ...) ((void)0)        | True                      | 
+  24 |                                          | True                      | 
+  25 | #define MAX_DEVICE_NAME 12               | True                      | 
+  26 | #define MAX_DEVICE_NAME_STR "12"         | True                      | 
+  27 |                                          | True                      | 
+  28 | #if 1                                    | True                      | 
+  29 | typedef unsigned long long cputime_t;    | True                      | 
+  30 | typedef long long icputime_t;            | True                      | 
+  31 | # define FMT_DATA "ll"                   | True                      | 
+  32 | # define CPUTIME_MAX (~0ULL)             | True                      | 
+  33 | #else                                    | True                      | 
+  34 | typedef unsigned long cputime_t;         | !1                        | 
+  35 | typedef long icputime_t;                 | !1                        | 
+  36 | # define FMT_DATA "l"                    | !1                        | 
+  37 | # define CPUTIME_MAX (~0UL)              | !1                        | 
+  38 | #endif                                   | True                      | 
+  39 |                                          | True                      | 
+  40 | enum {                                   | True                      | 
+  41 |  STATS_CPU_USER,                         | True                      | 
+  42 |  STATS_CPU_NICE,                         | True                      | 
+  43 |  STATS_CPU_SYSTEM,                       | True                      | 
+  44 |  STATS_CPU_IDLE,                         | True                      | 
+  45 |  STATS_CPU_IOWAIT,                       | True                      | 
+  46 |  STATS_CPU_IRQ,                          | True                      | 
+  47 |  STATS_CPU_SOFTIRQ,                      | True                      | 
+  48 |  STATS_CPU_STEAL,                        | True                      | 
+  49 |  STATS_CPU_GUEST,                        | True                      | 
+  50 |                                          | True                      | 
+  51 |  GLOBAL_UPTIME,                          | True                      | 
+  52 |  SMP_UPTIME,                             | True                      | 
+  53 |                                          | True                      | 
+  54 |  N_STATS_CPU,                            | True                      | 
+  55 | };                                       | True                      | 
+  56 |                                          | True                      | 
+  57 | typedef struct {                         | True                      | 
+  58 |  cputime_t vector[N_STATS_CPU];          | True                      | 
+  59 | } stats_cpu_t;                           | True                      | 
+  60 |                                          | True                      | 
+  61 | typedef struct {                         | True                      | 
+  62 |  stats_cpu_t *prev;                      | True                      | 
+  63 |  stats_cpu_t *curr;                      | True                      | 
+  64 |  cputime_t itv;                          | True                      | 
+  65 | } stats_cpu_pair_t;                      | True                      | 
+  66 |                                          | True                      | 
+  67 | typedef struct {                         | True                      | 
+  68 |  unsigned long long rd_sectors;          | True                      | 
+  69 |  unsigned long long wr_sectors;          | True                      | 
+  70 |  unsigned long rd_ops;                   | True                      | 
+  71 |  unsigned long wr_ops;                   | True                      | 
+  72 | } stats_dev_data_t;                      | True                      | 
+  73 |                                          | True                      | 
+  74 | typedef struct stats_dev {               | True                      | 
+  75 |  struct stats_dev *next;                 | True                      | 
+  76 |  char dname[MAX_DEVICE_NAME + 1];        | True                      | 
+  77 |  stats_dev_data_t prev_data;             | True                      | 
+  78 |  stats_dev_data_t curr_data;             | True                      | 
+  79 | } stats_dev_t;                           | True                      | 
+  80 |                                          | True                      | 
+  81 | /* Globals. Sort by size and access freq | True                      | 
+  82 | struct globals {                         | True                      | 
+  83 |  smallint show_all;                      | True                      | 
+  84 |  unsigned total_cpus;            /* Numb | True                      | 
+  85 |  unsigned clk_tck;               /* Numb | True                      | 
+  86 |  llist_t *dev_name_list;         /* List | True                      | 
+  87 |  stats_dev_t *stats_dev_list;            | True                      | 
+  88 |  struct tm tmtime;                       | True                      | 
+  89 |  struct {                                | True                      | 
+  90 |   const char *str;                       | True                      | 
+  91 |   unsigned div;                          | True                      | 
+  92 |  } unit;                                 | True                      | 
+  93 | };                                       | True                      | 
+  94 | #define G (*ptr_to_globals)              | True                      | 
+  95 | #define INIT_G() do { \                  | True                      | 
+  96 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+  97 |  G.unit.str = "Blk"; \                   | True                      | 
+  98 |  G.unit.div = 1; \                       | True                      | 
+  99 | } while (0)                              | True                      | 
+ 100 |                                          | True                      | 
+ 101 | /* Must match option string! */          | True                      | 
+ 102 | enum {                                   | True                      | 
+ 103 |  OPT_c = 1 << 0,                         | True                      | 
+ 104 |  OPT_d = 1 << 1,                         | True                      | 
+ 105 |  OPT_t = 1 << 2,                         | True                      | 
+ 106 |  OPT_z = 1 << 3,                         | True                      | 
+ 107 |  OPT_k = 1 << 4,                         | True                      | 
+ 108 |  OPT_m = 1 << 5,                         | True                      | 
+ 109 | };                                       | True                      | 
+ 110 |                                          | True                      | 
+ 111 | static ALWAYS_INLINE int this_is_smp(voi | True                      | 
+ 112 | {                                        | True                      | 
+ 113 |  return (G.total_cpus > 1);              | True                      | 
+ 114 | }                                        | True                      | 
+ 115 |                                          | True                      | 
+ 116 | static void print_header(void)           | True                      | 
+ 117 | {                                        | True                      | 
+ 118 |  char buf[32];                           | True                      | 
+ 119 |  struct utsname uts;                     | True                      | 
+ 120 |                                          | True                      | 
+ 121 |  uname(&uts); /* never fails */          | True                      | 
+ 122 |                                          | True                      | 
+ 123 |  /* Date representation for the current  | True                      | 
+ 124 |  strftime(buf, sizeof(buf), "%x", &G.tmt | True                      | 
+ 125 |                                          | True                      | 
+ 126 |  printf("%s %s (%s) \t%s \t_%s_\t(%u CPU | True                      | 
+ 127 |    uts.sysname, uts.release, uts.nodenam | True                      | 
+ 128 |    buf, uts.machine, G.total_cpus);      | True                      | 
+ 129 | }                                        | True                      | 
+ 130 |                                          | True                      | 
+ 131 | static void get_localtime(struct tm *ptm | True                      | 
+ 132 | {                                        | True                      | 
+ 133 |  time_t timer;                           | True                      | 
+ 134 |  time(&timer);                           | True                      | 
+ 135 |  localtime_r(&timer, ptm);               | True                      | 
+ 136 | }                                        | True                      | 
+ 137 |                                          | True                      | 
+ 138 | static void print_timestamp(void)        | True                      | 
+ 139 | {                                        | True                      | 
+ 140 |  char buf[64];                           | True                      | 
+ 141 |  /* %x: date representation for the curr | True                      | 
+ 142 |  /* %X: time representation for the curr | True                      | 
+ 143 |  strftime(buf, sizeof(buf), "%x %X", &G. | True                      | 
+ 144 |  puts(buf);                              | True                      | 
+ 145 | }                                        | True                      | 
+ 146 |                                          | True                      | 
+ 147 | static cputime_t get_smp_uptime(void)    | True                      | 
+ 148 | {                                        | True                      | 
+ 149 |  FILE *fp;                               | True                      | 
+ 150 |  unsigned long sec, dec;                 | True                      | 
+ 151 |                                          | True                      | 
+ 152 |  fp = xfopen_for_read("/proc/uptime");   | True                      | 
+ 153 |                                          | True                      | 
+ 154 |  if (fscanf(fp, "%lu.%lu", &sec, &dec) ! | True                      | 
+ 155 |   bb_error_msg_and_die("can't read '%s'" | True                      | 
+ 156 |                                          | True                      | 
+ 157 |  fclose(fp);                             | True                      | 
+ 158 |                                          | True                      | 
+ 159 |  return (cputime_t)sec * G.clk_tck + dec | True                      | 
+ 160 | }                                        | True                      | 
+ 161 |                                          | True                      | 
+ 162 | /* Fetch CPU statistics from /proc/stat  | True                      | 
+ 163 | static void get_cpu_statistics(stats_cpu | True                      | 
+ 164 | {                                        | True                      | 
+ 165 |  FILE *fp;                               | True                      | 
+ 166 |  char buf[1024];                         | True                      | 
+ 167 |                                          | True                      | 
+ 168 |  fp = xfopen_for_read("/proc/stat");     | True                      | 
+ 169 |                                          | True                      | 
+ 170 |  memset(sc, 0, sizeof(*sc));             | True                      | 
+ 171 |                                          | True                      | 
+ 172 |  while (fgets(buf, sizeof(buf), fp)) {   | True                      | 
+ 173 |   int i;                                 | True                      | 
+ 174 |   char *ibuf;                            | True                      | 
+ 175 |                                          | True                      | 
+ 176 |   /* Does the line start with "cpu "? */ | True                      | 
+ 177 |   if (!starts_with_cpu(buf) || buf[3] != | True                      | 
+ 178 |    continue;                             | True                      | 
+ 179 |   }                                      | True                      | 
+ 180 |   ibuf = buf + 4;                        | True                      | 
+ 181 |   for (i = STATS_CPU_USER; i <= STATS_CP | True                      | 
+ 182 |    ibuf = skip_whitespace(ibuf);         | True                      | 
+ 183 |    sscanf(ibuf, "%"FMT_DATA"u", &sc->vec | True                      | 
+ 184 |    if (i != STATS_CPU_GUEST) {           | True                      | 
+ 185 |     sc->vector[GLOBAL_UPTIME] += sc->vec | True                      | 
+ 186 |    }                                     | True                      | 
+ 187 |    ibuf = skip_non_whitespace(ibuf);     | True                      | 
+ 188 |   }                                      | True                      | 
+ 189 |   break;                                 | True                      | 
+ 190 |  }                                       | True                      | 
+ 191 |                                          | True                      | 
+ 192 |  if (this_is_smp()) {                    | True                      | 
+ 193 |   sc->vector[SMP_UPTIME] = get_smp_uptim | True                      | 
+ 194 |  }                                       | True                      | 
+ 195 |                                          | True                      | 
+ 196 |  fclose(fp);                             | True                      | 
+ 197 | }                                        | True                      | 
+ 198 |                                          | True                      | 
+ 199 | static ALWAYS_INLINE cputime_t get_inter | True                      | 
+ 200 | {                                        | True                      | 
+ 201 |  cputime_t itv = new - old;              | True                      | 
+ 202 |                                          | True                      | 
+ 203 |  return (itv == 0) ? 1 : itv;            | True                      | 
+ 204 | }                                        | True                      | 
+ 205 |                                          | True                      | 
+ 206 | #if CPUTIME_MAX > 0xffffffff             | True                      | 
+ 207 | /*                                       | CPUTIME_MAX>0xffffffff    | 
+ 208 |  * Handle overflow conditions properly f | CPUTIME_MAX>0xffffffff    | 
+ 209 |  * less bits than cputime_t, depending o | CPUTIME_MAX>0xffffffff    | 
+ 210 |  */                                      | CPUTIME_MAX>0xffffffff    | 
+ 211 | /* Surprisingly, on 32bit inlining is a  | CPUTIME_MAX>0xffffffff    | 
+ 212 | static ALWAYS_INLINE cputime_t overflow_ | CPUTIME_MAX>0xffffffff    | 
+ 213 | {                                        | CPUTIME_MAX>0xffffffff    | 
+ 214 |  cputime_t v = curr - prev;              | CPUTIME_MAX>0xffffffff    | 
+ 215 |                                          | CPUTIME_MAX>0xffffffff    | 
+ 216 |  if ((icputime_t)v < 0     /* curr < pre | CPUTIME_MAX>0xffffffff    | 
+ 217 |   && prev <= 0xffffffff /* kernel uses 3 | CPUTIME_MAX>0xffffffff    | 
+ 218 |  ) {                                     | CPUTIME_MAX>0xffffffff    | 
+ 219 |   /* Add 33th bit set to 1 to curr, comp | CPUTIME_MAX>0xffffffff    | 
+ 220 |   /* double shift defeats "warning: left | CPUTIME_MAX>0xffffffff    | 
+ 221 |   v += ((cputime_t)1 << 16) << 16;       | CPUTIME_MAX>0xffffffff    | 
+ 222 |  }                                       | CPUTIME_MAX>0xffffffff    | 
+ 223 |  return v;                               | CPUTIME_MAX>0xffffffff    | 
+ 224 | }                                        | CPUTIME_MAX>0xffffffff    | 
+ 225 | #else                                    | True                      | 
+ 226 | static ALWAYS_INLINE cputime_t overflow_ | True                      | 
+ 227 | {                                        | True                      | 
+ 228 |  return curr - prev;                     | True                      | 
+ 229 | }                                        | True                      | 
+ 230 | #endif                                   | True                      | 
+ 231 |                                          | True                      | 
+ 232 | static double percent_value(cputime_t pr | True                      | 
+ 233 | {                                        | True                      | 
+ 234 |  return ((double)overflow_safe_sub(prev, | True                      | 
+ 235 | }                                        | True                      | 
+ 236 |                                          | True                      | 
+ 237 | static void print_stats_cpu_struct(stats | True                      | 
+ 238 | {                                        | True                      | 
+ 239 |  cputime_t *p = stats->prev->vector;     | True                      | 
+ 240 |  cputime_t *c = stats->curr->vector;     | True                      | 
+ 241 |  printf("        %7.2f %7.2f %7.2f %7.2f | True                      | 
+ 242 |   percent_value(p[STATS_CPU_USER]  , c[S | True                      | 
+ 243 |   percent_value(p[STATS_CPU_NICE]  , c[S | True                      | 
+ 244 |   percent_value(p[STATS_CPU_SYSTEM] + p[ | True                      | 
+ 245 |    c[STATS_CPU_SYSTEM] + c[STATS_CPU_SOF | True                      | 
+ 246 |   percent_value(p[STATS_CPU_IOWAIT], c[S | True                      | 
+ 247 |   percent_value(p[STATS_CPU_STEAL] , c[S | True                      | 
+ 248 |   percent_value(p[STATS_CPU_IDLE]  , c[S | True                      | 
+ 249 |  );                                      | True                      | 
+ 250 | }                                        | True                      | 
+ 251 |                                          | True                      | 
+ 252 | static void cpu_report(stats_cpu_pair_t  | True                      | 
+ 253 | {                                        | True                      | 
+ 254 |  /* Always print a header */             | True                      | 
+ 255 |  puts("avg-cpu:  %user   %nice %system % | True                      | 
+ 256 |                                          | True                      | 
+ 257 |  /* Print current statistics */          | True                      | 
+ 258 |  print_stats_cpu_struct(stats);          | True                      | 
+ 259 | }                                        | True                      | 
+ 260 |                                          | True                      | 
+ 261 | static void print_stats_dev_struct(stats | True                      | 
+ 262 | {                                        | True                      | 
+ 263 |  stats_dev_data_t *p = &stats_dev->prev_ | True                      | 
+ 264 |  stats_dev_data_t *c = &stats_dev->curr_ | True                      | 
+ 265 |  if (option_mask32 & OPT_z)              | True                      | 
+ 266 |   if (p->rd_ops == c->rd_ops && p->wr_op | True                      | 
+ 267 |    return;                               | True                      | 
+ 268 |                                          | True                      | 
+ 269 |  printf("%-13s %8.2f %12.2f %12.2f %10ll | True                      | 
+ 270 |   stats_dev->dname,                      | True                      | 
+ 271 |   percent_value(p->rd_ops + p->wr_ops, c | True                      | 
+ 272 |   percent_value(p->rd_sectors, c->rd_sec | True                      | 
+ 273 |   percent_value(p->wr_sectors, c->wr_sec | True                      | 
+ 274 |   (c->rd_sectors - p->rd_sectors) / G.un | True                      | 
+ 275 |   (c->wr_sectors - p->wr_sectors) / G.un | True                      | 
+ 276 |  );                                      | True                      | 
+ 277 | }                                        | True                      | 
+ 278 |                                          | True                      | 
+ 279 | static void print_devstat_header(void)   | True                      | 
+ 280 | {                                        | True                      | 
+ 281 |  printf("Device:%15s%6s%s/s%6s%s/s%6s%s% | True                      | 
+ 282 |   "tps",                                 | True                      | 
+ 283 |   G.unit.str, "_read", G.unit.str, "_wrt | True                      | 
+ 284 |   G.unit.str, "_read", G.unit.str, "_wrt | True                      | 
+ 285 |  );                                      | True                      | 
+ 286 | }                                        | True                      | 
+ 287 |                                          | True                      | 
+ 288 | /*                                       | True                      | 
+ 289 |  * Is input partition of format [sdaN]?  | True                      | 
+ 290 |  */                                      | True                      | 
+ 291 | static int is_partition(const char *dev) | True                      | 
+ 292 | {                                        | True                      | 
+ 293 |  /* Ok, this is naive... */              | True                      | 
+ 294 |  return ((dev[0] - 's') | (dev[1] - 'd') | True                      | 
+ 295 | }                                        | True                      | 
+ 296 |                                          | True                      | 
+ 297 | static stats_dev_t *stats_dev_find_or_ne | True                      | 
+ 298 | {                                        | True                      | 
+ 299 |  stats_dev_t **curr = &G.stats_dev_list; | True                      | 
+ 300 |                                          | True                      | 
+ 301 |  while (*curr != NULL) {                 | True                      | 
+ 302 |   if (strcmp((*curr)->dname, dev_name) = | True                      | 
+ 303 |    return *curr;                         | True                      | 
+ 304 |   curr = &(*curr)->next;                 | True                      | 
+ 305 |  }                                       | True                      | 
+ 306 |                                          | True                      | 
+ 307 |  *curr = xzalloc(sizeof(stats_dev_t));   | True                      | 
+ 308 |  strncpy((*curr)->dname, dev_name, MAX_D | True                      | 
+ 309 |  return *curr;                           | True                      | 
+ 310 | }                                        | True                      | 
+ 311 |                                          | True                      | 
+ 312 | static void stats_dev_free(stats_dev_t * | True                      | 
+ 313 | {                                        | True                      | 
+ 314 |  if (stats_dev) {                        | True                      | 
+ 315 |   stats_dev_free(stats_dev->next);       | True                      | 
+ 316 |   free(stats_dev);                       | True                      | 
+ 317 |  }                                       | True                      | 
+ 318 | }                                        | True                      | 
+ 319 |                                          | True                      | 
+ 320 | static void do_disk_statistics(cputime_t | True                      | 
+ 321 | {                                        | True                      | 
+ 322 |  char buf[128];                          | True                      | 
+ 323 |  char dev_name[MAX_DEVICE_NAME + 1];     | True                      | 
+ 324 |  unsigned long long rd_sec_or_dummy;     | True                      | 
+ 325 |  unsigned long long wr_sec_or_dummy;     | True                      | 
+ 326 |  stats_dev_data_t *curr_data;            | True                      | 
+ 327 |  stats_dev_t *stats_dev;                 | True                      | 
+ 328 |  FILE *fp;                               | True                      | 
+ 329 |  int rc;                                 | True                      | 
+ 330 |                                          | True                      | 
+ 331 |  fp = xfopen_for_read("/proc/diskstats") | True                      | 
+ 332 |  /* Read and possibly print stats from / | True                      | 
+ 333 |  while (fgets(buf, sizeof(buf), fp)) {   | True                      | 
+ 334 |   sscanf(buf, "%*s %*s %"MAX_DEVICE_NAME | True                      | 
+ 335 |   if (G.dev_name_list) {                 | True                      | 
+ 336 |    /* Is device name in list? */         | True                      | 
+ 337 |    if (!llist_find_str(G.dev_name_list,  | True                      | 
+ 338 |     continue;                            | True                      | 
+ 339 |   } else if (is_partition(dev_name)) {   | True                      | 
+ 340 |    continue;                             | True                      | 
+ 341 |   }                                      | True                      | 
+ 342 |                                          | True                      | 
+ 343 |   stats_dev = stats_dev_find_or_new(dev_ | True                      | 
+ 344 |   curr_data = &stats_dev->curr_data;     | True                      | 
+ 345 |                                          | True                      | 
+ 346 |   rc = sscanf(buf, "%*s %*s %*s %lu %llu | True                      | 
+ 347 |    &curr_data->rd_ops,                   | True                      | 
+ 348 |    &rd_sec_or_dummy,                     | True                      | 
+ 349 |    &curr_data->rd_sectors,               | True                      | 
+ 350 |    &wr_sec_or_dummy,                     | True                      | 
+ 351 |    &curr_data->wr_ops,                   | True                      | 
+ 352 |    &curr_data->wr_sectors);              | True                      | 
+ 353 |   if (rc != 6) {                         | True                      | 
+ 354 |    curr_data->rd_sectors = rd_sec_or_dum | True                      | 
+ 355 |    curr_data->wr_sectors = wr_sec_or_dum | True                      | 
+ 356 |    //curr_data->rd_ops = ;               | True                      | 
+ 357 |    curr_data->wr_ops = (unsigned long)cu | True                      | 
+ 358 |   }                                      | True                      | 
+ 359 |                                          | True                      | 
+ 360 |   if (!G.dev_name_list /* User didn't sp | True                      | 
+ 361 |    && !G.show_all                        | True                      | 
+ 362 |    && curr_data->rd_ops == 0             | True                      | 
+ 363 |    && curr_data->wr_ops == 0             | True                      | 
+ 364 |   ) {                                    | True                      | 
+ 365 |    /* Don't print unused device */       | True                      | 
+ 366 |    continue;                             | True                      | 
+ 367 |   }                                      | True                      | 
+ 368 |                                          | True                      | 
+ 369 |   /* Print current statistics */         | True                      | 
+ 370 |   print_stats_dev_struct(stats_dev, itv) | True                      | 
+ 371 |   stats_dev->prev_data = *curr_data;     | True                      | 
+ 372 |  }                                       | True                      | 
+ 373 |                                          | True                      | 
+ 374 |  fclose(fp);                             | True                      | 
+ 375 | }                                        | True                      | 
+ 376 |                                          | True                      | 
+ 377 | static void dev_report(cputime_t itv)    | True                      | 
+ 378 | {                                        | True                      | 
+ 379 |  /* Always print a header */             | True                      | 
+ 380 |  print_devstat_header();                 | True                      | 
+ 381 |                                          | True                      | 
+ 382 |  /* Fetch current disk statistics */     | True                      | 
+ 383 |  do_disk_statistics(itv);                | True                      | 
+ 384 | }                                        | True                      | 
+ 385 |                                          | True                      | 
+ 386 | //usage:#define iostat_trivial_usage     | True                      | 
+ 387 | //usage:       "[-c] [-d] [-t] [-z] [-k| | True                      | 
+ 388 | //usage:#define iostat_full_usage "\n\n" | True                      | 
+ 389 | //usage:       "Report CPU and I/O stati | True                      | 
+ 390 | //usage:     "\n -c Show CPU utilization | True                      | 
+ 391 | //usage:     "\n -d Show device utilizat | True                      | 
+ 392 | //usage:     "\n -t Print current time"  | True                      | 
+ 393 | //usage:     "\n -z Omit devices with no | True                      | 
+ 394 | //usage:     "\n -k Use kb/s"            | True                      | 
+ 395 | //usage:     "\n -m Use Mb/s"            | True                      | 
+ 396 |                                          | True                      | 
+ 397 | int iostat_main(int argc, char **argv) M | True                      | 
+ 398 | int iostat_main(int argc UNUSED_PARAM, c | True                      | 
+ 399 | {                                        | True                      | 
+ 400 |  int opt;                                | True                      | 
+ 401 |  unsigned interval;                      | True                      | 
+ 402 |  int count;                              | True                      | 
+ 403 |  stats_cpu_t stats_data[2];              | True                      | 
+ 404 |  smallint current_stats;                 | True                      | 
+ 405 |                                          | True                      | 
+ 406 |  INIT_G();                               | True                      | 
+ 407 |                                          | True                      | 
+ 408 |  memset(&stats_data, 0, sizeof(stats_dat | True                      | 
+ 409 |                                          | True                      | 
+ 410 |  /* Get number of clock ticks per sec */ | True                      | 
+ 411 |  G.clk_tck = bb_clk_tck();               | True                      | 
+ 412 |                                          | True                      | 
+ 413 |  /* Determine number of CPUs */          | True                      | 
+ 414 |  G.total_cpus = get_cpu_count();         | True                      | 
+ 415 |  if (G.total_cpus == 0)                  | True                      | 
+ 416 |   G.total_cpus = 1;                      | True                      | 
+ 417 |                                          | True                      | 
+ 418 |  /* Parse and process arguments */       | True                      | 
+ 419 |  /* -k and -m are mutually exclusive */  | True                      | 
+ 420 |  opt = getopt32(argv, "^" "cdtzkm" "\0"  | True                      | 
+ 421 |  if (!(opt & (OPT_c + OPT_d)))           | True                      | 
+ 422 |   /* Default is -cd */                   | True                      | 
+ 423 |   opt |= OPT_c + OPT_d;                  | True                      | 
+ 424 |                                          | True                      | 
+ 425 |  argv += optind;                         | True                      | 
+ 426 |                                          | True                      | 
+ 427 |  /* Store device names into device list  | True                      | 
+ 428 |  while (*argv && !isdigit(*argv[0])) {   | True                      | 
+ 429 |   if (strcmp(*argv, "ALL") != 0) {       | True                      | 
+ 430 |    /* If not ALL, save device name */    | True                      | 
+ 431 |    char *dev_name = skip_dev_pfx(*argv); | True                      | 
+ 432 |    if (!llist_find_str(G.dev_name_list,  | True                      | 
+ 433 |     llist_add_to(&G.dev_name_list, dev_n | True                      | 
+ 434 |    }                                     | True                      | 
+ 435 |   } else {                               | True                      | 
+ 436 |    G.show_all = 1;                       | True                      | 
+ 437 |   }                                      | True                      | 
+ 438 |   argv++;                                | True                      | 
+ 439 |  }                                       | True                      | 
+ 440 |                                          | True                      | 
+ 441 |  interval = 0;                           | True                      | 
+ 442 |  count = 1;                              | True                      | 
+ 443 |  if (*argv) {                            | True                      | 
+ 444 |   /* Get interval */                     | True                      | 
+ 445 |   interval = xatoi_positive(*argv);      | True                      | 
+ 446 |   count = (interval != 0 ? -1 : 1);      | True                      | 
+ 447 |   argv++;                                | True                      | 
+ 448 |   if (*argv)                             | True                      | 
+ 449 |    /* Get count value */                 | True                      | 
+ 450 |    count = xatoi_positive(*argv);        | True                      | 
+ 451 |  }                                       | True                      | 
+ 452 |                                          | True                      | 
+ 453 |  if (opt & OPT_m) {                      | True                      | 
+ 454 |   G.unit.str = " MB";                    | True                      | 
+ 455 |   G.unit.div = 2048;                     | True                      | 
+ 456 |  }                                       | True                      | 
+ 457 |                                          | True                      | 
+ 458 |  if (opt & OPT_k) {                      | True                      | 
+ 459 |   G.unit.str = " kB";                    | True                      | 
+ 460 |   G.unit.div = 2;                        | True                      | 
+ 461 |  }                                       | True                      | 
+ 462 |                                          | True                      | 
+ 463 |  get_localtime(&G.tmtime);               | True                      | 
+ 464 |                                          | True                      | 
+ 465 |  /* Display header */                    | True                      | 
+ 466 |  print_header();                         | True                      | 
+ 467 |                                          | True                      | 
+ 468 |  current_stats = 0;                      | True                      | 
+ 469 |  /* Main loop */                         | True                      | 
+ 470 |  for (;;) {                              | True                      | 
+ 471 |   stats_cpu_pair_t stats;                | True                      | 
+ 472 |                                          | True                      | 
+ 473 |   stats.prev = &stats_data[current_stats | True                      | 
+ 474 |   stats.curr = &stats_data[current_stats | True                      | 
+ 475 |                                          | True                      | 
+ 476 |   /* Fill the time structure */          | True                      | 
+ 477 |   get_localtime(&G.tmtime);              | True                      | 
+ 478 |                                          | True                      | 
+ 479 |   /* Fetch current CPU statistics */     | True                      | 
+ 480 |   get_cpu_statistics(stats.curr);        | True                      | 
+ 481 |                                          | True                      | 
+ 482 |   /* Get interval */                     | True                      | 
+ 483 |   stats.itv = get_interval(              | True                      | 
+ 484 |    stats.prev->vector[GLOBAL_UPTIME],    | True                      | 
+ 485 |    stats.curr->vector[GLOBAL_UPTIME]     | True                      | 
+ 486 |   );                                     | True                      | 
+ 487 |                                          | True                      | 
+ 488 |   if (opt & OPT_t)                       | True                      | 
+ 489 |    print_timestamp();                    | True                      | 
+ 490 |                                          | True                      | 
+ 491 |   if (opt & OPT_c) {                     | True                      | 
+ 492 |    cpu_report(&stats);                   | True                      | 
+ 493 |    if (opt & OPT_d)                      | True                      | 
+ 494 |     /* Separate outputs by a newline */  | True                      | 
+ 495 |     bb_putchar('\n');                    | True                      | 
+ 496 |   }                                      | True                      | 
+ 497 |                                          | True                      | 
+ 498 |   if (opt & OPT_d) {                     | True                      | 
+ 499 |    if (this_is_smp()) {                  | True                      | 
+ 500 |     stats.itv = get_interval(            | True                      | 
+ 501 |      stats.prev->vector[SMP_UPTIME],     | True                      | 
+ 502 |      stats.curr->vector[SMP_UPTIME]      | True                      | 
+ 503 |     );                                   | True                      | 
+ 504 |    }                                     | True                      | 
+ 505 |    dev_report(stats.itv);                | True                      | 
+ 506 |   }                                      | True                      | 
+ 507 |                                          | True                      | 
+ 508 |   bb_putchar('\n');                      | True                      | 
+ 509 |                                          | True                      | 
+ 510 |   if (count > 0) {                       | True                      | 
+ 511 |    if (--count == 0)                     | True                      | 
+ 512 |     break;                               | True                      | 
+ 513 |   }                                      | True                      | 
+ 514 |                                          | True                      | 
+ 515 |   /* Swap stats */                       | True                      | 
+ 516 |   current_stats ^= 1;                    | True                      | 
+ 517 |                                          | True                      | 
+ 518 |   sleep(interval);                       | True                      | 
+ 519 |  }                                       | True                      | 
+ 520 |                                          | True                      | 
+ 521 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 522 |   llist_free(G.dev_name_list, NULL);     | True                      | 
+ 523 |   stats_dev_free(G.stats_dev_list);      | True                      | 
+ 524 |   free(&G);                              | True                      | 
+ 525 |  }                                       | True                      | 
+ 526 |                                          | True                      | 
+ 527 |  return EXIT_SUCCESS;                    | True                      | 
+ 528 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +113MB, 266ms             | 

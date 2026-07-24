@@ -1,0 +1,197 @@
+FILE: data/raw/busybox-1.38.0/coreutils/mv.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Mini mv implementation for busybox    | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2000 by Matt Kraai <kra | True                      | 
+   6 |  * SELinux support by Yuichi Nakamura <y | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   9 |  */                                      | True                      | 
+  10 | /* Mar 16, 2003      Manuel Novoa III    | True                      | 
+  11 |  *                                       | True                      | 
+  12 |  * Size reduction and improved error che | True                      | 
+  13 |  */                                      | True                      | 
+  14 | //config:config MV                       | True                      | 
+  15 | //config: bool "mv (10 kb)"              | True                      | 
+  16 | //config: default y                      | True                      | 
+  17 | //config: help                           | True                      | 
+  18 | //config: mv is used to move or rename f | True                      | 
+  19 |                                          | True                      | 
+  20 | //applet:IF_MV(APPLET_NOEXEC(mv, mv, BB_ | True                      | 
+  21 | /* NOEXEC despite cases when it can be a | True                      | 
+  22 |                                          | True                      | 
+  23 | //kbuild:lib-$(CONFIG_MV) += mv.o        | True                      | 
+  24 |                                          | True                      | 
+  25 | //usage:#define mv_trivial_usage         | True                      | 
+  26 | //usage:       "[-finT] SOURCE DEST\n"   | True                      | 
+  27 | //usage:       "or: mv [-fin] SOURCE...  | True                      | 
+  28 | //usage:#define mv_full_usage "\n\n"     | True                      | 
+  29 | //usage:       "Rename SOURCE to DEST, o | True                      | 
+  30 | //usage:     "\n -f Don't prompt before  | True                      | 
+  31 | //usage:     "\n -i Interactive, prompt  | True                      | 
+  32 | //usage:     "\n -n Don't overwrite an e | True                      | 
+  33 | //usage:     "\n -T Refuse to move if DE | True                      | 
+  34 | //usage:     "\n -t DIR Move all SOURCEs | True                      | 
+  35 | //usage:                                 | True                      | 
+  36 | //usage:#define mv_example_usage         | True                      | 
+  37 | //usage:       "$ mv /tmp/foo /bin/bar\n | True                      | 
+  38 |                                          | True                      | 
+  39 | #include "libbb.h"                       | True                      | 
+  40 | #include "libcoreutils/coreutils.h"      | True                      | 
+  41 |                                          | True                      | 
+  42 | int mv_main(int argc, char **argv) MAIN_ | True                      | 
+  43 | int mv_main(int argc, char **argv)       | True                      | 
+  44 | {                                        | True                      | 
+  45 |  struct stat statbuf;                    | True                      | 
+  46 |  const char *last;                       | True                      | 
+  47 |  const char *dest;                       | True                      | 
+  48 |  unsigned flags;                         | True                      | 
+  49 |  int dest_exists;                        | True                      | 
+  50 |  int status = 0;                         | True                      | 
+  51 |  int copy_flag = 0;                      | True                      | 
+  52 |                                          | True                      | 
+  53 | #define OPT_FORCE       (1 << 0)         | True                      | 
+  54 | #define OPT_INTERACTIVE (1 << 1)         | True                      | 
+  55 | #define OPT_NOCLOBBER   (1 << 2)         | True                      | 
+  56 | #define OPT_DESTNOTDIR  (1 << 3)         | True                      | 
+  57 | #define OPT_DESTDIR     (1 << 4)         | True                      | 
+  58 | #define OPT_VERBOSE     ((1 << 5) * ENAB | True                      | 
+  59 |  flags = getopt32long(argv, "^"          | True                      | 
+  60 |    "finTt:v"                             | True                      | 
+  61 |    "\0"                                  | True                      | 
+  62 |  /* At least one argument. (Usually two+ | True                      | 
+  63 |    "-1"                                  | True                      | 
+  64 |  /* only the final one of -f, -i, -n tak | True                      | 
+  65 |    ":f-in:i-fn:n-fi"                     | True                      | 
+  66 |  /* -t and -T don't mix */               | True                      | 
+  67 |    ":t--T:T--t",                         | True                      | 
+  68 |    "interactive\0" No_argument "i"       | True                      | 
+  69 |    "force\0"       No_argument "f"       | True                      | 
+  70 |    "no-clobber\0"  No_argument "n"       | True                      | 
+  71 |    "no-target-directory\0" No_argument " | True                      | 
+  72 |    "target-directory\0" Required_argumen | True                      | 
+  73 |    IF_FEATURE_VERBOSE(                   | True                      | 
+  74 |    "verbose\0"     No_argument "v"       | True                      | 
+  75 |    )                                     | True                      | 
+  76 |    , &last                               | True                      | 
+  77 |  );                                      | True                      | 
+  78 |  argc -= optind;                         | True                      | 
+  79 |  argv += optind;                         | True                      | 
+  80 |                                          | True                      | 
+  81 |  if (!(flags & OPT_DESTDIR)) {           | True                      | 
+  82 |   last = argv[argc - 1];                 | True                      | 
+  83 |   if (argc < 2)                          | True                      | 
+  84 |    bb_show_usage();                      | True                      | 
+  85 |   if (argc != 2) {                       | True                      | 
+  86 |    if (flags & OPT_DESTNOTDIR)           | True                      | 
+  87 |     bb_show_usage();                     | True                      | 
+  88 |    /* "mv A B C... DIR" - target must be | True                      | 
+  89 |   } else /* argc == 2 */ {               | True                      | 
+  90 |    /* "mv A B" - only case where target  | True                      | 
+  91 |    dest_exists = cp_mv_stat(last, &statb | True                      | 
+  92 |    if (dest_exists < 0) { /* error other | True                      | 
+  93 |     return EXIT_FAILURE;                 | True                      | 
+  94 |    }                                     | True                      | 
+  95 |    if (!(dest_exists & 2)) {             | True                      | 
+  96 |     /* last is not a directory */        | True                      | 
+  97 |     dest = last;                         | True                      | 
+  98 |     goto DO_MOVE;                        | True                      | 
+  99 |    }                                     | True                      | 
+ 100 |    /* last is a directory */             | True                      | 
+ 101 |    if (flags & OPT_DESTNOTDIR) {         | True                      | 
+ 102 |     if (stat(argv[0], &statbuf) == 0 &&  | True                      | 
+ 103 |      bb_error_msg_and_die("'%s' is a dir | True                      | 
+ 104 |     /* "mv -T DIR1 DIR2" is allowed (ren | True                      | 
+ 105 |     dest = last;                         | True                      | 
+ 106 |     goto DO_MOVE;                        | True                      | 
+ 107 |    }                                     | True                      | 
+ 108 |    /* else: fall through into "do { move | True                      | 
+ 109 |   }                                      | True                      | 
+ 110 |  }                                       | True                      | 
+ 111 |  /* else: last is DIR from "-t DIR" */   | True                      | 
+ 112 |                                          | True                      | 
+ 113 |  do {                                    | True                      | 
+ 114 |   dest = concat_path_file(last, bb_get_l | True                      | 
+ 115 |   dest_exists = cp_mv_stat(dest, &statbu | True                      | 
+ 116 |   if (dest_exists < 0) {                 | True                      | 
+ 117 |    goto RET_1;                           | True                      | 
+ 118 |   }                                      | True                      | 
+ 119 |                                          | True                      | 
+ 120 |  DO_MOVE:                                | True                      | 
+ 121 |   if (dest_exists) {                     | True                      | 
+ 122 |    if (flags & OPT_NOCLOBBER)            | True                      | 
+ 123 |     goto RET_0;                          | True                      | 
+ 124 |    if (!(flags & OPT_FORCE)              | True                      | 
+ 125 |     && ((access(dest, W_OK) < 0 && isatt | True                      | 
+ 126 |        || (flags & OPT_INTERACTIVE))     | True                      | 
+ 127 |    ) {                                   | True                      | 
+ 128 |     if (fprintf(stderr, "mv: overwrite ' | True                      | 
+ 129 |      goto RET_1;  /* Ouch! fprintf faile | True                      | 
+ 130 |     }                                    | True                      | 
+ 131 |     if (!bb_ask_y_confirmation()) {      | True                      | 
+ 132 |      goto RET_0;                         | True                      | 
+ 133 |     }                                    | True                      | 
+ 134 |    }                                     | True                      | 
+ 135 |   }                                      | True                      | 
+ 136 |                                          | True                      | 
+ 137 |   if (rename(*argv, dest) < 0) {         | True                      | 
+ 138 |    int source_exists;                    | True                      | 
+ 139 |                                          | True                      | 
+ 140 |    if (errno != EXDEV                    | True                      | 
+ 141 |     || (source_exists = cp_mv_stat2(*arg | True                      | 
+ 142 |    ) {                                   | True                      | 
+ 143 |     bb_perror_msg("can't rename '%s'", * | True                      | 
+ 144 |    } else {                              | True                      | 
+ 145 |     static const char fmt[] ALIGN1 =     | True                      | 
+ 146 |      "can't overwrite %sdirectory with % | True                      | 
+ 147 |                                          | True                      | 
+ 148 |     if (dest_exists) {                   | True                      | 
+ 149 |      if (dest_exists == 3) {             | True                      | 
+ 150 |       if (source_exists != 3) {          | True                      | 
+ 151 |        bb_error_msg(fmt, "", "non-");    | True                      | 
+ 152 |        goto RET_1;                       | True                      | 
+ 153 |       }                                  | True                      | 
+ 154 |      } else {                            | True                      | 
+ 155 |       if (source_exists == 3) {          | True                      | 
+ 156 |        bb_error_msg(fmt, "non-", "");    | True                      | 
+ 157 |        goto RET_1;                       | True                      | 
+ 158 |       }                                  | True                      | 
+ 159 |      }                                   | True                      | 
+ 160 |      if (unlink(dest) < 0) {             | True                      | 
+ 161 |       bb_perror_msg("can't remove '%s'", | True                      | 
+ 162 |       goto RET_1;                        | True                      | 
+ 163 |      }                                   | True                      | 
+ 164 |     }                                    | True                      | 
+ 165 |     /* FILEUTILS_RECUR also prevents nas | True                      | 
+ 166 |      * "read from device and write conte | True                      | 
+ 167 |      * instead of "create same device no | True                      | 
+ 168 |     copy_flag = FILEUTILS_RECUR | FILEUT | True                      | 
+ 169 | #if ENABLE_SELINUX                       | True                      | 
+ 170 |     copy_flag |= FILEUTILS_PRESERVE_SECU | ENABLE_SELINUX            | 
+ 171 | #endif                                   | True                      | 
+ 172 |     if ((copy_file(*argv, dest, copy_fla | True                      | 
+ 173 |      && (remove_file(*argv, FILEUTILS_RE | True                      | 
+ 174 |     ) {                                  | True                      | 
+ 175 |      goto RET_0;                         | True                      | 
+ 176 |     }                                    | True                      | 
+ 177 |    }                                     | True                      | 
+ 178 |  RET_1:                                  | True                      | 
+ 179 |    status = 1;                           | True                      | 
+ 180 |   }                                      | True                      | 
+ 181 |  RET_0:                                  | True                      | 
+ 182 |   if (flags & OPT_VERBOSE) {             | True                      | 
+ 183 |    printf("'%s' -> '%s'\n", *argv, dest) | True                      | 
+ 184 |   }                                      | True                      | 
+ 185 |   if (dest != last) {                    | True                      | 
+ 186 |    free((void *) dest);                  | True                      | 
+ 187 |   }                                      | True                      | 
+ 188 |  } while (*++argv && *argv != last);     | True                      | 
+ 189 |                                          | True                      | 
+ 190 |  return status;                          | True                      | 
+ 191 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +110MB, 257ms             | 

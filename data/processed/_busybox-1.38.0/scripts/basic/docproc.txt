@@ -1,0 +1,407 @@
+FILE: data/raw/busybox-1.38.0/scripts/basic/docproc.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * docproc is a simple preprocessor for  | True                      | 
+   3 |  *      used as placeholders for the ker | True                      | 
+   4 |  * docproc is used for documentation-fro | True                      | 
+   5 |  *      dependency-generator.            | True                      | 
+   6 |  * The two usages have in common that th | True                      | 
+   7 |  * some knowledge of the .tmpl syntax, t | True                      | 
+   8 |  * are kept together.                    | True                      | 
+   9 |  *                                       | True                      | 
+  10 |  * documentation-frontend                | True                      | 
+  11 |  *  Scans the template file and call ker | True                      | 
+  12 |  *  all occurrences of ![EIF]file        | True                      | 
+  13 |  *  Beforehand each referenced file are  | True                      | 
+  14 |  *  any exported sympols "EXPORT_SYMBOL( | True                      | 
+  15 |  *  This is used to create proper -funct | True                      | 
+  16 |  *  -nofunction arguments in calls to ke | True                      | 
+  17 |  *  Usage: docproc doc file.tmpl         | True                      | 
+  18 |  *                                       | True                      | 
+  19 |  * dependency-generator:                 | True                      | 
+  20 |  *  Scans the template file and list all | True                      | 
+  21 |  *  referenced in a format recognized by | True                      | 
+  22 |  *  Usage: docproc depend file.tmpl      | True                      | 
+  23 |  *  Writes dependency information to std | True                      | 
+  24 |  *  in the following format:             | True                      | 
+  25 |  *  file.tmpl src.c src2.c               | True                      | 
+  26 |  *  The filenames are obtained from the  | True                      | 
+  27 |  *  !Efilename                           | True                      | 
+  28 |  *  !Ifilename                           | True                      | 
+  29 |  *  !Dfilename                           | True                      | 
+  30 |  *  !Ffilename                           | True                      | 
+  31 |  *                                       | True                      | 
+  32 |  */                                      | True                      | 
+  33 |                                          | True                      | 
+  34 | #include <stdio.h>                       | True                      | 
+  35 | #include <stdlib.h>                      | True                      | 
+  36 | #include <string.h>                      | True                      | 
+  37 | #include <ctype.h>                       | True                      | 
+  38 | #include <unistd.h>                      | True                      | 
+  39 | #include <limits.h>                      | True                      | 
+  40 | #include <sys/types.h>                   | True                      | 
+  41 | #include <sys/wait.h>                    | True                      | 
+  42 | //bbox disabled: #include <alloca.h>     | True                      | 
+  43 |                                          | True                      | 
+  44 | /* exitstatus is used to keep track of a | True                      | 
+  45 |  * but execution continues. */           | True                      | 
+  46 | int exitstatus = 0;                      | True                      | 
+  47 |                                          | True                      | 
+  48 | typedef void DFL(char *);                | True                      | 
+  49 | DFL *defaultline;                        | True                      | 
+  50 |                                          | True                      | 
+  51 | typedef void FILEONLY(char * file);      | True                      | 
+  52 | FILEONLY *internalfunctions;             | True                      | 
+  53 | FILEONLY *externalfunctions;             | True                      | 
+  54 | FILEONLY *symbolsonly;                   | True                      | 
+  55 |                                          | True                      | 
+  56 | typedef void FILELINE(char * file, char  | True                      | 
+  57 | FILELINE * singlefunctions;              | True                      | 
+  58 | FILELINE * entity_system;                | True                      | 
+  59 |                                          | True                      | 
+  60 | #define MAXLINESZ     2048               | True                      | 
+  61 | #define MAXFILES      250                | True                      | 
+  62 | #define KERNELDOCPATH "scripts/"         | True                      | 
+  63 | #define KERNELDOC     "kernel-doc"       | True                      | 
+  64 | #define DOCBOOK       "-docbook"         | True                      | 
+  65 | #define FUNCTION      "-function"        | True                      | 
+  66 | #define NOFUNCTION    "-nofunction"      | True                      | 
+  67 |                                          | True                      | 
+  68 | void usage (void)                        | True                      | 
+  69 | {                                        | True                      | 
+  70 |  fprintf(stderr, "Usage: docproc {doc|de | True                      | 
+  71 |  fprintf(stderr, "Input is read from fil | True                      | 
+  72 |  fprintf(stderr, "doc: frontend when gen | True                      | 
+  73 |  fprintf(stderr, "depend: generate list  | True                      | 
+  74 | }                                        | True                      | 
+  75 |                                          | True                      | 
+  76 | /*                                       | True                      | 
+  77 |  * Execute kernel-doc with parameters gi | True                      | 
+  78 |  */                                      | True                      | 
+  79 | void exec_kernel_doc(char **svec)        | True                      | 
+  80 | {                                        | True                      | 
+  81 |  pid_t pid;                              | True                      | 
+  82 |  int ret;                                | True                      | 
+  83 |  char *real_filename;                    | True                      | 
+  84 |  int rflen;                              | True                      | 
+  85 |                                          | True                      | 
+  86 |  /* Make sure output generated so far ar | True                      | 
+  87 |  fflush(stdout);                         | True                      | 
+  88 |  switch(pid=fork()) {                    | True                      | 
+  89 |   case -1:                               | True                      | 
+  90 |    perror("vfork"+1);                    | True                      | 
+  91 |    exit(1);                              | True                      | 
+  92 |   case  0:                               | True                      | 
+  93 |    rflen  = strlen(getenv("SRCTREE"));   | True                      | 
+  94 |    rflen += strlen(KERNELDOCPATH KERNELD | True                      | 
+  95 |    real_filename = alloca(rflen + 1);    | True                      | 
+  96 |    strcpy(real_filename, getenv("SRCTREE | True                      | 
+  97 |    strcat(real_filename, KERNELDOCPATH K | True                      | 
+  98 |    execvp(real_filename, svec);          | True                      | 
+  99 |    fprintf(stderr, "exec ");             | True                      | 
+ 100 |    perror(real_filename);                | True                      | 
+ 101 |    exit(1);                              | True                      | 
+ 102 |   default:                               | True                      | 
+ 103 |    waitpid(pid, &ret ,0);                | True                      | 
+ 104 |  }                                       | True                      | 
+ 105 |  if (WIFEXITED(ret))                     | True                      | 
+ 106 |   exitstatus |= WEXITSTATUS(ret);        | True                      | 
+ 107 |  else                                    | True                      | 
+ 108 |   exitstatus = 0xff;                     | True                      | 
+ 109 | }                                        | True                      | 
+ 110 |                                          | True                      | 
+ 111 | /* Types used to create list of all expo | True                      | 
+ 112 | struct symbols                           | True                      | 
+ 113 | {                                        | True                      | 
+ 114 |  char *name;                             | True                      | 
+ 115 | };                                       | True                      | 
+ 116 |                                          | True                      | 
+ 117 | struct symfile                           | True                      | 
+ 118 | {                                        | True                      | 
+ 119 |  char *filename;                         | True                      | 
+ 120 |  struct symbols *symbollist;             | True                      | 
+ 121 |  int symbolcnt;                          | True                      | 
+ 122 | };                                       | True                      | 
+ 123 |                                          | True                      | 
+ 124 | struct symfile symfilelist[MAXFILES];    | True                      | 
+ 125 | int symfilecnt = 0;                      | True                      | 
+ 126 |                                          | True                      | 
+ 127 | void add_new_symbol(struct symfile *sym, | True                      | 
+ 128 | {                                        | True                      | 
+ 129 |  sym->symbollist =                       | True                      | 
+ 130 |    realloc(sym->symbollist, (sym->symbol | True                      | 
+ 131 |  sym->symbollist[sym->symbolcnt++].name  | True                      | 
+ 132 | }                                        | True                      | 
+ 133 |                                          | True                      | 
+ 134 | /* Add a filename to the list */         | True                      | 
+ 135 | struct symfile * add_new_file(char * fil | True                      | 
+ 136 | {                                        | True                      | 
+ 137 |  symfilelist[symfilecnt++].filename = st | True                      | 
+ 138 |  return &symfilelist[symfilecnt - 1];    | True                      | 
+ 139 | }                                        | True                      | 
+ 140 | /* Check if file already are present in  | True                      | 
+ 141 | struct symfile * filename_exist(char * f | True                      | 
+ 142 | {                                        | True                      | 
+ 143 |  int i;                                  | True                      | 
+ 144 |  for (i=0; i < symfilecnt; i++)          | True                      | 
+ 145 |   if (strcmp(symfilelist[i].filename, fi | True                      | 
+ 146 |    return &symfilelist[i];               | True                      | 
+ 147 |  return NULL;                            | True                      | 
+ 148 | }                                        | True                      | 
+ 149 |                                          | True                      | 
+ 150 | /*                                       | True                      | 
+ 151 |  * List all files referenced within the  | True                      | 
+ 152 |  * Files are separated by tabs.          | True                      | 
+ 153 |  */                                      | True                      | 
+ 154 | void adddep(char * file)     { printf("\ | True                      | 
+ 155 | void adddep2(char * file, char * line)   | True                      | 
+ 156 | void noaction(char * line)     { line =  | True                      | 
+ 157 | void noaction2(char * file, char * line) | True                      | 
+ 158 |                                          | True                      | 
+ 159 | /* Echo the line without further action  | True                      | 
+ 160 | void printline(char * line)              | True                      | 
+ 161 |                                          | True                      | 
+ 162 | /*                                       | True                      | 
+ 163 |  * Find all symbols exported with EXPORT | True                      | 
+ 164 |  * in filename.                          | True                      | 
+ 165 |  * All symbols located are stored in sym | True                      | 
+ 166 |  */                                      | True                      | 
+ 167 | void find_export_symbols(char * filename | True                      | 
+ 168 | {                                        | True                      | 
+ 169 |  FILE * fp;                              | True                      | 
+ 170 |  struct symfile *sym;                    | True                      | 
+ 171 |  char line[MAXLINESZ];                   | True                      | 
+ 172 |  if (filename_exist(filename) == NULL) { | True                      | 
+ 173 |   int rflen = strlen(getenv("SRCTREE"))  | True                      | 
+ 174 |   char *real_filename = alloca(rflen + 1 | True                      | 
+ 175 |   strcpy(real_filename, getenv("SRCTREE" | True                      | 
+ 176 |   strcat(real_filename, filename);       | True                      | 
+ 177 |   sym = add_new_file(filename);          | True                      | 
+ 178 |   fp = fopen(real_filename, "r");        | True                      | 
+ 179 |   if (fp == NULL)                        | True                      | 
+ 180 |   {                                      | True                      | 
+ 181 |    fprintf(stderr, "docproc: ");         | True                      | 
+ 182 |    perror(real_filename);                | True                      | 
+ 183 |    exit(1);                              | True                      | 
+ 184 |   }                                      | True                      | 
+ 185 |   while (fgets(line, MAXLINESZ, fp)) {   | True                      | 
+ 186 |    unsigned char *p;                     | True                      | 
+ 187 |    unsigned char *e;                     | True                      | 
+ 188 |    if (((p = (unsigned char *)strstr(lin | True                      | 
+ 189 |        ((p = (unsigned char *)strstr(lin | True                      | 
+ 190 |     /* Skip EXPORT_SYMBOL{_GPL} */       | True                      | 
+ 191 |     while (isalnum(*p) || *p == '_')     | True                      | 
+ 192 |      p++;                                | True                      | 
+ 193 |     /* Remove paranteses and additional  | True                      | 
+ 194 |     while (isspace(*p))                  | True                      | 
+ 195 |      p++;                                | True                      | 
+ 196 |     if (*p != '(')                       | True                      | 
+ 197 |      continue; /* Syntax error? */       | True                      | 
+ 198 |     else                                 | True                      | 
+ 199 |      p++;                                | True                      | 
+ 200 |     while (isspace(*p))                  | True                      | 
+ 201 |      p++;                                | True                      | 
+ 202 |     e = p;                               | True                      | 
+ 203 |     while (isalnum(*e) || *e == '_')     | True                      | 
+ 204 |      e++;                                | True                      | 
+ 205 |     *e = '\0';                           | True                      | 
+ 206 |     add_new_symbol(sym, (char*)p);       | True                      | 
+ 207 |    }                                     | True                      | 
+ 208 |   }                                      | True                      | 
+ 209 |   fclose(fp);                            | True                      | 
+ 210 |  }                                       | True                      | 
+ 211 | }                                        | True                      | 
+ 212 |                                          | True                      | 
+ 213 | /*                                       | True                      | 
+ 214 |  * Document all external or internal fun | True                      | 
+ 215 |  * Call kernel-doc with following parame | True                      | 
+ 216 |  * kernel-doc -docbook -nofunction funct | True                      | 
+ 217 |  * function names are obtained from all  | True                      | 
+ 218 |  * by find_export_symbols.               | True                      | 
+ 219 |  * intfunc uses -nofunction              | True                      | 
+ 220 |  * extfunc uses -function                | True                      | 
+ 221 |  */                                      | True                      | 
+ 222 | void docfunctions(char * filename, char  | True                      | 
+ 223 | {                                        | True                      | 
+ 224 |  int i,j;                                | True                      | 
+ 225 |  int symcnt = 0;                         | True                      | 
+ 226 |  int idx = 0;                            | True                      | 
+ 227 |  char **vec;                             | True                      | 
+ 228 |                                          | True                      | 
+ 229 |  for (i=0; i <= symfilecnt; i++)         | True                      | 
+ 230 |   symcnt += symfilelist[i].symbolcnt;    | True                      | 
+ 231 |  vec = malloc((2 + 2 * symcnt + 2) * siz | True                      | 
+ 232 |  if (vec == NULL) {                      | True                      | 
+ 233 |   perror("docproc: ");                   | True                      | 
+ 234 |   exit(1);                               | True                      | 
+ 235 |  }                                       | True                      | 
+ 236 |  vec[idx++] = KERNELDOC;                 | True                      | 
+ 237 |  vec[idx++] = DOCBOOK;                   | True                      | 
+ 238 |  for (i=0; i < symfilecnt; i++) {        | True                      | 
+ 239 |   struct symfile * sym = &symfilelist[i] | True                      | 
+ 240 |   for (j=0; j < sym->symbolcnt; j++) {   | True                      | 
+ 241 |    vec[idx++]     = type;                | True                      | 
+ 242 |    vec[idx++] = sym->symbollist[j].name; | True                      | 
+ 243 |   }                                      | True                      | 
+ 244 |  }                                       | True                      | 
+ 245 |  vec[idx++]     = filename;              | True                      | 
+ 246 |  vec[idx] = NULL;                        | True                      | 
+ 247 |  printf("<!-- %s -->\n", filename);      | True                      | 
+ 248 |  exec_kernel_doc(vec);                   | True                      | 
+ 249 |  fflush(stdout);                         | True                      | 
+ 250 |  free(vec);                              | True                      | 
+ 251 | }                                        | True                      | 
+ 252 | void intfunc(char * filename) { docfunct | True                      | 
+ 253 | void extfunc(char * filename) { docfunct | True                      | 
+ 254 |                                          | True                      | 
+ 255 | /*                                       | True                      | 
+ 256 |  * Document specific function(s) in a fi | True                      | 
+ 257 |  * Call kernel-doc with the following pa | True                      | 
+ 258 |  * kernel-doc -docbook -function functio | True                      | 
+ 259 |  */                                      | True                      | 
+ 260 | void singfunc(char * filename, char * li | True                      | 
+ 261 | {                                        | True                      | 
+ 262 |  char *vec[200]; /* Enough for specific  | True                      | 
+ 263 |  int i, idx = 0;                         | True                      | 
+ 264 |  int startofsym = 1;                     | True                      | 
+ 265 |  vec[idx++] = KERNELDOC;                 | True                      | 
+ 266 |  vec[idx++] = DOCBOOK;                   | True                      | 
+ 267 |                                          | True                      | 
+ 268 |  /* Split line up in individual paramete | True                      | 
+ 269 |  for (i=0; line[i]; i++) {               | True                      | 
+ 270 |   if (isspace((unsigned char) line[i]))  | True                      | 
+ 271 |    line[i] = '\0';                       | True                      | 
+ 272 |    startofsym = 1;                       | True                      | 
+ 273 |    continue;                             | True                      | 
+ 274 |   }                                      | True                      | 
+ 275 |   if (startofsym) {                      | True                      | 
+ 276 |    startofsym = 0;                       | True                      | 
+ 277 |    vec[idx++] = FUNCTION;                | True                      | 
+ 278 |    vec[idx++] = &line[i];                | True                      | 
+ 279 |   }                                      | True                      | 
+ 280 |  }                                       | True                      | 
+ 281 |  vec[idx++] = filename;                  | True                      | 
+ 282 |  vec[idx] = NULL;                        | True                      | 
+ 283 |  exec_kernel_doc(vec);                   | True                      | 
+ 284 | }                                        | True                      | 
+ 285 |                                          | True                      | 
+ 286 | /*                                       | True                      | 
+ 287 |  * Parse file, calling action specific f | True                      | 
+ 288 |  * 1) Lines containing !E                | True                      | 
+ 289 |  * 2) Lines containing !I                | True                      | 
+ 290 |  * 3) Lines containing !D                | True                      | 
+ 291 |  * 4) Lines containing !F                | True                      | 
+ 292 |  * 5) Default lines - lines not matching | True                      | 
+ 293 |  */                                      | True                      | 
+ 294 | void parse_file(FILE *infile)            | True                      | 
+ 295 | {                                        | True                      | 
+ 296 |  char line[MAXLINESZ];                   | True                      | 
+ 297 |  unsigned char * s;                      | True                      | 
+ 298 |  while (fgets(line, MAXLINESZ, infile))  | True                      | 
+ 299 |   if (line[0] == '!') {                  | True                      | 
+ 300 |    s = (unsigned char *)line + 2;        | True                      | 
+ 301 |    switch (line[1]) {                    | True                      | 
+ 302 |     case 'E':                            | True                      | 
+ 303 |      while (*s && !isspace(*s)) s++;     | True                      | 
+ 304 |      *s = '\0';                          | True                      | 
+ 305 |      externalfunctions(line+2);          | True                      | 
+ 306 |      break;                              | True                      | 
+ 307 |     case 'I':                            | True                      | 
+ 308 |      while (*s && !isspace(*s)) s++;     | True                      | 
+ 309 |      *s = '\0';                          | True                      | 
+ 310 |      internalfunctions(line+2);          | True                      | 
+ 311 |      break;                              | True                      | 
+ 312 |     case 'D':                            | True                      | 
+ 313 |      while (*s && !isspace(*s)) s++;     | True                      | 
+ 314 |      *s = '\0';                          | True                      | 
+ 315 |      symbolsonly(line+2);                | True                      | 
+ 316 |      break;                              | True                      | 
+ 317 |     case 'F':                            | True                      | 
+ 318 |      /* filename */                      | True                      | 
+ 319 |      while (*s && !isspace(*s)) s++;     | True                      | 
+ 320 |      *s++ = '\0';                        | True                      | 
+ 321 |      /* function names */                | True                      | 
+ 322 |      while (isspace(*s))                 | True                      | 
+ 323 |       s++;                               | True                      | 
+ 324 |      singlefunctions(line +2, (char*)s); | True                      | 
+ 325 |      break;                              | True                      | 
+ 326 |     default:                             | True                      | 
+ 327 |      defaultline(line);                  | True                      | 
+ 328 |    }                                     | True                      | 
+ 329 |   }                                      | True                      | 
+ 330 |   else {                                 | True                      | 
+ 331 |    defaultline(line);                    | True                      | 
+ 332 |   }                                      | True                      | 
+ 333 |  }                                       | True                      | 
+ 334 |  fflush(stdout);                         | True                      | 
+ 335 | }                                        | True                      | 
+ 336 |                                          | True                      | 
+ 337 |                                          | True                      | 
+ 338 | int main(int argc, char **argv)          | True                      | 
+ 339 | {                                        | True                      | 
+ 340 |  FILE * infile;                          | True                      | 
+ 341 |  if (argc != 3) {                        | True                      | 
+ 342 |   usage();                               | True                      | 
+ 343 |   exit(1);                               | True                      | 
+ 344 |  }                                       | True                      | 
+ 345 |  /* Open file, exit on error */          | True                      | 
+ 346 |  infile = fopen(argv[2], "r");           | True                      | 
+ 347 |  if (infile == NULL) {                   | True                      | 
+ 348 |   fprintf(stderr, "docproc: ");          | True                      | 
+ 349 |   perror(argv[2]);                       | True                      | 
+ 350 |   exit(2);                               | True                      | 
+ 351 |  }                                       | True                      | 
+ 352 |                                          | True                      | 
+ 353 |  if (strcmp("doc", argv[1]) == 0)        | True                      | 
+ 354 |  {                                       | True                      | 
+ 355 |   /* Need to do this in two passes.      | True                      | 
+ 356 |    * First pass is used to collect all s | True                      | 
+ 357 |    * in the various files.               | True                      | 
+ 358 |    * Second pass generate the documentat | True                      | 
+ 359 |    * This is required because function a | True                      | 
+ 360 |    * and exported in different files :-( | True                      | 
+ 361 |    */                                    | True                      | 
+ 362 |   /* Collect symbols */                  | True                      | 
+ 363 |   defaultline       = noaction;          | True                      | 
+ 364 |   internalfunctions = find_export_symbol | True                      | 
+ 365 |   externalfunctions = find_export_symbol | True                      | 
+ 366 |   symbolsonly       = find_export_symbol | True                      | 
+ 367 |   singlefunctions   = noaction2;         | True                      | 
+ 368 |   parse_file(infile);                    | True                      | 
+ 369 |                                          | True                      | 
+ 370 |   /* Rewind to start from beginning of f | True                      | 
+ 371 |   fseek(infile, 0, SEEK_SET);            | True                      | 
+ 372 |   defaultline       = printline;         | True                      | 
+ 373 |   internalfunctions = intfunc;           | True                      | 
+ 374 |   externalfunctions = extfunc;           | True                      | 
+ 375 |   symbolsonly       = printline;         | True                      | 
+ 376 |   singlefunctions   = singfunc;          | True                      | 
+ 377 |                                          | True                      | 
+ 378 |   parse_file(infile);                    | True                      | 
+ 379 |  }                                       | True                      | 
+ 380 |  else if (strcmp("depend", argv[1]) == 0 | True                      | 
+ 381 |  {                                       | True                      | 
+ 382 |   /* Create first part of dependency cha | True                      | 
+ 383 |    * file.tmpl */                        | True                      | 
+ 384 |   printf("%s\t", argv[2]);               | True                      | 
+ 385 |   defaultline       = noaction;          | True                      | 
+ 386 |   internalfunctions = adddep;            | True                      | 
+ 387 |   externalfunctions = adddep;            | True                      | 
+ 388 |   symbolsonly       = adddep;            | True                      | 
+ 389 |   singlefunctions   = adddep2;           | True                      | 
+ 390 |   parse_file(infile);                    | True                      | 
+ 391 |   printf("\n");                          | True                      | 
+ 392 |  }                                       | True                      | 
+ 393 |  else                                    | True                      | 
+ 394 |  {                                       | True                      | 
+ 395 |   fprintf(stderr, "Unknown option: %s\n" | True                      | 
+ 396 |   exit(1);                               | True                      | 
+ 397 |  }                                       | True                      | 
+ 398 |  fclose(infile);                         | True                      | 
+ 399 |  fflush(stdout);                         | True                      | 
+ 400 |  return exitstatus;                      | True                      | 
+ 401 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +21MB, 315ms              | 

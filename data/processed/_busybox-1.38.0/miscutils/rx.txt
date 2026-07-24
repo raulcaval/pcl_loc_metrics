@@ -1,0 +1,287 @@
+FILE: data/raw/busybox-1.38.0/miscutils/rx.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Copyright:     Copyright (C) 2001, He | True                      | 
+   4 |  * Author:        Christopher Hoover <ch | True                      | 
+   5 |  * Description:   xmodem functionality f | True                      | 
+   6 |  *                and the like           | True                      | 
+   7 |  * Created at:    Thu Dec 20 01:58:08 PS | True                      | 
+   8 |  *                                       | True                      | 
+   9 |  * xmodem functionality for uploading of | True                      | 
+  10 |  *                                       | True                      | 
+  11 |  * Copyright (C) 2001 Hewlett-Packard La | True                      | 
+  12 |  *                                       | True                      | 
+  13 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  14 |  *                                       | True                      | 
+  15 |  * This was originally written for blob  | True                      | 
+  16 |  */                                      | True                      | 
+  17 | //config:config RX                       | True                      | 
+  18 | //config: bool "rx (3.2 kb)"             | True                      | 
+  19 | //config: default y                      | True                      | 
+  20 | //config: help                           | True                      | 
+  21 | //config: Receive files using the Xmodem | True                      | 
+  22 |                                          | True                      | 
+  23 | //applet:IF_RX(APPLET(rx, BB_DIR_USR_BIN | True                      | 
+  24 |                                          | True                      | 
+  25 | //kbuild:lib-$(CONFIG_RX) += rx.o        | True                      | 
+  26 |                                          | True                      | 
+  27 | //usage:#define rx_trivial_usage         | True                      | 
+  28 | //usage:       "FILE"                    | True                      | 
+  29 | //usage:#define rx_full_usage "\n\n"     | True                      | 
+  30 | //usage:       "Receive a file using the | True                      | 
+  31 | //usage:                                 | True                      | 
+  32 | //usage:#define rx_example_usage         | True                      | 
+  33 | //usage:       "$ rx /tmp/foo\n"         | True                      | 
+  34 |                                          | True                      | 
+  35 | #include "libbb.h"                       | True                      | 
+  36 |                                          | True                      | 
+  37 | #define SOH 0x01                         | True                      | 
+  38 | #define STX 0x02                         | True                      | 
+  39 | #define EOT 0x04                         | True                      | 
+  40 | #define ACK 0x06                         | True                      | 
+  41 | #define NAK 0x15                         | True                      | 
+  42 | #define BS  0x08                         | True                      | 
+  43 | #define PAD 0x1A                         | True                      | 
+  44 |                                          | True                      | 
+  45 | /*                                       | True                      | 
+  46 | Cf:                                      | True                      | 
+  47 |   http://www.textfiles.com/apple/xmodem  | True                      | 
+  48 |   http://www.phys.washington.edu/~beloni | True                      | 
+  49 |   http://www.phys.washington.edu/~beloni | True                      | 
+  50 |   http://www.phys.washington.edu/~beloni | True                      | 
+  51 | */                                       | True                      | 
+  52 |                                          | True                      | 
+  53 | #define TIMEOUT 1                        | True                      | 
+  54 | #define TIMEOUT_LONG 10                  | True                      | 
+  55 | #define MAXERRORS 10                     | True                      | 
+  56 |                                          | True                      | 
+  57 | #define read_fd  STDIN_FILENO            | True                      | 
+  58 | #define write_fd STDOUT_FILENO           | True                      | 
+  59 |                                          | True                      | 
+  60 | static int read_byte(unsigned timeout)   | True                      | 
+  61 | {                                        | True                      | 
+  62 |  unsigned char buf;                      | True                      | 
+  63 |  int n;                                  | True                      | 
+  64 |                                          | True                      | 
+  65 |  alarm(timeout);                         | True                      | 
+  66 |  /* NOT safe_read! We want ALRM to inter | True                      | 
+  67 |  n = read(read_fd, &buf, 1);             | True                      | 
+  68 |  alarm(0);                               | True                      | 
+  69 |  if (n == 1)                             | True                      | 
+  70 |   return buf;                            | True                      | 
+  71 |  return -1;                              | True                      | 
+  72 | }                                        | True                      | 
+  73 |                                          | True                      | 
+  74 | static int receive(/*int read_fd, */int  | True                      | 
+  75 | {                                        | True                      | 
+  76 |  unsigned char blockBuf[1024];           | True                      | 
+  77 |  unsigned blockLength = 0;               | True                      | 
+  78 |  unsigned errors = 0;                    | True                      | 
+  79 |  unsigned wantBlockNo = 1;               | True                      | 
+  80 |  unsigned length = 0;                    | True                      | 
+  81 |  int do_crc = 1;                         | True                      | 
+  82 |  char reply_char;                        | True                      | 
+  83 |  unsigned timeout = TIMEOUT_LONG;        | True                      | 
+  84 |                                          | True                      | 
+  85 |  /* Flush pending input */               | True                      | 
+  86 |  tcflush(read_fd, TCIFLUSH);             | True                      | 
+  87 |                                          | True                      | 
+  88 |  /* Ask for CRC; if we get errors, we wi | True                      | 
+  89 |  reply_char = 'C';                       | True                      | 
+  90 |  full_write(write_fd, &reply_char, 1);   | True                      | 
+  91 |                                          | True                      | 
+  92 |  for (;;) {                              | True                      | 
+  93 |   int blockBegin;                        | True                      | 
+  94 |   int blockNo, blockNoOnesCompl;         | True                      | 
+  95 |   int cksum_or_crc;                      | True                      | 
+  96 |   unsigned expected;                     | True                      | 
+  97 |   int i, j;                              | True                      | 
+  98 |                                          | True                      | 
+  99 |   blockBegin = read_byte(timeout);       | True                      | 
+ 100 |   if (blockBegin < 0)                    | True                      | 
+ 101 |    goto timeout;                         | True                      | 
+ 102 |                                          | True                      | 
+ 103 |   /* If last block, remove padding */    | True                      | 
+ 104 |   if (blockBegin == EOT) {               | True                      | 
+ 105 |    /* Data blocks can be padded with ^Z  | True                      | 
+ 106 |    /* This code tries to detect and remo | True                      | 
+ 107 |    if (blockLength >= 3                  | True                      | 
+ 108 |     && blockBuf[blockLength - 1] == PAD  | True                      | 
+ 109 |     && blockBuf[blockLength - 2] == PAD  | True                      | 
+ 110 |     && blockBuf[blockLength - 3] == PAD  | True                      | 
+ 111 |    ) {                                   | True                      | 
+ 112 |     while (blockLength                   | True                      | 
+ 113 |         && blockBuf[blockLength - 1] ==  | True                      | 
+ 114 |     ) {                                  | True                      | 
+ 115 |      blockLength--;                      | True                      | 
+ 116 |     }                                    | True                      | 
+ 117 |    }                                     | True                      | 
+ 118 |   }                                      | True                      | 
+ 119 |   /* Write previously received block */  | True                      | 
+ 120 |   errno = 0;                             | True                      | 
+ 121 |   if (full_write(file_fd, blockBuf, bloc | True                      | 
+ 122 |    bb_simple_perror_msg(bb_msg_write_err | True                      | 
+ 123 |    goto fatal;                           | True                      | 
+ 124 |   }                                      | True                      | 
+ 125 |                                          | True                      | 
+ 126 |   timeout = TIMEOUT;                     | True                      | 
+ 127 |   reply_char = NAK;                      | True                      | 
+ 128 |                                          | True                      | 
+ 129 |   switch (blockBegin) {                  | True                      | 
+ 130 |   case SOH:                              | True                      | 
+ 131 |   case STX:                              | True                      | 
+ 132 |    break;                                | True                      | 
+ 133 |   case EOT:                              | True                      | 
+ 134 |    reply_char = ACK;                     | True                      | 
+ 135 |    full_write(write_fd, &reply_char, 1); | True                      | 
+ 136 |    return length;                        | True                      | 
+ 137 |   default:                               | True                      | 
+ 138 |    goto error;                           | True                      | 
+ 139 |   }                                      | True                      | 
+ 140 |                                          | True                      | 
+ 141 |   /* Block no */                         | True                      | 
+ 142 |   blockNo = read_byte(TIMEOUT);          | True                      | 
+ 143 |   if (blockNo < 0)                       | True                      | 
+ 144 |    goto timeout;                         | True                      | 
+ 145 |                                          | True                      | 
+ 146 |   /* Block no, in one's complement form  | True                      | 
+ 147 |   blockNoOnesCompl = read_byte(TIMEOUT); | True                      | 
+ 148 |   if (blockNoOnesCompl < 0)              | True                      | 
+ 149 |    goto timeout;                         | True                      | 
+ 150 |                                          | True                      | 
+ 151 |   if (blockNo != (255 - blockNoOnesCompl | True                      | 
+ 152 |    bb_simple_error_msg("bad block ones c | True                      | 
+ 153 |    goto error;                           | True                      | 
+ 154 |   }                                      | True                      | 
+ 155 |                                          | True                      | 
+ 156 |   blockLength = (blockBegin == SOH) ? 12 | True                      | 
+ 157 |                                          | True                      | 
+ 158 |   for (i = 0; i < blockLength; i++) {    | True                      | 
+ 159 |    int cc = read_byte(TIMEOUT);          | True                      | 
+ 160 |    if (cc < 0)                           | True                      | 
+ 161 |     goto timeout;                        | True                      | 
+ 162 |    blockBuf[i] = cc;                     | True                      | 
+ 163 |   }                                      | True                      | 
+ 164 |                                          | True                      | 
+ 165 |   cksum_or_crc = read_byte(TIMEOUT);     | True                      | 
+ 166 |   if (cksum_or_crc < 0)                  | True                      | 
+ 167 |    goto timeout;                         | True                      | 
+ 168 |   if (do_crc) {                          | True                      | 
+ 169 |    cksum_or_crc = (cksum_or_crc << 8) |  | True                      | 
+ 170 |    if (cksum_or_crc < 0)                 | True                      | 
+ 171 |     goto timeout;                        | True                      | 
+ 172 |   }                                      | True                      | 
+ 173 |                                          | True                      | 
+ 174 |   if (blockNo == ((wantBlockNo - 1) & 0x | True                      | 
+ 175 |    /* a repeat of the last block is ok,  | True                      | 
+ 176 |    /* this also ignores the initial bloc | True                      | 
+ 177 |    /* meta data. */                      | True                      | 
+ 178 |    blockLength = 0;                      | True                      | 
+ 179 |    goto next;                            | True                      | 
+ 180 |   }                                      | True                      | 
+ 181 |   if (blockNo != (wantBlockNo & 0xff)) { | True                      | 
+ 182 |    bb_error_msg("unexpected block no, 0x | True                      | 
+ 183 |    goto error;                           | True                      | 
+ 184 |   }                                      | True                      | 
+ 185 |                                          | True                      | 
+ 186 |   expected = 0;                          | True                      | 
+ 187 |   if (do_crc) {                          | True                      | 
+ 188 |    for (i = 0; i < blockLength; i++) {   | True                      | 
+ 189 |     expected = expected ^ blockBuf[i] << | True                      | 
+ 190 |     for (j = 0; j < 8; j++) {            | True                      | 
+ 191 |      if (expected & 0x8000)              | True                      | 
+ 192 |       expected = (expected << 1) ^ 0x102 | True                      | 
+ 193 |      else                                | True                      | 
+ 194 |       expected = (expected << 1);        | True                      | 
+ 195 |     }                                    | True                      | 
+ 196 |    }                                     | True                      | 
+ 197 |    expected &= 0xffff;                   | True                      | 
+ 198 |   } else {                               | True                      | 
+ 199 |    for (i = 0; i < blockLength; i++)     | True                      | 
+ 200 |     expected += blockBuf[i];             | True                      | 
+ 201 |    expected &= 0xff;                     | True                      | 
+ 202 |   }                                      | True                      | 
+ 203 |   if (cksum_or_crc != expected) {        | True                      | 
+ 204 |    bb_error_msg(do_crc ? "crc error, exp | True                      | 
+ 205 |      : "checksum error, expected 0x%02x, | True                      | 
+ 206 |     expected, cksum_or_crc);             | True                      | 
+ 207 |    goto error;                           | True                      | 
+ 208 |   }                                      | True                      | 
+ 209 |                                          | True                      | 
+ 210 |   wantBlockNo++;                         | True                      | 
+ 211 |   length += blockLength;                 | True                      | 
+ 212 |  next:                                   | True                      | 
+ 213 |   errors = 0;                            | True                      | 
+ 214 |   reply_char = ACK;                      | True                      | 
+ 215 |   full_write(write_fd, &reply_char, 1);  | True                      | 
+ 216 |   continue;                              | True                      | 
+ 217 |  error:                                  | True                      | 
+ 218 |  timeout:                                | True                      | 
+ 219 |   blockLength = 0;                       | True                      | 
+ 220 |   errors++;                              | True                      | 
+ 221 |   if (errors == MAXERRORS) {             | True                      | 
+ 222 |    /* Abort */                           | True                      | 
+ 223 |                                          | True                      | 
+ 224 |    /* If were asking for crc, try again  | True                      | 
+ 225 |    if (reply_char == 'C') {              | True                      | 
+ 226 |     reply_char = NAK;                    | True                      | 
+ 227 |     errors = 0;                          | True                      | 
+ 228 |     do_crc = 0;                          | True                      | 
+ 229 |     goto timeout;                        | True                      | 
+ 230 |    }                                     | True                      | 
+ 231 |    bb_simple_error_msg("too many errors; | True                      | 
+ 232 |  fatal:                                  | True                      | 
+ 233 |    /* 5 CAN followed by 5 BS. Don't try  | True                      | 
+ 234 |    safe_write(write_fd, "\030\030\030\03 | True                      | 
+ 235 |    return -1;                            | True                      | 
+ 236 |   }                                      | True                      | 
+ 237 |                                          | True                      | 
+ 238 |   /* Flush pending input */              | True                      | 
+ 239 |   tcflush(read_fd, TCIFLUSH);            | True                      | 
+ 240 |                                          | True                      | 
+ 241 |   full_write(write_fd, &reply_char, 1);  | True                      | 
+ 242 |  } /* for (;;) */                        | True                      | 
+ 243 | }                                        | True                      | 
+ 244 |                                          | True                      | 
+ 245 | static void sigalrm_handler(int UNUSED_P | True                      | 
+ 246 | {                                        | True                      | 
+ 247 | }                                        | True                      | 
+ 248 |                                          | True                      | 
+ 249 | int rx_main(int argc, char **argv) MAIN_ | True                      | 
+ 250 | int rx_main(int argc UNUSED_PARAM, char  | True                      | 
+ 251 | {                                        | True                      | 
+ 252 |  struct termios tty, orig_tty;           | True                      | 
+ 253 |  int termios_err;                        | True                      | 
+ 254 |  int file_fd;                            | True                      | 
+ 255 |  int n;                                  | True                      | 
+ 256 |                                          | True                      | 
+ 257 |  /* Disabled by vda:                     | True                      | 
+ 258 |   * why we can't receive from stdin? Why | True                      | 
+ 259 |   * controlling tty?? */                 | True                      | 
+ 260 |  /*read_fd = xopen(CURRENT_TTY, O_RDWR); | True                      | 
+ 261 |  file_fd = xopen(single_argv(argv), O_RD | True                      | 
+ 262 |                                          | True                      | 
+ 263 |  termios_err = tcgetattr(read_fd, &tty); | True                      | 
+ 264 |  if (termios_err == 0) {                 | True                      | 
+ 265 | //TODO: use set_termios_to_raw()         | True                      | 
+ 266 |   orig_tty = tty;                        | True                      | 
+ 267 |   cfmakeraw(&tty);                       | True                      | 
+ 268 |   tcsetattr(read_fd, TCSAFLUSH, &tty);   | True                      | 
+ 269 |  }                                       | True                      | 
+ 270 |                                          | True                      | 
+ 271 |  /* No SA_RESTART: we want ALRM to inter | True                      | 
+ 272 |  signal_no_SA_RESTART_empty_mask(SIGALRM | True                      | 
+ 273 |                                          | True                      | 
+ 274 |  n = receive(file_fd);                   | True                      | 
+ 275 |                                          | True                      | 
+ 276 |  if (termios_err == 0)                   | True                      | 
+ 277 |   tcsetattr(read_fd, TCSAFLUSH, &orig_tt | True                      | 
+ 278 |  if (ENABLE_FEATURE_CLEAN_UP)            | True                      | 
+ 279 |   close(file_fd);                        | True                      | 
+ 280 |  fflush_stdout_and_exit(n >= 0);         | True                      | 
+ 281 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +110MB, 237ms             | 

@@ -1,0 +1,554 @@
+FILE: data/raw/busybox-1.38.0/networking/zcip.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * RFC3927 ZeroConf IPv4 Link-Local addr | True                      | 
+   4 |  * (see <http://www.zeroconf.org/>)      | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Copyright (C) 2003 by Arthur van Hoff | True                      | 
+   7 |  * Copyright (C) 2004 by David Brownell  | True                      | 
+   8 |  *                                       | True                      | 
+   9 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  10 |  */                                      | True                      | 
+  11 | /*                                       | True                      | 
+  12 |  * ZCIP just manages the 169.254.*.* add | True                      | 
+  13 |  * routed at the IP level, though variou | True                      | 
+  14 |  * certainly be used.  Its naming is bui | True                      | 
+  15 |  */                                      | True                      | 
+  16 | //config:config ZCIP                     | True                      | 
+  17 | //config: bool "zcip (8.7 kb)"           | True                      | 
+  18 | //config: default y                      | True                      | 
+  19 | //config: select FEATURE_SYSLOG          | True                      | 
+  20 | //config: help                           | True                      | 
+  21 | //config: ZCIP provides ZeroConf IPv4 ad | True                      | 
+  22 | //config: It's a daemon that allocates a | True                      | 
+  23 | //config: address on the 169.254/16 netw | True                      | 
+  24 | //config:                                | True                      | 
+  25 | //config: See http://www.zeroconf.org fo | True                      | 
+  26 | //config: in the busybox examples.       | True                      | 
+  27 |                                          | True                      | 
+  28 | //applet:IF_ZCIP(APPLET(zcip, BB_DIR_SBI | True                      | 
+  29 |                                          | True                      | 
+  30 | //kbuild:lib-$(CONFIG_ZCIP) += zcip.o    | True                      | 
+  31 |                                          | True                      | 
+  32 | //#define DEBUG                          | True                      | 
+  33 |                                          | True                      | 
+  34 | // TODO:                                 | True                      | 
+  35 | // - more real-world usage/testing, espe | True                      | 
+  36 | // - kernel packet filters to reduce sch | True                      | 
+  37 | // - avoid silent script failures, espec | True                      | 
+  38 | // - link status monitoring (restart on  | True                      | 
+  39 |                                          | True                      | 
+  40 | //usage:#define zcip_trivial_usage       | True                      | 
+  41 | //usage:       "[OPTIONS] IFACE SCRIPT"  | True                      | 
+  42 | //usage:#define zcip_full_usage "\n\n"   | True                      | 
+  43 | //usage:       "Manage a ZeroConf IPv4 l | True                      | 
+  44 | //usage:     "\n -f  Run in foreground"  | True                      | 
+  45 | //usage:     "\n -q  Quit after obtainin | True                      | 
+  46 | //usage:     "\n -r 169.254.x.x Request  | True                      | 
+  47 | //usage:     "\n -l x.x.0.0 Use this ran | True                      | 
+  48 | //usage:     "\n -v  Verbose"            | True                      | 
+  49 | //usage:     "\n"                        | True                      | 
+  50 | //usage:     "\n$LOGGING=none  Suppress  | True                      | 
+  51 | //usage:     "\n$LOGGING=syslog  Log to  | True                      | 
+  52 | //usage:     "\n"                        | True                      | 
+  53 | //usage:     "\nWith no -q, runs continu | True                      | 
+  54 | //usage:     "\nexits only on I/O errors | True                      | 
+  55 |                                          | True                      | 
+  56 | #include "libbb.h"                       | True                      | 
+  57 | #include "common_bufsiz.h"               | True                      | 
+  58 | #include <netinet/ether.h>               | True                      | 
+  59 | #include <net/if.h>                      | True                      | 
+  60 | #include <net/if_arp.h>                  | True                      | 
+  61 | #include <linux/sockios.h>               | True                      | 
+  62 |                                          | True                      | 
+  63 | #include <syslog.h>                      | True                      | 
+  64 |                                          | True                      | 
+  65 | /* We don't need more than 32 bits of th | True                      | 
+  66 | #define MONOTONIC_US() ((unsigned)monoto | True                      | 
+  67 |                                          | True                      | 
+  68 | struct arp_packet {                      | True                      | 
+  69 |  struct ether_header eth;                | True                      | 
+  70 |  struct ether_arp arp;                   | True                      | 
+  71 | } PACKED;                                | True                      | 
+  72 |                                          | True                      | 
+  73 | enum {                                   | True                      | 
+  74 |  /* 0-1 seconds before sending 1st probe | True                      | 
+  75 |  PROBE_WAIT = 1,                         | True                      | 
+  76 |  /* 1-2 seconds between probes */        | True                      | 
+  77 |  PROBE_MIN = 1,                          | True                      | 
+  78 |  PROBE_MAX = 2,                          | True                      | 
+  79 |  PROBE_NUM = 3,  /* total probes to send | True                      | 
+  80 |  ANNOUNCE_INTERVAL = 2,  /* 2 seconds be | True                      | 
+  81 |  ANNOUNCE_NUM = 3, /* announces to send  | True                      | 
+  82 |  /* if probe/announce sees a conflict, m | True                      | 
+  83 |  CONFLICT_MULTIPLIER = 2,                | True                      | 
+  84 |  /* if we monitor and see a conflict, ho | True                      | 
+  85 |  DEFEND_INTERVAL = 10,                   | True                      | 
+  86 | };                                       | True                      | 
+  87 |                                          | True                      | 
+  88 | /* States during the configuration proce | True                      | 
+  89 | enum {                                   | True                      | 
+  90 |  PROBE = 0,                              | True                      | 
+  91 |  ANNOUNCE,                               | True                      | 
+  92 |  MONITOR,                                | True                      | 
+  93 |  DEFEND                                  | True                      | 
+  94 | };                                       | True                      | 
+  95 |                                          | True                      | 
+  96 | #define VDBG(...) do { } while (0)       | True                      | 
+  97 |                                          | True                      | 
+  98 |                                          | True                      | 
+  99 | enum {                                   | True                      | 
+ 100 |  sock_fd = 3                             | True                      | 
+ 101 | };                                       | True                      | 
+ 102 |                                          | True                      | 
+ 103 | struct globals {                         | True                      | 
+ 104 |  struct sockaddr iface_sockaddr;         | True                      | 
+ 105 |  struct ether_addr our_ethaddr;          | True                      | 
+ 106 |  uint32_t localnet_ip;                   | True                      | 
+ 107 | } FIX_ALIASING;                          | True                      | 
+ 108 | #define G (*(struct globals*)bb_common_b | True                      | 
+ 109 | #define INIT_G() do { setup_common_bufsi | True                      | 
+ 110 |                                          | True                      | 
+ 111 |                                          | True                      | 
+ 112 | /**                                      | True                      | 
+ 113 |  * Pick a random link local IP address o | True                      | 
+ 114 |  * the first and last 256 addresses are  | True                      | 
+ 115 |  */                                      | True                      | 
+ 116 | static uint32_t pick_nip(void)           | True                      | 
+ 117 | {                                        | True                      | 
+ 118 |  unsigned tmp;                           | True                      | 
+ 119 |                                          | True                      | 
+ 120 |  do {                                    | True                      | 
+ 121 |   tmp = rand() & IN_CLASSB_HOST;         | True                      | 
+ 122 |  } while (tmp > (IN_CLASSB_HOST - 0x0200 | True                      | 
+ 123 |  return htonl((G.localnet_ip + 0x0100) + | True                      | 
+ 124 | }                                        | True                      | 
+ 125 |                                          | True                      | 
+ 126 | static const char *nip_to_a(uint32_t nip | True                      | 
+ 127 | {                                        | True                      | 
+ 128 |  struct in_addr in;                      | True                      | 
+ 129 |  in.s_addr = nip;                        | True                      | 
+ 130 |  return inet_ntoa(in);                   | True                      | 
+ 131 | }                                        | True                      | 
+ 132 |                                          | True                      | 
+ 133 | /**                                      | True                      | 
+ 134 |  * Broadcast an ARP packet.              | True                      | 
+ 135 |  */                                      | True                      | 
+ 136 | static void send_arp_request(            | True                      | 
+ 137 |  /* int op, - always ARPOP_REQUEST */    | True                      | 
+ 138 |  /* const struct ether_addr *source_eth, | True                      | 
+ 139 |      uint32_t source_nip,                | True                      | 
+ 140 |  const struct ether_addr *target_eth, ui | True                      | 
+ 141 | {                                        | True                      | 
+ 142 |  enum { op = ARPOP_REQUEST };            | True                      | 
+ 143 | #define source_eth (&G.our_ethaddr)      | True                      | 
+ 144 |                                          | True                      | 
+ 145 |  struct arp_packet p;                    | True                      | 
+ 146 |  memset(&p, 0, sizeof(p));               | True                      | 
+ 147 |                                          | True                      | 
+ 148 |  // ether header                         | True                      | 
+ 149 |  p.eth.ether_type = htons(ETHERTYPE_ARP) | True                      | 
+ 150 |  memcpy(p.eth.ether_shost, source_eth, E | True                      | 
+ 151 |  memset(p.eth.ether_dhost, 0xff, ETH_ALE | True                      | 
+ 152 |                                          | True                      | 
+ 153 |  // arp request                          | True                      | 
+ 154 |  p.arp.arp_hrd = htons(ARPHRD_ETHER);    | True                      | 
+ 155 |  p.arp.arp_pro = htons(ETHERTYPE_IP);    | True                      | 
+ 156 |  p.arp.arp_hln = ETH_ALEN;               | True                      | 
+ 157 |  p.arp.arp_pln = 4;                      | True                      | 
+ 158 |  p.arp.arp_op = htons(op);               | True                      | 
+ 159 |  memcpy(&p.arp.arp_sha, source_eth, ETH_ | True                      | 
+ 160 |  memcpy(&p.arp.arp_spa, &source_nip, 4); | True                      | 
+ 161 |  memcpy(&p.arp.arp_tha, target_eth, ETH_ | True                      | 
+ 162 |  memcpy(&p.arp.arp_tpa, &target_nip, 4); | True                      | 
+ 163 |                                          | True                      | 
+ 164 |  // send it                              | True                      | 
+ 165 |  // Even though sock_fd is already bound | True                      | 
+ 166 |  // won't work, because "socket is not c | True                      | 
+ 167 |  // (and connect() won't fix that, "oper | True                      | 
+ 168 |  // Thus we sendto() to G.iface_sockaddr | True                      | 
+ 169 |  // (from bind() or from sendto()?) kern | True                      | 
+ 170 |  // to determine iface to emit the packe | True                      | 
+ 171 |  xsendto(sock_fd, &p, sizeof(p), &G.ifac | True                      | 
+ 172 | #undef source_eth                        | True                      | 
+ 173 | }                                        | True                      | 
+ 174 |                                          | True                      | 
+ 175 | /**                                      | True                      | 
+ 176 |  * Run a script.                         | True                      | 
+ 177 |  * argv[0]:intf argv[1]:script_name argv | True                      | 
+ 178 |  */                                      | True                      | 
+ 179 | static int run(char *argv[3], const char | True                      | 
+ 180 | {                                        | True                      | 
+ 181 |  int status;                             | True                      | 
+ 182 |  const char *addr = addr; /* for gcc */  | True                      | 
+ 183 |  const char *fmt = "%s %s %s" + 3;       | True                      | 
+ 184 |  char *env_ip = env_ip;                  | True                      | 
+ 185 |                                          | True                      | 
+ 186 |  argv[2] = (char*)param;                 | True                      | 
+ 187 |                                          | True                      | 
+ 188 |  VDBG("%s run %s %s\n", argv[0], argv[1] | True                      | 
+ 189 |                                          | True                      | 
+ 190 |  if (nip != 0) {                         | True                      | 
+ 191 |   addr = nip_to_a(nip);                  | True                      | 
+ 192 |   /* Must not use setenv() repeatedly, i | True                      | 
+ 193 |   env_ip = xasprintf("ip=%s", addr);     | True                      | 
+ 194 |   putenv(env_ip);                        | True                      | 
+ 195 |   fmt -= 3;                              | True                      | 
+ 196 |  }                                       | True                      | 
+ 197 |  bb_info_msg(fmt, argv[2], argv[0], addr | True                      | 
+ 198 |  status = spawn_and_wait(argv + 1);      | True                      | 
+ 199 |  if (nip != 0)                           | True                      | 
+ 200 |   bb_unsetenv_and_free(env_ip);          | True                      | 
+ 201 |                                          | True                      | 
+ 202 |  if (status < 0) {                       | True                      | 
+ 203 |   bb_perror_msg("%s %s %s" + 3, argv[2], | True                      | 
+ 204 |   return -errno;                         | True                      | 
+ 205 |  }                                       | True                      | 
+ 206 |  if (status != 0)                        | True                      | 
+ 207 |   bb_error_msg("script %s %s failed, exi | True                      | 
+ 208 |  return status;                          | True                      | 
+ 209 | }                                        | True                      | 
+ 210 |                                          | True                      | 
+ 211 | /**                                      | True                      | 
+ 212 |  * Return milliseconds of random delay,  | True                      | 
+ 213 |  */                                      | True                      | 
+ 214 | static ALWAYS_INLINE unsigned random_del | True                      | 
+ 215 | {                                        | True                      | 
+ 216 |  return (unsigned)rand() % (secs * 1000) | True                      | 
+ 217 | }                                        | True                      | 
+ 218 |                                          | True                      | 
+ 219 | /**                                      | True                      | 
+ 220 |  * main program                          | True                      | 
+ 221 |  */                                      | True                      | 
+ 222 | int zcip_main(int argc, char **argv) MAI | True                      | 
+ 223 | int zcip_main(int argc UNUSED_PARAM, cha | True                      | 
+ 224 | {                                        | True                      | 
+ 225 |  char *r_opt;                            | True                      | 
+ 226 |  const char *l_opt = "169.254.0.0";      | True                      | 
+ 227 |  int state;                              | True                      | 
+ 228 |  int nsent;                              | True                      | 
+ 229 |  unsigned opts;                          | True                      | 
+ 230 |                                          | True                      | 
+ 231 |  // Ugly trick, but I want these zeroed  | True                      | 
+ 232 |  struct {                                | True                      | 
+ 233 |   const struct ether_addr null_ethaddr;  | True                      | 
+ 234 |   struct ifreq ifr;                      | True                      | 
+ 235 |   uint32_t chosen_nip;                   | True                      | 
+ 236 |   int conflicts;                         | True                      | 
+ 237 |   int timeout_ms; // must be signed      | True                      | 
+ 238 |   int verbose;                           | True                      | 
+ 239 |  } L;                                    | True                      | 
+ 240 | #define null_ethaddr (L.null_ethaddr)    | True                      | 
+ 241 | #define ifr          (L.ifr         )    | True                      | 
+ 242 | #define chosen_nip   (L.chosen_nip  )    | True                      | 
+ 243 | #define conflicts    (L.conflicts   )    | True                      | 
+ 244 | #define timeout_ms   (L.timeout_ms  )    | True                      | 
+ 245 | #define verbose      (L.verbose     )    | True                      | 
+ 246 |                                          | True                      | 
+ 247 |  memset(&L, 0, sizeof(L));               | True                      | 
+ 248 |  INIT_G();                               | True                      | 
+ 249 |                                          | True                      | 
+ 250 | #define FOREGROUND (opts & 1)            | True                      | 
+ 251 | #define QUIT       (opts & 2)            | True                      | 
+ 252 |  // Parse commandline: prog [options] if | True                      | 
+ 253 |  // exactly 2 args; -v accumulates and i | True                      | 
+ 254 |  opts = getopt32(argv, "^" "fqr:l:v" "\0 | True                      | 
+ 255 |     &r_opt, &l_opt, &verbose             | True                      | 
+ 256 |  );                                      | True                      | 
+ 257 | #if !BB_MMU                              | True                      | 
+ 258 |  // on NOMMU reexec early (or else we wi | !BB_MMU                   | 
+ 259 |  if (!FOREGROUND)                        | !BB_MMU                   | 
+ 260 |   bb_daemonize_or_rexec(0 /*was: DAEMON_ | !BB_MMU                   | 
+ 261 | #endif                                   | True                      | 
+ 262 |  // Open an ARP socket                   | True                      | 
+ 263 |  // (need to do it before openlog to pre | True                      | 
+ 264 |  // fd 3 (sock_fd==3))                   | True                      | 
+ 265 |  xmove_fd(xsocket(AF_PACKET, SOCK_PACKET | True                      | 
+ 266 |  if (!FOREGROUND) {                      | True                      | 
+ 267 |   // do it before all bb_xx_msg calls    | True                      | 
+ 268 |   openlog(applet_name, 0, LOG_DAEMON);   | True                      | 
+ 269 |   logmode |= LOGMODE_SYSLOG;             | True                      | 
+ 270 |  }                                       | True                      | 
+ 271 |  bb_logenv_override();                   | True                      | 
+ 272 |                                          | True                      | 
+ 273 |  { // -l n.n.n.n                         | True                      | 
+ 274 |   struct in_addr net;                    | True                      | 
+ 275 |   if (inet_aton(l_opt, &net) == 0        | True                      | 
+ 276 |    || (net.s_addr & htonl(IN_CLASSB_NET) | True                      | 
+ 277 |   ) {                                    | True                      | 
+ 278 |    bb_simple_error_msg_and_die("invalid  | True                      | 
+ 279 |   }                                      | True                      | 
+ 280 |   G.localnet_ip = ntohl(net.s_addr);     | True                      | 
+ 281 |  }                                       | True                      | 
+ 282 |  if (opts & 4) { // -r n.n.n.n           | True                      | 
+ 283 |   struct in_addr ip;                     | True                      | 
+ 284 |   if (inet_aton(r_opt, &ip) == 0         | True                      | 
+ 285 |    || (ntohl(ip.s_addr) & IN_CLASSB_NET) | True                      | 
+ 286 |   ) {                                    | True                      | 
+ 287 |    bb_simple_error_msg_and_die("invalid  | True                      | 
+ 288 |   }                                      | True                      | 
+ 289 |   chosen_nip = ip.s_addr;                | True                      | 
+ 290 |  }                                       | True                      | 
+ 291 |  argv += optind - 1;                     | True                      | 
+ 292 |                                          | True                      | 
+ 293 |  /* Now: argv[0]:junk argv[1]:intf argv[ | True                      | 
+ 294 |  /* We need to make space for script arg | True                      | 
+ 295 |  argv[0] = argv[1];                      | True                      | 
+ 296 |  argv[1] = argv[2];                      | True                      | 
+ 297 |  /* Now: argv[0]:intf argv[1]:script arg | True                      | 
+ 298 | #define argv_intf (argv[0])              | True                      | 
+ 299 |                                          | True                      | 
+ 300 |  xsetenv("interface", argv_intf);        | True                      | 
+ 301 |                                          | True                      | 
+ 302 |  // Initialize the interface (modprobe,  | True                      | 
+ 303 |  if (run(argv, "init", 0))               | True                      | 
+ 304 |   return EXIT_FAILURE;                   | True                      | 
+ 305 |                                          | True                      | 
+ 306 |  // Initialize G.iface_sockaddr          | True                      | 
+ 307 |  // G.iface_sockaddr is: { u16 sa_family | True                      | 
+ 308 |  //memset(&G.iface_sockaddr, 0, sizeof(G | True                      | 
+ 309 |  //TODO: are we leaving sa_family == 0 ( | True                      | 
+ 310 |  safe_strncpy(G.iface_sockaddr.sa_data,  | True                      | 
+ 311 |                                          | True                      | 
+ 312 |  // Bind to the interface's ARP socket   | True                      | 
+ 313 |  xbind(sock_fd, &G.iface_sockaddr, sizeo | True                      | 
+ 314 |                                          | True                      | 
+ 315 |  // Get the interface's ethernet address | True                      | 
+ 316 |  //memset(&ifr, 0, sizeof(ifr));         | True                      | 
+ 317 |  strncpy_IFNAMSIZ(ifr.ifr_name, argv_int | True                      | 
+ 318 |  xioctl(sock_fd, SIOCGIFHWADDR, &ifr);   | True                      | 
+ 319 |  memcpy(&G.our_ethaddr, &ifr.ifr_hwaddr. | True                      | 
+ 320 |                                          | True                      | 
+ 321 |  // Start with some stable ip address, e | True                      | 
+ 322 |  // the hardware address or else the las | True                      | 
+ 323 |  // we are taking low-order four bytes,  | True                      | 
+ 324 |  // aren't random enough.                | True                      | 
+ 325 |  // NOTE: the sequence of addresses we t | True                      | 
+ 326 |  // depending on when we detect conflict | True                      | 
+ 327 |  {                                       | True                      | 
+ 328 |   uint32_t t;                            | True                      | 
+ 329 |   move_from_unaligned32(t, ((char *)&G.o | True                      | 
+ 330 |   srand(t);                              | True                      | 
+ 331 |  }                                       | True                      | 
+ 332 |  // FIXME cases to handle:               | True                      | 
+ 333 |  //  - zcip already running!             | True                      | 
+ 334 |  //  - link already has local address... | True                      | 
+ 335 |                                          | True                      | 
+ 336 |  // Daemonize now; don't delay system st | True                      | 
+ 337 |  if (!FOREGROUND) {                      | True                      | 
+ 338 | #if BB_MMU                               | True                      | 
+ 339 |   bb_daemonize(0 /*was: DAEMON_CHDIR_ROO | BB_MMU                    | 
+ 340 | #endif                                   | True                      | 
+ 341 |   bb_info_msg("start, interface %s", arg | True                      | 
+ 342 |  }                                       | True                      | 
+ 343 |                                          | True                      | 
+ 344 |  // Run the dynamic address negotiation  | True                      | 
+ 345 |  // restarting after address conflicts:  | True                      | 
+ 346 |  //  - start with some address we want t | True                      | 
+ 347 |  //  - short random delay                | True                      | 
+ 348 |  //  - arp probes to see if another host | True                      | 
+ 349 |  //    00:04:e2:64:23:c2 > ff:ff:ff:ff:f | True                      | 
+ 350 |  //  - arp announcements that we're clai | True                      | 
+ 351 |  //    00:04:e2:64:23:c2 > ff:ff:ff:ff:f | True                      | 
+ 352 |  //  - use it                            | True                      | 
+ 353 |  //  - defend it, within limits          | True                      | 
+ 354 |  // exit if:                             | True                      | 
+ 355 |  // - address is successfully obtained a | True                      | 
+ 356 |  //   run "<script> config", then exit w | True                      | 
+ 357 |  // - poll error (when does this happen? | True                      | 
+ 358 |  // - read error (when does this happen? | True                      | 
+ 359 |  // - sendto error (in send_arp_request( | True                      | 
+ 360 |  // - revents & POLLERR (link down). run | True                      | 
+ 361 |  if (chosen_nip == 0) {                  | True                      | 
+ 362 |  new_nip_and_PROBE:                      | True                      | 
+ 363 |   chosen_nip = pick_nip();               | True                      | 
+ 364 |  }                                       | True                      | 
+ 365 |  nsent = 0;                              | True                      | 
+ 366 |  state = PROBE;                          | True                      | 
+ 367 |  while (1) {                             | True                      | 
+ 368 |   struct pollfd fds[1];                  | True                      | 
+ 369 |   unsigned deadline_us = deadline_us;    | True                      | 
+ 370 |   struct arp_packet p;                   | True                      | 
+ 371 |   int ip_conflict;                       | True                      | 
+ 372 |   int n;                                 | True                      | 
+ 373 |                                          | True                      | 
+ 374 |   fds[0].fd = sock_fd;                   | True                      | 
+ 375 |   fds[0].events = POLLIN;                | True                      | 
+ 376 |   fds[0].revents = 0;                    | True                      | 
+ 377 |                                          | True                      | 
+ 378 |   // Poll, being ready to adjust current | True                      | 
+ 379 |   if (!timeout_ms) {                     | True                      | 
+ 380 |    timeout_ms = random_delay_ms(PROBE_WA | True                      | 
+ 381 |    // FIXME setsockopt(sock_fd, SO_ATTAC | True                      | 
+ 382 |    // make the kernel filter out all pac | True                      | 
+ 383 |    // ones we'd care about.              | True                      | 
+ 384 |   }                                      | True                      | 
+ 385 |   if (timeout_ms >= 0) {                 | True                      | 
+ 386 |    // Set deadline_us to the point in ti | True                      | 
+ 387 |    deadline_us = MONOTONIC_US() + timeou | True                      | 
+ 388 |   }                                      | True                      | 
+ 389 |                                          | True                      | 
+ 390 |   VDBG("...wait %d %s nsent=%u\n",       | True                      | 
+ 391 |     timeout_ms, argv_intf, nsent);       | True                      | 
+ 392 |                                          | True                      | 
+ 393 |   n = safe_poll(fds, 1, timeout_ms);     | True                      | 
+ 394 |   if (n < 0) {                           | True                      | 
+ 395 |    //bb_perror_msg("poll"); - done in sa | True                      | 
+ 396 |    return EXIT_FAILURE;                  | True                      | 
+ 397 |   }                                      | True                      | 
+ 398 |   if (n == 0) { // timed out?            | True                      | 
+ 399 |    VDBG("state:%d\n", state);            | True                      | 
+ 400 |    switch (state) {                      | True                      | 
+ 401 |    case PROBE:                           | True                      | 
+ 402 |     // No conflicting ARP packets were s | True                      | 
+ 403 |     // we can progress through the state | True                      | 
+ 404 |     if (nsent < PROBE_NUM) {             | True                      | 
+ 405 |      nsent++;                            | True                      | 
+ 406 |      VDBG("probe/%u %s@%s\n",            | True                      | 
+ 407 |        nsent, argv_intf, nip_to_a(chosen | True                      | 
+ 408 |      timeout_ms = PROBE_MIN * 1000;      | True                      | 
+ 409 |      timeout_ms += random_delay_ms(PROBE | True                      | 
+ 410 |      send_arp_request(0, &null_ethaddr,  | True                      | 
+ 411 |      continue;                           | True                      | 
+ 412 |     }                                    | True                      | 
+ 413 |     // Switch to announce state          | True                      | 
+ 414 |     nsent = 0;                           | True                      | 
+ 415 |     state = ANNOUNCE;                    | True                      | 
+ 416 |     goto send_announce;                  | True                      | 
+ 417 |    case ANNOUNCE:                        | True                      | 
+ 418 |     // No conflicting ARP packets were s | True                      | 
+ 419 |     // we can progress through the state | True                      | 
+ 420 |     if (nsent < ANNOUNCE_NUM) {          | True                      | 
+ 421 |  send_announce:                          | True                      | 
+ 422 |      nsent++;                            | True                      | 
+ 423 |      VDBG("announce/%u %s@%s\n",         | True                      | 
+ 424 |        nsent, argv_intf, nip_to_a(chosen | True                      | 
+ 425 |      timeout_ms = ANNOUNCE_INTERVAL * 10 | True                      | 
+ 426 |      send_arp_request(chosen_nip, &G.our | True                      | 
+ 427 |      continue;                           | True                      | 
+ 428 |     }                                    | True                      | 
+ 429 |     // Switch to monitor state           | True                      | 
+ 430 |     // FIXME update filters              | True                      | 
+ 431 |     run(argv, "config", chosen_nip);     | True                      | 
+ 432 |     // NOTE: all other exit paths should | True                      | 
+ 433 |     if (QUIT)                            | True                      | 
+ 434 |      return EXIT_SUCCESS;                | True                      | 
+ 435 |     // fall through: switch to MONITOR   | True                      | 
+ 436 |    default:                              | True                      | 
+ 437 |    // case DEFEND:                       | True                      | 
+ 438 |    // case MONITOR: (shouldn't happen, M | True                      | 
+ 439 |     // Defend period ended with no ARP r | True                      | 
+ 440 |     timeout_ms = -1; // never timeout in | True                      | 
+ 441 |     state = MONITOR;                     | True                      | 
+ 442 |     continue;                            | True                      | 
+ 443 |    }                                     | True                      | 
+ 444 |   }                                      | True                      | 
+ 445 |                                          | True                      | 
+ 446 |   // Packet arrived, or link went down.  | True                      | 
+ 447 |   // We need to adjust the timeout in ca | True                      | 
+ 448 |   // a conflicting packet.               | True                      | 
+ 449 |   if (timeout_ms > 0) {                  | True                      | 
+ 450 |    unsigned diff = deadline_us - MONOTON | True                      | 
+ 451 |    if ((int)(diff) < 0) {                | True                      | 
+ 452 |     // Current time is greater than the  | True                      | 
+ 453 |     diff = 0;                            | True                      | 
+ 454 |    }                                     | True                      | 
+ 455 |    VDBG("adjusting timeout\n");          | True                      | 
+ 456 |    timeout_ms = (diff / 1000) | 1; // ne | True                      | 
+ 457 |   }                                      | True                      | 
+ 458 |                                          | True                      | 
+ 459 |   if ((fds[0].revents & POLLIN) == 0) {  | True                      | 
+ 460 |    if (fds[0].revents & POLLERR) {       | True                      | 
+ 461 |     // FIXME: links routinely go down;   | True                      | 
+ 462 |     // this shouldn't necessarily exit.  | True                      | 
+ 463 |     bb_error_msg("iface %s is down", arg | True                      | 
+ 464 |     if (state >= MONITOR) {              | True                      | 
+ 465 |      // Only if we are in MONITOR or DEF | True                      | 
+ 466 |      run(argv, "deconfig", chosen_nip);  | True                      | 
+ 467 |     }                                    | True                      | 
+ 468 |     return EXIT_FAILURE;                 | True                      | 
+ 469 |    }                                     | True                      | 
+ 470 |    continue;                             | True                      | 
+ 471 |   }                                      | True                      | 
+ 472 |                                          | True                      | 
+ 473 |   // Read ARP packet                     | True                      | 
+ 474 |   if (safe_read(sock_fd, &p, sizeof(p))  | True                      | 
+ 475 |    bb_simple_perror_msg_and_die(bb_msg_r | True                      | 
+ 476 |   }                                      | True                      | 
+ 477 |                                          | True                      | 
+ 478 |   if (p.eth.ether_type != htons(ETHERTYP | True                      | 
+ 479 |    continue;                             | True                      | 
+ 480 |   if (p.arp.arp_op != htons(ARPOP_REQUES | True                      | 
+ 481 |    && p.arp.arp_op != htons(ARPOP_REPLY) | True                      | 
+ 482 |   ) {                                    | True                      | 
+ 483 |    continue;                             | True                      | 
+ 484 |   }                                      | True                      | 
+ 485 | #ifdef DEBUG                             | True                      | 
+ 486 |   {                                      | (DEBUG)                   | 
+ 487 |    struct ether_addr *sha = (struct ethe | (DEBUG)                   | 
+ 488 |    struct ether_addr *tha = (struct ethe | (DEBUG)                   | 
+ 489 |    struct in_addr *spa = (struct in_addr | (DEBUG)                   | 
+ 490 |    struct in_addr *tpa = (struct in_addr | (DEBUG)                   | 
+ 491 |    VDBG("source=%s %s\n", ether_ntoa(sha | (DEBUG)                   | 
+ 492 |    VDBG("target=%s %s\n", ether_ntoa(tha | (DEBUG)                   | 
+ 493 |   }                                      | (DEBUG)                   | 
+ 494 | #endif                                   | True                      | 
+ 495 |   ip_conflict = 0;                       | True                      | 
+ 496 |   if (memcmp(&p.arp.arp_sha, &G.our_etha | True                      | 
+ 497 |    if (memcmp(p.arp.arp_spa, &chosen_nip | True                      | 
+ 498 |     // A probe or reply with source_ip = | True                      | 
+ 499 |     ip_conflict = 1;                     | True                      | 
+ 500 |    }                                     | True                      | 
+ 501 |    if (p.arp.arp_op == htons(ARPOP_REQUE | True                      | 
+ 502 |     && memcmp(p.arp.arp_spa, &const_int_ | True                      | 
+ 503 |     && memcmp(p.arp.arp_tpa, &chosen_nip | True                      | 
+ 504 |    ) {                                   | True                      | 
+ 505 |     // A probe with source_ip == 0.0.0.0 | True                      | 
+ 506 |     // another host trying to claim this | True                      | 
+ 507 |     ip_conflict |= 2;                    | True                      | 
+ 508 |    }                                     | True                      | 
+ 509 |   }                                      | True                      | 
+ 510 |   VDBG("state:%d ip_conflict:%d\n", stat | True                      | 
+ 511 |   if (!ip_conflict)                      | True                      | 
+ 512 |    continue;                             | True                      | 
+ 513 |                                          | True                      | 
+ 514 |   // Either src or target IP conflict ex | True                      | 
+ 515 |   if (state <= ANNOUNCE) {               | True                      | 
+ 516 |    // PROBE or ANNOUNCE                  | True                      | 
+ 517 |    conflicts++;                          | True                      | 
+ 518 |    timeout_ms = PROBE_MIN * 1000         | True                      | 
+ 519 |     + CONFLICT_MULTIPLIER * random_delay | True                      | 
+ 520 |    goto new_nip_and_PROBE;               | True                      | 
+ 521 |   }                                      | True                      | 
+ 522 |                                          | True                      | 
+ 523 |   // MONITOR or DEFEND: only src IP conf | True                      | 
+ 524 |   if (ip_conflict & 1) {                 | True                      | 
+ 525 |    if (state == MONITOR) {               | True                      | 
+ 526 |     // Src IP conflict, defend with a si | True                      | 
+ 527 |     VDBG("monitor conflict - defending\n | True                      | 
+ 528 |     timeout_ms = DEFEND_INTERVAL * 1000; | True                      | 
+ 529 |     state = DEFEND;                      | True                      | 
+ 530 |     send_arp_request(chosen_nip, &G.our_ | True                      | 
+ 531 |     continue;                            | True                      | 
+ 532 |    }                                     | True                      | 
+ 533 |    // state == DEFEND                    | True                      | 
+ 534 |    // Another src IP conflict, start ove | True                      | 
+ 535 |    VDBG("defend conflict - starting over | True                      | 
+ 536 |    run(argv, "deconfig", chosen_nip);    | True                      | 
+ 537 |    conflicts = 0;                        | True                      | 
+ 538 |    timeout_ms = 0;                       | True                      | 
+ 539 |    goto new_nip_and_PROBE;               | True                      | 
+ 540 |   }                                      | True                      | 
+ 541 |   // Note: if we only have a target IP c | True                      | 
+ 542 |   // IOW: if we just saw this sort of AR | True                      | 
+ 543 |   //  aa:bb:cc:dd:ee:ff > xx:xx:xx:xx:xx | True                      | 
+ 544 |   // we expect _kernel_ to respond to th | True                      | 
+ 545 |   // is (expected to be) configured on t | True                      | 
+ 546 |  } // while (1)                          | True                      | 
+ 547 | #undef argv_intf                         | True                      | 
+ 548 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +114MB, 273ms             | 

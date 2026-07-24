@@ -1,0 +1,198 @@
+FILE: data/raw/busybox-1.38.0/archival/libarchive/get_header_cpio.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Copyright 2002 Laurence Anderson      | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   6 |  */                                      | True                      | 
+   7 | #include "libbb.h"                       | True                      | 
+   8 | #include "bb_archive.h"                  | True                      | 
+   9 |                                          | True                      | 
+  10 | typedef struct hardlinks_t {             | True                      | 
+  11 |  struct hardlinks_t *next;               | True                      | 
+  12 |  int inode; /* TODO: must match maj/min  | True                      | 
+  13 |  int mode ;                              | True                      | 
+  14 |  int mtime; /* These three are useful on | True                      | 
+  15 |  int uid  ; /* of hardlinks with zero si | True                      | 
+  16 |  int gid  ;                              | True                      | 
+  17 |  char name[1];                           | True                      | 
+  18 | } hardlinks_t;                           | True                      | 
+  19 |                                          | True                      | 
+  20 | char FAST_FUNC get_header_cpio(archive_h | True                      | 
+  21 | {                                        | True                      | 
+  22 |  file_header_t *file_header = archive_ha | True                      | 
+  23 |  char cpio_header[111];                  | True                      | 
+  24 |  int namesize;                           | True                      | 
+  25 |  int major, minor, nlink, mode, inode;   | True                      | 
+  26 |  unsigned size, uid, gid, mtime;         | True                      | 
+  27 |                                          | True                      | 
+  28 |  /* There can be padding before archive  | True                      | 
+  29 |  data_align(archive_handle, 4);          | True                      | 
+  30 |                                          | True                      | 
+  31 |  size = full_read(archive_handle->src_fd | True                      | 
+  32 |  if (size == 0) {                        | True                      | 
+  33 |   goto create_hardlinks;                 | True                      | 
+  34 |  }                                       | True                      | 
+  35 |  if (size != 110) {                      | True                      | 
+  36 |   bb_simple_error_msg_and_die("short rea | True                      | 
+  37 |  }                                       | True                      | 
+  38 |  archive_handle->offset += 110;          | True                      | 
+  39 |                                          | True                      | 
+  40 |  if (!is_prefixed_with(&cpio_header[0],  | True                      | 
+  41 |   || (cpio_header[5] != '1' && cpio_head | True                      | 
+  42 |  ) {                                     | True                      | 
+  43 |   bb_simple_error_msg_and_die("unsupport | True                      | 
+  44 |  }                                       | True                      | 
+  45 |                                          | True                      | 
+  46 |  cpio_header[110] = '\0'; /* sscanf may  | True                      | 
+  47 |  if (sscanf(cpio_header + 6,             | True                      | 
+  48 |    "%8x" "%8x" "%8x" "%8x"               | True                      | 
+  49 |    "%8x" "%8x" "%8x" /*maj,min:*/ "%*16c | True                      | 
+  50 |    /*rmaj,rmin:*/"%8x" "%8x" "%8x" /*chk | True                      | 
+  51 |    &inode, &mode, &uid, &gid,            | True                      | 
+  52 |    &nlink, &mtime, &size,                | True                      | 
+  53 |    &major, &minor, &namesize) != 10)     | True                      | 
+  54 |   bb_simple_error_msg_and_die("damaged c | True                      | 
+  55 |  file_header->mode = mode;               | True                      | 
+  56 |  /* "cpio -R USER:GRP" support: */       | True                      | 
+  57 |  if (archive_handle->cpio__owner.uid !=  | True                      | 
+  58 |   uid = archive_handle->cpio__owner.uid; | True                      | 
+  59 |  if (archive_handle->cpio__owner.gid !=  | True                      | 
+  60 |   gid = archive_handle->cpio__owner.gid; | True                      | 
+  61 |  file_header->uid = uid;                 | True                      | 
+  62 |  file_header->gid = gid;                 | True                      | 
+  63 |  file_header->mtime = mtime;             | True                      | 
+  64 |  file_header->size = size;               | True                      | 
+  65 |                                          | True                      | 
+  66 |  namesize &= 0x1fff; /* paranoia: limit  | True                      | 
+  67 |  file_header->name = xzalloc(namesize +  | True                      | 
+  68 |  /* Read in filename */                  | True                      | 
+  69 |  xread(archive_handle->src_fd, file_head | True                      | 
+  70 |  if (file_header->name[0] == '/') {      | True                      | 
+  71 |   /* Testcase: echo /etc/hosts | cpio -p | True                      | 
+  72 |    * Without this code, it tries to unpa | True                      | 
+  73 |    * into "/etc/hosts", not "etc/hosts". | True                      | 
+  74 |    */                                    | True                      | 
+  75 |   char *p = file_header->name;           | True                      | 
+  76 |   do p++; while (*p == '/');             | True                      | 
+  77 |   overlapping_strcpy(file_header->name,  | True                      | 
+  78 |  }                                       | True                      | 
+  79 |  archive_handle->offset += namesize;     | True                      | 
+  80 |                                          | True                      | 
+  81 |  /* Update offset amount and skip paddin | True                      | 
+  82 |  data_align(archive_handle, 4);          | True                      | 
+  83 |                                          | True                      | 
+  84 |  if (strcmp(file_header->name, cpio_TRAI | True                      | 
+  85 |   /* Always round up. ">> 9" divides by  | True                      | 
+  86 |   archive_handle->cpio__blocks = (uoff_t | True                      | 
+  87 |   goto create_hardlinks;                 | True                      | 
+  88 |  }                                       | True                      | 
+  89 |                                          | True                      | 
+  90 |  file_header->link_target = NULL;        | True                      | 
+  91 |  if (S_ISLNK(file_header->mode)) {       | True                      | 
+  92 |   file_header->size &= 0x1fff; /* parano | True                      | 
+  93 |   file_header->link_target = xzalloc(fil | True                      | 
+  94 |   xread(archive_handle->src_fd, file_hea | True                      | 
+  95 |   archive_handle->offset += file_header- | True                      | 
+  96 |   file_header->size = 0; /* Stop possibl | True                      | 
+  97 |  }                                       | True                      | 
+  98 |                                          | True                      | 
+  99 | // TODO: data_extract_all can't deal wit | True                      | 
+ 100 | // when fixed, change S_ISREG to !S_ISDI | True                      | 
+ 101 |                                          | True                      | 
+ 102 |  if (nlink > 1 && S_ISREG(file_header->m | True                      | 
+ 103 |   hardlinks_t *new = xmalloc(sizeof(*new | True                      | 
+ 104 |   new->inode = inode;                    | True                      | 
+ 105 |   new->mode  = mode ;                    | True                      | 
+ 106 |   new->mtime = mtime;                    | True                      | 
+ 107 |   new->uid   = uid  ;                    | True                      | 
+ 108 |   new->gid   = gid  ;                    | True                      | 
+ 109 |   strcpy(new->name, file_header->name);  | True                      | 
+ 110 |   /* Put file on a linked list for later | True                      | 
+ 111 |   if (size == 0) {                       | True                      | 
+ 112 |    new->next = archive_handle->cpio__har | True                      | 
+ 113 |    archive_handle->cpio__hardlinks_to_cr | True                      | 
+ 114 |    return EXIT_SUCCESS; /* Skip this one | True                      | 
+ 115 |    /* TODO: this breaks cpio -t (it does | True                      | 
+ 116 |   }                                      | True                      | 
+ 117 |   new->next = archive_handle->cpio__crea | True                      | 
+ 118 |   archive_handle->cpio__created_hardlink | True                      | 
+ 119 |  }                                       | True                      | 
+ 120 |  file_header->device = makedev(major, mi | True                      | 
+ 121 |                                          | True                      | 
+ 122 |  if (archive_handle->filter(archive_hand | True                      | 
+ 123 |   archive_handle->action_data(archive_ha | True                      | 
+ 124 | //TODO: run "echo /etc/hosts | cpio -pv  | True                      | 
+ 125 | //cpio: etc/hosts not created: newer or  | True                      | 
+ 126 | //etc/hosts  <-- should NOT show it      | True                      | 
+ 127 | //2 blocks <-- should say "0 blocks"     | True                      | 
+ 128 |   archive_handle->action_header(file_hea | True                      | 
+ 129 |  } else {                                | True                      | 
+ 130 |   data_skip(archive_handle);             | True                      | 
+ 131 |  }                                       | True                      | 
+ 132 |                                          | True                      | 
+ 133 |  archive_handle->offset += file_header-> | True                      | 
+ 134 |                                          | True                      | 
+ 135 |  free(file_header->link_target);         | True                      | 
+ 136 |  free(file_header->name);                | True                      | 
+ 137 |  file_header->link_target = NULL;        | True                      | 
+ 138 |  file_header->name = NULL;               | True                      | 
+ 139 |                                          | True                      | 
+ 140 |  return EXIT_SUCCESS;                    | True                      | 
+ 141 |                                          | True                      | 
+ 142 |  create_hardlinks:                       | True                      | 
+ 143 |  free(file_header->link_target);         | True                      | 
+ 144 |  free(file_header->name);                | True                      | 
+ 145 |                                          | True                      | 
+ 146 |  while (archive_handle->cpio__hardlinks_ | True                      | 
+ 147 |   hardlinks_t *cur;                      | True                      | 
+ 148 |   hardlinks_t *make_me = archive_handle- | True                      | 
+ 149 |                                          | True                      | 
+ 150 |   archive_handle->cpio__hardlinks_to_cre | True                      | 
+ 151 |                                          | True                      | 
+ 152 |   memset(file_header, 0, sizeof(*file_he | True                      | 
+ 153 |   file_header->mtime = make_me->mtime;   | True                      | 
+ 154 |   file_header->name = make_me->name;     | True                      | 
+ 155 |   file_header->mode = make_me->mode;     | True                      | 
+ 156 |   file_header->uid = make_me->uid;       | True                      | 
+ 157 |   file_header->gid = make_me->gid;       | True                      | 
+ 158 |   /*file_header->size = 0;*/             | True                      | 
+ 159 |   /*file_header->link_target = NULL;*/   | True                      | 
+ 160 |                                          | True                      | 
+ 161 |   /* Try to find a file we are hardlinke | True                      | 
+ 162 |   cur = archive_handle->cpio__created_ha | True                      | 
+ 163 |   while (cur) {                          | True                      | 
+ 164 |    /* TODO: must match maj/min too! */   | True                      | 
+ 165 |    if (cur->inode == make_me->inode) {   | True                      | 
+ 166 |     file_header->link_target = cur->name | True                      | 
+ 167 |      /* link_target != NULL, size = 0: " | True                      | 
+ 168 |     if (archive_handle->filter(archive_h | True                      | 
+ 169 |      archive_handle->action_data(archive | True                      | 
+ 170 |     free(make_me);                       | True                      | 
+ 171 |     goto next_link;                      | True                      | 
+ 172 |    }                                     | True                      | 
+ 173 |    cur = cur->next;                      | True                      | 
+ 174 |   }                                      | True                      | 
+ 175 |   /* Oops... no file with such inode was | True                      | 
+ 176 |    * (happens when hardlinked files are  | True                      | 
+ 177 |   if (archive_handle->filter(archive_han | True                      | 
+ 178 |    archive_handle->action_data(archive_h | True                      | 
+ 179 |   /* Move to the list of created hardlin | True                      | 
+ 180 |   make_me->next = archive_handle->cpio__ | True                      | 
+ 181 |   archive_handle->cpio__created_hardlink | True                      | 
+ 182 |  next_link: ;                            | True                      | 
+ 183 |  }                                       | True                      | 
+ 184 |                                          | True                      | 
+ 185 |  while (archive_handle->cpio__created_ha | True                      | 
+ 186 |   hardlinks_t *p = archive_handle->cpio_ | True                      | 
+ 187 |   archive_handle->cpio__created_hardlink | True                      | 
+ 188 |   free(p);                               | True                      | 
+ 189 |  }                                       | True                      | 
+ 190 |                                          | True                      | 
+ 191 |  return EXIT_FAILURE; /* "No more files  | True                      | 
+ 192 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +16MB, 264ms              | 

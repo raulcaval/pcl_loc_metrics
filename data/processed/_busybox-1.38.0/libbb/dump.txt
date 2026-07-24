@@ -1,0 +1,933 @@
+FILE: data/raw/busybox-1.38.0/libbb/dump.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                 | 
+-----+------------------------------------------+---------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                  | 
+   2 | /*                                       | True                                  | 
+   3 |  * Support code for the hexdump and od a | True                                  | 
+   4 |  * based on code from util-linux v 2.11l | True                                  | 
+   5 |  *                                       | True                                  | 
+   6 |  * Copyright (c) 1989                    | True                                  | 
+   7 |  * The Regents of the University of Cali | True                                  | 
+   8 |  *                                       | True                                  | 
+   9 |  * Licensed under GPLv2 or later, see fi | True                                  | 
+  10 |  *                                       | True                                  | 
+  11 |  * Original copyright notice is retained | True                                  | 
+  12 |  */                                      | True                                  | 
+  13 | #include "libbb.h"                       | True                                  | 
+  14 | #include "dump.h"                        | True                                  | 
+  15 |                                          | True                                  | 
+  16 | #define F_IGNORE 0x01  /* %_A */         | True                                  | 
+  17 | #define F_SETREP 0x02  /* rep count set, | True                                  | 
+  18 | #define F_ADDRESS 0x001  /* print offset | True                                  | 
+  19 | #define F_BPAD  0x002  /* blank pad */   | True                                  | 
+  20 | #define F_C  0x004  /* %_c */            | True                                  | 
+  21 | #define F_CHAR  0x008  /* %c */          | True                                  | 
+  22 | #define F_DBL  0x010  /* %[EefGf] */     | True                                  | 
+  23 | #define F_INT  0x020  /* %[di] */        | True                                  | 
+  24 | #define F_P  0x040  /* %_p */            | True                                  | 
+  25 | #define F_STR  0x080  /* %s */           | True                                  | 
+  26 | #define F_U  0x100  /* %_u */            | True                                  | 
+  27 | #define F_UINT  0x200  /* %[ouXx] */     | True                                  | 
+  28 | #define F_TEXT  0x400  /* no conversions | True                                  | 
+  29 |                                          | True                                  | 
+  30 | typedef struct priv_dumper_t {           | True                                  | 
+  31 |  dumper_t pub;                           | True                                  | 
+  32 |                                          | True                                  | 
+  33 |  char **argv;                            | True                                  | 
+  34 |  FU *endfu;                              | True                                  | 
+  35 |  off_t savaddress;        /* saved addre | True                                  | 
+  36 |  off_t eaddress;          /* end address | True                                  | 
+  37 |  int blocksize;                          | True                                  | 
+  38 |  smallint exitval;        /* final exit  | True                                  | 
+  39 |                                          | True                                  | 
+  40 |  /* former statics */                    | True                                  | 
+  41 |  smallint next__done;                    | True                                  | 
+  42 |  smallint get__ateof; // = 1;            | True                                  | 
+  43 |  unsigned char *get__curp;               | True                                  | 
+  44 |  unsigned char *get__savp;               | True                                  | 
+  45 | } priv_dumper_t;                         | True                                  | 
+  46 |                                          | True                                  | 
+  47 | static const char dot_flags_width_chars[ | True                                  | 
+  48 |                                          | True                                  | 
+  49 | static const char size_conv_str[] ALIGN1 | True                                  | 
+  50 | "\x1\x4\x4\x4\x4\x4\x4\x8\x8\x8\x8\x8""c | True                                  | 
+  51 | /* c  d  i  o  u  x  X  e  E  f  g  G -  | True                                  | 
+  52 | #define SCS_OFS 12                       | True                                  | 
+  53 | #define float_convs (size_conv_str + SCS | True                                  | 
+  54 | static const char int_convs[] ALIGN1 = " | True                                  | 
+  55 |                                          | True                                  | 
+  56 | dumper_t* FAST_FUNC alloc_dumper(void)   | True                                  | 
+  57 | {                                        | True                                  | 
+  58 |  priv_dumper_t *dumper = xzalloc(sizeof( | True                                  | 
+  59 |  dumper->pub.dump_length = -1;           | True                                  | 
+  60 |  dumper->pub.dump_vflag = FIRST;         | True                                  | 
+  61 |  dumper->get__ateof = 1;                 | True                                  | 
+  62 |  return &dumper->pub;                    | True                                  | 
+  63 | }                                        | True                                  | 
+  64 |                                          | True                                  | 
+  65 | static NOINLINE int bb_dump_size(FS *fs) | True                                  | 
+  66 | {                                        | True                                  | 
+  67 |  FU *fu;                                 | True                                  | 
+  68 |  int bcnt, cur_size;                     | True                                  | 
+  69 |  char *fmt;                              | True                                  | 
+  70 |  const char *p;                          | True                                  | 
+  71 |  int prec;                               | True                                  | 
+  72 |                                          | True                                  | 
+  73 |  /* figure out the data block size neede | True                                  | 
+  74 |  for (cur_size = 0, fu = fs->nextfu; fu; | True                                  | 
+  75 |   if (fu->bcnt) {                        | True                                  | 
+  76 |    cur_size += fu->bcnt * fu->reps;      | True                                  | 
+  77 |    continue;                             | True                                  | 
+  78 |   }                                      | True                                  | 
+  79 |   for (bcnt = prec = 0, fmt = fu->fmt; * | True                                  | 
+  80 |    if (*fmt != '%')                      | True                                  | 
+  81 |     continue;                            | True                                  | 
+  82 |    /*                                    | True                                  | 
+  83 |     * skip any special chars -- save pre | True                                  | 
+  84 |     * case it's a %s format.             | True                                  | 
+  85 |     */                                   | True                                  | 
+  86 |    while (strchr(dot_flags_width_chars + | True                                  | 
+  87 |     continue;                            | True                                  | 
+  88 |    if (*fmt == '.' && isdigit(*++fmt)) { | True                                  | 
+  89 |     prec = atoi(fmt);                    | True                                  | 
+  90 |     while (isdigit(*++fmt))              | True                                  | 
+  91 |      continue;                           | True                                  | 
+  92 |    }                                     | True                                  | 
+  93 |    p = strchr(size_conv_str + SCS_OFS, * | True                                  | 
+  94 |    if (!p) {                             | True                                  | 
+  95 |     if (*fmt == 's') {                   | True                                  | 
+  96 |      bcnt += prec;                       | True                                  | 
+  97 |     }                                    | True                                  | 
+  98 |     if (*fmt == '_') {                   | True                                  | 
+  99 |      ++fmt;                              | True                                  | 
+ 100 |      if ((*fmt == 'c') || (*fmt == 'p')  | True                                  | 
+ 101 |       bcnt += 1;                         | True                                  | 
+ 102 |      }                                   | True                                  | 
+ 103 |     }                                    | True                                  | 
+ 104 |    } else {                              | True                                  | 
+ 105 |     bcnt += p[-SCS_OFS];                 | True                                  | 
+ 106 |    }                                     | True                                  | 
+ 107 |   }                                      | True                                  | 
+ 108 |   cur_size += bcnt * fu->reps;           | True                                  | 
+ 109 |  }                                       | True                                  | 
+ 110 |  return cur_size;                        | True                                  | 
+ 111 | }                                        | True                                  | 
+ 112 |                                          | True                                  | 
+ 113 | static NOINLINE void rewrite(priv_dumper | True                                  | 
+ 114 | {                                        | True                                  | 
+ 115 |  FU *fu;                                 | True                                  | 
+ 116 |                                          | True                                  | 
+ 117 |  for (fu = fs->nextfu; fu; fu = fu->next | True                                  | 
+ 118 |   PR *pr;                                | True                                  | 
+ 119 |   char *p1, *p2, *p3;                    | True                                  | 
+ 120 |   char *fmtp;                            | True                                  | 
+ 121 |   int nconv = 0;                         | True                                  | 
+ 122 |   /*                                     | True                                  | 
+ 123 |    * break each format unit into print u | True                                  | 
+ 124 |    * conversion character gets its own.  | True                                  | 
+ 125 |    */                                    | True                                  | 
+ 126 |   for (fmtp = fu->fmt; *fmtp; ) {        | True                                  | 
+ 127 |    unsigned len;                         | True                                  | 
+ 128 |    const char *prec;                     | True                                  | 
+ 129 |    const char *byte_count_str;           | True                                  | 
+ 130 |                                          | True                                  | 
+ 131 |    /* DBU:[dvae@cray.com] zalloc so that | True                                  | 
+ 132 |    pr = xzalloc(sizeof(*pr));            | True                                  | 
+ 133 |    if (!fu->nextpr)                      | True                                  | 
+ 134 |     fu->nextpr = pr;                     | True                                  | 
+ 135 |                                          | True                                  | 
+ 136 |    /* skip preceding text and up to the  | True                                  | 
+ 137 |    p1 = strchr(fmtp, '%');               | True                                  | 
+ 138 |    if (!p1) { /* only text in the string | True                                  | 
+ 139 |     pr->fmt = fmtp;                      | True                                  | 
+ 140 |     pr->flags = F_TEXT;                  | True                                  | 
+ 141 |     break;                               | True                                  | 
+ 142 |    }                                     | True                                  | 
+ 143 |                                          | True                                  | 
+ 144 |    /*                                    | True                                  | 
+ 145 |     * get precision for %s -- if have a  | True                                  | 
+ 146 |     * need it.                           | True                                  | 
+ 147 |     */                                   | True                                  | 
+ 148 |    prec = NULL;                          | True                                  | 
+ 149 |    if (fu->bcnt) {                       | True                                  | 
+ 150 |     /* skip to conversion character */   | True                                  | 
+ 151 |     while (strchr(dot_flags_width_chars, | True                                  | 
+ 152 |      continue;                           | True                                  | 
+ 153 |    } else {                              | True                                  | 
+ 154 |     /* skip any special chars, field wid | True                                  | 
+ 155 |     while (strchr(dot_flags_width_chars  | True                                  | 
+ 156 |      continue;                           | True                                  | 
+ 157 |     if (*p1 == '.' && isdigit(*++p1)) {  | True                                  | 
+ 158 |      prec = p1;                          | True                                  | 
+ 159 |      while (isdigit(*++p1))              | True                                  | 
+ 160 |       continue;                          | True                                  | 
+ 161 |     }                                    | True                                  | 
+ 162 |    }                                     | True                                  | 
+ 163 |                                          | True                                  | 
+ 164 |    p2 = p1 + 1; /* set end pointer */    | True                                  | 
+ 165 |                                          | True                                  | 
+ 166 |    /*                                    | True                                  | 
+ 167 |     * figure out the byte count for each | True                                  | 
+ 168 |     * rewrite the format as necessary, s | True                                  | 
+ 169 |     * padding for end of data.           | True                                  | 
+ 170 |     */                                   | True                                  | 
+ 171 |    if (*p1 == 'c') {                     | True                                  | 
+ 172 |     pr->flags = F_CHAR;                  | True                                  | 
+ 173 |  DO_BYTE_COUNT_1:                        | True                                  | 
+ 174 |     byte_count_str = "\001";             | True                                  | 
+ 175 |  DO_BYTE_COUNT:                          | True                                  | 
+ 176 |     if (fu->bcnt) {                      | True                                  | 
+ 177 |      for (;;) {                          | True                                  | 
+ 178 |       if (fu->bcnt == *byte_count_str)   | True                                  | 
+ 179 |        break;                            | True                                  | 
+ 180 |       if (*++byte_count_str == 0)        | True                                  | 
+ 181 |        bb_error_msg_and_die("bad byte co | True                                  | 
+ 182 |      }                                   | True                                  | 
+ 183 |     }                                    | True                                  | 
+ 184 |     /* Unlike the original, output the r | True                                  | 
+ 185 |     pr->bcnt = *byte_count_str;          | True                                  | 
+ 186 |    } else                                | True                                  | 
+ 187 |    if (*p1 == 'l') { /* %ld etc */       | True                                  | 
+ 188 |     const char *e;                       | True                                  | 
+ 189 |                                          | True                                  | 
+ 190 |     ++p2;                                | True                                  | 
+ 191 |     ++p1;                                | True                                  | 
+ 192 |     if (*p1 == 'l') { /* %lld etc */     | True                                  | 
+ 193 |      ++p2;                               | True                                  | 
+ 194 |      ++p1;                               | True                                  | 
+ 195 |     }                                    | True                                  | 
+ 196 |  DO_INT_CONV:                            | True                                  | 
+ 197 |     e = strchr(int_convs, *p1); /* "diou | True                                  | 
+ 198 |     if (!e)                              | True                                  | 
+ 199 |      goto DO_BAD_CONV_CHAR;              | True                                  | 
+ 200 |     pr->flags = F_INT;                   | True                                  | 
+ 201 |     byte_count_str = "\010\004\002\001"; | True                                  | 
+ 202 |     if (e > int_convs + 1) { /* not d or | True                                  | 
+ 203 |      pr->flags = F_UINT;                 | True                                  | 
+ 204 |      byte_count_str++;                   | True                                  | 
+ 205 |     }                                    | True                                  | 
+ 206 |     goto DO_BYTE_COUNT;                  | True                                  | 
+ 207 |    } else                                | True                                  | 
+ 208 |    if (strchr(int_convs, *p1)) { /* %d e | True                                  | 
+ 209 |     goto DO_INT_CONV;                    | True                                  | 
+ 210 |    } else                                | True                                  | 
+ 211 |    if (strchr(float_convs, *p1)) { /* fl | True                                  | 
+ 212 |     pr->flags = F_DBL;                   | True                                  | 
+ 213 |     byte_count_str = "\010\004";         | True                                  | 
+ 214 |     goto DO_BYTE_COUNT;                  | True                                  | 
+ 215 |    } else                                | True                                  | 
+ 216 |    if (*p1 == 's') {                     | True                                  | 
+ 217 |     pr->flags = F_STR;                   | True                                  | 
+ 218 |     pr->bcnt = fu->bcnt;                 | True                                  | 
+ 219 |     if (fu->bcnt == 0) {                 | True                                  | 
+ 220 |      if (!prec)                          | True                                  | 
+ 221 |       bb_simple_error_msg_and_die("%s ne | True                                  | 
+ 222 |      pr->bcnt = atoi(prec);              | True                                  | 
+ 223 |     }                                    | True                                  | 
+ 224 |    } else                                | True                                  | 
+ 225 |    if (*p1 == '_') {                     | True                                  | 
+ 226 |     p2++;  /* move past a in "%_a" */    | True                                  | 
+ 227 |     switch (p1[1]) {                     | True                                  | 
+ 228 |     case 'A': /* %_A[dox]: print address | True                                  | 
+ 229 |      dumper->endfu = fu;                 | True                                  | 
+ 230 |      fu->flags |= F_IGNORE;              | True                                  | 
+ 231 |      /* FALLTHROUGH */                   | True                                  | 
+ 232 |     case 'a': /* %_a[dox]: current addre | True                                  | 
+ 233 |      pr->flags = F_ADDRESS;              | True                                  | 
+ 234 |      p2++;  /* move past x in "%_ax" */  | True                                  | 
+ 235 |      if ((p1[2] != 'd') && (p1[2] != 'o' | True                                  | 
+ 236 |       goto DO_BAD_CONV_CHAR;             | True                                  | 
+ 237 |      }                                   | True                                  | 
+ 238 |      *p1++ = 'l';                        | True                                  | 
+ 239 |      *p1++ = 'l';                        | True                                  | 
+ 240 |      break;                              | True                                  | 
+ 241 |     case 'c': /* %_c: chars, \ooo, \n \r | True                                  | 
+ 242 |      pr->flags = F_C;                    | True                                  | 
+ 243 |      /* *p1 = 'c';   set in conv_c */    | True                                  | 
+ 244 |      goto DO_BYTE_COUNT_1;               | True                                  | 
+ 245 |     case 'p': /* %_p: chars, dots for no | True                                  | 
+ 246 |      pr->flags = F_P;                    | True                                  | 
+ 247 |      *p1 = 'c';                          | True                                  | 
+ 248 |      goto DO_BYTE_COUNT_1;               | True                                  | 
+ 249 |     case 'u': /* %_u: chars, 'nul', 'esc | True                                  | 
+ 250 |      pr->flags = F_U;                    | True                                  | 
+ 251 |      /* *p1 = 'c';   set in conv_u */    | True                                  | 
+ 252 |      goto DO_BYTE_COUNT_1;               | True                                  | 
+ 253 |     default:                             | True                                  | 
+ 254 |      goto DO_BAD_CONV_CHAR;              | True                                  | 
+ 255 |     }                                    | True                                  | 
+ 256 |    } else {                              | True                                  | 
+ 257 |  DO_BAD_CONV_CHAR:                       | True                                  | 
+ 258 |     bb_error_msg_and_die("bad conversion | True                                  | 
+ 259 |    }                                     | True                                  | 
+ 260 |                                          | True                                  | 
+ 261 |    /*                                    | True                                  | 
+ 262 |     * copy to PR format string, set conv | True                                  | 
+ 263 |     * pointer, update original.          | True                                  | 
+ 264 |     */                                   | True                                  | 
+ 265 |    len = (p1 - fmtp) + 1;                | True                                  | 
+ 266 |    pr->fmt = xstrndup(fmtp, len);        | True                                  | 
+ 267 |    /* DBU:[dave@cray.com] w/o this, trai | True                                  | 
+ 268 |     * Skip subsequent text and up to the | True                                  | 
+ 269 |     * additional text onto fmt: eg. if f | True                                  | 
+ 270 |     * we lose the " is a HEX number" par | True                                  | 
+ 271 |     */                                   | True                                  | 
+ 272 |    for (p3 = p2; *p3 && *p3 != '%'; p3++ | True                                  | 
+ 273 |     continue;                            | True                                  | 
+ 274 |    if ((p3 - p2) != 0) {                 | True                                  | 
+ 275 |     char *d;                             | True                                  | 
+ 276 |     pr->fmt = d = xrealloc(pr->fmt, len  | True                                  | 
+ 277 |     d += len;                            | True                                  | 
+ 278 |     do {                                 | True                                  | 
+ 279 |      *d++ = *p2++;                       | True                                  | 
+ 280 |     } while (p2 != p3);                  | True                                  | 
+ 281 |     *d = '\0';                           | True                                  | 
+ 282 |     /* now p2 = p3 */                    | True                                  | 
+ 283 |    }                                     | True                                  | 
+ 284 |    pr->cchar = pr->fmt + len - 1; /* mus | True                                  | 
+ 285 |    fmtp = p2;                            | True                                  | 
+ 286 |                                          | True                                  | 
+ 287 |    /* only one conversion character if b | True                                  | 
+ 288 |    if (!(pr->flags & F_ADDRESS) && fu->b | True                                  | 
+ 289 |     bb_simple_error_msg_and_die("byte co | True                                  | 
+ 290 |    }                                     | True                                  | 
+ 291 |   }                                      | True                                  | 
+ 292 |   /*                                     | True                                  | 
+ 293 |    * if format unit byte count not speci | True                                  | 
+ 294 |    * so can adjust rep count later.      | True                                  | 
+ 295 |    */                                    | True                                  | 
+ 296 |   if (fu->bcnt == 0)                     | True                                  | 
+ 297 |    for (pr = fu->nextpr; pr; pr = pr->ne | True                                  | 
+ 298 |     fu->bcnt += pr->bcnt;                | True                                  | 
+ 299 |  }                                       | True                                  | 
+ 300 |  /*                                      | True                                  | 
+ 301 |   * if the format string interprets any  | True                                  | 
+ 302 |   * not the same as the blocksize, and i | True                                  | 
+ 303 |   * interprets any data at all, and has  | True                                  | 
+ 304 |   * repeat it as necessary.              | True                                  | 
+ 305 |   *                                      | True                                  | 
+ 306 |   * if rep count is greater than 1, no t | True                                  | 
+ 307 |   * gets output from the last iteration  | True                                  | 
+ 308 |   * 2/1 "%02x " prints "XX XX", not "XX  | True                                  | 
+ 309 |   * 2/1 "%02x\n" prints "XX\nXX", not "X | True                                  | 
+ 310 |   */                                     | True                                  | 
+ 311 |  for (fu = fs->nextfu; fu; fu = fu->next | True                                  | 
+ 312 |   if (!fu->nextfu                        | True                                  | 
+ 313 |    && fs->bcnt < dumper->blocksize       | True                                  | 
+ 314 |    && !(fu->flags & F_SETREP)            | True                                  | 
+ 315 |    && fu->bcnt                           | True                                  | 
+ 316 |   ) {                                    | True                                  | 
+ 317 |    fu->reps += (dumper->blocksize - fs-> | True                                  | 
+ 318 |   }                                      | True                                  | 
+ 319 |   if (fu->reps > 1 && fu->nextpr) {      | True                                  | 
+ 320 |    PR *pr;                               | True                                  | 
+ 321 |    char *p1, *p2;                        | True                                  | 
+ 322 |                                          | True                                  | 
+ 323 |    for (pr = fu->nextpr;; pr = pr->nextp | True                                  | 
+ 324 |     if (!pr->nextpr)                     | True                                  | 
+ 325 |      break;                              | True                                  | 
+ 326 |    p2 = NULL;                            | True                                  | 
+ 327 |    for (p1 = pr->fmt; *p1; ++p1)         | True                                  | 
+ 328 |     p2 = isspace(*p1) ? p1 : NULL;       | True                                  | 
+ 329 |    pr->nospace = p2;                     | True                                  | 
+ 330 |   }                                      | True                                  | 
+ 331 |  }                                       | True                                  | 
+ 332 | }                                        | True                                  | 
+ 333 |                                          | True                                  | 
+ 334 | static void do_skip(priv_dumper_t *dumpe | True                                  | 
+ 335 | {                                        | True                                  | 
+ 336 |  struct stat sbuf;                       | True                                  | 
+ 337 |                                          | True                                  | 
+ 338 |  xfstat(STDIN_FILENO, &sbuf, fname);     | True                                  | 
+ 339 |  if (S_ISREG(sbuf.st_mode)               | True                                  | 
+ 340 |   && dumper->pub.dump_skip >= sbuf.st_si | True                                  | 
+ 341 |  ) {                                     | True                                  | 
+ 342 |   /* If st_size is valid and pub.dump_sk | True                                  | 
+ 343 |   dumper->pub.dump_skip -= sbuf.st_size; | True                                  | 
+ 344 |   dumper->pub.address += sbuf.st_size;   | True                                  | 
+ 345 |   return;                                | True                                  | 
+ 346 |  }                                       | True                                  | 
+ 347 |  if (fseeko(stdin, dumper->pub.dump_skip | True                                  | 
+ 348 |   bb_simple_perror_msg_and_die(fname);   | True                                  | 
+ 349 |  }                                       | True                                  | 
+ 350 |  dumper->pub.address += dumper->pub.dump | True                                  | 
+ 351 |  dumper->savaddress = dumper->pub.addres | True                                  | 
+ 352 |  dumper->pub.dump_skip = 0;              | True                                  | 
+ 353 | }                                        | True                                  | 
+ 354 |                                          | True                                  | 
+ 355 | static NOINLINE int next(priv_dumper_t * | True                                  | 
+ 356 | {                                        | True                                  | 
+ 357 |  for (;;) {                              | True                                  | 
+ 358 |   const char *fname = *dumper->argv;     | True                                  | 
+ 359 |                                          | True                                  | 
+ 360 |   if (fname) {                           | True                                  | 
+ 361 |    dumper->argv++;                       | True                                  | 
+ 362 |    if (NOT_LONE_DASH(fname)) {           | True                                  | 
+ 363 |     if (!freopen(fname, "r", stdin)) {   | True                                  | 
+ 364 |      bb_simple_perror_msg(fname);        | True                                  | 
+ 365 |      dumper->exitval = 1;                | True                                  | 
+ 366 |      dumper->next__done = 1;             | True                                  | 
+ 367 |      continue;                           | True                                  | 
+ 368 |     }                                    | True                                  | 
+ 369 |    }                                     | True                                  | 
+ 370 |   } else {                               | True                                  | 
+ 371 |    if (dumper->next__done)               | True                                  | 
+ 372 |     return 0; /* no next file */         | True                                  | 
+ 373 |   }                                      | True                                  | 
+ 374 |   dumper->next__done = 1;                | True                                  | 
+ 375 |   if (dumper->pub.dump_skip)             | True                                  | 
+ 376 |    do_skip(dumper, fname ? fname : "stdi | True                                  | 
+ 377 |   if (dumper->pub.dump_skip == 0)        | True                                  | 
+ 378 |    return 1;                             | True                                  | 
+ 379 |  }                                       | True                                  | 
+ 380 |  /* NOTREACHED */                        | True                                  | 
+ 381 | }                                        | True                                  | 
+ 382 |                                          | True                                  | 
+ 383 | static unsigned char *get(priv_dumper_t  | True                                  | 
+ 384 | {                                        | True                                  | 
+ 385 |  int n;                                  | True                                  | 
+ 386 |  int need, nread;                        | True                                  | 
+ 387 |  int blocksize = dumper->blocksize;      | True                                  | 
+ 388 |                                          | True                                  | 
+ 389 |  if (!dumper->get__curp) {               | True                                  | 
+ 390 |   dumper->pub.address = (off_t)0; /*DBU: | True                                  | 
+ 391 |   dumper->get__curp = xmalloc(blocksize) | True                                  | 
+ 392 |   dumper->get__savp = xzalloc(blocksize) | True                                  | 
+ 393 |  } else {                                | True                                  | 
+ 394 |   unsigned char *tmp = dumper->get__curp | True                                  | 
+ 395 |   dumper->get__curp = dumper->get__savp; | True                                  | 
+ 396 |   dumper->get__savp = tmp;               | True                                  | 
+ 397 |   dumper->savaddress += blocksize;       | True                                  | 
+ 398 |   dumper->pub.address = dumper->savaddre | True                                  | 
+ 399 |  }                                       | True                                  | 
+ 400 |  need = blocksize;                       | True                                  | 
+ 401 |  nread = 0;                              | True                                  | 
+ 402 |  while (1) {                             | True                                  | 
+ 403 |   /*                                     | True                                  | 
+ 404 |    * if read the right number of bytes,  | True                                  | 
+ 405 |    * and no other files are available, z | True                                  | 
+ 406 |    * block and set the end flag.         | True                                  | 
+ 407 |    */                                    | True                                  | 
+ 408 |   if (!dumper->pub.dump_length || (dumpe | True                                  | 
+ 409 |    if (need == blocksize) {              | True                                  | 
+ 410 |     return NULL;                         | True                                  | 
+ 411 |    }                                     | True                                  | 
+ 412 |    if (dumper->pub.dump_vflag != ALL   / | True                                  | 
+ 413 |     && dumper->pub.dump_vflag != FIRST / | True                                  | 
+ 414 |     && memcmp(dumper->get__curp, dumper- | True                                  | 
+ 415 |    ) {                                   | True                                  | 
+ 416 |     if (dumper->pub.dump_vflag != DUP) { | True                                  | 
+ 417 |      puts("*");                          | True                                  | 
+ 418 |     }                                    | True                                  | 
+ 419 |    }                                     | True                                  | 
+ 420 |    memset(dumper->get__curp + nread, 0,  | True                                  | 
+ 421 |    dumper->eaddress = dumper->pub.addres | True                                  | 
+ 422 |    return dumper->get__curp;             | True                                  | 
+ 423 |   }                                      | True                                  | 
+ 424 |   n = fread(dumper->get__curp + nread, s | True                                  | 
+ 425 |     dumper->pub.dump_length == -1 ? need | True                                  | 
+ 426 |   if (n == 0) {                          | True                                  | 
+ 427 |    if (ferror(stdin)) {                  | True                                  | 
+ 428 |     bb_simple_perror_msg(dumper->argv[-1 | True                                  | 
+ 429 |    }                                     | True                                  | 
+ 430 |    dumper->get__ateof = 1;               | True                                  | 
+ 431 |    continue;                             | True                                  | 
+ 432 |   }                                      | True                                  | 
+ 433 |   dumper->get__ateof = 0;                | True                                  | 
+ 434 |   if (dumper->pub.dump_length != -1) {   | True                                  | 
+ 435 |    dumper->pub.dump_length -= n;         | True                                  | 
+ 436 |   }                                      | True                                  | 
+ 437 |   need -= n;                             | True                                  | 
+ 438 |   if (need == 0) {                       | True                                  | 
+ 439 |    if (dumper->pub.dump_vflag == ALL   / | True                                  | 
+ 440 |     || dumper->pub.dump_vflag == FIRST / | True                                  | 
+ 441 |     || memcmp(dumper->get__curp, dumper- | True                                  | 
+ 442 |    ) {                                   | True                                  | 
+ 443 |     if (dumper->pub.dump_vflag == DUP || | True                                  | 
+ 444 |      dumper->pub.dump_vflag = WAIT;      | True                                  | 
+ 445 |     }                                    | True                                  | 
+ 446 |     return dumper->get__curp;            | True                                  | 
+ 447 |    }                                     | True                                  | 
+ 448 |    if (dumper->pub.dump_vflag == WAIT) { | True                                  | 
+ 449 |     puts("*");                           | True                                  | 
+ 450 |    }                                     | True                                  | 
+ 451 |    dumper->pub.dump_vflag = DUP;         | True                                  | 
+ 452 |    dumper->savaddress += blocksize;      | True                                  | 
+ 453 |    dumper->pub.address = dumper->savaddr | True                                  | 
+ 454 |    need = blocksize;                     | True                                  | 
+ 455 |    nread = 0;                            | True                                  | 
+ 456 |   } else {                               | True                                  | 
+ 457 |    nread += n;                           | True                                  | 
+ 458 |   }                                      | True                                  | 
+ 459 |  }                                       | True                                  | 
+ 460 | }                                        | True                                  | 
+ 461 |                                          | True                                  | 
+ 462 | static void bpad(PR *pr)                 | True                                  | 
+ 463 | {                                        | True                                  | 
+ 464 |  char *p1, *p2;                          | True                                  | 
+ 465 |                                          | True                                  | 
+ 466 |  /*                                      | True                                  | 
+ 467 |   * remove all conversion flags; '-' is  | True                                  | 
+ 468 |   * with %s, and it's not useful here.   | True                                  | 
+ 469 |   */                                     | True                                  | 
+ 470 |  pr->flags = F_BPAD;                     | True                                  | 
+ 471 |  *pr->cchar = 's';                       | True                                  | 
+ 472 |  for (p1 = pr->fmt; *p1 != '%'; ++p1)    | True                                  | 
+ 473 |   continue;                              | True                                  | 
+ 474 |  for (p2 = ++p1; *p1 && strchr(" -0+#",  | True                                  | 
+ 475 |   if (pr->nospace)                       | True                                  | 
+ 476 |    pr->nospace--;                        | True                                  | 
+ 477 |  while ((*p2++ = *p1++) != '\0')         | True                                  | 
+ 478 |   continue;                              | True                                  | 
+ 479 | }                                        | True                                  | 
+ 480 |                                          | True                                  | 
+ 481 | static void conv_c(PR *pr, unsigned char | True                                  | 
+ 482 | {                                        | True                                  | 
+ 483 |  const char *str;                        | True                                  | 
+ 484 |  unsigned char ch;                       | True                                  | 
+ 485 |                                          | True                                  | 
+ 486 |  ch = *p;                                | True                                  | 
+ 487 |  if (ch == 0 || (ch -= 6, (signed char)c | True                                  | 
+ 488 |   /* map chars 0,7..13 to "\0","\{a,b,t, | True                                  | 
+ 489 |   str = c_escape_conv_str00 + 3 * ch;    | True                                  | 
+ 490 |   goto strpr;                            | True                                  | 
+ 491 |  }                                       | True                                  | 
+ 492 |                                          | True                                  | 
+ 493 |  if (isprint_asciionly(*p)) {            | True                                  | 
+ 494 |   *pr->cchar = 'c';                      | True                                  | 
+ 495 |   printf(pr->fmt, *p);                   | True                                  | 
+ 496 |  } else {                                | True                                  | 
+ 497 | #if defined(__i386__) || defined(__x86_6 | True                                  | 
+ 498 |   /* Abuse partial register operations * | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 499 |   uint32_t buf;                          | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 500 |   unsigned n = *p;                       | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 501 |   asm (           //00000000 00000000 00 | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 502 | "\n  shll $10,%%eax" //00000000 000000aa | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 503 | "\n  shrw $5,%%ax"   //00000000 000000aa | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 504 | "\n  shrb $5,%%al"   //00000000 000000aa | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 505 | "\n  shll $8,%%eax"  //000000aa 00000bbb | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 506 | "\n  bswapl %%eax"   //00000000 00000ccc | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 507 | "\n  addl $0x303030,%%eax"               | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 508 | "\n"  : "=a" (n)                         | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 509 |   : "0" (n)                              | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 510 |   );                                     | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 511 |   buf = n;                               | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 512 |   str = (void*)&buf;                     | !(__i386__)&&(__x86_64__)||(__i386__) | 
+ 513 | #elif 1                                  | True                                  | 
+ 514 |   char buf[4];                           | !(__i386__)&&!(__x86_64__)            | 
+ 515 |   /* gcc-8.0.1 needs lots of casts to sh | !(__i386__)&&!(__x86_64__)            | 
+ 516 |   sprintf(buf, "%03o", (unsigned)(uint8_ | !(__i386__)&&!(__x86_64__)            | 
+ 517 |   str = buf;                             | !(__i386__)&&!(__x86_64__)            | 
+ 518 | #else // use faster version? +20 bytes o | True                                  | 
+ 519 |   char buf[4];                           | !(((__i386__)||(__x86_64__))||1)      | 
+ 520 |   buf[3] = '\0';                         | !(((__i386__)||(__x86_64__))||1)      | 
+ 521 |   ch = *p;                               | !(((__i386__)||(__x86_64__))||1)      | 
+ 522 |   buf[2] = '0' + (ch & 7); ch >>= 3;     | !(((__i386__)||(__x86_64__))||1)      | 
+ 523 |   buf[1] = '0' + (ch & 7); ch >>= 3;     | !(((__i386__)||(__x86_64__))||1)      | 
+ 524 |   buf[0] = '0' + ch;                     | !(((__i386__)||(__x86_64__))||1)      | 
+ 525 |   str = buf;                             | !(((__i386__)||(__x86_64__))||1)      | 
+ 526 | #endif                                   | True                                  | 
+ 527 |  strpr:                                  | True                                  | 
+ 528 |   *pr->cchar = 's';                      | True                                  | 
+ 529 |   printf(pr->fmt, str);                  | True                                  | 
+ 530 |  }                                       | True                                  | 
+ 531 | }                                        | True                                  | 
+ 532 |                                          | True                                  | 
+ 533 | static void conv_u(PR *pr, unsigned char | True                                  | 
+ 534 | {                                        | True                                  | 
+ 535 |  static const char list[] ALIGN1 =       | True                                  | 
+ 536 |   "nul\0soh\0stx\0etx\0eot\0enq\0ack\0be | True                                  | 
+ 537 |   "bs\0_ht\0_lf\0_vt\0_ff\0_cr\0_so\0_si | True                                  | 
+ 538 |   "dle\0dc1\0dc2\0dc3\0dc4\0nak\0syn\0et | True                                  | 
+ 539 |   "can\0em\0_sub\0esc\0fs\0_gs\0_rs\0_us | True                                  | 
+ 540 |  /* NB: bug: od uses %_u to implement -a | True                                  | 
+ 541 |   * but it should use "nl", not "lf", fo | True                                  | 
+ 542 |   */                                     | True                                  | 
+ 543 |                                          | True                                  | 
+ 544 |  if (*p <= 0x1f) {                       | True                                  | 
+ 545 |   *pr->cchar = 's';                      | True                                  | 
+ 546 |   printf(pr->fmt, list + (4 * (int)*p)); | True                                  | 
+ 547 |  } else if (*p == 0x7f) {                | True                                  | 
+ 548 |   *pr->cchar = 's';                      | True                                  | 
+ 549 |   printf(pr->fmt, "del");                | True                                  | 
+ 550 |  } else if (*p < 0x7f) { /* isprint() */ | True                                  | 
+ 551 |   *pr->cchar = 'c';                      | True                                  | 
+ 552 |   printf(pr->fmt, *p);                   | True                                  | 
+ 553 |  } else {                                | True                                  | 
+ 554 |   *pr->cchar = 'x';                      | True                                  | 
+ 555 |   printf(pr->fmt, (int) *p);             | True                                  | 
+ 556 |  }                                       | True                                  | 
+ 557 | }                                        | True                                  | 
+ 558 |                                          | True                                  | 
+ 559 | static NOINLINE void display(priv_dumper | True                                  | 
+ 560 | {                                        | True                                  | 
+ 561 |  unsigned char *bp;                      | True                                  | 
+ 562 |                                          | True                                  | 
+ 563 |  while ((bp = get(dumper)) != NULL) {    | True                                  | 
+ 564 |   FS *fs;                                | True                                  | 
+ 565 |   unsigned char *savebp;                 | True                                  | 
+ 566 |   off_t saveaddress;                     | True                                  | 
+ 567 |                                          | True                                  | 
+ 568 |   fs = dumper->pub.fshead;               | True                                  | 
+ 569 |   savebp = bp;                           | True                                  | 
+ 570 |   saveaddress = dumper->pub.address;     | True                                  | 
+ 571 |   for (; fs; fs = fs->nextfs, bp = saveb | True                                  | 
+ 572 |    FU *fu;                               | True                                  | 
+ 573 |    for (fu = fs->nextfu; fu; fu = fu->ne | True                                  | 
+ 574 |     int cnt;                             | True                                  | 
+ 575 |     if (fu->flags & F_IGNORE) {          | True                                  | 
+ 576 |      break;                              | True                                  | 
+ 577 |     }                                    | True                                  | 
+ 578 |     for (cnt = fu->reps; cnt; --cnt) {   | True                                  | 
+ 579 |      PR *pr;                             | True                                  | 
+ 580 |      for (pr = fu->nextpr; pr; dumper->p | True                                  | 
+ 581 |         bp += pr->bcnt, pr = pr->nextpr) | True                                  | 
+ 582 |       unsigned char savech;              | True                                  | 
+ 583 |                                          | True                                  | 
+ 584 |       if (dumper->eaddress               | True                                  | 
+ 585 |        && dumper->pub.address >= dumper- | True                                  | 
+ 586 |       ) {                                | True                                  | 
+ 587 | #if ENABLE_XXD                           | True                                  | 
+ 588 |        if (dumper->pub.xxd_eofstring) {  | ENABLE_XXD                            | 
+ 589 |         /* xxd support: requested to not | ENABLE_XXD                            | 
+ 590 |         fputs_stdout(dumper->pub.xxd_eof | ENABLE_XXD                            | 
+ 591 |         return;                          | ENABLE_XXD                            | 
+ 592 |        }                                 | ENABLE_XXD                            | 
+ 593 | #endif                                   | True                                  | 
+ 594 | #if ENABLE_OD                            | True                                  | 
+ 595 |        if (dumper->pub.od_eofstring) {   | ENABLE_OD                             | 
+ 596 |         /* od support: requested to not  | ENABLE_OD                             | 
+ 597 |         /* ... but do print final offset | ENABLE_OD                             | 
+ 598 |         fputs_stdout(dumper->pub.od_eofs | ENABLE_OD                             | 
+ 599 |         goto endfu;                      | ENABLE_OD                             | 
+ 600 |        }                                 | ENABLE_OD                             | 
+ 601 | #endif                                   | True                                  | 
+ 602 |        if (!(pr->flags & (F_TEXT | F_BPA | True                                  | 
+ 603 |         bpad(pr);                        | True                                  | 
+ 604 |       }                                  | True                                  | 
+ 605 |       savech = '\0';                     | True                                  | 
+ 606 |       if (cnt == 1 && pr->nospace) {     | True                                  | 
+ 607 |        savech = *pr->nospace;            | True                                  | 
+ 608 |        *pr->nospace = '\0';              | True                                  | 
+ 609 |       }                                  | True                                  | 
+ 610 |       switch (pr->flags) {               | True                                  | 
+ 611 |       case F_ADDRESS:                    | True                                  | 
+ 612 |        printf(pr->fmt, (unsigned long lo | True                                  | 
+ 613 | #if ENABLE_XXD                           | True                                  | 
+ 614 |         + dumper->pub.xxd_displayoff     | ENABLE_XXD                            | 
+ 615 | #endif                                   | True                                  | 
+ 616 |        );                                | True                                  | 
+ 617 |        break;                            | True                                  | 
+ 618 |       case F_BPAD:                       | True                                  | 
+ 619 |        printf(pr->fmt, "");              | True                                  | 
+ 620 |        break;                            | True                                  | 
+ 621 |       case F_C:                          | True                                  | 
+ 622 |        conv_c(pr, bp);                   | True                                  | 
+ 623 |        break;                            | True                                  | 
+ 624 |       case F_CHAR:                       | True                                  | 
+ 625 |        printf(pr->fmt, *bp);             | True                                  | 
+ 626 |        break;                            | True                                  | 
+ 627 |       case F_DBL: {                      | True                                  | 
+ 628 |        double dval;                      | True                                  | 
+ 629 |        float fval;                       | True                                  | 
+ 630 |                                          | True                                  | 
+ 631 |        switch (pr->bcnt) {               | True                                  | 
+ 632 |        case 4:                           | True                                  | 
+ 633 |         memcpy(&fval, bp, sizeof(fval)); | True                                  | 
+ 634 |         printf(pr->fmt, fval);           | True                                  | 
+ 635 |         break;                           | True                                  | 
+ 636 |        case 8:                           | True                                  | 
+ 637 |         memcpy(&dval, bp, sizeof(dval)); | True                                  | 
+ 638 |         printf(pr->fmt, dval);           | True                                  | 
+ 639 |         break;                           | True                                  | 
+ 640 |        }                                 | True                                  | 
+ 641 |        break;                            | True                                  | 
+ 642 |       }                                  | True                                  | 
+ 643 |       case F_INT: {                      | True                                  | 
+ 644 |        union {                           | True                                  | 
+ 645 |         int16_t ival16;                  | True                                  | 
+ 646 |         int32_t ival32;                  | True                                  | 
+ 647 |         int64_t ival64;                  | True                                  | 
+ 648 |        } u;                              | True                                  | 
+ 649 |        int value = (signed char)*bp;     | True                                  | 
+ 650 |                                          | True                                  | 
+ 651 |        switch (pr->bcnt) {               | True                                  | 
+ 652 |        case 1:                           | True                                  | 
+ 653 |         break;                           | True                                  | 
+ 654 |        case 2:                           | True                                  | 
+ 655 |         move_from_unaligned16(u.ival16,  | True                                  | 
+ 656 |         value = u.ival16;                | True                                  | 
+ 657 |         break;                           | True                                  | 
+ 658 |        case 4:                           | True                                  | 
+ 659 |         move_from_unaligned32(u.ival32,  | True                                  | 
+ 660 |         value = u.ival32;                | True                                  | 
+ 661 |         break;                           | True                                  | 
+ 662 |        case 8:                           | True                                  | 
+ 663 |         move_from_unaligned64(u.ival64,  | True                                  | 
+ 664 | //A hack. Users _must_ use %llX formats  | True                                  | 
+ 665 |         printf(pr->fmt, (long long)u.iva | True                                  | 
+ 666 |         goto skip;                       | True                                  | 
+ 667 |        }                                 | True                                  | 
+ 668 |        printf(pr->fmt, value);           | True                                  | 
+ 669 |  skip:                                   | True                                  | 
+ 670 |        break;                            | True                                  | 
+ 671 |       }                                  | True                                  | 
+ 672 |       case F_P:                          | True                                  | 
+ 673 |        printf(pr->fmt, isprint_asciionly | True                                  | 
+ 674 |        break;                            | True                                  | 
+ 675 |       case F_STR:                        | True                                  | 
+ 676 |        printf(pr->fmt, (char *) bp);     | True                                  | 
+ 677 |        break;                            | True                                  | 
+ 678 |       case F_TEXT:                       | True                                  | 
+ 679 |        fputs_stdout(pr->fmt);            | True                                  | 
+ 680 |        break;                            | True                                  | 
+ 681 |       case F_U:                          | True                                  | 
+ 682 |        conv_u(pr, bp);                   | True                                  | 
+ 683 |        break;                            | True                                  | 
+ 684 |       case F_UINT: {                     | True                                  | 
+ 685 |        union {                           | True                                  | 
+ 686 |         uint16_t uval16;                 | True                                  | 
+ 687 |         uint32_t uval32;                 | True                                  | 
+ 688 |        } u;                              | True                                  | 
+ 689 |        unsigned value = (unsigned char)* | True                                  | 
+ 690 |        switch (pr->bcnt) {               | True                                  | 
+ 691 |        case 1:                           | True                                  | 
+ 692 |         break;                           | True                                  | 
+ 693 |        case 2:                           | True                                  | 
+ 694 |         move_from_unaligned16(u.uval16,  | True                                  | 
+ 695 |         value = u.uval16;                | True                                  | 
+ 696 |         break;                           | True                                  | 
+ 697 |        case 4:                           | True                                  | 
+ 698 |         move_from_unaligned32(u.uval32,  | True                                  | 
+ 699 |         value = u.uval32;                | True                                  | 
+ 700 |         break;                           | True                                  | 
+ 701 |        /* case 8: no users yet */        | True                                  | 
+ 702 |        }                                 | True                                  | 
+ 703 |        printf(pr->fmt, value);           | True                                  | 
+ 704 |        break;                            | True                                  | 
+ 705 |       }                                  | True                                  | 
+ 706 |       }                                  | True                                  | 
+ 707 |       if (savech) {                      | True                                  | 
+ 708 |        *pr->nospace = savech;            | True                                  | 
+ 709 |       }                                  | True                                  | 
+ 710 |      }                                   | True                                  | 
+ 711 |     }                                    | True                                  | 
+ 712 |    }                                     | True                                  | 
+ 713 |   }                                      | True                                  | 
+ 714 |  }                                       | True                                  | 
+ 715 |  IF_OD(endfu:)                           | True                                  | 
+ 716 |  if (dumper->endfu) {                    | True                                  | 
+ 717 |   PR *pr;                                | True                                  | 
+ 718 |   /*                                     | True                                  | 
+ 719 |    * if eaddress not set, error or file  | True                                  | 
+ 720 |    * of blocksize, and no partial block  | True                                  | 
+ 721 |    */                                    | True                                  | 
+ 722 |   if (!dumper->eaddress) {               | True                                  | 
+ 723 |    if (!dumper->pub.address) {           | True                                  | 
+ 724 |     return;                              | True                                  | 
+ 725 |    }                                     | True                                  | 
+ 726 |    dumper->eaddress = dumper->pub.addres | True                                  | 
+ 727 |   }                                      | True                                  | 
+ 728 |   for (pr = dumper->endfu->nextpr; pr; p | True                                  | 
+ 729 |    switch (pr->flags) {                  | True                                  | 
+ 730 |    case F_ADDRESS:                       | True                                  | 
+ 731 |     printf(pr->fmt, (unsigned long long) | True                                  | 
+ 732 | #if ENABLE_XXD                           | True                                  | 
+ 733 |      + dumper->pub.xxd_displayoff        | ENABLE_XXD                            | 
+ 734 | #endif                                   | True                                  | 
+ 735 |     );                                   | True                                  | 
+ 736 |     break;                               | True                                  | 
+ 737 |    case F_TEXT:                          | True                                  | 
+ 738 |     fputs_stdout(pr->fmt);               | True                                  | 
+ 739 |     break;                               | True                                  | 
+ 740 |    }                                     | True                                  | 
+ 741 |   }                                      | True                                  | 
+ 742 |  }                                       | True                                  | 
+ 743 | }                                        | True                                  | 
+ 744 |                                          | True                                  | 
+ 745 | #define dumper ((priv_dumper_t*)pub_dump | True                                  | 
+ 746 | int FAST_FUNC bb_dump_dump(dumper_t *pub | True                                  | 
+ 747 | {                                        | True                                  | 
+ 748 |  FS *tfs;                                | True                                  | 
+ 749 |  int blocksize;                          | True                                  | 
+ 750 |                                          | True                                  | 
+ 751 |  /* figure out the data block size */    | True                                  | 
+ 752 |  blocksize = 0;                          | True                                  | 
+ 753 |  tfs = dumper->pub.fshead;               | True                                  | 
+ 754 |  while (tfs) {                           | True                                  | 
+ 755 |   tfs->bcnt = bb_dump_size(tfs);         | True                                  | 
+ 756 |   if (blocksize < tfs->bcnt) {           | True                                  | 
+ 757 |    blocksize = tfs->bcnt;                | True                                  | 
+ 758 |   }                                      | True                                  | 
+ 759 |   tfs = tfs->nextfs;                     | True                                  | 
+ 760 |  }                                       | True                                  | 
+ 761 |  dumper->blocksize = blocksize;          | True                                  | 
+ 762 |                                          | True                                  | 
+ 763 |  /* rewrite the rules, do syntax checkin | True                                  | 
+ 764 |  for (tfs = dumper->pub.fshead; tfs; tfs | True                                  | 
+ 765 |   rewrite(dumper, tfs);                  | True                                  | 
+ 766 |  }                                       | True                                  | 
+ 767 |                                          | True                                  | 
+ 768 |  dumper->argv = argv;                    | True                                  | 
+ 769 |  display(dumper);                        | True                                  | 
+ 770 |                                          | True                                  | 
+ 771 |  return dumper->exitval;                 | True                                  | 
+ 772 | }                                        | True                                  | 
+ 773 |                                          | True                                  | 
+ 774 | void FAST_FUNC bb_dump_add(dumper_t* pub | True                                  | 
+ 775 | {                                        | True                                  | 
+ 776 |  const char *p;                          | True                                  | 
+ 777 |  FS *tfs;                                | True                                  | 
+ 778 |  FU **nextfupp;                          | True                                  | 
+ 779 |                                          | True                                  | 
+ 780 |  /* start new linked list of format unit | True                                  | 
+ 781 |  tfs = xzalloc(sizeof(FS)); /*DBU:[dave@ | True                                  | 
+ 782 |  if (!dumper->pub.fshead) {              | True                                  | 
+ 783 |   dumper->pub.fshead = tfs;              | True                                  | 
+ 784 |  } else {                                | True                                  | 
+ 785 |   FS *fslast = dumper->pub.fshead;       | True                                  | 
+ 786 |   while (fslast->nextfs)                 | True                                  | 
+ 787 |    fslast = fslast->nextfs;              | True                                  | 
+ 788 |   fslast->nextfs = tfs;                  | True                                  | 
+ 789 |  }                                       | True                                  | 
+ 790 |  nextfupp = &tfs->nextfu;                | True                                  | 
+ 791 |                                          | True                                  | 
+ 792 |  /* take the format string and break it  | True                                  | 
+ 793 |  p = fmt;                                | True                                  | 
+ 794 |  for (;;) {                              | True                                  | 
+ 795 |   FU *tfu;                               | True                                  | 
+ 796 |   const char *savep;                     | True                                  | 
+ 797 |                                          | True                                  | 
+ 798 |   p = skip_whitespace(p);                | True                                  | 
+ 799 |   if (*p == '\0') {                      | True                                  | 
+ 800 |    break;                                | True                                  | 
+ 801 |   }                                      | True                                  | 
+ 802 |                                          | True                                  | 
+ 803 |   /* allocate a new format unit and link | True                                  | 
+ 804 |   /* NOSTRICT */                         | True                                  | 
+ 805 |   /* DBU:[dave@cray.com] zalloc so that  | True                                  | 
+ 806 |   tfu = xzalloc(sizeof(FU));             | True                                  | 
+ 807 |   *nextfupp = tfu;                       | True                                  | 
+ 808 |   nextfupp = &tfu->nextfu;               | True                                  | 
+ 809 |   tfu->reps = 1;                         | True                                  | 
+ 810 |                                          | True                                  | 
+ 811 |   /* if leading digit, repetition count  | True                                  | 
+ 812 |   if (isdigit(*p)) {                     | True                                  | 
+ 813 |    for (savep = p; isdigit(*p); ++p)     | True                                  | 
+ 814 |     continue;                            | True                                  | 
+ 815 |    if (!isspace(*p) && *p != '/') {      | True                                  | 
+ 816 |     bb_error_msg_and_die("bad format {%s | True                                  | 
+ 817 |    }                                     | True                                  | 
+ 818 |    /* may overwrite either white space o | True                                  | 
+ 819 |    tfu->reps = atoi(savep);              | True                                  | 
+ 820 |    tfu->flags = F_SETREP;                | True                                  | 
+ 821 |    /* skip trailing white space */       | True                                  | 
+ 822 |    p = skip_whitespace(++p);             | True                                  | 
+ 823 |   }                                      | True                                  | 
+ 824 |                                          | True                                  | 
+ 825 |   /* skip slash and trailing white space | True                                  | 
+ 826 |   if (*p == '/') {                       | True                                  | 
+ 827 |    p = skip_whitespace(p + 1);           | True                                  | 
+ 828 |   }                                      | True                                  | 
+ 829 |                                          | True                                  | 
+ 830 |   /* byte count */                       | True                                  | 
+ 831 |   if (isdigit(*p)) {                     | True                                  | 
+ 832 | // TODO: use bb_strtou                   | True                                  | 
+ 833 |    savep = p;                            | True                                  | 
+ 834 |    while (isdigit(*++p))                 | True                                  | 
+ 835 |     continue;                            | True                                  | 
+ 836 |    if (!isspace(*p)) {                   | True                                  | 
+ 837 |     bb_error_msg_and_die("bad format {%s | True                                  | 
+ 838 |    }                                     | True                                  | 
+ 839 | // Above check prohibits formats such as | True                                  | 
+ 840 | // Other than this, formats can be prett | True                                  | 
+ 841 | // "%07_ax:"8/2 "%04x|""\n"              | True                                  | 
+ 842 | // but this space is required. The check | True                                  | 
+ 843 | // keeping it to stay compat with util-l | True                                  | 
+ 844 |    tfu->bcnt = atoi(savep);              | True                                  | 
+ 845 |    /* skip trailing white space */       | True                                  | 
+ 846 |    p = skip_whitespace(p + 1);           | True                                  | 
+ 847 |   }                                      | True                                  | 
+ 848 |                                          | True                                  | 
+ 849 |   /* format */                           | True                                  | 
+ 850 |   if (*p != '"') {                       | True                                  | 
+ 851 |    bb_error_msg_and_die("bad format {%s} | True                                  | 
+ 852 |   }                                      | True                                  | 
+ 853 |   for (savep = ++p; *p != '"';) {        | True                                  | 
+ 854 |    if (*p++ == '\0') {                   | True                                  | 
+ 855 |     bb_error_msg_and_die("bad format {%s | True                                  | 
+ 856 |    }                                     | True                                  | 
+ 857 |   }                                      | True                                  | 
+ 858 |   tfu->fmt = xstrndup(savep, p - savep); | True                                  | 
+ 859 |                                          | True                                  | 
+ 860 |   /* alphabetic escape sequences have to | True                                  | 
+ 861 |   strcpy_and_process_escape_sequences(tf | True                                  | 
+ 862 |   /* unknown mappings are not changed: " | True                                  | 
+ 863 |   /* trailing backslash, if any, is pres | True                                  | 
+ 864 | #if 0                                    | True                                  | 
+ 865 |   char *p1;                              | 0                                     | 
+ 866 |   char *p2;                              | 0                                     | 
+ 867 |   p1 = tfu->fmt;                         | 0                                     | 
+ 868 |   for (p2 = p1;; ++p1, ++p2) {           | 0                                     | 
+ 869 |    *p2 = *p1;                            | 0                                     | 
+ 870 |    if (*p1 == '\0')                      | 0                                     | 
+ 871 |     break;                               | 0                                     | 
+ 872 |                                          | 0                                     | 
+ 873 |    if (*p1 == '\\') {                    | 0                                     | 
+ 874 |     const char *cs;                      | 0                                     | 
+ 875 |                                          | 0                                     | 
+ 876 |     p1++;                                | 0                                     | 
+ 877 |     *p2 = *p1;                           | 0                                     | 
+ 878 |     if (*p1 == '\0') {                   | 0                                     | 
+ 879 |      /* "...\" trailing backslash. Eaten | 0                                     | 
+ 880 |      break;                              | 0                                     | 
+ 881 |     }                                    | 0                                     | 
+ 882 |     cs = conv_str + 4; /* skip NUL eleme | 0                                     | 
+ 883 |     do {                                 | 0                                     | 
+ 884 |      /* map e.g. "\n" -> '\n' */         | 0                                     | 
+ 885 |      if (*p1 == cs[2]) {                 | 0                                     | 
+ 886 |       *p2 = cs[0];                       | 0                                     | 
+ 887 |       break;                             | 0                                     | 
+ 888 |      }                                   | 0                                     | 
+ 889 |      cs += 4;                            | 0                                     | 
+ 890 |     } while (*cs);                       | 0                                     | 
+ 891 |     /* unknown mappings remove bkslash:  | 0                                     | 
+ 892 |    }                                     | 0                                     | 
+ 893 |   }                                      | 0                                     | 
+ 894 | #endif                                   | True                                  | 
+ 895 |                                          | True                                  | 
+ 896 |   p++;                                   | True                                  | 
+ 897 |  }                                       | True                                  | 
+ 898 | }                                        | True                                  | 
+ 899 |                                          | True                                  | 
+ 900 | /*                                       | True                                  | 
+ 901 |  * Copyright (c) 1989 The Regents of the | True                                  | 
+ 902 |  * All rights reserved.                  | True                                  | 
+ 903 |  *                                       | True                                  | 
+ 904 |  * Redistribution and use in source and  | True                                  | 
+ 905 |  * modification, are permitted provided  | True                                  | 
+ 906 |  * are met:                              | True                                  | 
+ 907 |  * 1. Redistributions of source code mus | True                                  | 
+ 908 |  *    notice, this list of conditions an | True                                  | 
+ 909 |  * 2. Redistributions in binary form mus | True                                  | 
+ 910 |  *    notice, this list of conditions an | True                                  | 
+ 911 |  *    documentation and/or other materia | True                                  | 
+ 912 |  * 3. Neither the name of the University | True                                  | 
+ 913 |  *    may be used to endorse or promote  | True                                  | 
+ 914 |  *    without specific prior written per | True                                  | 
+ 915 |  *                                       | True                                  | 
+ 916 |  * THIS SOFTWARE IS PROVIDED BY THE REGE | True                                  | 
+ 917 |  * ANY EXPRESS OR IMPLIED WARRANTIES, IN | True                                  | 
+ 918 |  * IMPLIED WARRANTIES OF MERCHANTABILITY | True                                  | 
+ 919 |  * ARE DISCLAIMED.  IN NO EVENT SHALL TH | True                                  | 
+ 920 |  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, | True                                  | 
+ 921 |  * DAMAGES (INCLUDING, BUT NOT LIMITED T | True                                  | 
+ 922 |  * OR SERVICES; LOSS OF USE, DATA, OR PR | True                                  | 
+ 923 |  * HOWEVER CAUSED AND ON ANY THEORY OF L | True                                  | 
+ 924 |  * LIABILITY, OR TORT (INCLUDING NEGLIGE | True                                  | 
+ 925 |  * OUT OF THE USE OF THIS SOFTWARE, EVEN | True                                  | 
+ 926 |  * SUCH DAMAGE.                          | True                                  | 
+ 927 |  */                                      | True                                  | 
+-----+------------------------------------------+---------------------------------------+
+     |                                          | +136MB, 290ms                         | 

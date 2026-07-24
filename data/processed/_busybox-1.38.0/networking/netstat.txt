@@ -1,0 +1,780 @@
+FILE: data/raw/busybox-1.38.0/networking/netstat.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                | 
+-----+------------------------------------------+------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                 | 
+   2 | /*                                       | True                                                 | 
+   3 |  * Mini netstat implementation(s) for bu | True                                                 | 
+   4 |  * based in part on the netstat implemen | True                                                 | 
+   5 |  *                                       | True                                                 | 
+   6 |  * Copyright (C) 2002 by Bart Visscher < | True                                                 | 
+   7 |  *                                       | True                                                 | 
+   8 |  * 2002-04-20                            | True                                                 | 
+   9 |  * IPV6 support added by Bart Visscher < | True                                                 | 
+  10 |  *                                       | True                                                 | 
+  11 |  * 2008-07-10                            | True                                                 | 
+  12 |  * optional '-p' flag support ported fro | True                                                 | 
+  13 |  *                                       | True                                                 | 
+  14 |  * Licensed under GPLv2 or later, see fi | True                                                 | 
+  15 |  */                                      | True                                                 | 
+  16 | //config:config NETSTAT                  | True                                                 | 
+  17 | //config: bool "netstat (10 kb)"         | True                                                 | 
+  18 | //config: default y                      | True                                                 | 
+  19 | //config: help                           | True                                                 | 
+  20 | //config: netstat prints information abo | True                                                 | 
+  21 | //config:                                | True                                                 | 
+  22 | //config:config FEATURE_NETSTAT_WIDE     | True                                                 | 
+  23 | //config: bool "Enable wide output"      | True                                                 | 
+  24 | //config: default y                      | True                                                 | 
+  25 | //config: depends on NETSTAT             | True                                                 | 
+  26 | //config: help                           | True                                                 | 
+  27 | //config: Add support for wide columns.  | True                                                 | 
+  28 | //config: (-W option).                   | True                                                 | 
+  29 | //config:                                | True                                                 | 
+  30 | //config:config FEATURE_NETSTAT_PRG      | True                                                 | 
+  31 | //config: bool "Enable PID/Program name  | True                                                 | 
+  32 | //config: default y                      | True                                                 | 
+  33 | //config: depends on NETSTAT             | True                                                 | 
+  34 | //config: help                           | True                                                 | 
+  35 | //config: Add support for -p flag to pri | True                                                 | 
+  36 | //config: +700 bytes of code.            | True                                                 | 
+  37 |                                          | True                                                 | 
+  38 | //applet:IF_NETSTAT(APPLET(netstat, BB_D | True                                                 | 
+  39 |                                          | True                                                 | 
+  40 | //kbuild:lib-$(CONFIG_NETSTAT) += netsta | True                                                 | 
+  41 |                                          | True                                                 | 
+  42 | #include "libbb.h"                       | True                                                 | 
+  43 | #include "inet_common.h"                 | True                                                 | 
+  44 |                                          | True                                                 | 
+  45 | //usage:#define netstat_trivial_usage    | True                                                 | 
+  46 | //usage:       "[-"IF_ROUTE("r")"al] [-t | True                                                 | 
+  47 | //usage:#define netstat_full_usage "\n\n | True                                                 | 
+  48 | //usage:       "Display networking infor | True                                                 | 
+  49 | //usage: IF_ROUTE(                       | True                                                 | 
+  50 | //usage:     "\n -r Routing table"       | True                                                 | 
+  51 | //usage: )                               | True                                                 | 
+  52 | //usage:     "\n -a All sockets"         | True                                                 | 
+  53 | //usage:     "\n -l Listening sockets"   | True                                                 | 
+  54 | //usage:     "\n  Else: connected socket | True                                                 | 
+  55 | //usage:     "\n -t TCP sockets"         | True                                                 | 
+  56 | //usage:     "\n -u UDP sockets"         | True                                                 | 
+  57 | //usage:     "\n -w Raw sockets"         | True                                                 | 
+  58 | //usage:     "\n -x Unix sockets"        | True                                                 | 
+  59 | //usage:     "\n  Else: all socket types | True                                                 | 
+  60 | //usage:     "\n -e Other/more informati | True                                                 | 
+  61 | //usage:     "\n -n Don't resolve names" | True                                                 | 
+  62 | //usage: IF_FEATURE_NETSTAT_WIDE(        | True                                                 | 
+  63 | //usage:     "\n -W Wide display"        | True                                                 | 
+  64 | //usage: )                               | True                                                 | 
+  65 | //usage: IF_FEATURE_NETSTAT_PRG(         | True                                                 | 
+  66 | //usage:     "\n -p Show PID/program nam | True                                                 | 
+  67 | //usage: )                               | True                                                 | 
+  68 |                                          | True                                                 | 
+  69 | #define NETSTAT_OPTS "laentuwx" \        | True                                                 | 
+  70 |  IF_ROUTE(               "r") \          | True                                                 | 
+  71 |  IF_FEATURE_NETSTAT_WIDE("W") \          | True                                                 | 
+  72 |  IF_FEATURE_NETSTAT_PRG( "p")            | True                                                 | 
+  73 |                                          | True                                                 | 
+  74 | enum {                                   | True                                                 | 
+  75 |  OPT_sock_listen = 1 << 0, // l          | True                                                 | 
+  76 |  OPT_sock_all    = 1 << 1, // a          | True                                                 | 
+  77 |  OPT_extended    = 1 << 2, // e          | True                                                 | 
+  78 |  OPT_noresolve   = 1 << 3, // n          | True                                                 | 
+  79 |  OPT_sock_tcp    = 1 << 4, // t          | True                                                 | 
+  80 |  OPT_sock_udp    = 1 << 5, // u          | True                                                 | 
+  81 |  OPT_sock_raw    = 1 << 6, // w          | True                                                 | 
+  82 |  OPT_sock_unix   = 1 << 7, // x          | True                                                 | 
+  83 |  OPTBIT_x        = 7,                    | True                                                 | 
+  84 |  IF_ROUTE(               OPTBIT_ROUTE,)  | True                                                 | 
+  85 |  IF_FEATURE_NETSTAT_WIDE(OPTBIT_WIDE ,)  | True                                                 | 
+  86 |  IF_FEATURE_NETSTAT_PRG( OPTBIT_PRG  ,)  | True                                                 | 
+  87 |  OPT_route       = IF_ROUTE(             | True                                                 | 
+  88 |  OPT_wide        = IF_FEATURE_NETSTAT_WI | True                                                 | 
+  89 |  OPT_prg         = IF_FEATURE_NETSTAT_PR | True                                                 | 
+  90 | };                                       | True                                                 | 
+  91 |                                          | True                                                 | 
+  92 | #define NETSTAT_CONNECTED 0x01           | True                                                 | 
+  93 | #define NETSTAT_LISTENING 0x02           | True                                                 | 
+  94 | #define NETSTAT_NUMERIC   0x04           | True                                                 | 
+  95 | /* Must match getopt32 option string */  | True                                                 | 
+  96 | #define NETSTAT_TCP       0x10           | True                                                 | 
+  97 | #define NETSTAT_UDP       0x20           | True                                                 | 
+  98 | #define NETSTAT_RAW       0x40           | True                                                 | 
+  99 | #define NETSTAT_UNIX      0x80           | True                                                 | 
+ 100 | #define NETSTAT_ALLPROTO  (NETSTAT_TCP|N | True                                                 | 
+ 101 |                                          | True                                                 | 
+ 102 |                                          | True                                                 | 
+ 103 | enum {                                   | True                                                 | 
+ 104 |  TCP_ESTABLISHED = 1,                    | True                                                 | 
+ 105 |  TCP_SYN_SENT,                           | True                                                 | 
+ 106 |  TCP_SYN_RECV,                           | True                                                 | 
+ 107 |  TCP_FIN_WAIT1,                          | True                                                 | 
+ 108 |  TCP_FIN_WAIT2,                          | True                                                 | 
+ 109 |  TCP_TIME_WAIT,                          | True                                                 | 
+ 110 |  TCP_CLOSE,                              | True                                                 | 
+ 111 |  TCP_CLOSE_WAIT,                         | True                                                 | 
+ 112 |  TCP_LAST_ACK,                           | True                                                 | 
+ 113 |  TCP_LISTEN,                             | True                                                 | 
+ 114 |  TCP_CLOSING, /* now a valid state */    | True                                                 | 
+ 115 | };                                       | True                                                 | 
+ 116 |                                          | True                                                 | 
+ 117 | static const char *const tcp_state[] ALI | True                                                 | 
+ 118 |  "",                                     | True                                                 | 
+ 119 |  "ESTABLISHED",                          | True                                                 | 
+ 120 |  "SYN_SENT",                             | True                                                 | 
+ 121 |  "SYN_RECV",                             | True                                                 | 
+ 122 |  "FIN_WAIT1",                            | True                                                 | 
+ 123 |  "FIN_WAIT2",                            | True                                                 | 
+ 124 |  "TIME_WAIT",                            | True                                                 | 
+ 125 |  "CLOSE",                                | True                                                 | 
+ 126 |  "CLOSE_WAIT",                           | True                                                 | 
+ 127 |  "LAST_ACK",                             | True                                                 | 
+ 128 |  "LISTEN",                               | True                                                 | 
+ 129 |  "CLOSING"                               | True                                                 | 
+ 130 | };                                       | True                                                 | 
+ 131 |                                          | True                                                 | 
+ 132 | typedef enum {                           | True                                                 | 
+ 133 |  SS_FREE = 0,     /* not allocated       | True                                                 | 
+ 134 |  SS_UNCONNECTED,  /* unconnected to any  | True                                                 | 
+ 135 |  SS_CONNECTING,   /* in process of conne | True                                                 | 
+ 136 |  SS_CONNECTED,    /* connected to socket | True                                                 | 
+ 137 |  SS_DISCONNECTING /* in process of disco | True                                                 | 
+ 138 | } socket_state;                          | True                                                 | 
+ 139 |                                          | True                                                 | 
+ 140 | #define SO_ACCEPTCON (1<<16)  /* perform | True                                                 | 
+ 141 | #define SO_WAITDATA  (1<<17)  /* wait da | True                                                 | 
+ 142 | #define SO_NOSPACE   (1<<18)  /* no spac | True                                                 | 
+ 143 |                                          | True                                                 | 
+ 144 | #define ADDR_NORMAL_WIDTH        23      | True                                                 | 
+ 145 | /* When there are IPv6 connections the I | True                                                 | 
+ 146 |  * truncated to none-recognition. The '- | True                                                 | 
+ 147 |  * address columns wide enough to accomm | True                                                 | 
+ 148 |  * IPv6 addresses, i.e. addresses of the | True                                                 | 
+ 149 |  * xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:ddd.ddd | True                                                 | 
+ 150 |  */                                      | True                                                 | 
+ 151 | #define ADDR_WIDE                51  /*  | True                                                 | 
+ 152 | #if ENABLE_FEATURE_NETSTAT_WIDE          | True                                                 | 
+ 153 | # define FMT_NET_CONN_DATA       "%s   % | ENABLE_FEATURE_NETSTAT_WIDE                          | 
+ 154 | # define FMT_NET_CONN_HEADER     "\nProt | ENABLE_FEATURE_NETSTAT_WIDE                          | 
+ 155 | #else                                    | True                                                 | 
+ 156 | # define FMT_NET_CONN_DATA       "%s   % | !ENABLE_FEATURE_NETSTAT_WIDE                         | 
+ 157 | # define FMT_NET_CONN_HEADER     "\nProt | !ENABLE_FEATURE_NETSTAT_WIDE                         | 
+ 158 | #endif                                   | True                                                 | 
+ 159 |                                          | True                                                 | 
+ 160 | #define PROGNAME_WIDTH     20            | True                                                 | 
+ 161 | #define PROGNAME_WIDTH_STR "20"          | True                                                 | 
+ 162 | /* PROGNAME_WIDTH chars: 123456789012345 | True                                                 | 
+ 163 | #define PROGNAME_BANNER "PID/Program nam | True                                                 | 
+ 164 |                                          | True                                                 | 
+ 165 | struct prg_node {                        | True                                                 | 
+ 166 |  struct prg_node *next;                  | True                                                 | 
+ 167 |  long inode;                             | True                                                 | 
+ 168 |  char name[PROGNAME_WIDTH];              | True                                                 | 
+ 169 | };                                       | True                                                 | 
+ 170 |                                          | True                                                 | 
+ 171 | #define PRG_HASH_SIZE 211                | True                                                 | 
+ 172 |                                          | True                                                 | 
+ 173 | struct globals {                         | True                                                 | 
+ 174 |  smalluint flags;                        | True                                                 | 
+ 175 | #if ENABLE_FEATURE_NETSTAT_PRG           | True                                                 | 
+ 176 |  smallint prg_cache_loaded;              | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 177 |  struct prg_node *prg_hash[PRG_HASH_SIZE | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 178 | #endif                                   | True                                                 | 
+ 179 |  char *p_etc_services;                   | True                                                 | 
+ 180 | #if ENABLE_FEATURE_NETSTAT_PRG           | True                                                 | 
+ 181 |  const char *progname_banner;            | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 182 | #endif                                   | True                                                 | 
+ 183 | #if ENABLE_FEATURE_NETSTAT_WIDE          | True                                                 | 
+ 184 |  unsigned addr_width;                    | ENABLE_FEATURE_NETSTAT_WIDE                          | 
+ 185 | #endif                                   | True                                                 | 
+ 186 | };                                       | True                                                 | 
+ 187 | #define G (*ptr_to_globals)              | True                                                 | 
+ 188 | #define flags            (G.flags        | True                                                 | 
+ 189 | #define prg_cache_loaded (G.prg_cache_lo | True                                                 | 
+ 190 | #define prg_hash         (G.prg_hash     | True                                                 | 
+ 191 | #if ENABLE_FEATURE_NETSTAT_PRG           | True                                                 | 
+ 192 | # define progname_banner (G.progname_ban | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 193 | #else                                    | True                                                 | 
+ 194 | # define progname_banner ""              | !ENABLE_FEATURE_NETSTAT_PRG                          | 
+ 195 | #endif                                   | True                                                 | 
+ 196 | #define INIT_G() do { \                  | True                                                 | 
+ 197 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                                                 | 
+ 198 |  flags = NETSTAT_CONNECTED | NETSTAT_ALL | True                                                 | 
+ 199 | } while (0)                              | True                                                 | 
+ 200 |                                          | True                                                 | 
+ 201 |                                          | True                                                 | 
+ 202 | #if ENABLE_FEATURE_NETSTAT_PRG           | True                                                 | 
+ 203 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 204 | /* Deliberately truncating long to unsig | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 205 | #define PRG_HASHIT(x) ((unsigned)(x) % P | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 206 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 207 | static void prg_cache_add(long inode, ch | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 208 | {                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 209 |  unsigned hi = PRG_HASHIT(inode);        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 210 |  struct prg_node **pnp, *pn;             | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 211 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 212 |  prg_cache_loaded = 2;                   | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 213 |  for (pnp = prg_hash + hi; (pn = *pnp) ! | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 214 |   if (pn->inode == inode) {              | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 215 |    /* Some warning should be appropriate | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 216 |     * as we got multiple processes for o | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 217 |    return;                               | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 218 |   }                                      | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 219 |  }                                       | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 220 |  *pnp = xzalloc(sizeof(struct prg_node)) | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 221 |  pn = *pnp;                              | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 222 |  pn->inode = inode;                      | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 223 |  safe_strncpy(pn->name, name, PROGNAME_W | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 224 | }                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 225 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 226 | static const char *prg_cache_get(long in | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 227 | {                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 228 |  unsigned hi = PRG_HASHIT(inode);        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 229 |  struct prg_node *pn;                    | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 230 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 231 |  for (pn = prg_hash[hi]; pn; pn = pn->ne | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 232 |   if (pn->inode == inode)                | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 233 |    return pn->name;                      | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 234 |  return "-";                             | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 235 | }                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 236 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 237 | #if ENABLE_FEATURE_CLEAN_UP              | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 238 | static void prg_cache_clear(void)        | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 239 | {                                        | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 240 |  struct prg_node **pnp, *pn;             | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 241 |                                          | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 242 |  for (pnp = prg_hash; pnp < prg_hash + P | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 243 |   while ((pn = *pnp) != NULL) {          | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 244 |    *pnp = pn->next;                      | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 245 |    free(pn);                             | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 246 |   }                                      | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 247 |  }                                       | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 248 | }                                        | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 249 | #else                                    | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 250 | #define prg_cache_clear() ((void)0)      | ENABLE_FEATURE_NETSTAT_PRG&&!ENABLE_FEATURE_CLEAN_UP | 
+ 251 | #endif                                   | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 252 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 253 | static long extract_socket_inode(const c | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 254 | {                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 255 |  long inode = -1;                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 256 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 257 |  if (is_prefixed_with(lname, "socket:[") | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 258 |   /* "socket:[12345]", extract the "1234 | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 259 |   inode = bb_strtoul(lname + sizeof("soc | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 260 |   if (*lname != ']')                     | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 261 |    inode = -1;                           | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 262 |  } else if (is_prefixed_with(lname, "[00 | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 263 |   /* "[0000]:12345", extract the "12345" | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 264 |   inode = bb_strtoul(lname + sizeof("[00 | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 265 |   if (errno) /* not NUL terminated? */   | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 266 |    inode = -1;                           | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 267 |  }                                       | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 268 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 269 | #if 0 /* bb_strtol returns all-ones bit  | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 270 |  if (errno == ERANGE)                    | ENABLE_FEATURE_NETSTAT_PRG&&0                        | 
+ 271 |   inode = -1;                            | ENABLE_FEATURE_NETSTAT_PRG&&0                        | 
+ 272 | #endif                                   | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 273 |  return inode;                           | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 274 | }                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 275 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 276 | static int FAST_FUNC add_to_prg_cache_if | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 277 |   const char *fileName,                  | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 278 |   struct stat *statbuf UNUSED_PARAM)     | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 279 | {                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 280 |  char *linkname;                         | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 281 |  long inode;                             | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 282 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 283 |  linkname = xmalloc_readlink(fileName);  | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 284 |  if (linkname != NULL) {                 | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 285 |   inode = extract_socket_inode(linkname) | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 286 |   free(linkname);                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 287 |   if (inode >= 0) {                      | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 288 |    char *pid_slash_progname = state->use | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 289 |    prg_cache_add(inode, pid_slash_progna | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 290 |   }                                      | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 291 |  }                                       | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 292 |  return TRUE;                            | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 293 | }                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 294 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 295 | static int FAST_FUNC dir_act(struct recu | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 296 |   const char *fileName,                  | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 297 |   struct stat *statbuf UNUSED_PARAM)     | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 298 | {                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 299 |  const char *pid;                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 300 |  char *pid_slash_progname;               | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 301 |  char proc_pid_fname[sizeof("/proc/%u/cm | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 302 |  char cmdline_buf[512];                  | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 303 |  int n, len;                             | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 304 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 305 |  if (state->depth == 0) /* "/proc" itsel | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 306 |   return TRUE; /* continue looking one l | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 307 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 308 |  pid = fileName + sizeof("/proc/")-1; /* | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 309 |  if (!isdigit(pid[0])) /* skip /proc ent | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 310 |   return SKIP;                           | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 311 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 312 |  len = snprintf(proc_pid_fname, sizeof(p | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 313 |  n = open_read_close(proc_pid_fname, cmd | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 314 |  if (n < 0)                              | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 315 |   return FALSE;                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 316 |  cmdline_buf[n] = '\0';                  | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 317 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 318 |  /* go through all files in /proc/PID/fd | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 319 |  strcpy(proc_pid_fname + len - (sizeof(" | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 320 |  pid_slash_progname = concat_path_file(p | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 321 |  n = recursive_action(proc_pid_fname,    | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 322 |    ACTION_RECURSE | ACTION_QUIET,        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 323 |    add_to_prg_cache_if_socket,           | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 324 |    NULL,                                 | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 325 |    (void *)pid_slash_progname            | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 326 |  );                                      | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 327 |  free(pid_slash_progname);               | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 328 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 329 |  if (!n)                                 | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 330 |   return FALSE; /* signal permissions er | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 331 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 332 |  return SKIP; /* caller should not recur | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 333 | }                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 334 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 335 | static void prg_cache_load(void)         | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 336 | {                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 337 |  int load_ok;                            | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 338 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 339 |  prg_cache_loaded = 1;                   | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 340 |  load_ok = recursive_action("/proc", ACT | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 341 |     NULL, dir_act, NULL);                | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 342 |  if (load_ok)                            | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 343 |   return;                                | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 344 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 345 |  if (prg_cache_loaded == 1)              | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 346 |   bb_simple_error_msg("can't scan /proc  | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 347 |  else                                    | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 348 |   bb_simple_error_msg("showing only proc | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 349 | }                                        | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 350 |                                          | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 351 | #else                                    | True                                                 | 
+ 352 |                                          | !ENABLE_FEATURE_NETSTAT_PRG                          | 
+ 353 | #define prg_cache_clear()       ((void)0 | !ENABLE_FEATURE_NETSTAT_PRG                          | 
+ 354 |                                          | !ENABLE_FEATURE_NETSTAT_PRG                          | 
+ 355 | #endif //ENABLE_FEATURE_NETSTAT_PRG      | True                                                 | 
+ 356 |                                          | True                                                 | 
+ 357 |                                          | True                                                 | 
+ 358 | #if ENABLE_FEATURE_IPV6                  | True                                                 | 
+ 359 | static void build_ipv6_addr(char* local_ | ENABLE_FEATURE_IPV6                                  | 
+ 360 | {                                        | ENABLE_FEATURE_IPV6                                  | 
+ 361 |  char addr6[INET6_ADDRSTRLEN];           | ENABLE_FEATURE_IPV6                                  | 
+ 362 |  struct in6_addr in6;                    | ENABLE_FEATURE_IPV6                                  | 
+ 363 |                                          | ENABLE_FEATURE_IPV6                                  | 
+ 364 |  sscanf(local_addr, "%08X%08X%08X%08X",  | ENABLE_FEATURE_IPV6                                  | 
+ 365 |      &in6.s6_addr32[0], &in6.s6_addr32[1 | ENABLE_FEATURE_IPV6                                  | 
+ 366 |      &in6.s6_addr32[2], &in6.s6_addr32[3 | ENABLE_FEATURE_IPV6                                  | 
+ 367 |  inet_ntop(AF_INET6, &in6, addr6, sizeof | ENABLE_FEATURE_IPV6                                  | 
+ 368 |  inet_pton(AF_INET6, addr6, &localaddr-> | ENABLE_FEATURE_IPV6                                  | 
+ 369 |                                          | ENABLE_FEATURE_IPV6                                  | 
+ 370 |  localaddr->sin6_family = AF_INET6;      | ENABLE_FEATURE_IPV6                                  | 
+ 371 | }                                        | ENABLE_FEATURE_IPV6                                  | 
+ 372 | #endif                                   | True                                                 | 
+ 373 |                                          | True                                                 | 
+ 374 | static void build_ipv4_addr(char* local_ | True                                                 | 
+ 375 | {                                        | True                                                 | 
+ 376 |  sscanf(local_addr, "%X", &localaddr->si | True                                                 | 
+ 377 |  localaddr->sin_family = AF_INET;        | True                                                 | 
+ 378 | }                                        | True                                                 | 
+ 379 |                                          | True                                                 | 
+ 380 | static const char *get_sname(int port, c | True                                                 | 
+ 381 | {                                        | True                                                 | 
+ 382 |  if (port == 0)                          | True                                                 | 
+ 383 |   return "*";                            | True                                                 | 
+ 384 |  if (!numeric) {                         | True                                                 | 
+ 385 |   const char *se = bb_get_servname_by_po | True                                                 | 
+ 386 |   if (se)                                | True                                                 | 
+ 387 |    return se;                            | True                                                 | 
+ 388 |  }                                       | True                                                 | 
+ 389 |  /* hummm, we may return static buffer h | True                                                 | 
+ 390 |  return itoa(port);                      | True                                                 | 
+ 391 | }                                        | True                                                 | 
+ 392 |                                          | True                                                 | 
+ 393 | static char *ip_port_str(struct sockaddr | True                                                 | 
+ 394 | {                                        | True                                                 | 
+ 395 |  char *host;                             | True                                                 | 
+ 396 |                                          | True                                                 | 
+ 397 |  /* Code which used "*" for INADDR_ANY i | True                                                 | 
+ 398 |   * in IPv6, while "0.0.0.0" is not. */  | True                                                 | 
+ 399 |                                          | True                                                 | 
+ 400 |  host = NULL;                            | True                                                 | 
+ 401 |  if (!numeric)                           | True                                                 | 
+ 402 |   host = xmalloc_sockaddr2host_noport(ad | True                                                 | 
+ 403 |  if (!host)                              | True                                                 | 
+ 404 |   host = xmalloc_sockaddr2dotted_noport( | True                                                 | 
+ 405 |                                          | True                                                 | 
+ 406 |  xasprintf_inplace(host, "%s:%s", host,  | True                                                 | 
+ 407 |  return host;                            | True                                                 | 
+ 408 | }                                        | True                                                 | 
+ 409 |                                          | True                                                 | 
+ 410 | struct inet_params {                     | True                                                 | 
+ 411 |  int local_port, rem_port, state, uid;   | True                                                 | 
+ 412 |  union {                                 | True                                                 | 
+ 413 |   struct sockaddr     sa;                | True                                                 | 
+ 414 |   struct sockaddr_in  sin;               | True                                                 | 
+ 415 | #if ENABLE_FEATURE_IPV6                  | True                                                 | 
+ 416 |   struct sockaddr_in6 sin6;              | ENABLE_FEATURE_IPV6                                  | 
+ 417 | #endif                                   | True                                                 | 
+ 418 |  } localaddr, remaddr;                   | True                                                 | 
+ 419 |  unsigned long rxq, txq, inode;          | True                                                 | 
+ 420 | };                                       | True                                                 | 
+ 421 |                                          | True                                                 | 
+ 422 | static int scan_inet_proc_line(struct in | True                                                 | 
+ 423 | {                                        | True                                                 | 
+ 424 |  int num;                                | True                                                 | 
+ 425 |  /* IPv6 /proc files use 32-char hex rep | True                                                 | 
+ 426 |   * of IPv6 address, followed by :PORT_I | True                                                 | 
+ 427 |   */                                     | True                                                 | 
+ 428 |  char local_addr[33], rem_addr[33]; /* 3 | True                                                 | 
+ 429 |                                          | True                                                 | 
+ 430 |  num = sscanf(line,                      | True                                                 | 
+ 431 |    "%*d: %32[0-9A-Fa-f]:%X "             | True                                                 | 
+ 432 |    "%32[0-9A-Fa-f]:%X %X "               | True                                                 | 
+ 433 |    "%lX:%lX %*X:%*X "                    | True                                                 | 
+ 434 |    "%*X %d %*d %lu ",                    | True                                                 | 
+ 435 |    local_addr, &param->local_port,       | True                                                 | 
+ 436 |    rem_addr, &param->rem_port, &param->s | True                                                 | 
+ 437 |    &param->txq, &param->rxq,             | True                                                 | 
+ 438 |    &param->uid, &param->inode);          | True                                                 | 
+ 439 |  if (num < 9) {                          | True                                                 | 
+ 440 |   return 1; /* error */                  | True                                                 | 
+ 441 |  }                                       | True                                                 | 
+ 442 |                                          | True                                                 | 
+ 443 |  if (strlen(local_addr) > 8) {           | True                                                 | 
+ 444 | #if ENABLE_FEATURE_IPV6                  | True                                                 | 
+ 445 |   build_ipv6_addr(local_addr, &param->lo | ENABLE_FEATURE_IPV6                                  | 
+ 446 |   build_ipv6_addr(rem_addr, &param->rema | ENABLE_FEATURE_IPV6                                  | 
+ 447 | #endif                                   | True                                                 | 
+ 448 |  } else {                                | True                                                 | 
+ 449 |   build_ipv4_addr(local_addr, &param->lo | True                                                 | 
+ 450 |   build_ipv4_addr(rem_addr, &param->rema | True                                                 | 
+ 451 |  }                                       | True                                                 | 
+ 452 |  return 0;                               | True                                                 | 
+ 453 | }                                        | True                                                 | 
+ 454 |                                          | True                                                 | 
+ 455 | static void print_inet_line(struct inet_ | True                                                 | 
+ 456 |   const char *state_str, const char *pro | True                                                 | 
+ 457 | {                                        | True                                                 | 
+ 458 |  if ((is_connected && (flags & NETSTAT_C | True                                                 | 
+ 459 |   || (!is_connected && (flags & NETSTAT_ | True                                                 | 
+ 460 |  ) {                                     | True                                                 | 
+ 461 |   char *l = ip_port_str(                 | True                                                 | 
+ 462 |     &param->localaddr.sa, param->local_p | True                                                 | 
+ 463 |     proto, flags & NETSTAT_NUMERIC);     | True                                                 | 
+ 464 |   char *r = ip_port_str(                 | True                                                 | 
+ 465 |     &param->remaddr.sa, param->rem_port, | True                                                 | 
+ 466 |     proto, flags & NETSTAT_NUMERIC);     | True                                                 | 
+ 467 |   printf(FMT_NET_CONN_DATA,              | True                                                 | 
+ 468 |    proto, param->rxq, param->txq,        | True                                                 | 
+ 469 |    IF_FEATURE_NETSTAT_WIDE(G.addr_width, | True                                                 | 
+ 470 |    IF_FEATURE_NETSTAT_WIDE(G.addr_width, | True                                                 | 
+ 471 |    state_str);                           | True                                                 | 
+ 472 | #if ENABLE_FEATURE_NETSTAT_PRG           | True                                                 | 
+ 473 |   if (option_mask32 & OPT_prg)           | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 474 |    printf("%."PROGNAME_WIDTH_STR"s", prg | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 475 | #endif                                   | True                                                 | 
+ 476 |   bb_putchar('\n');                      | True                                                 | 
+ 477 |   free(l);                               | True                                                 | 
+ 478 |   free(r);                               | True                                                 | 
+ 479 |  }                                       | True                                                 | 
+ 480 | }                                        | True                                                 | 
+ 481 |                                          | True                                                 | 
+ 482 | static int FAST_FUNC tcp_do_one(char *li | True                                                 | 
+ 483 | {                                        | True                                                 | 
+ 484 |  struct inet_params param;               | True                                                 | 
+ 485 |                                          | True                                                 | 
+ 486 |  memset(&param, 0, sizeof(param));       | True                                                 | 
+ 487 |  if (scan_inet_proc_line(&param, line))  | True                                                 | 
+ 488 |   return 1;                              | True                                                 | 
+ 489 |                                          | True                                                 | 
+ 490 |  print_inet_line(&param, tcp_state[param | True                                                 | 
+ 491 |  return 0;                               | True                                                 | 
+ 492 | }                                        | True                                                 | 
+ 493 |                                          | True                                                 | 
+ 494 | #if ENABLE_FEATURE_IPV6                  | True                                                 | 
+ 495 | # define NOT_NULL_ADDR(A) ( \            | ENABLE_FEATURE_IPV6                                  | 
+ 496 |  ( (A.sa.sa_family == AF_INET6) \        | ENABLE_FEATURE_IPV6                                  | 
+ 497 |    && (A.sin6.sin6_addr.s6_addr32[0] | A | ENABLE_FEATURE_IPV6                                  | 
+ 498 |        A.sin6.sin6_addr.s6_addr32[2] | A | ENABLE_FEATURE_IPV6                                  | 
+ 499 |  ) || ( \                                | ENABLE_FEATURE_IPV6                                  | 
+ 500 |    (A.sa.sa_family == AF_INET) \         | ENABLE_FEATURE_IPV6                                  | 
+ 501 |    && A.sin.sin_addr.s_addr != 0 \       | ENABLE_FEATURE_IPV6                                  | 
+ 502 |  ) \                                     | ENABLE_FEATURE_IPV6                                  | 
+ 503 | )                                        | ENABLE_FEATURE_IPV6                                  | 
+ 504 | #else                                    | True                                                 | 
+ 505 | # define NOT_NULL_ADDR(A) (A.sin.sin_add | !ENABLE_FEATURE_IPV6                                 | 
+ 506 | #endif                                   | True                                                 | 
+ 507 |                                          | True                                                 | 
+ 508 | static int FAST_FUNC udp_do_one(char *li | True                                                 | 
+ 509 | {                                        | True                                                 | 
+ 510 |  int have_remaddr;                       | True                                                 | 
+ 511 |  const char *state_str;                  | True                                                 | 
+ 512 |  struct inet_params param;               | True                                                 | 
+ 513 |                                          | True                                                 | 
+ 514 |  memset(&param, 0, sizeof(param)); /* ot | True                                                 | 
+ 515 |  if (scan_inet_proc_line(&param, line))  | True                                                 | 
+ 516 |   return 1;                              | True                                                 | 
+ 517 |                                          | True                                                 | 
+ 518 |  state_str = "UNKNOWN";                  | True                                                 | 
+ 519 |  switch (param.state) {                  | True                                                 | 
+ 520 |  case TCP_ESTABLISHED:                   | True                                                 | 
+ 521 |   state_str = "ESTABLISHED";             | True                                                 | 
+ 522 |   break;                                 | True                                                 | 
+ 523 |  case TCP_CLOSE:                         | True                                                 | 
+ 524 |   state_str = "";                        | True                                                 | 
+ 525 |   break;                                 | True                                                 | 
+ 526 |  }                                       | True                                                 | 
+ 527 |                                          | True                                                 | 
+ 528 |  have_remaddr = NOT_NULL_ADDR(param.rema | True                                                 | 
+ 529 |  print_inet_line(&param, state_str, "udp | True                                                 | 
+ 530 |  return 0;                               | True                                                 | 
+ 531 | }                                        | True                                                 | 
+ 532 |                                          | True                                                 | 
+ 533 | static int FAST_FUNC raw_do_one(char *li | True                                                 | 
+ 534 | {                                        | True                                                 | 
+ 535 |  int have_remaddr;                       | True                                                 | 
+ 536 |  struct inet_params param;               | True                                                 | 
+ 537 |                                          | True                                                 | 
+ 538 |  if (scan_inet_proc_line(&param, line))  | True                                                 | 
+ 539 |   return 1;                              | True                                                 | 
+ 540 |                                          | True                                                 | 
+ 541 |  have_remaddr = NOT_NULL_ADDR(param.rema | True                                                 | 
+ 542 |  print_inet_line(&param, itoa(param.stat | True                                                 | 
+ 543 |  return 0;                               | True                                                 | 
+ 544 | }                                        | True                                                 | 
+ 545 |                                          | True                                                 | 
+ 546 | static int FAST_FUNC unix_do_one(char *l | True                                                 | 
+ 547 | {                                        | True                                                 | 
+ 548 |  unsigned long refcnt, proto, unix_flags | True                                                 | 
+ 549 |  unsigned long inode;                    | True                                                 | 
+ 550 |  int type, state;                        | True                                                 | 
+ 551 |  int num, path_ofs;                      | True                                                 | 
+ 552 |  const char *ss_proto, *ss_state, *ss_ty | True                                                 | 
+ 553 |  char ss_flags[32];                      | True                                                 | 
+ 554 |                                          | True                                                 | 
+ 555 |  /* 2.6.15 may report lines like "... @/ | True                                                 | 
+ 556 |   * Other users report long lines filled | True                                                 | 
+ 557 |   * (those ^@ are NUL bytes too). We see | True                                                 | 
+ 558 |  if (!line[0])                           | True                                                 | 
+ 559 |   return 0;                              | True                                                 | 
+ 560 |                                          | True                                                 | 
+ 561 |  path_ofs = 0; /* paranoia */            | True                                                 | 
+ 562 |  num = sscanf(line, "%*p: %lX %lX %lX %X | True                                                 | 
+ 563 |    &refcnt, &proto, &unix_flags, &type,  | True                                                 | 
+ 564 |  if (num < 6) {                          | True                                                 | 
+ 565 |   return 1; /* error */                  | True                                                 | 
+ 566 |  }                                       | True                                                 | 
+ 567 |  if ((flags & (NETSTAT_LISTENING|NETSTAT | True                                                 | 
+ 568 |   if ((state == SS_UNCONNECTED) && (unix | True                                                 | 
+ 569 |    if (!(flags & NETSTAT_LISTENING))     | True                                                 | 
+ 570 |     return 0;                            | True                                                 | 
+ 571 |   } else {                               | True                                                 | 
+ 572 |    if (!(flags & NETSTAT_CONNECTED))     | True                                                 | 
+ 573 |     return 0;                            | True                                                 | 
+ 574 |   }                                      | True                                                 | 
+ 575 |  }                                       | True                                                 | 
+ 576 |                                          | True                                                 | 
+ 577 |  switch (proto) {                        | True                                                 | 
+ 578 |   case 0:                                | True                                                 | 
+ 579 |    ss_proto = "unix";                    | True                                                 | 
+ 580 |    break;                                | True                                                 | 
+ 581 |   default:                               | True                                                 | 
+ 582 |    ss_proto = "??";                      | True                                                 | 
+ 583 |  }                                       | True                                                 | 
+ 584 |                                          | True                                                 | 
+ 585 |  switch (type) {                         | True                                                 | 
+ 586 |   case SOCK_STREAM:                      | True                                                 | 
+ 587 |    ss_type = "STREAM";                   | True                                                 | 
+ 588 |    break;                                | True                                                 | 
+ 589 |   case SOCK_DGRAM:                       | True                                                 | 
+ 590 |    ss_type = "DGRAM";                    | True                                                 | 
+ 591 |    break;                                | True                                                 | 
+ 592 |   case SOCK_RAW:                         | True                                                 | 
+ 593 |    ss_type = "RAW";                      | True                                                 | 
+ 594 |    break;                                | True                                                 | 
+ 595 |   case SOCK_RDM:                         | True                                                 | 
+ 596 |    ss_type = "RDM";                      | True                                                 | 
+ 597 |    break;                                | True                                                 | 
+ 598 |   case SOCK_SEQPACKET:                   | True                                                 | 
+ 599 |    ss_type = "SEQPACKET";                | True                                                 | 
+ 600 |    break;                                | True                                                 | 
+ 601 |   default:                               | True                                                 | 
+ 602 |    ss_type = "UNKNOWN";                  | True                                                 | 
+ 603 |  }                                       | True                                                 | 
+ 604 |                                          | True                                                 | 
+ 605 |  switch (state) {                        | True                                                 | 
+ 606 |   case SS_FREE:                          | True                                                 | 
+ 607 |    ss_state = "FREE";                    | True                                                 | 
+ 608 |    break;                                | True                                                 | 
+ 609 |   case SS_UNCONNECTED:                   | True                                                 | 
+ 610 |    /*                                    | True                                                 | 
+ 611 |     * Unconnected sockets may be listeni | True                                                 | 
+ 612 |     * for something.                     | True                                                 | 
+ 613 |     */                                   | True                                                 | 
+ 614 |    if (unix_flags & SO_ACCEPTCON) {      | True                                                 | 
+ 615 |     ss_state = "LISTENING";              | True                                                 | 
+ 616 |    } else {                              | True                                                 | 
+ 617 |     ss_state = "";                       | True                                                 | 
+ 618 |    }                                     | True                                                 | 
+ 619 |    break;                                | True                                                 | 
+ 620 |   case SS_CONNECTING:                    | True                                                 | 
+ 621 |    ss_state = "CONNECTING";              | True                                                 | 
+ 622 |    break;                                | True                                                 | 
+ 623 |   case SS_CONNECTED:                     | True                                                 | 
+ 624 |    ss_state = "CONNECTED";               | True                                                 | 
+ 625 |    break;                                | True                                                 | 
+ 626 |   case SS_DISCONNECTING:                 | True                                                 | 
+ 627 |    ss_state = "DISCONNECTING";           | True                                                 | 
+ 628 |    break;                                | True                                                 | 
+ 629 |   default:                               | True                                                 | 
+ 630 |    ss_state = "UNKNOWN";                 | True                                                 | 
+ 631 |  }                                       | True                                                 | 
+ 632 |                                          | True                                                 | 
+ 633 |  strcpy(ss_flags, "[ ");                 | True                                                 | 
+ 634 |  if (unix_flags & SO_ACCEPTCON)          | True                                                 | 
+ 635 |   strcat(ss_flags, "ACC ");              | True                                                 | 
+ 636 |  if (unix_flags & SO_WAITDATA)           | True                                                 | 
+ 637 |   strcat(ss_flags, "W ");                | True                                                 | 
+ 638 |  if (unix_flags & SO_NOSPACE)            | True                                                 | 
+ 639 |   strcat(ss_flags, "N ");                | True                                                 | 
+ 640 |  strcat(ss_flags, "]");                  | True                                                 | 
+ 641 |                                          | True                                                 | 
+ 642 |  printf("%-5s %-6lu %-11s %-10s %-13s %6 | True                                                 | 
+ 643 |   ss_proto, refcnt, ss_flags, ss_type, s | True                                                 | 
+ 644 |   );                                     | True                                                 | 
+ 645 |                                          | True                                                 | 
+ 646 | #if ENABLE_FEATURE_NETSTAT_PRG           | True                                                 | 
+ 647 |  if (option_mask32 & OPT_prg)            | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 648 |   printf("%-"PROGNAME_WIDTH_STR"s", prg_ | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 649 | #endif                                   | True                                                 | 
+ 650 |                                          | True                                                 | 
+ 651 |  /* TODO: currently we stop at first NUL | True                                                 | 
+ 652 |  line += path_ofs;                       | True                                                 | 
+ 653 |  chomp(line);                            | True                                                 | 
+ 654 |  while (*line)                           | True                                                 | 
+ 655 |   fputc_printable(*line++, stdout);      | True                                                 | 
+ 656 |  bb_putchar('\n');                       | True                                                 | 
+ 657 |  return 0;                               | True                                                 | 
+ 658 | }                                        | True                                                 | 
+ 659 |                                          | True                                                 | 
+ 660 | static void do_info(const char *file, in | True                                                 | 
+ 661 | {                                        | True                                                 | 
+ 662 |  int lnr;                                | True                                                 | 
+ 663 |  FILE *procinfo;                         | True                                                 | 
+ 664 |  char *buffer;                           | True                                                 | 
+ 665 |                                          | True                                                 | 
+ 666 |  /* _stdin is just to save "r" param */  | True                                                 | 
+ 667 |  procinfo = fopen_or_warn_stdin(file);   | True                                                 | 
+ 668 |  if (procinfo == NULL) {                 | True                                                 | 
+ 669 |   return;                                | True                                                 | 
+ 670 |  }                                       | True                                                 | 
+ 671 |  lnr = 0;                                | True                                                 | 
+ 672 |  /* Why xmalloc_fgets_str? because it do | True                                                 | 
+ 673 |  while ((buffer = xmalloc_fgets_str(proc | True                                                 | 
+ 674 |   /* line 0 is skipped */                | True                                                 | 
+ 675 |   if (lnr && proc(buffer))               | True                                                 | 
+ 676 |    bb_error_msg("%s: bogus data on line  | True                                                 | 
+ 677 |   lnr++;                                 | True                                                 | 
+ 678 |   free(buffer);                          | True                                                 | 
+ 679 |  }                                       | True                                                 | 
+ 680 |  fclose(procinfo);                       | True                                                 | 
+ 681 | }                                        | True                                                 | 
+ 682 |                                          | True                                                 | 
+ 683 | int netstat_main(int argc, char **argv)  | True                                                 | 
+ 684 | int netstat_main(int argc UNUSED_PARAM,  | True                                                 | 
+ 685 | {                                        | True                                                 | 
+ 686 |  unsigned opt;                           | True                                                 | 
+ 687 |                                          | True                                                 | 
+ 688 |  INIT_G();                               | True                                                 | 
+ 689 |                                          | True                                                 | 
+ 690 |  /* Option string must match NETSTAT_xxx | True                                                 | 
+ 691 |  opt = getopt32(argv, NETSTAT_OPTS);     | True                                                 | 
+ 692 |  if (opt & OPT_sock_listen) { // -l      | True                                                 | 
+ 693 |   flags &= ~NETSTAT_CONNECTED;           | True                                                 | 
+ 694 |   flags |= NETSTAT_LISTENING;            | True                                                 | 
+ 695 |  }                                       | True                                                 | 
+ 696 |  if (opt & OPT_sock_all) flags |= NETSTA | True                                                 | 
+ 697 |  //if (opt & OPT_extended) // -e         | True                                                 | 
+ 698 |  if (opt & OPT_noresolve) flags |= NETST | True                                                 | 
+ 699 |  //if (opt & OPT_sock_tcp) // -t: NETSTA | True                                                 | 
+ 700 |  //if (opt & OPT_sock_udp) // -u: NETSTA | True                                                 | 
+ 701 |  //if (opt & OPT_sock_raw) // -w: NETSTA | True                                                 | 
+ 702 |  //if (opt & OPT_sock_unix) // -x: NETST | True                                                 | 
+ 703 | #if ENABLE_ROUTE                         | True                                                 | 
+ 704 |  if (opt & OPT_route) { // -r            | ENABLE_ROUTE                                         | 
+ 705 |   bb_displayroutes(flags & NETSTAT_NUMER | ENABLE_ROUTE                                         | 
+ 706 |   return 0;                              | ENABLE_ROUTE                                         | 
+ 707 |  }                                       | ENABLE_ROUTE                                         | 
+ 708 | #endif                                   | True                                                 | 
+ 709 | #if ENABLE_FEATURE_NETSTAT_WIDE          | True                                                 | 
+ 710 |  G.addr_width = ADDR_NORMAL_WIDTH;       | ENABLE_FEATURE_NETSTAT_WIDE                          | 
+ 711 |  if (opt & OPT_wide) { // -W             | ENABLE_FEATURE_NETSTAT_WIDE                          | 
+ 712 |   G.addr_width = ADDR_WIDE;              | ENABLE_FEATURE_NETSTAT_WIDE                          | 
+ 713 |  }                                       | ENABLE_FEATURE_NETSTAT_WIDE                          | 
+ 714 | #endif                                   | True                                                 | 
+ 715 | #if ENABLE_FEATURE_NETSTAT_PRG           | True                                                 | 
+ 716 |  progname_banner = "";                   | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 717 |  if (opt & OPT_prg) { // -p              | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 718 |   progname_banner = PROGNAME_BANNER;     | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 719 |   prg_cache_load();                      | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 720 |  }                                       | ENABLE_FEATURE_NETSTAT_PRG                           | 
+ 721 | #endif                                   | True                                                 | 
+ 722 |                                          | True                                                 | 
+ 723 |  opt &= NETSTAT_ALLPROTO;                | True                                                 | 
+ 724 |  if (opt) {                              | True                                                 | 
+ 725 |   flags &= ~NETSTAT_ALLPROTO;            | True                                                 | 
+ 726 |   flags |= opt;                          | True                                                 | 
+ 727 |  }                                       | True                                                 | 
+ 728 |  if (flags & (NETSTAT_TCP|NETSTAT_UDP|NE | True                                                 | 
+ 729 |   printf("Active Internet connections ") | True                                                 | 
+ 730 |                                          | True                                                 | 
+ 731 |   if ((flags & (NETSTAT_LISTENING|NETSTA | True                                                 | 
+ 732 |    printf("(servers and established)");  | True                                                 | 
+ 733 |   else if (flags & NETSTAT_LISTENING)    | True                                                 | 
+ 734 |    printf("(only servers)");             | True                                                 | 
+ 735 |   else                                   | True                                                 | 
+ 736 |    printf("(w/o servers)");              | True                                                 | 
+ 737 |   printf(FMT_NET_CONN_HEADER,            | True                                                 | 
+ 738 |     IF_FEATURE_NETSTAT_WIDE(G.addr_width | True                                                 | 
+ 739 |     IF_FEATURE_NETSTAT_WIDE(G.addr_width | True                                                 | 
+ 740 |     progname_banner                      | True                                                 | 
+ 741 |   );                                     | True                                                 | 
+ 742 |  }                                       | True                                                 | 
+ 743 |  if (flags & NETSTAT_TCP) {              | True                                                 | 
+ 744 |   do_info("/proc/net/tcp", tcp_do_one);  | True                                                 | 
+ 745 | #if ENABLE_FEATURE_IPV6                  | True                                                 | 
+ 746 |   do_info("/proc/net/tcp6", tcp_do_one); | ENABLE_FEATURE_IPV6                                  | 
+ 747 | #endif                                   | True                                                 | 
+ 748 |  }                                       | True                                                 | 
+ 749 |  if (flags & NETSTAT_UDP) {              | True                                                 | 
+ 750 |   do_info("/proc/net/udp", udp_do_one);  | True                                                 | 
+ 751 | #if ENABLE_FEATURE_IPV6                  | True                                                 | 
+ 752 |   do_info("/proc/net/udp6", udp_do_one); | ENABLE_FEATURE_IPV6                                  | 
+ 753 | #endif                                   | True                                                 | 
+ 754 |  }                                       | True                                                 | 
+ 755 |  if (flags & NETSTAT_RAW) {              | True                                                 | 
+ 756 |   do_info("/proc/net/raw", raw_do_one);  | True                                                 | 
+ 757 | #if ENABLE_FEATURE_IPV6                  | True                                                 | 
+ 758 |   do_info("/proc/net/raw6", raw_do_one); | ENABLE_FEATURE_IPV6                                  | 
+ 759 | #endif                                   | True                                                 | 
+ 760 |  }                                       | True                                                 | 
+ 761 |  if (flags & NETSTAT_UNIX) {             | True                                                 | 
+ 762 |   printf("Active UNIX domain sockets "); | True                                                 | 
+ 763 |   if ((flags & (NETSTAT_LISTENING|NETSTA | True                                                 | 
+ 764 |    printf("(servers and established)");  | True                                                 | 
+ 765 |   else if (flags & NETSTAT_LISTENING)    | True                                                 | 
+ 766 |    printf("(only servers)");             | True                                                 | 
+ 767 |   else                                   | True                                                 | 
+ 768 |    printf("(w/o servers)");              | True                                                 | 
+ 769 |   printf("\nProto RefCnt Flags       Typ | True                                                 | 
+ 770 |   do_info("/proc/net/unix", unix_do_one) | True                                                 | 
+ 771 |  }                                       | True                                                 | 
+ 772 |  prg_cache_clear();                      | ENABLE_FEATURE_NETSTAT_PRG&&ENABLE_FEATURE_CLEAN_UP  | 
+ 773 |  return 0;                               | True                                                 | 
+ 774 | }                                        | True                                                 | 
+-----+------------------------------------------+------------------------------------------------------+
+     |                                          | +129MB, 268ms                                        | 

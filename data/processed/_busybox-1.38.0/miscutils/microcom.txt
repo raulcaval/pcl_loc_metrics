@@ -1,0 +1,198 @@
+FILE: data/raw/busybox-1.38.0/miscutils/microcom.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * bare bones 'talk to modem' program -  | True                      | 
+   4 |  * inspired by mgetty's microcom         | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Copyright (C) 2008 by Vladimir Dronni | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   9 |  */                                      | True                      | 
+  10 | //config:config MICROCOM                 | True                      | 
+  11 | //config: bool "microcom (5.9 kb)"       | True                      | 
+  12 | //config: default y                      | True                      | 
+  13 | //config: help                           | True                      | 
+  14 | //config: The poor man's minicom utility | True                      | 
+  15 |                                          | True                      | 
+  16 | //applet:IF_MICROCOM(APPLET(microcom, BB | True                      | 
+  17 |                                          | True                      | 
+  18 | //kbuild:lib-$(CONFIG_MICROCOM) += micro | True                      | 
+  19 |                                          | True                      | 
+  20 | //usage:#define microcom_trivial_usage   | True                      | 
+  21 | //usage:       "[-d DELAY_MS] [-t TIMEOU | True                      | 
+  22 | //usage:#define microcom_full_usage "\n\ | True                      | 
+  23 | //usage:       "Copy bytes from stdin to | True                      | 
+  24 | //usage:     "\n -d DELAY Wait up to DEL | True                      | 
+  25 | //usage:     "\n   every next byte to it | True                      | 
+  26 | //usage:     "\n -t TIMEOUT Exit if both | True                      | 
+  27 | //usage:     "\n -s SPEED Set serial lin | True                      | 
+  28 | //usage:     "\n -X  Disable special mea | True                      | 
+  29 |                                          | True                      | 
+  30 | #include "libbb.h"                       | True                      | 
+  31 | #include "common_bufsiz.h"               | True                      | 
+  32 |                                          | True                      | 
+  33 | // set raw tty mode                      | True                      | 
+  34 | static void xget1(int fd, struct termios | True                      | 
+  35 | {                                        | True                      | 
+  36 |  get_termios_and_make_raw(fd, t, oldt, 0 | True                      | 
+  37 |   | TERMIOS_CLEAR_ISIG /* ^C is ASCII ch | True                      | 
+  38 |   | TERMIOS_RAW_INPUT /* pass all chars  | True                      | 
+  39 |   | TERMIOS_RAW_CRNL  /* dont convert NL | True                      | 
+  40 |  );                                      | True                      | 
+  41 | }                                        | True                      | 
+  42 |                                          | True                      | 
+  43 | static int xset1(int fd, struct termios  | True                      | 
+  44 | {                                        | True                      | 
+  45 |  int ret = tcsetattr(fd, TCSAFLUSH, tio) | True                      | 
+  46 |                                          | True                      | 
+  47 |  if (ret) {                              | True                      | 
+  48 |   bb_perror_msg("can't tcsetattr for %s" | True                      | 
+  49 |  }                                       | True                      | 
+  50 |  return ret;                             | True                      | 
+  51 | }                                        | True                      | 
+  52 |                                          | True                      | 
+  53 | int microcom_main(int argc, char **argv) | True                      | 
+  54 | int microcom_main(int argc UNUSED_PARAM, | True                      | 
+  55 | {                                        | True                      | 
+  56 |  int sfd;                                | True                      | 
+  57 |  int nfd;                                | True                      | 
+  58 |  struct pollfd pfd[2];                   | True                      | 
+  59 |  struct termios tio0, tiosfd, tio;       | True                      | 
+  60 |  char *device_lock_file;                 | True                      | 
+  61 |  enum {                                  | True                      | 
+  62 |   OPT_X = 1 << 0, // do not respect Ctrl | True                      | 
+  63 |   OPT_s = 1 << 1, // baudrate            | True                      | 
+  64 |   OPT_d = 1 << 2, // wait for device res | True                      | 
+  65 |   OPT_t = 1 << 3, // timeout, ms         | True                      | 
+  66 |  };                                      | True                      | 
+  67 |  speed_t speed = 9600;                   | True                      | 
+  68 |  int delay = -1;                         | True                      | 
+  69 |  int timeout = -1;                       | True                      | 
+  70 |  unsigned opts;                          | True                      | 
+  71 |                                          | True                      | 
+  72 |  // fetch options                        | True                      | 
+  73 |  opts = getopt32(argv, "^" "Xs:+d:+t:+"  | True                      | 
+  74 |     &speed, &delay, &timeout             | True                      | 
+  75 |  );                                      | True                      | 
+  76 | // argc -= optind;                       | True                      | 
+  77 |  argv += optind;                         | True                      | 
+  78 |                                          | True                      | 
+  79 |  // try to create lock file in /var/lock | True                      | 
+  80 |  device_lock_file = (char *)bb_basename( | True                      | 
+  81 |  device_lock_file = xasprintf("/var/lock | True                      | 
+  82 |  sfd = open(device_lock_file, O_CREAT |  | True                      | 
+  83 |  if (sfd < 0) {                          | True                      | 
+  84 |   // device already locked -> bail out   | True                      | 
+  85 |   if (errno == EEXIST)                   | True                      | 
+  86 |    bb_perror_msg_and_die("can't create ' | True                      | 
+  87 |   // can't create lock -> don't care     | True                      | 
+  88 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                      | 
+  89 |    free(device_lock_file);               | True                      | 
+  90 |   device_lock_file = NULL;               | True                      | 
+  91 |  } else {                                | True                      | 
+  92 |   // %4d to make concurrent mgetty (if a | True                      | 
+  93 |   // Mgetty treats 4-bytes lock files as | True                      | 
+  94 |   // not text, PID. Making 5+ char file. | True                      | 
+  95 |   fdprintf(sfd, "%4d\n", getpid());      | True                      | 
+  96 |   close(sfd);                            | True                      | 
+  97 |  }                                       | True                      | 
+  98 |                                          | True                      | 
+  99 |  // setup signals                        | True                      | 
+ 100 |  bb_signals(0                            | True                      | 
+ 101 |   + (1 << SIGHUP)                        | True                      | 
+ 102 |   + (1 << SIGINT)                        | True                      | 
+ 103 |   + (1 << SIGTERM)                       | True                      | 
+ 104 |   + (1 << SIGPIPE)                       | True                      | 
+ 105 |   , record_signo);                       | True                      | 
+ 106 |                                          | True                      | 
+ 107 |  // error exit code if we fail to open t | True                      | 
+ 108 |  bb_got_signal = 1;                      | True                      | 
+ 109 |                                          | True                      | 
+ 110 |  // open device                          | True                      | 
+ 111 |  sfd = open_or_warn(argv[0], O_RDWR | O_ | True                      | 
+ 112 |  if (sfd < 0)                            | True                      | 
+ 113 |   goto done;                             | True                      | 
+ 114 |  fcntl(sfd, F_SETFL, O_RDWR);            | True                      | 
+ 115 |                                          | True                      | 
+ 116 |  // put device to "raw mode"             | True                      | 
+ 117 |  xget1(sfd, &tio, &tiosfd);              | True                      | 
+ 118 |  // set device speed                     | True                      | 
+ 119 |  cfsetspeed(&tio, tty_value_to_baud(spee | True                      | 
+ 120 |  if (xset1(sfd, &tio, argv[0]))          | True                      | 
+ 121 |   goto done;                             | True                      | 
+ 122 |                                          | True                      | 
+ 123 |  // put stdin to "raw mode" (if stdin is | True                      | 
+ 124 |  // handle one character at a time       | True                      | 
+ 125 |  if (isatty(STDIN_FILENO)) {             | True                      | 
+ 126 |   xget1(STDIN_FILENO, &tio, &tio0);      | True                      | 
+ 127 |   if (xset1(STDIN_FILENO, &tio, "stdin") | True                      | 
+ 128 |    goto done;                            | True                      | 
+ 129 |  }                                       | True                      | 
+ 130 |                                          | True                      | 
+ 131 |  // main loop: check with poll(), then r | True                      | 
+ 132 |  pfd[0].fd = sfd;                        | True                      | 
+ 133 |  pfd[0].events = POLLIN;                 | True                      | 
+ 134 |  pfd[1].fd = STDIN_FILENO;               | True                      | 
+ 135 |  pfd[1].events = POLLIN;                 | True                      | 
+ 136 |                                          | True                      | 
+ 137 |  bb_got_signal = 0;                      | True                      | 
+ 138 |  nfd = 2;                                | True                      | 
+ 139 |  // Not safe_poll: we want to exit on si | True                      | 
+ 140 |  while (!bb_got_signal && poll(pfd, nfd, | True                      | 
+ 141 |   if (nfd > 1 && pfd[1].revents) {       | True                      | 
+ 142 |    char c;                               | True                      | 
+ 143 |    // read from stdin -> write to device | True                      | 
+ 144 |    if (safe_read(STDIN_FILENO, &c, 1) <  | True                      | 
+ 145 |     // don't poll stdin anymore if we go | True                      | 
+ 146 |     nfd--;                               | True                      | 
+ 147 |     goto skip_write;                     | True                      | 
+ 148 |    }                                     | True                      | 
+ 149 |    // do we need special processing?     | True                      | 
+ 150 |    if (!(opts & OPT_X)) {                | True                      | 
+ 151 |     // ^@ sends Break                    | True                      | 
+ 152 |     if (VINTR == c) {                    | True                      | 
+ 153 |      tcsendbreak(sfd, 0);                | True                      | 
+ 154 |      goto skip_write;                    | True                      | 
+ 155 |     }                                    | True                      | 
+ 156 |     // ^X exits                          | True                      | 
+ 157 |     if (24 == c)                         | True                      | 
+ 158 |      break;                              | True                      | 
+ 159 |    }                                     | True                      | 
+ 160 |    write(sfd, &c, 1);                    | True                      | 
+ 161 |    if (delay >= 0)                       | True                      | 
+ 162 |     safe_poll(pfd, 1, delay);            | True                      | 
+ 163 | skip_write: ;                            | True                      | 
+ 164 |   }                                      | True                      | 
+ 165 |   if (pfd[0].revents) {                  | True                      | 
+ 166 |    ssize_t len;                          | True                      | 
+ 167 | #define iobuf bb_common_bufsiz1          | True                      | 
+ 168 |    setup_common_bufsiz();                | True                      | 
+ 169 |    // read from device -> write to stdou | True                      | 
+ 170 |    len = safe_read(sfd, iobuf, COMMON_BU | True                      | 
+ 171 |    if (len > 0)                          | True                      | 
+ 172 |     full_write(STDOUT_FILENO, iobuf, len | True                      | 
+ 173 |    else {                                | True                      | 
+ 174 |     // EOF/error -> bail out             | True                      | 
+ 175 |     bb_got_signal = SIGHUP;              | True                      | 
+ 176 |     break;                               | True                      | 
+ 177 |    }                                     | True                      | 
+ 178 |   }                                      | True                      | 
+ 179 |  }                                       | True                      | 
+ 180 |                                          | True                      | 
+ 181 |  // restore device mode                  | True                      | 
+ 182 |  tcsetattr(sfd, TCSAFLUSH, &tiosfd);     | True                      | 
+ 183 |                                          | True                      | 
+ 184 |  if (isatty(STDIN_FILENO))               | True                      | 
+ 185 |   tcsetattr(STDIN_FILENO, TCSAFLUSH, &ti | True                      | 
+ 186 |                                          | True                      | 
+ 187 | done:                                    | True                      | 
+ 188 |  if (device_lock_file)                   | True                      | 
+ 189 |   unlink(device_lock_file);              | True                      | 
+ 190 |                                          | True                      | 
+ 191 |  return bb_got_signal;                   | True                      | 
+ 192 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +112MB, 265ms             | 

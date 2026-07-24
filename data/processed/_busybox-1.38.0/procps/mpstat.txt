@@ -1,0 +1,973 @@
+FILE: data/raw/busybox-1.38.0/procps/mpstat.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Per-processor statistics, based on sy | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2010 Marek Polacek <mmp | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config MPSTAT                   | True                      | 
+  10 | //config: bool "mpstat (10 kb)"          | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Per-processor statistics       | True                      | 
+  14 |                                          | True                      | 
+  15 | //applet:IF_MPSTAT(APPLET(mpstat, BB_DIR | True                      | 
+  16 | /* shouldn't be noexec: "mpstat INTERVAL | True                      | 
+  17 |                                          | True                      | 
+  18 | //kbuild:lib-$(CONFIG_MPSTAT) += mpstat. | True                      | 
+  19 |                                          | True                      | 
+  20 | #include "libbb.h"                       | True                      | 
+  21 | #include <sys/utsname.h>  /* struct utsn | True                      | 
+  22 |                                          | True                      | 
+  23 | //#define debug(fmt, ...) fprintf(stderr | True                      | 
+  24 | #define debug(fmt, ...) ((void)0)        | True                      | 
+  25 |                                          | True                      | 
+  26 | /* Size of /proc/interrupts line, CPU da | True                      | 
+  27 | #define INTERRUPTS_LINE    64            | True                      | 
+  28 | /* Maximum number of interrupts */       | True                      | 
+  29 | #define NR_IRQS            256           | True                      | 
+  30 | #define NR_IRQCPU_PREALLOC 3             | True                      | 
+  31 | #define MAX_IRQNAME_LEN    16            | True                      | 
+  32 | #define MAX_PF_NAME        512           | True                      | 
+  33 | /* sysstat 9.0.6 uses width 8, but newer | True                      | 
+  34 |  * data needs more: "interrupts" in /pro | True                      | 
+  35 |  * most are up to 8 chars, one (BLOCK_IO | True                      | 
+  36 |  * We are printing headers in the " IRQN | True                      | 
+  37 |  * anything smaller than 10 chars looks  | True                      | 
+  38 |  */                                      | True                      | 
+  39 | #define INTRATE_SCRWIDTH      10         | True                      | 
+  40 | #define INTRATE_SCRWIDTH_STR "10"        | True                      | 
+  41 |                                          | True                      | 
+  42 | /* System files */                       | True                      | 
+  43 | #define PROCFS_STAT       "/proc/stat"   | True                      | 
+  44 | #define PROCFS_INTERRUPTS "/proc/interru | True                      | 
+  45 | #define PROCFS_SOFTIRQS   "/proc/softirq | True                      | 
+  46 | #define PROCFS_UPTIME     "/proc/uptime" | True                      | 
+  47 |                                          | True                      | 
+  48 |                                          | True                      | 
+  49 | #if 1                                    | True                      | 
+  50 | typedef unsigned long long data_t;       | True                      | 
+  51 | typedef long long idata_t;               | True                      | 
+  52 | #define FMT_DATA "ll"                    | True                      | 
+  53 | #define DATA_MAX ULLONG_MAX              | True                      | 
+  54 | #else                                    | True                      | 
+  55 | typedef unsigned long data_t;            | !1                        | 
+  56 | typedef long idata_t;                    | !1                        | 
+  57 | #define FMT_DATA "l"                     | !1                        | 
+  58 | #define DATA_MAX ULONG_MAX               | !1                        | 
+  59 | #endif                                   | True                      | 
+  60 |                                          | True                      | 
+  61 |                                          | True                      | 
+  62 | struct stats_irqcpu {                    | True                      | 
+  63 |  unsigned interrupts;                    | True                      | 
+  64 |  char irq_name[MAX_IRQNAME_LEN];         | True                      | 
+  65 | };                                       | True                      | 
+  66 |                                          | True                      | 
+  67 | struct stats_cpu {                       | True                      | 
+  68 |  data_t cpu_user;                        | True                      | 
+  69 |  data_t cpu_nice;                        | True                      | 
+  70 |  data_t cpu_system;                      | True                      | 
+  71 |  data_t cpu_idle;                        | True                      | 
+  72 |  data_t cpu_iowait;                      | True                      | 
+  73 |  data_t cpu_steal;                       | True                      | 
+  74 |  data_t cpu_irq;                         | True                      | 
+  75 |  data_t cpu_softirq;                     | True                      | 
+  76 |  data_t cpu_guest;                       | True                      | 
+  77 | };                                       | True                      | 
+  78 |                                          | True                      | 
+  79 | struct stats_irq {                       | True                      | 
+  80 |  data_t irq_nr;                          | True                      | 
+  81 | };                                       | True                      | 
+  82 |                                          | True                      | 
+  83 |                                          | True                      | 
+  84 | /* Globals. Sort by size and access freq | True                      | 
+  85 | struct globals {                         | True                      | 
+  86 |  int interval;                           | True                      | 
+  87 |  int count;                              | True                      | 
+  88 |  unsigned cpu_nr;                /* Numb | True                      | 
+  89 |  unsigned irqcpu_nr;             /* Numb | True                      | 
+  90 |  unsigned softirqcpu_nr;         /* Numb | True                      | 
+  91 |  unsigned options;                       | True                      | 
+  92 |  unsigned hz;                            | True                      | 
+  93 |  unsigned cpu_bitmap_len;                | True                      | 
+  94 |  smallint p_option;                      | True                      | 
+  95 |  // 9.0.6 does not do it. Try "mpstat -A | True                      | 
+  96 |  //smallint header_done;                 | True                      | 
+  97 |  //smallint avg_header_done;             | True                      | 
+  98 |  unsigned char *cpu_bitmap;      /* Bit  | True                      | 
+  99 |  data_t global_uptime[3];                | True                      | 
+ 100 |  data_t per_cpu_uptime[3];               | True                      | 
+ 101 |  struct stats_cpu *st_cpu[3];            | True                      | 
+ 102 |  struct stats_irq *st_irq[3];            | True                      | 
+ 103 |  struct stats_irqcpu *st_irqcpu[3];      | True                      | 
+ 104 |  struct stats_irqcpu *st_softirqcpu[3];  | True                      | 
+ 105 |  struct tm timestamp[3];                 | True                      | 
+ 106 | };                                       | True                      | 
+ 107 | #define G (*ptr_to_globals)              | True                      | 
+ 108 | #define INIT_G() do { \                  | True                      | 
+ 109 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+ 110 | } while (0)                              | True                      | 
+ 111 |                                          | True                      | 
+ 112 | /* The selected interrupts statistics (b | True                      | 
+ 113 | enum {                                   | True                      | 
+ 114 |  D_CPU      = 1 << 0,                    | True                      | 
+ 115 |  D_IRQ_SUM  = 1 << 1,                    | True                      | 
+ 116 |  D_IRQ_CPU  = 1 << 2,                    | True                      | 
+ 117 |  D_SOFTIRQS = 1 << 3,                    | True                      | 
+ 118 | };                                       | True                      | 
+ 119 |                                          | True                      | 
+ 120 |                                          | True                      | 
+ 121 | /* Is option on? */                      | True                      | 
+ 122 | static ALWAYS_INLINE int display_opt(int | True                      | 
+ 123 | {                                        | True                      | 
+ 124 |  return (opt & G.options);               | True                      | 
+ 125 | }                                        | True                      | 
+ 126 |                                          | True                      | 
+ 127 | #if DATA_MAX > 0xffffffff                | True                      | 
+ 128 | /*                                       | (ULLONG_MAX>4294967295)   | 
+ 129 |  * Handle overflow conditions properly f | (ULLONG_MAX>4294967295)   | 
+ 130 |  * less bits than data_t, depending on t | (ULLONG_MAX>4294967295)   | 
+ 131 |  */                                      | (ULLONG_MAX>4294967295)   | 
+ 132 | /* Surprisingly, on 32bit inlining is a  | (ULLONG_MAX>4294967295)   | 
+ 133 | static ALWAYS_INLINE data_t overflow_saf | (ULLONG_MAX>4294967295)   | 
+ 134 | {                                        | (ULLONG_MAX>4294967295)   | 
+ 135 |  data_t v = curr - prev;                 | (ULLONG_MAX>4294967295)   | 
+ 136 |                                          | (ULLONG_MAX>4294967295)   | 
+ 137 |  if ((idata_t)v < 0     /* curr < prev - | (ULLONG_MAX>4294967295)   | 
+ 138 |   && prev <= 0xffffffff /* kernel uses 3 | (ULLONG_MAX>4294967295)   | 
+ 139 |  ) {                                     | (ULLONG_MAX>4294967295)   | 
+ 140 |   /* Add 33th bit set to 1 to curr, comp | (ULLONG_MAX>4294967295)   | 
+ 141 |   /* double shift defeats "warning: left | (ULLONG_MAX>4294967295)   | 
+ 142 |   v += ((data_t)1 << 16) << 16;          | (ULLONG_MAX>4294967295)   | 
+ 143 |  }                                       | (ULLONG_MAX>4294967295)   | 
+ 144 |  return v;                               | (ULLONG_MAX>4294967295)   | 
+ 145 | }                                        | (ULLONG_MAX>4294967295)   | 
+ 146 | #else                                    | True                      | 
+ 147 | static ALWAYS_INLINE data_t overflow_saf | !(ULLONG_MAX>4294967295)  | 
+ 148 | {                                        | !(ULLONG_MAX>4294967295)  | 
+ 149 |  return curr - prev;                     | !(ULLONG_MAX>4294967295)  | 
+ 150 | }                                        | !(ULLONG_MAX>4294967295)  | 
+ 151 | #endif                                   | True                      | 
+ 152 |                                          | True                      | 
+ 153 | static double percent_value(data_t prev, | True                      | 
+ 154 | {                                        | True                      | 
+ 155 |  return ((double)overflow_safe_sub(prev, | True                      | 
+ 156 | }                                        | True                      | 
+ 157 |                                          | True                      | 
+ 158 | static double hz_value(data_t prev, data | True                      | 
+ 159 | {                                        | True                      | 
+ 160 |  //bb_error_msg("curr:%lld prev:%lld G.h | True                      | 
+ 161 |  return ((double)overflow_safe_sub(prev, | True                      | 
+ 162 | }                                        | True                      | 
+ 163 |                                          | True                      | 
+ 164 | static ALWAYS_INLINE data_t jiffies_diff | True                      | 
+ 165 | {                                        | True                      | 
+ 166 |  data_t diff = new - old;                | True                      | 
+ 167 |  return (diff == 0) ? 1 : diff;          | True                      | 
+ 168 | }                                        | True                      | 
+ 169 |                                          | True                      | 
+ 170 | static int is_cpu_in_bitmap(unsigned cpu | True                      | 
+ 171 | {                                        | True                      | 
+ 172 |  return G.cpu_bitmap[cpu >> 3] & (1 << ( | True                      | 
+ 173 | }                                        | True                      | 
+ 174 |                                          | True                      | 
+ 175 | static void write_irqcpu_stats(struct st | True                      | 
+ 176 |   int total_irqs,                        | True                      | 
+ 177 |   data_t itv,                            | True                      | 
+ 178 |   int prev, int current,                 | True                      | 
+ 179 |   const char *prev_str, const char *curr | True                      | 
+ 180 | {                                        | True                      | 
+ 181 |  int j;                                  | True                      | 
+ 182 |  int offset, cpu;                        | True                      | 
+ 183 |  struct stats_irqcpu *p0, *q0;           | True                      | 
+ 184 |                                          | True                      | 
+ 185 |  /* Check if number of IRQs has changed  | True                      | 
+ 186 |  if (G.interval != 0) {                  | True                      | 
+ 187 |   for (j = 0; j <= total_irqs; j++) {    | True                      | 
+ 188 |    p0 = &per_cpu_stats[current][j];      | True                      | 
+ 189 |    if (p0->irq_name[0] != '\0') {        | True                      | 
+ 190 |     q0 = &per_cpu_stats[prev][j];        | True                      | 
+ 191 |     if (strcmp(p0->irq_name, q0->irq_nam | True                      | 
+ 192 |      /* Strings are different */         | True                      | 
+ 193 |      break;                              | True                      | 
+ 194 |     }                                    | True                      | 
+ 195 |    }                                     | True                      | 
+ 196 |   }                                      | True                      | 
+ 197 |  }                                       | True                      | 
+ 198 |                                          | True                      | 
+ 199 |  /* Print header */                      | True                      | 
+ 200 |  printf("\n%-11s  CPU", prev_str);       | True                      | 
+ 201 |  {                                       | True                      | 
+ 202 |   /* A bit complex code to "buy back" sp | True                      | 
+ 203 |    * Here's how it looks like. BLOCK_IOP | True                      | 
+ 204 |    * and latter headers use smaller widt | True                      | 
+ 205 |    * ...BLOCK/s BLOCK_IOPOLL/s TASKLET/s | True                      | 
+ 206 |    * ...   2.32      0.00      0.01      | True                      | 
+ 207 |    */                                    | True                      | 
+ 208 |   int expected_len = 0;                  | True                      | 
+ 209 |   int printed_len = 0;                   | True                      | 
+ 210 |   for (j = 0; j < total_irqs; j++) {     | True                      | 
+ 211 |    p0 = &per_cpu_stats[current][j];      | True                      | 
+ 212 |    if (p0->irq_name[0] != '\0') {        | True                      | 
+ 213 |     int n = (INTRATE_SCRWIDTH-3) - (prin | True                      | 
+ 214 |     printed_len += printf(" %*s/s", n >  | True                      | 
+ 215 |     expected_len += INTRATE_SCRWIDTH;    | True                      | 
+ 216 |    }                                     | True                      | 
+ 217 |   }                                      | True                      | 
+ 218 |  }                                       | True                      | 
+ 219 |  bb_putchar('\n');                       | True                      | 
+ 220 |                                          | True                      | 
+ 221 |  for (cpu = 1; cpu <= G.cpu_nr; cpu++) { | True                      | 
+ 222 |   /* Check if we want stats about this C | True                      | 
+ 223 |   if (!is_cpu_in_bitmap(cpu) && G.p_opti | True                      | 
+ 224 |    continue;                             | True                      | 
+ 225 |   }                                      | True                      | 
+ 226 |                                          | True                      | 
+ 227 |   printf("%-11s %4u", current_str, cpu - | True                      | 
+ 228 |                                          | True                      | 
+ 229 |   for (j = 0; j < total_irqs; j++) {     | True                      | 
+ 230 |    /* IRQ field set only for proc 0 */   | True                      | 
+ 231 |    p0 = &per_cpu_stats[current][j];      | True                      | 
+ 232 |                                          | True                      | 
+ 233 |    /*                                    | True                      | 
+ 234 |     * An empty string for irq name means | True                      | 
+ 235 |     * interrupt is no longer used.       | True                      | 
+ 236 |     */                                   | True                      | 
+ 237 |    if (p0->irq_name[0] != '\0') {        | True                      | 
+ 238 |     offset = j;                          | True                      | 
+ 239 |     q0 = &per_cpu_stats[prev][offset];   | True                      | 
+ 240 |                                          | True                      | 
+ 241 |     /*                                   | True                      | 
+ 242 |      * If we want stats for the time sin | True                      | 
+ 243 |      * we have p0->irq != q0->irq.       | True                      | 
+ 244 |      */                                  | True                      | 
+ 245 |     if (strcmp(p0->irq_name, q0->irq_nam | True                      | 
+ 246 |      && G.interval != 0                  | True                      | 
+ 247 |     ) {                                  | True                      | 
+ 248 |      if (j) {                            | True                      | 
+ 249 |       offset = j - 1;                    | True                      | 
+ 250 |       q0 = &per_cpu_stats[prev][offset]; | True                      | 
+ 251 |      }                                   | True                      | 
+ 252 |      if (strcmp(p0->irq_name, q0->irq_na | True                      | 
+ 253 |       && (j + 1 < total_irqs)            | True                      | 
+ 254 |      ) {                                 | True                      | 
+ 255 |       offset = j + 1;                    | True                      | 
+ 256 |       q0 = &per_cpu_stats[prev][offset]; | True                      | 
+ 257 |      }                                   | True                      | 
+ 258 |     }                                    | True                      | 
+ 259 |                                          | True                      | 
+ 260 |     if (strcmp(p0->irq_name, q0->irq_nam | True                      | 
+ 261 |      || G.interval == 0                  | True                      | 
+ 262 |     ) {                                  | True                      | 
+ 263 |      struct stats_irqcpu *p, *q;         | True                      | 
+ 264 |      p = &per_cpu_stats[current][(cpu -  | True                      | 
+ 265 |      q = &per_cpu_stats[prev][(cpu - 1)  | True                      | 
+ 266 |      printf("%"INTRATE_SCRWIDTH_STR".2f" | True                      | 
+ 267 |       (double)(p->interrupts - q->interr | True                      | 
+ 268 |     } else {                             | True                      | 
+ 269 |      printf("        N/A");              | True                      | 
+ 270 |     }                                    | True                      | 
+ 271 |    }                                     | True                      | 
+ 272 |   }                                      | True                      | 
+ 273 |   bb_putchar('\n');                      | True                      | 
+ 274 |  }                                       | True                      | 
+ 275 | }                                        | True                      | 
+ 276 |                                          | True                      | 
+ 277 | static data_t get_per_cpu_interval(const | True                      | 
+ 278 |   const struct stats_cpu *scp)           | True                      | 
+ 279 | {                                        | True                      | 
+ 280 |  return ((scc->cpu_user + scc->cpu_nice  | True                      | 
+ 281 |    scc->cpu_system + scc->cpu_iowait +   | True                      | 
+ 282 |    scc->cpu_idle + scc->cpu_steal +      | True                      | 
+ 283 |    scc->cpu_irq + scc->cpu_softirq) -    | True                      | 
+ 284 |   (scp->cpu_user + scp->cpu_nice +       | True                      | 
+ 285 |    scp->cpu_system + scp->cpu_iowait +   | True                      | 
+ 286 |    scp->cpu_idle + scp->cpu_steal +      | True                      | 
+ 287 |    scp->cpu_irq + scp->cpu_softirq));    | True                      | 
+ 288 | }                                        | True                      | 
+ 289 |                                          | True                      | 
+ 290 | static void print_stats_cpu_struct(const | True                      | 
+ 291 |   const struct stats_cpu *c,             | True                      | 
+ 292 |   data_t itv)                            | True                      | 
+ 293 | {                                        | True                      | 
+ 294 |  printf(" %7.2f %7.2f %7.2f %7.2f %7.2f  | True                      | 
+ 295 |   percent_value(p->cpu_user - p->cpu_gue | True                      | 
+ 296 |   /**/                          c->cpu_u | True                      | 
+ 297 |   percent_value(p->cpu_nice   , c->cpu_n | True                      | 
+ 298 |   percent_value(p->cpu_system , c->cpu_s | True                      | 
+ 299 |   percent_value(p->cpu_iowait , c->cpu_i | True                      | 
+ 300 |   percent_value(p->cpu_irq    , c->cpu_i | True                      | 
+ 301 |   percent_value(p->cpu_softirq, c->cpu_s | True                      | 
+ 302 |   percent_value(p->cpu_steal  , c->cpu_s | True                      | 
+ 303 |   percent_value(p->cpu_guest  , c->cpu_g | True                      | 
+ 304 |   percent_value(p->cpu_idle   , c->cpu_i | True                      | 
+ 305 |  );                                      | True                      | 
+ 306 | }                                        | True                      | 
+ 307 |                                          | True                      | 
+ 308 | static void write_stats_core(int prev, i | True                      | 
+ 309 |   const char *prev_str, const char *curr | True                      | 
+ 310 | {                                        | True                      | 
+ 311 |  struct stats_cpu *scc, *scp;            | True                      | 
+ 312 |  data_t itv, global_itv;                 | True                      | 
+ 313 |  int cpu;                                | True                      | 
+ 314 |                                          | True                      | 
+ 315 |  /* Compute time interval */             | True                      | 
+ 316 |  itv = global_itv = jiffies_diff(G.globa | True                      | 
+ 317 |                                          | True                      | 
+ 318 |  /* Reduce interval to one CPU */        | True                      | 
+ 319 |  if (G.cpu_nr > 1)                       | True                      | 
+ 320 |   itv = jiffies_diff(G.per_cpu_uptime[pr | True                      | 
+ 321 |                                          | True                      | 
+ 322 |  /* Print CPU stats */                   | True                      | 
+ 323 |  if (display_opt(D_CPU)) {               | True                      | 
+ 324 |                                          | True                      | 
+ 325 |   ///* This is done exactly once */      | True                      | 
+ 326 |   //if (!G.header_done) {                | True                      | 
+ 327 |    printf("\n%-11s  CPU    %%usr   %%nic | True                      | 
+ 328 |     prev_str                             | True                      | 
+ 329 |    );                                    | True                      | 
+ 330 |   // G.header_done = 1;                  | True                      | 
+ 331 |   //}                                    | True                      | 
+ 332 |                                          | True                      | 
+ 333 |   for (cpu = 0; cpu <= G.cpu_nr; cpu++)  | True                      | 
+ 334 |    data_t per_cpu_itv;                   | True                      | 
+ 335 |                                          | True                      | 
+ 336 |    /* Print stats about this particular  | True                      | 
+ 337 |    if (!is_cpu_in_bitmap(cpu))           | True                      | 
+ 338 |     continue;                            | True                      | 
+ 339 |                                          | True                      | 
+ 340 |    scc = &G.st_cpu[current][cpu];        | True                      | 
+ 341 |    scp = &G.st_cpu[prev][cpu];           | True                      | 
+ 342 |    per_cpu_itv = global_itv;             | True                      | 
+ 343 |                                          | True                      | 
+ 344 |    printf((cpu ? "%-11s %4u" : "%-11s  a | True                      | 
+ 345 |    if (cpu) {                            | True                      | 
+ 346 |     double idle;                         | True                      | 
+ 347 |     /*                                   | True                      | 
+ 348 |      * If the CPU is offline, then it is | True                      | 
+ 349 |      * so all values are 0.              | True                      | 
+ 350 |      * NB: Guest time is already include | True                      | 
+ 351 |      */                                  | True                      | 
+ 352 |     if ((scc->cpu_user | scc->cpu_nice | | True                      | 
+ 353 |          scc->cpu_iowait | scc->cpu_idle | True                      | 
+ 354 |          scc->cpu_irq | scc->cpu_softirq | True                      | 
+ 355 |     ) {                                  | True                      | 
+ 356 |      /*                                  | True                      | 
+ 357 |       * Set current struct fields to val | True                      | 
+ 358 |       * iteration. Then their values won | True                      | 
+ 359 |       * zero, when the CPU comes back on | True                      | 
+ 360 |       */                                 | True                      | 
+ 361 |      *scc = *scp;                        | True                      | 
+ 362 |      idle = 0.0;                         | True                      | 
+ 363 |      goto print_zeros;                   | True                      | 
+ 364 |     }                                    | True                      | 
+ 365 |     /* Compute interval again for curren | True                      | 
+ 366 |     per_cpu_itv = get_per_cpu_interval(s | True                      | 
+ 367 |     if (per_cpu_itv == 0) {              | True                      | 
+ 368 |      /*                                  | True                      | 
+ 369 |       * If the CPU is tickless then ther | True                      | 
+ 370 |       * but the sum of values is not zer | True                      | 
+ 371 |       */                                 | True                      | 
+ 372 |      idle = 100.0;                       | True                      | 
+ 373 |  print_zeros:                            | True                      | 
+ 374 |      printf(" %7.2f %7.2f %7.2f %7.2f %7 | True                      | 
+ 375 |       0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, | True                      | 
+ 376 |      continue;                           | True                      | 
+ 377 |     }                                    | True                      | 
+ 378 |    }                                     | True                      | 
+ 379 |    print_stats_cpu_struct(scp, scc, per_ | True                      | 
+ 380 |   }                                      | True                      | 
+ 381 |  }                                       | True                      | 
+ 382 |                                          | True                      | 
+ 383 |  /* Print total number of IRQs per CPU * | True                      | 
+ 384 |  if (display_opt(D_IRQ_SUM)) {           | True                      | 
+ 385 |                                          | True                      | 
+ 386 |   ///* Print average header, this is don | True                      | 
+ 387 |   //if (!G.avg_header_done) {            | True                      | 
+ 388 |    printf("\n%-11s  CPU    intr/s\n", pr | True                      | 
+ 389 |   // G.avg_header_done = 1;              | True                      | 
+ 390 |   //}                                    | True                      | 
+ 391 |                                          | True                      | 
+ 392 |   for (cpu = 0; cpu <= G.cpu_nr; cpu++)  | True                      | 
+ 393 |    data_t per_cpu_itv;                   | True                      | 
+ 394 |                                          | True                      | 
+ 395 |    /* Print stats about this CPU? */     | True                      | 
+ 396 |    if (!is_cpu_in_bitmap(cpu))           | True                      | 
+ 397 |     continue;                            | True                      | 
+ 398 |                                          | True                      | 
+ 399 |    per_cpu_itv = itv;                    | True                      | 
+ 400 |    printf((cpu ? "%-11s %4u" : "%-11s  a | True                      | 
+ 401 |    if (cpu) {                            | True                      | 
+ 402 |     scc = &G.st_cpu[current][cpu];       | True                      | 
+ 403 |     scp = &G.st_cpu[prev][cpu];          | True                      | 
+ 404 |     /* Compute interval again for curren | True                      | 
+ 405 |     per_cpu_itv = get_per_cpu_interval(s | True                      | 
+ 406 |     if (per_cpu_itv == 0) {              | True                      | 
+ 407 |      printf(" %9.2f\n", 0.0);            | True                      | 
+ 408 |      continue;                           | True                      | 
+ 409 |     }                                    | True                      | 
+ 410 |    }                                     | True                      | 
+ 411 |    //bb_error_msg("G.st_irq[%u][%u].irq_ | True                      | 
+ 412 |    // current, cpu, G.st_irq[prev][cpu]. | True                      | 
+ 413 |    printf(" %9.2f\n", hz_value(G.st_irq[ | True                      | 
+ 414 |   }                                      | True                      | 
+ 415 |  }                                       | True                      | 
+ 416 |                                          | True                      | 
+ 417 |  if (display_opt(D_IRQ_CPU)) {           | True                      | 
+ 418 |   write_irqcpu_stats(G.st_irqcpu, G.irqc | True                      | 
+ 419 |     itv,                                 | True                      | 
+ 420 |     prev, current,                       | True                      | 
+ 421 |     prev_str, current_str                | True                      | 
+ 422 |   );                                     | True                      | 
+ 423 |  }                                       | True                      | 
+ 424 |                                          | True                      | 
+ 425 |  if (display_opt(D_SOFTIRQS)) {          | True                      | 
+ 426 |   write_irqcpu_stats(G.st_softirqcpu, G. | True                      | 
+ 427 |     itv,                                 | True                      | 
+ 428 |     prev, current,                       | True                      | 
+ 429 |     prev_str, current_str                | True                      | 
+ 430 |   );                                     | True                      | 
+ 431 |  }                                       | True                      | 
+ 432 | }                                        | True                      | 
+ 433 |                                          | True                      | 
+ 434 | /*                                       | True                      | 
+ 435 |  * Print the statistics                  | True                      | 
+ 436 |  */                                      | True                      | 
+ 437 | static void write_stats(int current)     | True                      | 
+ 438 | {                                        | True                      | 
+ 439 |  char prev_time[16];                     | True                      | 
+ 440 |  char curr_time[16];                     | True                      | 
+ 441 |                                          | True                      | 
+ 442 |  strftime(prev_time, sizeof(prev_time),  | True                      | 
+ 443 |  strftime(curr_time, sizeof(curr_time),  | True                      | 
+ 444 |                                          | True                      | 
+ 445 |  write_stats_core(!current, current, pre | True                      | 
+ 446 | }                                        | True                      | 
+ 447 |                                          | True                      | 
+ 448 | static void write_stats_avg(int current) | True                      | 
+ 449 | {                                        | True                      | 
+ 450 |  write_stats_core(2, current, "Average:" | True                      | 
+ 451 | }                                        | True                      | 
+ 452 |                                          | True                      | 
+ 453 | /*                                       | True                      | 
+ 454 |  * Read CPU statistics                   | True                      | 
+ 455 |  */                                      | True                      | 
+ 456 | static void get_cpu_statistics(struct st | True                      | 
+ 457 | {                                        | True                      | 
+ 458 |  FILE *fp;                               | True                      | 
+ 459 |  char buf[1024];                         | True                      | 
+ 460 |                                          | True                      | 
+ 461 |  fp = xfopen_for_read(PROCFS_STAT);      | True                      | 
+ 462 |                                          | True                      | 
+ 463 |  while (fgets(buf, sizeof(buf), fp)) {   | True                      | 
+ 464 |   data_t sum;                            | True                      | 
+ 465 |   unsigned cpu_number;                   | True                      | 
+ 466 |   struct stats_cpu *cp;                  | True                      | 
+ 467 |                                          | True                      | 
+ 468 |   if (!starts_with_cpu(buf))             | True                      | 
+ 469 |    continue; /* not "cpu" */             | True                      | 
+ 470 |                                          | True                      | 
+ 471 |   cp = cpu; /* for "cpu " case */        | True                      | 
+ 472 |   if (buf[3] != ' ') {                   | True                      | 
+ 473 |    /* "cpuN " */                         | True                      | 
+ 474 |    if (G.cpu_nr == 0                     | True                      | 
+ 475 |     || sscanf(buf + 3, "%u ", &cpu_numbe | True                      | 
+ 476 |     || cpu_number >= G.cpu_nr            | True                      | 
+ 477 |    ) {                                   | True                      | 
+ 478 |     continue;                            | True                      | 
+ 479 |    }                                     | True                      | 
+ 480 |    cp = &cpu[cpu_number + 1];            | True                      | 
+ 481 |   }                                      | True                      | 
+ 482 |                                          | True                      | 
+ 483 |   /* Read the counters, save them */     | True                      | 
+ 484 |   /* Not all fields have to be present * | True                      | 
+ 485 |   memset(cp, 0, sizeof(*cp));            | True                      | 
+ 486 |   sscanf(buf, "%*s"                      | True                      | 
+ 487 |    " %"FMT_DATA"u %"FMT_DATA"u %"FMT_DAT | True                      | 
+ 488 |    " %"FMT_DATA"u %"FMT_DATA"u %"FMT_DAT | True                      | 
+ 489 |    " %"FMT_DATA"u %"FMT_DATA"u %"FMT_DAT | True                      | 
+ 490 |    &cp->cpu_user, &cp->cpu_nice, &cp->cp | True                      | 
+ 491 |    &cp->cpu_idle, &cp->cpu_iowait, &cp-> | True                      | 
+ 492 |    &cp->cpu_softirq, &cp->cpu_steal, &cp | True                      | 
+ 493 |   );                                     | True                      | 
+ 494 |   /*                                     | True                      | 
+ 495 |    * Compute uptime in jiffies (1/HZ), i | True                      | 
+ 496 |    * individual CPU's uptimes.           | True                      | 
+ 497 |    * NB: We have to omit cpu_guest, beca | True                      | 
+ 498 |    */                                    | True                      | 
+ 499 |   sum = cp->cpu_user + cp->cpu_nice + cp | True                      | 
+ 500 |    cp->cpu_idle + cp->cpu_iowait + cp->c | True                      | 
+ 501 |    cp->cpu_softirq + cp->cpu_steal;      | True                      | 
+ 502 |                                          | True                      | 
+ 503 |   if (buf[3] == ' ') {                   | True                      | 
+ 504 |    /* "cpu " */                          | True                      | 
+ 505 |    *up = sum;                            | True                      | 
+ 506 |   } else {                               | True                      | 
+ 507 |    /* "cpuN " */                         | True                      | 
+ 508 |    if (cpu_number == 0 && *up0 != 0) {   | True                      | 
+ 509 |     /* Compute uptime of single CPU */   | True                      | 
+ 510 |     *up0 = sum;                          | True                      | 
+ 511 |    }                                     | True                      | 
+ 512 |   }                                      | True                      | 
+ 513 |  }                                       | True                      | 
+ 514 |  fclose(fp);                             | True                      | 
+ 515 | }                                        | True                      | 
+ 516 |                                          | True                      | 
+ 517 | /*                                       | True                      | 
+ 518 |  * Read IRQs from /proc/stat             | True                      | 
+ 519 |  */                                      | True                      | 
+ 520 | static void get_irqs_from_stat(struct st | True                      | 
+ 521 | {                                        | True                      | 
+ 522 |  FILE *fp;                               | True                      | 
+ 523 |  char buf[1024];                         | True                      | 
+ 524 |                                          | True                      | 
+ 525 |  fp = xfopen_for_read(PROCFS_STAT);      | True                      | 
+ 526 |                                          | True                      | 
+ 527 |  while (fgets(buf, sizeof(buf), fp)) {   | True                      | 
+ 528 |   //bb_error_msg("/proc/stat:'%s'", buf) | True                      | 
+ 529 |   if (is_prefixed_with(buf, "intr ")) {  | True                      | 
+ 530 |    /* Read total number of IRQs since sy | True                      | 
+ 531 |    sscanf(buf + 5, "%"FMT_DATA"u", &irq- | True                      | 
+ 532 |   }                                      | True                      | 
+ 533 |  }                                       | True                      | 
+ 534 |                                          | True                      | 
+ 535 |  fclose(fp);                             | True                      | 
+ 536 | }                                        | True                      | 
+ 537 |                                          | True                      | 
+ 538 | /*                                       | True                      | 
+ 539 |  * Read stats from /proc/interrupts or / | True                      | 
+ 540 |  */                                      | True                      | 
+ 541 | static void get_irqs_from_interrupts(con | True                      | 
+ 542 |   struct stats_irqcpu *per_cpu_stats[],  | True                      | 
+ 543 |   int irqs_per_cpu, int current)         | True                      | 
+ 544 | {                                        | True                      | 
+ 545 |  FILE *fp;                               | True                      | 
+ 546 |  struct stats_irq *irq_i;                | True                      | 
+ 547 |  struct stats_irqcpu *ic;                | True                      | 
+ 548 |  char *buf;                              | True                      | 
+ 549 |  unsigned buflen;                        | True                      | 
+ 550 |  unsigned cpu;                           | True                      | 
+ 551 |  unsigned irq;                           | True                      | 
+ 552 |  int cpu_index[G.cpu_nr];                | True                      | 
+ 553 |  int iindex;                             | True                      | 
+ 554 |                                          | True                      | 
+ 555 | // Moved to caller.                      | True                      | 
+ 556 | // Otherwise reading of /proc/softirqs   | True                      | 
+ 557 | // was resetting counts to 0 after we pa | True                      | 
+ 558 | // /proc/interrupts. Which resulted in:  | True                      | 
+ 559 | // 01:32:47 PM  CPU    intr/s            | True                      | 
+ 560 | // 01:32:47 PM  all    591.47            | True                      | 
+ 561 | // 01:32:47 PM    0      0.00 <= ???     | True                      | 
+ 562 | // 01:32:47 PM    1      0.00 <= ???     | True                      | 
+ 563 | // for (cpu = 1; cpu <= G.cpu_nr; cpu++) | True                      | 
+ 564 | //  G.st_irq[current][cpu].irq_nr = 0;   | True                      | 
+ 565 | //  //bb_error_msg("G.st_irq[%u][%u].irq | True                      | 
+ 566 | // }                                     | True                      | 
+ 567 |                                          | True                      | 
+ 568 |  fp = fopen_for_read(fname);             | True                      | 
+ 569 |  if (!fp)                                | True                      | 
+ 570 |   return;                                | True                      | 
+ 571 |                                          | True                      | 
+ 572 |  buflen = INTERRUPTS_LINE + 16 * G.cpu_n | True                      | 
+ 573 |  buf = xmalloc(buflen);                  | True                      | 
+ 574 |                                          | True                      | 
+ 575 |  /* Parse header and determine, which CP | True                      | 
+ 576 |  iindex = 0;                             | True                      | 
+ 577 |  while (fgets(buf, buflen, fp)) {        | True                      | 
+ 578 |   char *cp, *next;                       | True                      | 
+ 579 |   next = buf;                            | True                      | 
+ 580 |   while ((cp = strstr(next, "CPU")) != N | True                      | 
+ 581 |    && iindex < G.cpu_nr                  | True                      | 
+ 582 |   ) {                                    | True                      | 
+ 583 |    cpu = strtoul(cp + 3, &next, 10);     | True                      | 
+ 584 |    cpu_index[iindex++] = cpu;            | True                      | 
+ 585 |   }                                      | True                      | 
+ 586 |   if (iindex) /* We found header */      | True                      | 
+ 587 |    break;                                | True                      | 
+ 588 |  }                                       | True                      | 
+ 589 |                                          | True                      | 
+ 590 |  irq = 0;                                | True                      | 
+ 591 |  while (fgets(buf, buflen, fp)           | True                      | 
+ 592 |   && irq < irqs_per_cpu                  | True                      | 
+ 593 |  ) {                                     | True                      | 
+ 594 |   int len;                               | True                      | 
+ 595 |   char last_char;                        | True                      | 
+ 596 |   char *cp;                              | True                      | 
+ 597 |                                          | True                      | 
+ 598 |   /* Skip over "IRQNAME:" */             | True                      | 
+ 599 |   cp = strchr(buf, ':');                 | True                      | 
+ 600 |   if (!cp)                               | True                      | 
+ 601 |    continue;                             | True                      | 
+ 602 |   last_char = cp[-1];                    | True                      | 
+ 603 |                                          | True                      | 
+ 604 |   ic = &per_cpu_stats[current][irq];     | True                      | 
+ 605 |   len = cp - buf;                        | True                      | 
+ 606 |   if (len >= sizeof(ic->irq_name)) {     | True                      | 
+ 607 |    len = sizeof(ic->irq_name) - 1;       | True                      | 
+ 608 |   }                                      | True                      | 
+ 609 |   safe_strncpy(ic->irq_name, buf, len +  | True                      | 
+ 610 |   //bb_error_msg("%s: irq%d:'%s' buf:'%s | True                      | 
+ 611 |   cp++;                                  | True                      | 
+ 612 |                                          | True                      | 
+ 613 |   for (cpu = 0; cpu < iindex; cpu++) {   | True                      | 
+ 614 |    char *next;                           | True                      | 
+ 615 |    ic = &per_cpu_stats[current][cpu_inde | True                      | 
+ 616 |    irq_i = &G.st_irq[current][cpu_index[ | True                      | 
+ 617 |    ic->interrupts = strtoul(cp, &next, 1 | True                      | 
+ 618 |    /* Count only numerical IRQs */       | True                      | 
+ 619 |    if (isdigit(last_char)) {             | True                      | 
+ 620 |     irq_i->irq_nr += ic->interrupts;     | True                      | 
+ 621 |     //bb_error_msg("G.st_irq[%u][%u].irq | True                      | 
+ 622 |     // current, cpu_index[cpu] + 1, ic-> | True                      | 
+ 623 |    }                                     | True                      | 
+ 624 |    cp = next;                            | True                      | 
+ 625 |   }                                      | True                      | 
+ 626 |   irq++;                                 | True                      | 
+ 627 |  }                                       | True                      | 
+ 628 |  fclose(fp);                             | True                      | 
+ 629 |  free(buf);                              | True                      | 
+ 630 |                                          | True                      | 
+ 631 |  while (irq < irqs_per_cpu) {            | True                      | 
+ 632 |   /* Number of interrupts per CPU has ch | True                      | 
+ 633 |   ic = &per_cpu_stats[current][irq];     | True                      | 
+ 634 |   ic->irq_name[0] = '\0'; /* False inter | True                      | 
+ 635 |   irq++;                                 | True                      | 
+ 636 |  }                                       | True                      | 
+ 637 | }                                        | True                      | 
+ 638 |                                          | True                      | 
+ 639 | static void get_uptime(data_t *uptime)   | True                      | 
+ 640 | {                                        | True                      | 
+ 641 |  FILE *fp;                               | True                      | 
+ 642 |  char buf[sizeof(long)*3 * 2 + 4]; /* en | True                      | 
+ 643 |  unsigned long uptime_sec, decimal;      | True                      | 
+ 644 |                                          | True                      | 
+ 645 |  fp = xfopen_for_read(PROCFS_UPTIME);    | True                      | 
+ 646 |  if (fgets(buf, sizeof(buf), fp)) {      | True                      | 
+ 647 |   if (sscanf(buf, "%lu.%lu", &uptime_sec | True                      | 
+ 648 |    *uptime = (data_t)uptime_sec * G.hz + | True                      | 
+ 649 |   }                                      | True                      | 
+ 650 |  }                                       | True                      | 
+ 651 |                                          | True                      | 
+ 652 |  fclose(fp);                             | True                      | 
+ 653 | }                                        | True                      | 
+ 654 |                                          | True                      | 
+ 655 | static void get_localtime(struct tm *tm) | True                      | 
+ 656 | {                                        | True                      | 
+ 657 |  time_t timer;                           | True                      | 
+ 658 |  time(&timer);                           | True                      | 
+ 659 |  localtime_r(&timer, tm);                | True                      | 
+ 660 | }                                        | True                      | 
+ 661 |                                          | True                      | 
+ 662 | static void alarm_handler(int sig UNUSED | True                      | 
+ 663 | {                                        | True                      | 
+ 664 |  signal(SIGALRM, alarm_handler);         | True                      | 
+ 665 |  alarm(G.interval);                      | True                      | 
+ 666 | }                                        | True                      | 
+ 667 |                                          | True                      | 
+ 668 | static void main_loop(void)              | True                      | 
+ 669 | {                                        | True                      | 
+ 670 |  unsigned current;                       | True                      | 
+ 671 |  unsigned cpus;                          | True                      | 
+ 672 |                                          | True                      | 
+ 673 |  /* Read the stats */                    | True                      | 
+ 674 |  if (G.cpu_nr > 1) {                     | True                      | 
+ 675 |   G.per_cpu_uptime[0] = 0;               | True                      | 
+ 676 |   get_uptime(&G.per_cpu_uptime[0]);      | True                      | 
+ 677 |  }                                       | True                      | 
+ 678 |                                          | True                      | 
+ 679 |  get_cpu_statistics(G.st_cpu[0], &G.glob | True                      | 
+ 680 |                                          | True                      | 
+ 681 |  if (display_opt(D_IRQ_SUM))             | True                      | 
+ 682 |   get_irqs_from_stat(G.st_irq[0]);       | True                      | 
+ 683 |                                          | True                      | 
+ 684 |  if (display_opt(D_IRQ_SUM | D_IRQ_CPU)) | True                      | 
+ 685 |   get_irqs_from_interrupts(PROCFS_INTERR | True                      | 
+ 686 |      G.irqcpu_nr, 0);                    | True                      | 
+ 687 |                                          | True                      | 
+ 688 |  if (display_opt(D_SOFTIRQS))            | True                      | 
+ 689 |   get_irqs_from_interrupts(PROCFS_SOFTIR | True                      | 
+ 690 |      G.softirqcpu_nr, 0);                | True                      | 
+ 691 |                                          | True                      | 
+ 692 |  if (G.interval == 0) {                  | True                      | 
+ 693 |   /* Display since boot time */          | True                      | 
+ 694 |   cpus = G.cpu_nr + 1;                   | True                      | 
+ 695 |   G.timestamp[1] = G.timestamp[0];       | True                      | 
+ 696 |   memset(G.st_cpu[1], 0, sizeof(G.st_cpu | True                      | 
+ 697 |   memset(G.st_irq[1], 0, sizeof(G.st_irq | True                      | 
+ 698 |   memset(G.st_irqcpu[1], 0, sizeof(G.st_ | True                      | 
+ 699 |   memset(G.st_softirqcpu[1], 0, sizeof(G | True                      | 
+ 700 |                                          | True                      | 
+ 701 |   write_stats(0);                        | True                      | 
+ 702 |                                          | True                      | 
+ 703 |   /* And we're done */                   | True                      | 
+ 704 |   return;                                | True                      | 
+ 705 |  }                                       | True                      | 
+ 706 |                                          | True                      | 
+ 707 |  /* Set a handler for SIGALRM */         | True                      | 
+ 708 |  alarm_handler(0);                       | True                      | 
+ 709 |                                          | True                      | 
+ 710 |  /* Save the stats we already have. We n | True                      | 
+ 711 |  G.timestamp[2] = G.timestamp[0];        | True                      | 
+ 712 |  G.global_uptime[2] = G.global_uptime[0] | True                      | 
+ 713 |  G.per_cpu_uptime[2] = G.per_cpu_uptime[ | True                      | 
+ 714 |  cpus = G.cpu_nr + 1;                    | True                      | 
+ 715 |  memcpy(G.st_cpu[2], G.st_cpu[0], sizeof | True                      | 
+ 716 |  memcpy(G.st_irq[2], G.st_irq[0], sizeof | True                      | 
+ 717 |  memcpy(G.st_irqcpu[2], G.st_irqcpu[0],  | True                      | 
+ 718 |  if (display_opt(D_SOFTIRQS)) {          | True                      | 
+ 719 |   memcpy(G.st_softirqcpu[2], G.st_softir | True                      | 
+ 720 |    sizeof(G.st_softirqcpu[0][0]) * cpus  | True                      | 
+ 721 |  }                                       | True                      | 
+ 722 |                                          | True                      | 
+ 723 |  current = 1;                            | True                      | 
+ 724 |  while (1) {                             | True                      | 
+ 725 |   /* Suspend until a signal is received  | True                      | 
+ 726 |   pause();                               | True                      | 
+ 727 |                                          | True                      | 
+ 728 |   /* Set structures to 0 to distinguish  | True                      | 
+ 729 |   memset(&G.st_cpu[current][/*cpu:*/ 1], | True                      | 
+ 730 |                                          | True                      | 
+ 731 |   get_localtime(&G.timestamp[current]);  | True                      | 
+ 732 |                                          | True                      | 
+ 733 |   /* Read stats */                       | True                      | 
+ 734 |   if (G.cpu_nr > 1) {                    | True                      | 
+ 735 |    G.per_cpu_uptime[current] = 0;        | True                      | 
+ 736 |    get_uptime(&G.per_cpu_uptime[current] | True                      | 
+ 737 |   }                                      | True                      | 
+ 738 |   get_cpu_statistics(G.st_cpu[current],  | True                      | 
+ 739 |                                          | True                      | 
+ 740 |   if (display_opt(D_IRQ_SUM))            | True                      | 
+ 741 |    get_irqs_from_stat(G.st_irq[current]) | True                      | 
+ 742 |                                          | True                      | 
+ 743 |   if (display_opt(D_IRQ_SUM | D_IRQ_CPU) | True                      | 
+ 744 |    int cpu;                              | True                      | 
+ 745 |    for (cpu = 1; cpu <= G.cpu_nr; cpu++) | True                      | 
+ 746 |     G.st_irq[current][cpu].irq_nr = 0;   | True                      | 
+ 747 |    }                                     | True                      | 
+ 748 |    /* accumulates .irq_nr */             | True                      | 
+ 749 |    get_irqs_from_interrupts(PROCFS_INTER | True                      | 
+ 750 |      G.irqcpu_nr, current);              | True                      | 
+ 751 |   }                                      | True                      | 
+ 752 |                                          | True                      | 
+ 753 |   if (display_opt(D_SOFTIRQS))           | True                      | 
+ 754 |    get_irqs_from_interrupts(PROCFS_SOFTI | True                      | 
+ 755 |      G.st_softirqcpu,                    | True                      | 
+ 756 |      G.softirqcpu_nr, current);          | True                      | 
+ 757 |                                          | True                      | 
+ 758 |   write_stats(current);                  | True                      | 
+ 759 |                                          | True                      | 
+ 760 |   if (G.count > 0) {                     | True                      | 
+ 761 |    if (--G.count == 0)                   | True                      | 
+ 762 |     break;                               | True                      | 
+ 763 |   }                                      | True                      | 
+ 764 |                                          | True                      | 
+ 765 |   current ^= 1;                          | True                      | 
+ 766 |  }                                       | True                      | 
+ 767 |                                          | True                      | 
+ 768 |  /* Print average statistics */          | True                      | 
+ 769 |  write_stats_avg(current);               | True                      | 
+ 770 | }                                        | True                      | 
+ 771 |                                          | True                      | 
+ 772 | /* Initialization */                     | True                      | 
+ 773 |                                          | True                      | 
+ 774 | static void alloc_struct(int cpus)       | True                      | 
+ 775 | {                                        | True                      | 
+ 776 |  int i;                                  | True                      | 
+ 777 |  for (i = 0; i < 3; i++) {               | True                      | 
+ 778 |   G.st_cpu[i] = xzalloc(sizeof(G.st_cpu[ | True                      | 
+ 779 |   G.st_irq[i] = xzalloc(sizeof(G.st_irq[ | True                      | 
+ 780 |   G.st_irqcpu[i] = xzalloc(sizeof(G.st_i | True                      | 
+ 781 |   G.st_softirqcpu[i] = xzalloc(sizeof(G. | True                      | 
+ 782 |  }                                       | True                      | 
+ 783 |  G.cpu_bitmap_len = (cpus >> 3) + 1;     | True                      | 
+ 784 |  G.cpu_bitmap = xzalloc(G.cpu_bitmap_len | True                      | 
+ 785 | }                                        | True                      | 
+ 786 |                                          | True                      | 
+ 787 | static void print_header(struct tm *t)   | True                      | 
+ 788 | {                                        | True                      | 
+ 789 |  char cur_date[16];                      | True                      | 
+ 790 |  struct utsname uts;                     | True                      | 
+ 791 |                                          | True                      | 
+ 792 |  /* Get system name, release number and  | True                      | 
+ 793 |  uname(&uts);                            | True                      | 
+ 794 |                                          | True                      | 
+ 795 |  strftime(cur_date, sizeof(cur_date), "% | True                      | 
+ 796 |                                          | True                      | 
+ 797 |  printf("%s %s (%s)\t%s\t_%s_\t(%u CPU)\ | True                      | 
+ 798 |   uts.sysname, uts.release, uts.nodename | True                      | 
+ 799 | }                                        | True                      | 
+ 800 |                                          | True                      | 
+ 801 | /*                                       | True                      | 
+ 802 |  * Get number of interrupts available pe | True                      | 
+ 803 |  */                                      | True                      | 
+ 804 | static int get_irqcpu_nr(const char *f,  | True                      | 
+ 805 | {                                        | True                      | 
+ 806 |  FILE *fp;                               | True                      | 
+ 807 |  char *line;                             | True                      | 
+ 808 |  unsigned linelen;                       | True                      | 
+ 809 |  unsigned irq;                           | True                      | 
+ 810 |                                          | True                      | 
+ 811 |  fp = fopen_for_read(f);                 | True                      | 
+ 812 |  if (!fp)  /* No interrupts file */      | True                      | 
+ 813 |   return 0;                              | True                      | 
+ 814 |                                          | True                      | 
+ 815 |  linelen = INTERRUPTS_LINE + 16 * G.cpu_ | True                      | 
+ 816 |  line = xmalloc(linelen);                | True                      | 
+ 817 |                                          | True                      | 
+ 818 |  irq = 0;                                | True                      | 
+ 819 |  while (fgets(line, linelen, fp)         | True                      | 
+ 820 |   && irq < max_irqs                      | True                      | 
+ 821 |  ) {                                     | True                      | 
+ 822 |   int p = strcspn(line, ":");            | True                      | 
+ 823 |   if ((p > 0) && (p < 16))               | True                      | 
+ 824 |    irq++;                                | True                      | 
+ 825 |  }                                       | True                      | 
+ 826 |                                          | True                      | 
+ 827 |  fclose(fp);                             | True                      | 
+ 828 |  free(line);                             | True                      | 
+ 829 |                                          | True                      | 
+ 830 |  return irq;                             | True                      | 
+ 831 | }                                        | True                      | 
+ 832 |                                          | True                      | 
+ 833 | //usage:#define mpstat_trivial_usage     | True                      | 
+ 834 | //usage:       "[-A] [-I SUM|CPU|ALL|SCP | True                      | 
+ 835 | //usage:#define mpstat_full_usage "\n\n" | True                      | 
+ 836 | //usage:       "Per-processor statistics | True                      | 
+ 837 | //usage:     "\n -A   Same as -I ALL -u  | True                      | 
+ 838 | //usage:     "\n -I SUM|CPU|ALL|SCPU Rep | True                      | 
+ 839 | //usage:     "\n -P num|ALL  Processor t | True                      | 
+ 840 | //usage:     "\n -u   Report CPU utiliza | True                      | 
+ 841 |                                          | True                      | 
+ 842 | int mpstat_main(int argc, char **argv) M | True                      | 
+ 843 | int mpstat_main(int argc UNUSED_PARAM, c | True                      | 
+ 844 | {                                        | True                      | 
+ 845 |  char *opt_irq_fmt;                      | True                      | 
+ 846 |  char *opt_set_cpu;                      | True                      | 
+ 847 |  int i, opt;                             | True                      | 
+ 848 |  enum {                                  | True                      | 
+ 849 |   OPT_ALL    = 1 << 0, /* -A */          | True                      | 
+ 850 |   OPT_INTS   = 1 << 1, /* -I */          | True                      | 
+ 851 |   OPT_SETCPU = 1 << 2, /* -P */          | True                      | 
+ 852 |   OPT_UTIL   = 1 << 3, /* -u */          | True                      | 
+ 853 |  };                                      | True                      | 
+ 854 |                                          | True                      | 
+ 855 |  /* Dont buffer data if redirected to a  | True                      | 
+ 856 |  setbuf(stdout, NULL);                   | True                      | 
+ 857 |                                          | True                      | 
+ 858 |  INIT_G();                               | True                      | 
+ 859 |                                          | True                      | 
+ 860 |  G.interval = -1;                        | True                      | 
+ 861 |                                          | True                      | 
+ 862 |  /* Get number of processors */          | True                      | 
+ 863 |  G.cpu_nr = get_cpu_count();             | True                      | 
+ 864 |                                          | True                      | 
+ 865 |  /* Get number of clock ticks per sec */ | True                      | 
+ 866 |  G.hz = bb_clk_tck();                    | True                      | 
+ 867 |                                          | True                      | 
+ 868 |  /* Calculate number of interrupts per p | True                      | 
+ 869 |  G.irqcpu_nr = get_irqcpu_nr(PROCFS_INTE | True                      | 
+ 870 |                                          | True                      | 
+ 871 |  /* Calculate number of soft interrupts  | True                      | 
+ 872 |  G.softirqcpu_nr = get_irqcpu_nr(PROCFS_ | True                      | 
+ 873 |                                          | True                      | 
+ 874 |  /* Allocate space for structures. + 1 f | True                      | 
+ 875 |  alloc_struct(G.cpu_nr + 1);             | True                      | 
+ 876 |                                          | True                      | 
+ 877 |  /* Parse and process arguments */       | True                      | 
+ 878 |  opt = getopt32(argv, "AI:P:u", &opt_irq | True                      | 
+ 879 |  argv += optind;                         | True                      | 
+ 880 |                                          | True                      | 
+ 881 |  if (*argv) {                            | True                      | 
+ 882 |   /* Get interval */                     | True                      | 
+ 883 |   G.interval = xatoi_positive(*argv);    | True                      | 
+ 884 |   G.count = -1;                          | True                      | 
+ 885 |   argv++;                                | True                      | 
+ 886 |   if (*argv) {                           | True                      | 
+ 887 |    /* Get count value */                 | True                      | 
+ 888 |    if (G.interval == 0)                  | True                      | 
+ 889 |     bb_show_usage();                     | True                      | 
+ 890 |    G.count = xatoi_positive(*argv);      | True                      | 
+ 891 |    //if (*++argv)                        | True                      | 
+ 892 |    // bb_show_usage();                   | True                      | 
+ 893 |   }                                      | True                      | 
+ 894 |  }                                       | True                      | 
+ 895 |  if (G.interval < 0)                     | True                      | 
+ 896 |   G.interval = 0;                        | True                      | 
+ 897 |                                          | True                      | 
+ 898 |  if (opt & OPT_ALL) {                    | True                      | 
+ 899 |   G.p_option = 1;                        | True                      | 
+ 900 |   G.options |= D_CPU + D_IRQ_SUM + D_IRQ | True                      | 
+ 901 |   /* Select every CPU */                 | True                      | 
+ 902 |   memset(G.cpu_bitmap, 0xff, G.cpu_bitma | True                      | 
+ 903 |  }                                       | True                      | 
+ 904 |                                          | True                      | 
+ 905 |  if (opt & OPT_INTS) {                   | True                      | 
+ 906 |   static const char v[] = {              | True                      | 
+ 907 |    D_IRQ_CPU, D_IRQ_SUM, D_SOFTIRQS,     | True                      | 
+ 908 |    D_IRQ_SUM + D_IRQ_CPU + D_SOFTIRQS    | True                      | 
+ 909 |   };                                     | True                      | 
+ 910 |   i = index_in_strings("CPU\0SUM\0SCPU\0 | True                      | 
+ 911 |   if (i == -1)                           | True                      | 
+ 912 |    bb_show_usage();                      | True                      | 
+ 913 |   G.options |= v[i];                     | True                      | 
+ 914 |  }                                       | True                      | 
+ 915 |                                          | True                      | 
+ 916 |  if ((opt & OPT_UTIL) /* -u? */          | True                      | 
+ 917 |   || G.options == 0  /* nothing? (use de | True                      | 
+ 918 |  ) {                                     | True                      | 
+ 919 |   G.options |= D_CPU;                    | True                      | 
+ 920 |  }                                       | True                      | 
+ 921 |                                          | True                      | 
+ 922 |  if (opt & OPT_SETCPU) {                 | True                      | 
+ 923 |   char *t;                               | True                      | 
+ 924 |   G.p_option = 1;                        | True                      | 
+ 925 |                                          | True                      | 
+ 926 |   for (t = strtok_r(opt_set_cpu, ",", &o | True                      | 
+ 927 |    if (strcmp(t, "ALL") == 0) {          | True                      | 
+ 928 |     /* Select every CPU */               | True                      | 
+ 929 |     memset(G.cpu_bitmap, 0xff, G.cpu_bit | True                      | 
+ 930 |    } else {                              | True                      | 
+ 931 |     /* Get CPU number */                 | True                      | 
+ 932 |     unsigned n = xatoi_positive(t);      | True                      | 
+ 933 |     if (n >= G.cpu_nr)                   | True                      | 
+ 934 |      bb_simple_error_msg_and_die("not th | True                      | 
+ 935 |     n++;                                 | True                      | 
+ 936 |     G.cpu_bitmap[n >> 3] |= 1 << (n & 7) | True                      | 
+ 937 |    }                                     | True                      | 
+ 938 |   }                                      | True                      | 
+ 939 |  }                                       | True                      | 
+ 940 |                                          | True                      | 
+ 941 |  if (!G.p_option)                        | True                      | 
+ 942 |   /* Display global stats */             | True                      | 
+ 943 |   G.cpu_bitmap[0] = 1;                   | True                      | 
+ 944 |                                          | True                      | 
+ 945 |  /* Get time */                          | True                      | 
+ 946 |  get_localtime(&G.timestamp[0]);         | True                      | 
+ 947 |                                          | True                      | 
+ 948 |  /* Display header */                    | True                      | 
+ 949 |  print_header(&G.timestamp[0]);          | True                      | 
+ 950 |                                          | True                      | 
+ 951 |  /* The main loop */                     | True                      | 
+ 952 |  main_loop();                            | True                      | 
+ 953 |                                          | True                      | 
+ 954 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 955 |   /* Clean up */                         | True                      | 
+ 956 |   for (i = 0; i < 3; i++) {              | True                      | 
+ 957 |    free(G.st_cpu[i]);                    | True                      | 
+ 958 |    free(G.st_irq[i]);                    | True                      | 
+ 959 |    free(G.st_irqcpu[i]);                 | True                      | 
+ 960 |    free(G.st_softirqcpu[i]);             | True                      | 
+ 961 |   }                                      | True                      | 
+ 962 |   free(G.cpu_bitmap);                    | True                      | 
+ 963 |   free(&G);                              | True                      | 
+ 964 |  }                                       | True                      | 
+ 965 |                                          | True                      | 
+ 966 |  return EXIT_SUCCESS;                    | True                      | 
+ 967 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +136MB, 309ms             | 

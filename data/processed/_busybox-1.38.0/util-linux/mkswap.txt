@@ -1,0 +1,176 @@
+FILE: data/raw/busybox-1.38.0/util-linux/mkswap.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * mkswap.c - format swap device (Linux  | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright 2006 Rob Landley <rob@landl | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config MKSWAP                   | True                      | 
+  10 | //config: bool "mkswap (6.6 kb)"         | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: The mkswap utility is used to  | True                      | 
+  14 | //config: Linux swap space. This allows  | True                      | 
+  15 | //config: partition as if it were additi | True                      | 
+  16 | //config: the capability of low-memory m | True                      | 
+  17 | //config: much slower than real RAM, but | True                      | 
+  18 | //config: applications being killed by t | True                      | 
+  19 | //config: Once you have created swap spa | True                      | 
+  20 | //config: the swap space using the 'swap | True                      | 
+  21 | //config:                                | True                      | 
+  22 | //config:config FEATURE_MKSWAP_UUID      | True                      | 
+  23 | //config: bool "UUID support"            | True                      | 
+  24 | //config: default y                      | True                      | 
+  25 | //config: depends on MKSWAP              | True                      | 
+  26 | //config: help                           | True                      | 
+  27 | //config: Generate swap spaces with univ | True                      | 
+  28 |                                          | True                      | 
+  29 | //applet:IF_MKSWAP(APPLET(mkswap, BB_DIR | True                      | 
+  30 |                                          | True                      | 
+  31 | //kbuild:lib-$(CONFIG_MKSWAP) += mkswap. | True                      | 
+  32 |                                          | True                      | 
+  33 | //usage:#define mkswap_trivial_usage     | True                      | 
+  34 | //usage:       "[-L LBL] BLOCKDEV [KBYTE | True                      | 
+  35 | //usage:#define mkswap_full_usage "\n\n" | True                      | 
+  36 | //usage:       "Prepare BLOCKDEV to be u | True                      | 
+  37 | //usage:     "\n -L LBL Label"           | True                      | 
+  38 |                                          | True                      | 
+  39 | #include "libbb.h"                       | True                      | 
+  40 | #include "common_bufsiz.h"               | True                      | 
+  41 |                                          | True                      | 
+  42 | #if ENABLE_SELINUX                       | True                      | 
+  43 | static void mkswap_selinux_setcontext(in | ENABLE_SELINUX            | 
+  44 | {                                        | ENABLE_SELINUX            | 
+  45 |  struct stat stbuf;                      | ENABLE_SELINUX            | 
+  46 |                                          | ENABLE_SELINUX            | 
+  47 |  if (!is_selinux_enabled())              | ENABLE_SELINUX            | 
+  48 |   return;                                | ENABLE_SELINUX            | 
+  49 |                                          | ENABLE_SELINUX            | 
+  50 |  xfstat(fd, &stbuf, path);               | ENABLE_SELINUX            | 
+  51 |  if (S_ISREG(stbuf.st_mode)) {           | ENABLE_SELINUX            | 
+  52 |   security_context_t newcon;             | ENABLE_SELINUX            | 
+  53 |   security_context_t oldcon = NULL;      | ENABLE_SELINUX            | 
+  54 |   context_t context;                     | ENABLE_SELINUX            | 
+  55 |                                          | ENABLE_SELINUX            | 
+  56 |   if (fgetfilecon(fd, &oldcon) < 0) {    | ENABLE_SELINUX            | 
+  57 |    if (errno != ENODATA)                 | ENABLE_SELINUX            | 
+  58 |     goto error;                          | ENABLE_SELINUX            | 
+  59 |    if (matchpathcon(path, stbuf.st_mode, | ENABLE_SELINUX            | 
+  60 |     goto error;                          | ENABLE_SELINUX            | 
+  61 |   }                                      | ENABLE_SELINUX            | 
+  62 |   context = context_new(oldcon);         | ENABLE_SELINUX            | 
+  63 |   if (!context || context_type_set(conte | ENABLE_SELINUX            | 
+  64 |    goto error;                           | ENABLE_SELINUX            | 
+  65 |   newcon = context_str(context);         | ENABLE_SELINUX            | 
+  66 |   if (!newcon)                           | ENABLE_SELINUX            | 
+  67 |    goto error;                           | ENABLE_SELINUX            | 
+  68 |   /* fsetfilecon_raw is hidden */        | ENABLE_SELINUX            | 
+  69 |   if (strcmp(oldcon, newcon) != 0 && fse | ENABLE_SELINUX            | 
+  70 |    goto error;                           | ENABLE_SELINUX            | 
+  71 |   if (ENABLE_FEATURE_CLEAN_UP) {         | ENABLE_SELINUX            | 
+  72 |    context_free(context);                | ENABLE_SELINUX            | 
+  73 |    freecon(oldcon);                      | ENABLE_SELINUX            | 
+  74 |   }                                      | ENABLE_SELINUX            | 
+  75 |  }                                       | ENABLE_SELINUX            | 
+  76 |  return;                                 | ENABLE_SELINUX            | 
+  77 |  error:                                  | ENABLE_SELINUX            | 
+  78 |  bb_simple_perror_msg_and_die("SELinux r | ENABLE_SELINUX            | 
+  79 | }                                        | ENABLE_SELINUX            | 
+  80 | #else                                    | True                      | 
+  81 | # define mkswap_selinux_setcontext(fd, p | !ENABLE_SELINUX           | 
+  82 | #endif                                   | True                      | 
+  83 |                                          | True                      | 
+  84 | /* from Linux 2.6.23 */                  | True                      | 
+  85 | /*                                       | True                      | 
+  86 |  * Magic header for a swap area. ... Not | True                      | 
+  87 |  * kilobyte is reserved for boot loader  | True                      | 
+  88 |  */                                      | True                      | 
+  89 | struct swap_header_v1 {                  | True                      | 
+  90 | /* char     bootbits[1024];    Space for | True                      | 
+  91 |  uint32_t version;        /* second kbyt | True                      | 
+  92 |  uint32_t last_page;      /* 1 */        | True                      | 
+  93 |  uint32_t nr_badpages;    /* 2 */        | True                      | 
+  94 |  uint8_t  sws_uuid[16];   /* 3,4,5,6 */  | True                      | 
+  95 |  char     sws_volume[16]; /* 7,8,9,10 */ | True                      | 
+  96 |  uint32_t padding[117];   /* 11..127 */  | True                      | 
+  97 |  uint32_t badpages[1];    /* 128 */      | True                      | 
+  98 |  /* total 129 32-bit words in 2nd kiloby | True                      | 
+  99 | } FIX_ALIASING;                          | True                      | 
+ 100 |                                          | True                      | 
+ 101 | #define NWORDS 129                       | True                      | 
+ 102 | #define hdr ((struct swap_header_v1*)bb_ | True                      | 
+ 103 | #define INIT_G() do { setup_common_bufsi | True                      | 
+ 104 |                                          | True                      | 
+ 105 | struct BUG_sizes {                       | True                      | 
+ 106 |  char swap_header_v1_wrong[sizeof(*hdr)  | True                      | 
+ 107 |  char bufsiz1_is_too_small[COMMON_BUFSIZ | True                      | 
+ 108 | };                                       | True                      | 
+ 109 |                                          | True                      | 
+ 110 | /* Stored without terminating NUL */     | True                      | 
+ 111 | static const char SWAPSPACE2[sizeof("SWA | True                      | 
+ 112 |                                          | True                      | 
+ 113 | int mkswap_main(int argc, char **argv) M | True                      | 
+ 114 | int mkswap_main(int argc UNUSED_PARAM, c | True                      | 
+ 115 | {                                        | True                      | 
+ 116 |  int fd;                                 | True                      | 
+ 117 |  unsigned pagesize;                      | True                      | 
+ 118 |  off_t len;                              | True                      | 
+ 119 |  const char *label = "";                 | True                      | 
+ 120 |                                          | True                      | 
+ 121 |  INIT_G();                               | True                      | 
+ 122 |                                          | True                      | 
+ 123 |  /* TODO: -p PAGESZ, -U UUID */          | True                      | 
+ 124 |  getopt32(argv, "^" "L:" "\0" "-1"/*at l | True                      | 
+ 125 |  argv += optind;                         | True                      | 
+ 126 |                                          | True                      | 
+ 127 |  fd = xopen(argv[0], O_WRONLY);          | True                      | 
+ 128 |                                          | True                      | 
+ 129 |  /* Figure out how big the device is */  | True                      | 
+ 130 |  len = get_volume_size_in_bytes(fd, argv | True                      | 
+ 131 |  pagesize = bb_getpagesize();            | True                      | 
+ 132 |  len -= pagesize;                        | True                      | 
+ 133 |                                          | True                      | 
+ 134 |  /* Announce our intentions */           | True                      | 
+ 135 |  printf("Setting up swapspace version 1, | True                      | 
+ 136 |  mkswap_selinux_setcontext(fd, argv[0]); | ENABLE_SELINUX            | 
+ 137 |                                          | True                      | 
+ 138 |  /* hdr is zero-filled so far. Clear the | True                      | 
+ 139 |   * mkswap-ing former FAT partition does | True                      | 
+ 140 |   *                                      | True                      | 
+ 141 |   * util-linux-ng 2.17.2 claims to erase | True                      | 
+ 142 |   * a partition table and is not run on  | True                      | 
+ 143 |   */                                     | True                      | 
+ 144 |  xwrite(fd, hdr, 1024);                  | True                      | 
+ 145 |                                          | True                      | 
+ 146 |  /* Fill the header. */                  | True                      | 
+ 147 |  hdr->version = 1;                       | True                      | 
+ 148 |  hdr->last_page = (uoff_t)len / pagesize | True                      | 
+ 149 |                                          | True                      | 
+ 150 |  if (ENABLE_FEATURE_MKSWAP_UUID) {       | True                      | 
+ 151 |   char uuid_string37[37];                | True                      | 
+ 152 |   /* f.e. UUID=dfd9c173-be52-4d27-99a5-c | True                      | 
+ 153 |   generate_uuid(hdr->sws_uuid);          | True                      | 
+ 154 |   format_uuid_DCE_37_chars(uuid_string37 | True                      | 
+ 155 |   printf("UUID=%s\n", uuid_string37);    | True                      | 
+ 156 |  }                                       | True                      | 
+ 157 |  safe_strncpy(hdr->sws_volume, label, 16 | True                      | 
+ 158 |                                          | True                      | 
+ 159 |  /* Write the header.  Sync to disk beca | True                      | 
+ 160 |   * signature on disk (not in cache) dur | True                      | 
+ 161 |  xwrite(fd, hdr, NWORDS * 4);            | True                      | 
+ 162 |  xlseek(fd, pagesize - 10, SEEK_SET);    | True                      | 
+ 163 |  xwrite(fd, SWAPSPACE2, 10);             | True                      | 
+ 164 |  fsync(fd);                              | True                      | 
+ 165 |                                          | True                      | 
+ 166 |  if (ENABLE_FEATURE_CLEAN_UP)            | True                      | 
+ 167 |   close(fd);                             | True                      | 
+ 168 |                                          | True                      | 
+ 169 |  return 0;                               | True                      | 
+ 170 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +110MB, 268ms             | 

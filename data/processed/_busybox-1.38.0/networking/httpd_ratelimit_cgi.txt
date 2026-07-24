@@ -1,0 +1,238 @@
+FILE: data/raw/busybox-1.38.0/networking/httpd_ratelimit_cgi.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * Copyright (c) 2026 Denys Vlasenko <vd | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   5 |  */                                      | True                      | 
+   6 |                                          | True                      | 
+   7 | /*                                       | True                      | 
+   8 |  * This program is a CGI application. It | True                      | 
+   9 |  * invocations of another, presumably re | True                      | 
+  10 |  * which you want to only allow less tha | True                      | 
+  11 |  *                                       | True                      | 
+  12 |  * Any extra clients who try to run the  | True                      | 
+  13 |  * "429 Too Many Requests" HTTP response | True                      | 
+  14 |  *                                       | True                      | 
+  15 |  * The most efficient way to do so is to | True                      | 
+  16 |  * #!/path/to/httpd_ratelimit_cgi /tmp/l | True                      | 
+  17 |  */                                      | True                      | 
+  18 |                                          | True                      | 
+  19 | /* Build a-la                            | True                      | 
+  20 | i486-linux-uclibc-gcc \                  | True                      | 
+  21 | -static -static-libgcc \                 | True                      | 
+  22 | -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURC | True                      | 
+  23 | -Wall -Wshadow -Wwrite-strings -Wundef - | True                      | 
+  24 | -Wold-style-definition -Wdeclaration-aft | True                      | 
+  25 | -Wmissing-prototypes -Wmissing-declarati | True                      | 
+  26 | -Os -fno-builtin-strlen -finline-limit=0 | True                      | 
+  27 | -ffunction-sections -fdata-sections -fno | True                      | 
+  28 | -funsigned-char \                        | True                      | 
+  29 | -falign-functions=1 -falign-jumps=1 -fal | True                      | 
+  30 | -march=i386 -mpreferred-stack-boundary=2 | True                      | 
+  31 | -Wl,-Map -Wl,link.map -Wl,--warn-common  | True                      | 
+  32 | httpd_ratelimit_cgi.c -o httpd_ratelimit | True                      | 
+  33 | */                                       | True                      | 
+  34 | #include <stdlib.h>                      | True                      | 
+  35 | #include <string.h>                      | True                      | 
+  36 | #include <unistd.h>                      | True                      | 
+  37 | #include <errno.h>                       | True                      | 
+  38 | #include <signal.h>                      | True                      | 
+  39 | #include <sys/stat.h> /* mkdir */        | True                      | 
+  40 | #include <limits.h>                      | True                      | 
+  41 |                                          | True                      | 
+  42 | static void full_write(int fd, const voi | True                      | 
+  43 | {                                        | True                      | 
+  44 |  ssize_t cc;                             | True                      | 
+  45 |                                          | True                      | 
+  46 |  while (len) {                           | True                      | 
+  47 |   cc = write(fd, buf, len);              | True                      | 
+  48 |                                          | True                      | 
+  49 |   if (cc < 0)                            | True                      | 
+  50 |    return;                               | True                      | 
+  51 |   buf = ((const char *)buf) + cc;        | True                      | 
+  52 |   len -= cc;                             | True                      | 
+  53 |  }                                       | True                      | 
+  54 | }                                        | True                      | 
+  55 |                                          | True                      | 
+  56 | static void full_write2(int fd, const ch | True                      | 
+  57 | {                                        | True                      | 
+  58 |  full_write(fd, msg, strlen(msg));       | True                      | 
+  59 |  full_write(fd, " '", 2);                | True                      | 
+  60 |  full_write(fd, msg2, strlen(msg2));     | True                      | 
+  61 |  full_write(fd, "'\n", 2);               | True                      | 
+  62 | }                                        | True                      | 
+  63 |                                          | True                      | 
+  64 | static void write_and_die(int fd, const  | True                      | 
+  65 | {                                        | True                      | 
+  66 |  full_write(fd, msg, strlen(msg));       | True                      | 
+  67 |  exit(0);                                | True                      | 
+  68 | }                                        | True                      | 
+  69 |                                          | True                      | 
+  70 | static void write_and_die2(int fd, const | True                      | 
+  71 | {                                        | True                      | 
+  72 |  full_write2(fd, msg, msg2);             | True                      | 
+  73 |  exit(0);                                | True                      | 
+  74 | }                                        | True                      | 
+  75 |                                          | True                      | 
+  76 | static void fmt_ul(char *dst, unsigned l | True                      | 
+  77 | {                                        | True                      | 
+  78 |  char buf[sizeof(n)*3 + 2];              | True                      | 
+  79 |  char *p;                                | True                      | 
+  80 |                                          | True                      | 
+  81 |  p = buf + sizeof(buf) - 1;              | True                      | 
+  82 |  *p = '\0';                              | True                      | 
+  83 |  do {                                    | True                      | 
+  84 |   *--p = (n % 10) + '0';                 | True                      | 
+  85 |   n /= 10;                               | True                      | 
+  86 |  } while (n);                            | True                      | 
+  87 |  strcpy(dst, p);                         | True                      | 
+  88 | }                                        | True                      | 
+  89 |                                          | True                      | 
+  90 | static long get_no(const char *s)        | True                      | 
+  91 | {                                        | True                      | 
+  92 |  const char *start = s;                  | True                      | 
+  93 |  long v = 0;                             | True                      | 
+  94 |  while (*s >= '0' && *s <= '9')          | True                      | 
+  95 |   v = v * 10 + (*s++ - '0');             | True                      | 
+  96 |  if (start == s || *s != '\0' /*|| v < 0 | True                      | 
+  97 |   return -1;                             | True                      | 
+  98 |  return v;                               | True                      | 
+  99 | }                                        | True                      | 
+ 100 |                                          | True                      | 
+ 101 | int main(int argc, char **argv)          | True                      | 
+ 102 | {                                        | True                      | 
+ 103 |  const char *lock_dir = ".";             | True                      | 
+ 104 |  unsigned long max_slots;                | True                      | 
+ 105 |  char *sp;                               | True                      | 
+ 106 |  char *symno;                            | True                      | 
+ 107 |  unsigned slot_num;                      | True                      | 
+ 108 |  pid_t my_pid;                           | True                      | 
+ 109 |  char my_pid_str[sizeof(long)*3];        | True                      | 
+ 110 |                                          | True                      | 
+ 111 |  argv++;                                 | True                      | 
+ 112 |  if (!argv[0] || !argv[1])               | True                      | 
+ 113 |   write_and_die(2, "Usage: ratelimit [LO | True                      | 
+ 114 |                                          | True                      | 
+ 115 |  /* ratelimit "[LOCKDIR] MAX_PROCS PROG" | True                      | 
+ 116 |   * This happens if we are running as sh | True                      | 
+ 117 |   * of the form "!#/path/to/ratelimit [/ | True                      | 
+ 118 |   * (in this case argv[1] is the shebang | True                      | 
+ 119 |  sp = strchr(argv[0], ' ');              | True                      | 
+ 120 |  if (sp) {                               | True                      | 
+ 121 |   *sp++ = '\0';                          | True                      | 
+ 122 |   /* convert to ratelimit "SOME\0THING"  | True                      | 
+ 123 |   /*                       argv1 ^ */    | True                      | 
+ 124 |   argv[1] = sp;                          | True                      | 
+ 125 |   sp = strchr(sp, ' ');                  | True                      | 
+ 126 |   if (sp) { /* "THING" also has a space? | True                      | 
+ 127 |    *sp++ = '\0';                         | True                      | 
+ 128 |    /* convert to ratelimit "SOME\0THI\0G | True                      | 
+ 129 |    /*                        argv0^    ^ | True                      | 
+ 130 |    lock_dir = argv[0];                   | True                      | 
+ 131 |    argv[0] = argv[1];                    | True                      | 
+ 132 |    argv[1] = sp;                         | True                      | 
+ 133 |    goto get_max;                         | True                      | 
+ 134 |   }                                      | True                      | 
+ 135 |  }                                       | True                      | 
+ 136 |                                          | True                      | 
+ 137 |  max_slots = get_no(argv[0]);            | True                      | 
+ 138 |  if (max_slots > 9999) {                 | True                      | 
+ 139 |   /* ratelimit LOCKDIR MAX_PROCS PROG [A | True                      | 
+ 140 |   lock_dir = argv[0];                    | True                      | 
+ 141 |   if (!lock_dir[0])                      | True                      | 
+ 142 |    write_and_die2(2, "Bad LOCKDIR", argv | True                      | 
+ 143 |   argv++;                                | True                      | 
+ 144 |  get_max:                                | True                      | 
+ 145 |   max_slots = get_no(argv[0]);           | True                      | 
+ 146 |   if (max_slots > 9999)                  | True                      | 
+ 147 |    write_and_die2(2, "Bad MAX_PROCS", ar | True                      | 
+ 148 |  }                                       | True                      | 
+ 149 |  argv++; /* points to PROG [ARGS] */     | True                      | 
+ 150 |                                          | True                      | 
+ 151 |     {                                    | True                      | 
+ 152 |  char slot_path[strlen(lock_dir) + 16];  | True                      | 
+ 153 |  symno = stpcpy(stpcpy(slot_path, lock_d | True                      | 
+ 154 |                                          | True                      | 
+ 155 |  my_pid = getpid();                      | True                      | 
+ 156 |  fmt_ul(my_pid_str, my_pid);             | True                      | 
+ 157 |                                          | True                      | 
+ 158 |  /* Ensure lock directory exists (idempo | True                      | 
+ 159 |  if (lock_dir[0] != '.' || lock_dir[1])  | True                      | 
+ 160 |   mkdir(lock_dir, 0755);                 | True                      | 
+ 161 |                                          | True                      | 
+ 162 |  /* Starting slot varies per process */  | True                      | 
+ 163 |  slot_num = my_pid;                      | True                      | 
+ 164 |                                          | True                      | 
+ 165 |  /* max_slots = 0 is allowed for testing | True                      | 
+ 166 |  if (max_slots != 0) for (int i = 0; i < | True                      | 
+ 167 |   slot_num = (slot_num + 1) % max_slots; | True                      | 
+ 168 |   fmt_ul(symno, slot_num);               | True                      | 
+ 169 |                                          | True                      | 
+ 170 |   while (1) {                            | True                      | 
+ 171 |    char buf[32];                         | True                      | 
+ 172 |    ssize_t len;                          | True                      | 
+ 173 |    long old_pid;                         | True                      | 
+ 174 |                                          | True                      | 
+ 175 |    /* Try to claim atomically */         | True                      | 
+ 176 |    if (symlink(my_pid_str, slot_path) == | True                      | 
+ 177 |     goto exec;                           | True                      | 
+ 178 |                                          | True                      | 
+ 179 |    /* Only handle EEXIST - other errors  | True                      | 
+ 180 |    if (errno != EEXIST)                  | True                      | 
+ 181 |     break;                               | True                      | 
+ 182 |                                          | True                      | 
+ 183 |    /* Read existing target PID */        | True                      | 
+ 184 |    len = readlink(slot_path, buf, sizeof | True                      | 
+ 185 |    if (len < 1) {                        | True                      | 
+ 186 |     /* Broken/empty - clean up and retry | True                      | 
+ 187 |     unlink(slot_path);                   | True                      | 
+ 188 |     continue;                            | True                      | 
+ 189 |    }                                     | True                      | 
+ 190 |    buf[len] = '\0';                      | True                      | 
+ 191 |                                          | True                      | 
+ 192 |    /* Parse PID */                       | True                      | 
+ 193 |    old_pid = get_no(buf);                | True                      | 
+ 194 |    if (old_pid <= 0 || old_pid > INT_MAX | True                      | 
+ 195 |     /* Invalid PID string - clean up and | True                      | 
+ 196 |     unlink(slot_path);                   | True                      | 
+ 197 |     continue;                            | True                      | 
+ 198 |    }                                     | True                      | 
+ 199 |                                          | True                      | 
+ 200 |    /* Check if old process is alive */   | True                      | 
+ 201 |    if (kill(old_pid, 0) == 0 || errno != | True                      | 
+ 202 |     /* Alive (or unexpected error): slot | True                      | 
+ 203 |     break;                               | True                      | 
+ 204 |    }                                     | True                      | 
+ 205 |                                          | True                      | 
+ 206 |    /* Dead: clean up and retry this slot | True                      | 
+ 207 |    unlink(slot_path);                    | True                      | 
+ 208 |    /* Loop continues to retry symlink()  | True                      | 
+ 209 |   }                                      | True                      | 
+ 210 |  }                                       | True                      | 
+ 211 |                                          | True                      | 
+ 212 |  /* No slot available, return 429 */     | True                      | 
+ 213 |  write_and_die(1, "Status: 429 Too Many  | True                      | 
+ 214 |  "Content-Type: text/plain\r\n"          | True                      | 
+ 215 |  "Retry-After: 60\r\n"                   | True                      | 
+ 216 |  "Connection: close\r\n"                 | True                      | 
+ 217 |  "\r\n"                                  | True                      | 
+ 218 |  "Too many concurrent requests\n"        | True                      | 
+ 219 |  );                                      | True                      | 
+ 220 |  return 0;                               | True                      | 
+ 221 |     }                                    | True                      | 
+ 222 |                                          | True                      | 
+ 223 | exec:                                    | True                      | 
+ 224 |  execv(argv[0], argv);                   | True                      | 
+ 225 |  full_write2(2, "can't execute", argv[0] | True                      | 
+ 226 |  write_and_die(1, "Status: 500 Internal  | True                      | 
+ 227 |  "Content-Type: text/plain\r\n"          | True                      | 
+ 228 |  "\r\n"                                  | True                      | 
+ 229 |  "Can't execute binary\n"                | True                      | 
+ 230 |  );                                      | True                      | 
+ 231 |  return 1;                               | True                      | 
+ 232 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +22MB, 325ms              | 

@@ -1,0 +1,342 @@
+FILE: data/raw/busybox-1.38.0/networking/isrv.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Generic non-forking server infrastruc | True                      | 
+   4 |  * Intended to make writing telnetd-type | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Copyright (C) 2007 Denys Vlasenko     | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   9 |  */                                      | True                      | 
+  10 |                                          | True                      | 
+  11 | #include "libbb.h"                       | True                      | 
+  12 | #include "isrv.h"                        | True                      | 
+  13 |                                          | True                      | 
+  14 | #define DEBUG 0                          | True                      | 
+  15 |                                          | True                      | 
+  16 | #if DEBUG                                | True                      | 
+  17 | #define DPRINTF(args...) bb_error_msg(ar | DEBUG                     | 
+  18 | #else                                    | True                      | 
+  19 | #define DPRINTF(args...) ((void)0)       | !DEBUG                    | 
+  20 | #endif                                   | True                      | 
+  21 |                                          | True                      | 
+  22 | /* Helpers */                            | True                      | 
+  23 |                                          | True                      | 
+  24 | /* Opaque structure */                   | True                      | 
+  25 |                                          | True                      | 
+  26 | struct isrv_state_t {                    | True                      | 
+  27 |  short  *fd2peer; /* one per registered  | True                      | 
+  28 |  void  **param_tbl; /* one per registere | True                      | 
+  29 |  /* one per registered peer; doesn't exi | True                      | 
+  30 |  time_t *timeo_tbl;                      | True                      | 
+  31 |  int   (*new_peer)(isrv_state_t *state,  | True                      | 
+  32 |  time_t  curtime;                        | True                      | 
+  33 |  int     timeout;                        | True                      | 
+  34 |  int     fd_count;                       | True                      | 
+  35 |  int     peer_count;                     | True                      | 
+  36 |  int     wr_count;                       | True                      | 
+  37 |  fd_set  rd;                             | True                      | 
+  38 |  fd_set  wr;                             | True                      | 
+  39 | };                                       | True                      | 
+  40 | #define FD2PEER    (state->fd2peer)      | True                      | 
+  41 | #define PARAM_TBL  (state->param_tbl)    | True                      | 
+  42 | #define TIMEO_TBL  (state->timeo_tbl)    | True                      | 
+  43 | #define CURTIME    (state->curtime)      | True                      | 
+  44 | #define TIMEOUT    (state->timeout)      | True                      | 
+  45 | #define FD_COUNT   (state->fd_count)     | True                      | 
+  46 | #define PEER_COUNT (state->peer_count)   | True                      | 
+  47 | #define WR_COUNT   (state->wr_count)     | True                      | 
+  48 |                                          | True                      | 
+  49 | /* callback */                           | True                      | 
+  50 | void isrv_want_rd(isrv_state_t *state, i | True                      | 
+  51 | {                                        | True                      | 
+  52 |  FD_SET(fd, &state->rd);                 | True                      | 
+  53 | }                                        | True                      | 
+  54 |                                          | True                      | 
+  55 | /* callback */                           | True                      | 
+  56 | void isrv_want_wr(isrv_state_t *state, i | True                      | 
+  57 | {                                        | True                      | 
+  58 |  if (!FD_ISSET(fd, &state->wr)) {        | True                      | 
+  59 |   WR_COUNT++;                            | True                      | 
+  60 |   FD_SET(fd, &state->wr);                | True                      | 
+  61 |  }                                       | True                      | 
+  62 | }                                        | True                      | 
+  63 |                                          | True                      | 
+  64 | /* callback */                           | True                      | 
+  65 | void isrv_dont_want_rd(isrv_state_t *sta | True                      | 
+  66 | {                                        | True                      | 
+  67 |  FD_CLR(fd, &state->rd);                 | True                      | 
+  68 | }                                        | True                      | 
+  69 |                                          | True                      | 
+  70 | /* callback */                           | True                      | 
+  71 | void isrv_dont_want_wr(isrv_state_t *sta | True                      | 
+  72 | {                                        | True                      | 
+  73 |  if (FD_ISSET(fd, &state->wr)) {         | True                      | 
+  74 |   WR_COUNT--;                            | True                      | 
+  75 |   FD_CLR(fd, &state->wr);                | True                      | 
+  76 |  }                                       | True                      | 
+  77 | }                                        | True                      | 
+  78 |                                          | True                      | 
+  79 | /* callback */                           | True                      | 
+  80 | int isrv_register_fd(isrv_state_t *state | True                      | 
+  81 | {                                        | True                      | 
+  82 |  int n;                                  | True                      | 
+  83 |                                          | True                      | 
+  84 |  DPRINTF("register_fd(peer:%d,fd:%d)", p | True                      | 
+  85 |                                          | True                      | 
+  86 |  if (FD_COUNT >= FD_SETSIZE) return -1;  | True                      | 
+  87 |  if (FD_COUNT <= fd) {                   | True                      | 
+  88 |   n = FD_COUNT;                          | True                      | 
+  89 |   FD_COUNT = fd + 1;                     | True                      | 
+  90 |                                          | True                      | 
+  91 |   DPRINTF("register_fd: FD_COUNT %d", FD | True                      | 
+  92 |                                          | True                      | 
+  93 |   FD2PEER = xrealloc(FD2PEER, FD_COUNT * | True                      | 
+  94 |   while (n < fd) FD2PEER[n++] = -1;      | True                      | 
+  95 |  }                                       | True                      | 
+  96 |                                          | True                      | 
+  97 |  DPRINTF("register_fd: FD2PEER[%d] = %d" | True                      | 
+  98 |                                          | True                      | 
+  99 |  FD2PEER[fd] = peer;                     | True                      | 
+ 100 |  return 0;                               | True                      | 
+ 101 | }                                        | True                      | 
+ 102 |                                          | True                      | 
+ 103 | /* callback */                           | True                      | 
+ 104 | void isrv_close_fd(isrv_state_t *state,  | True                      | 
+ 105 | {                                        | True                      | 
+ 106 |  DPRINTF("close_fd(%d)", fd);            | True                      | 
+ 107 |                                          | True                      | 
+ 108 |  close(fd);                              | True                      | 
+ 109 |  isrv_dont_want_rd(state, fd);           | True                      | 
+ 110 |  if (WR_COUNT) isrv_dont_want_wr(state,  | True                      | 
+ 111 |                                          | True                      | 
+ 112 |  FD2PEER[fd] = -1;                       | True                      | 
+ 113 |  if (fd == FD_COUNT-1) {                 | True                      | 
+ 114 |   do fd--; while (fd >= 0 && FD2PEER[fd] | True                      | 
+ 115 |   FD_COUNT = fd + 1;                     | True                      | 
+ 116 |                                          | True                      | 
+ 117 |   DPRINTF("close_fd: FD_COUNT %d", FD_CO | True                      | 
+ 118 |                                          | True                      | 
+ 119 |   FD2PEER = xrealloc(FD2PEER, FD_COUNT * | True                      | 
+ 120 |  }                                       | True                      | 
+ 121 | }                                        | True                      | 
+ 122 |                                          | True                      | 
+ 123 | /* callback */                           | True                      | 
+ 124 | int isrv_register_peer(isrv_state_t *sta | True                      | 
+ 125 | {                                        | True                      | 
+ 126 |  int n;                                  | True                      | 
+ 127 |                                          | True                      | 
+ 128 |  if (PEER_COUNT >= FD_SETSIZE) return -1 | True                      | 
+ 129 |  n = PEER_COUNT++;                       | True                      | 
+ 130 |                                          | True                      | 
+ 131 |  DPRINTF("register_peer: PEER_COUNT %d", | True                      | 
+ 132 |                                          | True                      | 
+ 133 |  PARAM_TBL = xrealloc(PARAM_TBL, PEER_CO | True                      | 
+ 134 |  PARAM_TBL[n] = param;                   | True                      | 
+ 135 |  if (TIMEOUT) {                          | True                      | 
+ 136 |   TIMEO_TBL = xrealloc(TIMEO_TBL, PEER_C | True                      | 
+ 137 |   TIMEO_TBL[n] = CURTIME;                | True                      | 
+ 138 |  }                                       | True                      | 
+ 139 |  return n;                               | True                      | 
+ 140 | }                                        | True                      | 
+ 141 |                                          | True                      | 
+ 142 | static void remove_peer(isrv_state_t *st | True                      | 
+ 143 | {                                        | True                      | 
+ 144 |  int movesize;                           | True                      | 
+ 145 |  int fd;                                 | True                      | 
+ 146 |                                          | True                      | 
+ 147 |  DPRINTF("remove_peer(%d)", peer);       | True                      | 
+ 148 |                                          | True                      | 
+ 149 |  fd = FD_COUNT - 1;                      | True                      | 
+ 150 |  while (fd >= 0) {                       | True                      | 
+ 151 |   if (FD2PEER[fd] == peer) {             | True                      | 
+ 152 |    isrv_close_fd(state, fd);             | True                      | 
+ 153 |    fd--;                                 | True                      | 
+ 154 |    continue;                             | True                      | 
+ 155 |   }                                      | True                      | 
+ 156 |   if (FD2PEER[fd] > peer)                | True                      | 
+ 157 |    FD2PEER[fd]--;                        | True                      | 
+ 158 |   fd--;                                  | True                      | 
+ 159 |  }                                       | True                      | 
+ 160 |                                          | True                      | 
+ 161 |  PEER_COUNT--;                           | True                      | 
+ 162 |  DPRINTF("remove_peer: PEER_COUNT %d", P | True                      | 
+ 163 |                                          | True                      | 
+ 164 |  movesize = (PEER_COUNT - peer) * sizeof | True                      | 
+ 165 |  if (movesize > 0) {                     | True                      | 
+ 166 |   memcpy(&PARAM_TBL[peer], &PARAM_TBL[pe | True                      | 
+ 167 |   if (TIMEOUT)                           | True                      | 
+ 168 |    memcpy(&TIMEO_TBL[peer], &TIMEO_TBL[p | True                      | 
+ 169 |  }                                       | True                      | 
+ 170 |  PARAM_TBL = xrealloc(PARAM_TBL, PEER_CO | True                      | 
+ 171 |  if (TIMEOUT)                            | True                      | 
+ 172 |   TIMEO_TBL = xrealloc(TIMEO_TBL, PEER_C | True                      | 
+ 173 | }                                        | True                      | 
+ 174 |                                          | True                      | 
+ 175 | static void handle_accept(isrv_state_t * | True                      | 
+ 176 | {                                        | True                      | 
+ 177 |  int n, newfd;                           | True                      | 
+ 178 |                                          | True                      | 
+ 179 |  /* suppress gcc warning "cast from ptr  | True                      | 
+ 180 |  fcntl(fd, F_SETFL, (int)(ptrdiff_t)(PAR | True                      | 
+ 181 |  newfd = accept(fd, NULL, 0);            | True                      | 
+ 182 |  fcntl(fd, F_SETFL, (int)(ptrdiff_t)(PAR | True                      | 
+ 183 |  if (newfd < 0) {                        | True                      | 
+ 184 |   if (errno == EAGAIN) return;           | True                      | 
+ 185 |   /* Most probably someone gave us wrong | True                      | 
+ 186 |    * (for example, non-socket). Don't wa | True                      | 
+ 187 |    * to loop forever. */                 | True                      | 
+ 188 |   bb_simple_perror_msg_and_die("accept") | True                      | 
+ 189 |  }                                       | True                      | 
+ 190 |                                          | True                      | 
+ 191 |  DPRINTF("new_peer(%d)", newfd);         | True                      | 
+ 192 |  n = state->new_peer(state, newfd);      | True                      | 
+ 193 |  if (n)                                  | True                      | 
+ 194 |   remove_peer(state, n); /* unsuccessful | True                      | 
+ 195 | }                                        | True                      | 
+ 196 |                                          | True                      | 
+ 197 | static void handle_fd_set(isrv_state_t * | True                      | 
+ 198 | {                                        | True                      | 
+ 199 |  enum { LONG_CNT = sizeof(fd_set) / size | True                      | 
+ 200 |  int fds_pos;                            | True                      | 
+ 201 |  int fd, peer;                           | True                      | 
+ 202 |  /* need to know value at _the beginning | True                      | 
+ 203 |  int fd_cnt = FD_COUNT;                  | True                      | 
+ 204 |                                          | True                      | 
+ 205 |  BUILD_BUG_ON(LONG_CNT * sizeof(long) != | True                      | 
+ 206 |                                          | True                      | 
+ 207 |  fds_pos = 0;                            | True                      | 
+ 208 |  while (1) {                             | True                      | 
+ 209 |   /* Find next nonzero bit */            | True                      | 
+ 210 |   while (fds_pos < LONG_CNT) {           | True                      | 
+ 211 |    if (((long*)fds)[fds_pos] == 0) {     | True                      | 
+ 212 |     fds_pos++;                           | True                      | 
+ 213 |     continue;                            | True                      | 
+ 214 |    }                                     | True                      | 
+ 215 |    /* Found non-zero word */             | True                      | 
+ 216 |    fd = fds_pos * sizeof(long)*8; /* wor | True                      | 
+ 217 |    while (1) {                           | True                      | 
+ 218 |     if (FD_ISSET(fd, fds)) {             | True                      | 
+ 219 |      FD_CLR(fd, fds);                    | True                      | 
+ 220 |      goto found_fd;                      | True                      | 
+ 221 |     }                                    | True                      | 
+ 222 |     fd++;                                | True                      | 
+ 223 |    }                                     | True                      | 
+ 224 |   }                                      | True                      | 
+ 225 |   break; /* all words are zero */        | True                      | 
+ 226 |  found_fd:                               | True                      | 
+ 227 |   if (fd >= fd_cnt) { /* paranoia */     | True                      | 
+ 228 |    DPRINTF("handle_fd_set: fd > fd_cnt?? | True                      | 
+ 229 |      fd, fd_cnt);                        | True                      | 
+ 230 |    break;                                | True                      | 
+ 231 |   }                                      | True                      | 
+ 232 |   DPRINTF("handle_fd_set: fd %d is activ | True                      | 
+ 233 |   peer = FD2PEER[fd];                    | True                      | 
+ 234 |   if (peer < 0)                          | True                      | 
+ 235 |    continue; /* peer is already gone */  | True                      | 
+ 236 |   if (peer == 0) {                       | True                      | 
+ 237 |    handle_accept(state, fd);             | True                      | 
+ 238 |    continue;                             | True                      | 
+ 239 |   }                                      | True                      | 
+ 240 |   DPRINTF("h(fd:%d)", fd);               | True                      | 
+ 241 |   if (h(fd, &PARAM_TBL[peer])) {         | True                      | 
+ 242 |    /* this peer is gone */               | True                      | 
+ 243 |    remove_peer(state, peer);             | True                      | 
+ 244 |   } else if (TIMEOUT) {                  | True                      | 
+ 245 |    TIMEO_TBL[peer] = monotonic_sec();    | True                      | 
+ 246 |   }                                      | True                      | 
+ 247 |  }                                       | True                      | 
+ 248 | }                                        | True                      | 
+ 249 |                                          | True                      | 
+ 250 | static void handle_timeout(isrv_state_t  | True                      | 
+ 251 | {                                        | True                      | 
+ 252 |  int n, peer;                            | True                      | 
+ 253 |  peer = PEER_COUNT-1;                    | True                      | 
+ 254 |  /* peer 0 is not checked */             | True                      | 
+ 255 |  while (peer > 0) {                      | True                      | 
+ 256 |   DPRINTF("peer %d: time diff %d", peer, | True                      | 
+ 257 |     (int)(CURTIME - TIMEO_TBL[peer]));   | True                      | 
+ 258 |   if ((CURTIME - TIMEO_TBL[peer]) >= TIM | True                      | 
+ 259 |    DPRINTF("peer %d: do_timeout()", peer | True                      | 
+ 260 |    n = do_timeout(&PARAM_TBL[peer]);     | True                      | 
+ 261 |    if (n)                                | True                      | 
+ 262 |     remove_peer(state, peer);            | True                      | 
+ 263 |   }                                      | True                      | 
+ 264 |   peer--;                                | True                      | 
+ 265 |  }                                       | True                      | 
+ 266 | }                                        | True                      | 
+ 267 |                                          | True                      | 
+ 268 | /* Driver */                             | True                      | 
+ 269 | void isrv_run(                           | True                      | 
+ 270 |  int listen_fd,                          | True                      | 
+ 271 |  int (*new_peer)(isrv_state_t *state, in | True                      | 
+ 272 |  int (*do_rd)(int fd, void **),          | True                      | 
+ 273 |  int (*do_wr)(int fd, void **),          | True                      | 
+ 274 |  int (*do_timeout)(void **),             | True                      | 
+ 275 |  int timeout,                            | True                      | 
+ 276 |  int linger_timeout)                     | True                      | 
+ 277 | {                                        | True                      | 
+ 278 |  isrv_state_t *state = xzalloc(sizeof(*s | True                      | 
+ 279 |  state->new_peer = new_peer;             | True                      | 
+ 280 |  state->timeout  = timeout;              | True                      | 
+ 281 |                                          | True                      | 
+ 282 |  /* register "peer" #0 - it will accept  | True                      | 
+ 283 |  isrv_register_peer(state, NULL);        | True                      | 
+ 284 |  isrv_register_fd(state, /*peer:*/ 0, li | True                      | 
+ 285 |  isrv_want_rd(state, listen_fd);         | True                      | 
+ 286 |  /* remember flags to make blocking<->no | True                      | 
+ 287 |  /* (suppress gcc warning "cast from ptr | True                      | 
+ 288 |  PARAM_TBL[0] = (void*)(ptrdiff_t)(fcntl | True                      | 
+ 289 |                                          | True                      | 
+ 290 |  while (1) {                             | True                      | 
+ 291 |   struct timeval tv;                     | True                      | 
+ 292 |   fd_set rd;                             | True                      | 
+ 293 |   fd_set wr;                             | True                      | 
+ 294 |   fd_set *wrp = NULL;                    | True                      | 
+ 295 |   int n;                                 | True                      | 
+ 296 |                                          | True                      | 
+ 297 |   tv.tv_sec = timeout;                   | True                      | 
+ 298 |   if (PEER_COUNT <= 1)                   | True                      | 
+ 299 |    tv.tv_sec = linger_timeout;           | True                      | 
+ 300 |   tv.tv_usec = 0;                        | True                      | 
+ 301 |   rd = state->rd;                        | True                      | 
+ 302 |   if (WR_COUNT) {                        | True                      | 
+ 303 |    wr = state->wr;                       | True                      | 
+ 304 |    wrp = &wr;                            | True                      | 
+ 305 |   }                                      | True                      | 
+ 306 |                                          | True                      | 
+ 307 |   DPRINTF("run: select(FD_COUNT:%d,timeo | True                      | 
+ 308 |     FD_COUNT, (int)tv.tv_sec);           | True                      | 
+ 309 |   n = select(FD_COUNT, &rd, wrp, NULL, t | True                      | 
+ 310 |   DPRINTF("run: ...select:%d", n);       | True                      | 
+ 311 |                                          | True                      | 
+ 312 |   if (n < 0) {                           | True                      | 
+ 313 |    if (errno != EINTR)                   | True                      | 
+ 314 |     bb_simple_perror_msg("select");      | True                      | 
+ 315 |    continue;                             | True                      | 
+ 316 |   }                                      | True                      | 
+ 317 |                                          | True                      | 
+ 318 |   if (n == 0 && linger_timeout && PEER_C | True                      | 
+ 319 |    break;                                | True                      | 
+ 320 |                                          | True                      | 
+ 321 |   if (timeout) {                         | True                      | 
+ 322 |    time_t t = monotonic_sec();           | True                      | 
+ 323 |    if (t != CURTIME) {                   | True                      | 
+ 324 |     CURTIME = t;                         | True                      | 
+ 325 |     handle_timeout(state, do_timeout);   | True                      | 
+ 326 |    }                                     | True                      | 
+ 327 |   }                                      | True                      | 
+ 328 |   if (n > 0) {                           | True                      | 
+ 329 |    handle_fd_set(state, &rd, do_rd);     | True                      | 
+ 330 |    if (wrp)                              | True                      | 
+ 331 |     handle_fd_set(state, wrp, do_wr);    | True                      | 
+ 332 |   }                                      | True                      | 
+ 333 |  }                                       | True                      | 
+ 334 |  DPRINTF("run: bailout");                | True                      | 
+ 335 |  /* NB: accept socket is not closed. Cal | True                      | 
+ 336 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +109MB, 235ms             | 

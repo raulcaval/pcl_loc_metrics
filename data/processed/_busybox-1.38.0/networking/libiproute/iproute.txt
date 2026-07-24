@@ -1,0 +1,1174 @@
+FILE: data/raw/busybox-1.38.0/networking/libiproute/iproute.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                  | 
+-----+------------------------------------------+----------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                   | 
+   2 | /*                                       | True                                   | 
+   3 |  * Licensed under GPLv2 or later, see fi | True                                   | 
+   4 |  *                                       | True                                   | 
+   5 |  * Authors: Alexey Kuznetsov, <kuznet@ms | True                                   | 
+   6 |  *                                       | True                                   | 
+   7 |  * Changes:                              | True                                   | 
+   8 |  *                                       | True                                   | 
+   9 |  * Rani Assaf <rani@magic.metawire.com>  | True                                   | 
+  10 |  * Kunihiro Ishiguro <kunihiro@zebra.org | True                                   | 
+  11 |  */                                      | True                                   | 
+  12 | #include "ip_common.h"  /* #include "lib | True                                   | 
+  13 | #include "common_bufsiz.h"               | True                                   | 
+  14 | #include "rt_names.h"                    | True                                   | 
+  15 | #include "utils.h"                       | True                                   | 
+  16 |                                          | True                                   | 
+  17 | #include <linux/version.h>               | True                                   | 
+  18 | /* RTA_TABLE is not a define, can't test | True                                   | 
+  19 | /* As a proxy, test which kernels toolch | True                                   | 
+  20 | #define HAVE_RTA_TABLE (LINUX_VERSION_CO | True                                   | 
+  21 |                                          | True                                   | 
+  22 | #ifndef RTAX_RTTVAR                      | True                                   | 
+  23 | #define RTAX_RTTVAR RTAX_HOPS            | !(RTAX_RTTVAR)                         | 
+  24 | #endif                                   | True                                   | 
+  25 |                                          | True                                   | 
+  26 |                                          | True                                   | 
+  27 | struct filter_t {                        | True                                   | 
+  28 |  int tb;                                 | True                                   | 
+  29 |  /* Misnomer. Does not mean "flushed som | True                                   | 
+  30 |  /* More like "flush commands were const | True                                   | 
+  31 |  smallint flushed;                       | True                                   | 
+  32 |  /* Flush cmd buf. If !NULL, print_route | True                                   | 
+  33 |  char *flushb;                           | True                                   | 
+  34 |  int flushp;                             | True                                   | 
+  35 |  int flushe;                             | True                                   | 
+  36 |  struct rtnl_handle *rth;                | True                                   | 
+  37 |  //int protocol, protocolmask; - write-o | True                                   | 
+  38 |  int scope, scopemask;                   | True                                   | 
+  39 |  //int type; - read-only                 | True                                   | 
+  40 |  //int typemask; - unused                | True                                   | 
+  41 |  //int tos, tosmask; - unused            | True                                   | 
+  42 |  int iif;                                | True                                   | 
+  43 |  int oif;                                | True                                   | 
+  44 |  //int realm, realmmask; - unused        | True                                   | 
+  45 |  //inet_prefix rprefsrc; - read-only     | True                                   | 
+  46 |  inet_prefix rvia;                       | True                                   | 
+  47 |  inet_prefix rdst;                       | True                                   | 
+  48 |  inet_prefix mdst;                       | True                                   | 
+  49 |  inet_prefix rsrc;                       | True                                   | 
+  50 |  inet_prefix msrc;                       | True                                   | 
+  51 | } FIX_ALIASING;                          | True                                   | 
+  52 | typedef struct filter_t filter_t;        | True                                   | 
+  53 |                                          | True                                   | 
+  54 | #define G_filter (*(filter_t*)bb_common_ | True                                   | 
+  55 | #define INIT_G() do { setup_common_bufsi | True                                   | 
+  56 |                                          | True                                   | 
+  57 | static int flush_update(void)            | True                                   | 
+  58 | {                                        | True                                   | 
+  59 |  if (rtnl_send_check(G_filter.rth, G_fil | True                                   | 
+  60 |   bb_simple_perror_msg("can't send flush | True                                   | 
+  61 |   return -1;                             | True                                   | 
+  62 |  }                                       | True                                   | 
+  63 |  G_filter.flushp = 0;                    | True                                   | 
+  64 |  return 0;                               | True                                   | 
+  65 | }                                        | True                                   | 
+  66 |                                          | True                                   | 
+  67 | static int FAST_FUNC print_route(const s | True                                   | 
+  68 |   struct nlmsghdr *n, void *arg UNUSED_P | True                                   | 
+  69 | {                                        | True                                   | 
+  70 |  struct rtmsg *r = NLMSG_DATA(n);        | True                                   | 
+  71 |  int len = n->nlmsg_len;                 | True                                   | 
+  72 |  struct rtattr *tb[RTA_MAX+1];           | True                                   | 
+  73 |  inet_prefix dst;                        | True                                   | 
+  74 |  inet_prefix src;                        | True                                   | 
+  75 |  int host_len = -1;                      | True                                   | 
+  76 |  uint32_t tid;                           | True                                   | 
+  77 |                                          | True                                   | 
+  78 |  if (n->nlmsg_type != RTM_NEWROUTE && n- | True                                   | 
+  79 |   fprintf(stderr, "Not a route: %08x %08 | True                                   | 
+  80 |    n->nlmsg_len, n->nlmsg_type, n->nlmsg | True                                   | 
+  81 |   return 0;                              | True                                   | 
+  82 |  }                                       | True                                   | 
+  83 |  if (G_filter.flushb && n->nlmsg_type != | True                                   | 
+  84 |   return 0;                              | True                                   | 
+  85 |  len -= NLMSG_LENGTH(sizeof(*r));        | True                                   | 
+  86 |  if (len < 0)                            | True                                   | 
+  87 |   bb_error_msg_and_die("wrong nlmsg len  | True                                   | 
+  88 |                                          | True                                   | 
+  89 |  //memset(tb, 0, sizeof(tb)); - parse_rt | True                                   | 
+  90 |  parse_rtattr(tb, RTA_MAX, RTM_RTA(r), l | True                                   | 
+  91 |                                          | True                                   | 
+  92 | #if HAVE_RTA_TABLE                       | True                                   | 
+  93 |  if (tb[RTA_TABLE])                      | HAVE_RTA_TABLE                         | 
+  94 |   tid = *(uint32_t *)RTA_DATA(tb[RTA_TAB | HAVE_RTA_TABLE                         | 
+  95 |  else                                    | HAVE_RTA_TABLE                         | 
+  96 | #endif                                   | True                                   | 
+  97 |   tid = r->rtm_table;                    | True                                   | 
+  98 |                                          | True                                   | 
+  99 |  if (r->rtm_family == AF_INET6)          | True                                   | 
+ 100 |   host_len = 128;                        | True                                   | 
+ 101 |  else if (r->rtm_family == AF_INET)      | True                                   | 
+ 102 |   host_len = 32;                         | True                                   | 
+ 103 |                                          | True                                   | 
+ 104 |  if (r->rtm_family == AF_INET6) {        | True                                   | 
+ 105 |   if (G_filter.tb) {                     | True                                   | 
+ 106 |    if (G_filter.tb < 0) {                | True                                   | 
+ 107 |     if (!(r->rtm_flags & RTM_F_CLONED))  | True                                   | 
+ 108 |      return 0;                           | True                                   | 
+ 109 |     }                                    | True                                   | 
+ 110 |    } else {                              | True                                   | 
+ 111 |     if (r->rtm_flags & RTM_F_CLONED) {   | True                                   | 
+ 112 |      return 0;                           | True                                   | 
+ 113 |     }                                    | True                                   | 
+ 114 |     if (G_filter.tb != tid) {            | True                                   | 
+ 115 |      return 0;                           | True                                   | 
+ 116 |     }                                    | True                                   | 
+ 117 |    }                                     | True                                   | 
+ 118 |   }                                      | True                                   | 
+ 119 |  } else {                                | True                                   | 
+ 120 |   if (G_filter.tb > 0 && G_filter.tb !=  | True                                   | 
+ 121 |    return 0;                             | True                                   | 
+ 122 |   }                                      | True                                   | 
+ 123 |  }                                       | True                                   | 
+ 124 |  if ((G_filter.scope ^ r->rtm_scope) & G | True                                   | 
+ 125 |   return 0;                              | True                                   | 
+ 126 |  if (G_filter.rdst.family                | True                                   | 
+ 127 |   && (r->rtm_family != G_filter.rdst.fam | True                                   | 
+ 128 |  ) {                                     | True                                   | 
+ 129 |   return 0;                              | True                                   | 
+ 130 |  }                                       | True                                   | 
+ 131 |  if (G_filter.mdst.family                | True                                   | 
+ 132 |   && (r->rtm_family != G_filter.mdst.fam | True                                   | 
+ 133 |      || (G_filter.mdst.bitlen >= 0 && G_ | True                                   | 
+ 134 |      )                                   | True                                   | 
+ 135 |  ) {                                     | True                                   | 
+ 136 |   return 0;                              | True                                   | 
+ 137 |  }                                       | True                                   | 
+ 138 |  if (G_filter.rsrc.family                | True                                   | 
+ 139 |   && (r->rtm_family != G_filter.rsrc.fam | True                                   | 
+ 140 |  ) {                                     | True                                   | 
+ 141 |   return 0;                              | True                                   | 
+ 142 |  }                                       | True                                   | 
+ 143 |  if (G_filter.msrc.family                | True                                   | 
+ 144 |   && (r->rtm_family != G_filter.msrc.fam | True                                   | 
+ 145 |      || (G_filter.msrc.bitlen >= 0 && G_ | True                                   | 
+ 146 |      )                                   | True                                   | 
+ 147 |  ) {                                     | True                                   | 
+ 148 |   return 0;                              | True                                   | 
+ 149 |  }                                       | True                                   | 
+ 150 |                                          | True                                   | 
+ 151 |  memset(&src, 0, sizeof(src));           | True                                   | 
+ 152 |  memset(&dst, 0, sizeof(dst));           | True                                   | 
+ 153 |                                          | True                                   | 
+ 154 |  if (tb[RTA_SRC]) {                      | True                                   | 
+ 155 |   src.bitlen = r->rtm_src_len;           | True                                   | 
+ 156 |   src.bytelen = (r->rtm_family == AF_INE | True                                   | 
+ 157 |   memcpy(src.data, RTA_DATA(tb[RTA_SRC]) | True                                   | 
+ 158 |  }                                       | True                                   | 
+ 159 |  if (tb[RTA_DST]) {                      | True                                   | 
+ 160 |   dst.bitlen = r->rtm_dst_len;           | True                                   | 
+ 161 |   dst.bytelen = (r->rtm_family == AF_INE | True                                   | 
+ 162 |   memcpy(dst.data, RTA_DATA(tb[RTA_DST]) | True                                   | 
+ 163 |  }                                       | True                                   | 
+ 164 |                                          | True                                   | 
+ 165 |  if (G_filter.rdst.family                | True                                   | 
+ 166 |   && inet_addr_match(&dst, &G_filter.rds | True                                   | 
+ 167 |  ) {                                     | True                                   | 
+ 168 |   return 0;                              | True                                   | 
+ 169 |  }                                       | True                                   | 
+ 170 |  if (G_filter.mdst.family                | True                                   | 
+ 171 |   && G_filter.mdst.bitlen >= 0           | True                                   | 
+ 172 |   && inet_addr_match(&dst, &G_filter.mds | True                                   | 
+ 173 |  ) {                                     | True                                   | 
+ 174 |   return 0;                              | True                                   | 
+ 175 |  }                                       | True                                   | 
+ 176 |  if (G_filter.rsrc.family                | True                                   | 
+ 177 |   && inet_addr_match(&src, &G_filter.rsr | True                                   | 
+ 178 |  ) {                                     | True                                   | 
+ 179 |   return 0;                              | True                                   | 
+ 180 |  }                                       | True                                   | 
+ 181 |  if (G_filter.msrc.family && G_filter.ms | True                                   | 
+ 182 |   && inet_addr_match(&src, &G_filter.msr | True                                   | 
+ 183 |  ) {                                     | True                                   | 
+ 184 |   return 0;                              | True                                   | 
+ 185 |  }                                       | True                                   | 
+ 186 |  if (G_filter.oif != 0) {                | True                                   | 
+ 187 |   if (!tb[RTA_OIF])                      | True                                   | 
+ 188 |    return 0;                             | True                                   | 
+ 189 |   if (G_filter.oif != *(int*)RTA_DATA(tb | True                                   | 
+ 190 |    return 0;                             | True                                   | 
+ 191 |  }                                       | True                                   | 
+ 192 |                                          | True                                   | 
+ 193 |  if (G_filter.flushb) {                  | True                                   | 
+ 194 |   struct nlmsghdr *fn;                   | True                                   | 
+ 195 |                                          | True                                   | 
+ 196 |   /* We are creating route flush command | True                                   | 
+ 197 |                                          | True                                   | 
+ 198 |   if (r->rtm_family == AF_INET6          | True                                   | 
+ 199 |    && r->rtm_dst_len == 0                | True                                   | 
+ 200 |    && r->rtm_type == RTN_UNREACHABLE     | True                                   | 
+ 201 |    && tb[RTA_PRIORITY]                   | True                                   | 
+ 202 |    && *(int*)RTA_DATA(tb[RTA_PRIORITY])  | True                                   | 
+ 203 |   ) {                                    | True                                   | 
+ 204 |    return 0;                             | True                                   | 
+ 205 |   }                                      | True                                   | 
+ 206 |                                          | True                                   | 
+ 207 |   if (NLMSG_ALIGN(G_filter.flushp) + n-> | True                                   | 
+ 208 |    if (flush_update())                   | True                                   | 
+ 209 |     xfunc_die();                         | True                                   | 
+ 210 |   }                                      | True                                   | 
+ 211 |   fn = (void*)(G_filter.flushb + NLMSG_A | True                                   | 
+ 212 |   memcpy(fn, n, n->nlmsg_len);           | True                                   | 
+ 213 |   fn->nlmsg_type = RTM_DELROUTE;         | True                                   | 
+ 214 |   fn->nlmsg_flags = NLM_F_REQUEST;       | True                                   | 
+ 215 |   fn->nlmsg_seq = ++G_filter.rth->seq;   | True                                   | 
+ 216 |   G_filter.flushp = (((char*)fn) + n->nl | True                                   | 
+ 217 |   G_filter.flushed = 1;                  | True                                   | 
+ 218 |   return 0;                              | True                                   | 
+ 219 |  }                                       | True                                   | 
+ 220 |                                          | True                                   | 
+ 221 |  /* We are printing routes */            | True                                   | 
+ 222 |                                          | True                                   | 
+ 223 |  if (n->nlmsg_type == RTM_DELROUTE) {    | True                                   | 
+ 224 |   printf("Deleted ");                    | True                                   | 
+ 225 |  }                                       | True                                   | 
+ 226 |  if (r->rtm_type != RTN_UNICAST /* && !G | True                                   | 
+ 227 |   printf("%s ", rtnl_rtntype_n2a(r->rtm_ | True                                   | 
+ 228 |  }                                       | True                                   | 
+ 229 |                                          | True                                   | 
+ 230 |  if (tb[RTA_DST]) {                      | True                                   | 
+ 231 |   if (r->rtm_dst_len != host_len) {      | True                                   | 
+ 232 |    printf("%s/%u ",                      | True                                   | 
+ 233 |     rt_addr_n2a(r->rtm_family, RTA_DATA( | True                                   | 
+ 234 |     r->rtm_dst_len                       | True                                   | 
+ 235 |    );                                    | True                                   | 
+ 236 |   } else {                               | True                                   | 
+ 237 |    printf("%s ", format_host(r->rtm_fami | True                                   | 
+ 238 |       RTA_PAYLOAD(tb[RTA_DST]),          | True                                   | 
+ 239 |       RTA_DATA(tb[RTA_DST]))             | True                                   | 
+ 240 |    );                                    | True                                   | 
+ 241 |   }                                      | True                                   | 
+ 242 |  } else if (r->rtm_dst_len) {            | True                                   | 
+ 243 |   printf("0/%d ", r->rtm_dst_len);       | True                                   | 
+ 244 |  } else {                                | True                                   | 
+ 245 |   printf("default ");                    | True                                   | 
+ 246 |  }                                       | True                                   | 
+ 247 |  if (tb[RTA_SRC]) {                      | True                                   | 
+ 248 |   if (r->rtm_src_len != host_len) {      | True                                   | 
+ 249 |    printf("from %s/%u ",                 | True                                   | 
+ 250 |     rt_addr_n2a(r->rtm_family, RTA_DATA( | True                                   | 
+ 251 |     r->rtm_src_len                       | True                                   | 
+ 252 |    );                                    | True                                   | 
+ 253 |   } else {                               | True                                   | 
+ 254 |    printf("from %s ", format_host(r->rtm | True                                   | 
+ 255 |       RTA_PAYLOAD(tb[RTA_SRC]),          | True                                   | 
+ 256 |       RTA_DATA(tb[RTA_SRC]))             | True                                   | 
+ 257 |    );                                    | True                                   | 
+ 258 |   }                                      | True                                   | 
+ 259 |  } else if (r->rtm_src_len) {            | True                                   | 
+ 260 |   printf("from 0/%u ", r->rtm_src_len);  | True                                   | 
+ 261 |  }                                       | True                                   | 
+ 262 |  if (tb[RTA_GATEWAY] && G_filter.rvia.bi | True                                   | 
+ 263 |   printf("via %s ", format_host(r->rtm_f | True                                   | 
+ 264 |      RTA_PAYLOAD(tb[RTA_GATEWAY]),       | True                                   | 
+ 265 |      RTA_DATA(tb[RTA_GATEWAY]))          | True                                   | 
+ 266 |   );                                     | True                                   | 
+ 267 |  }                                       | True                                   | 
+ 268 |  if (tb[RTA_OIF]) {                      | True                                   | 
+ 269 |   printf("dev %s ", ll_index_to_name(*(i | True                                   | 
+ 270 |  }                                       | True                                   | 
+ 271 | #if ENABLE_FEATURE_IP_RULE               | True                                   | 
+ 272 |  if (tid && tid != RT_TABLE_MAIN && !G_f | ENABLE_FEATURE_IP_RULE                 | 
+ 273 |   printf("table %s ", rtnl_rttable_n2a(t | ENABLE_FEATURE_IP_RULE                 | 
+ 274 | #endif                                   | True                                   | 
+ 275 |                                          | True                                   | 
+ 276 |  /* Todo: parse & show "proto kernel" he | True                                   | 
+ 277 |  if (!(r->rtm_flags & RTM_F_CLONED)) {   | True                                   | 
+ 278 |   if ((r->rtm_scope != RT_SCOPE_UNIVERSE | True                                   | 
+ 279 |    printf("scope %s ", rtnl_rtscope_n2a( | True                                   | 
+ 280 |  }                                       | True                                   | 
+ 281 |                                          | True                                   | 
+ 282 |  if (tb[RTA_PREFSRC] && /*G_filter.rpref | True                                   | 
+ 283 |   /* Do not use format_host(). It is our | True                                   | 
+ 284 |      and symbolic name will not be usefu | True                                   | 
+ 285 |    */                                    | True                                   | 
+ 286 |   printf(" src %s ", rt_addr_n2a(r->rtm_ | True                                   | 
+ 287 |      RTA_DATA(tb[RTA_PREFSRC])));        | True                                   | 
+ 288 |  }                                       | True                                   | 
+ 289 |  if (tb[RTA_PRIORITY]) {                 | True                                   | 
+ 290 |   printf(" metric %d ", *(uint32_t*)RTA_ | True                                   | 
+ 291 |  }                                       | True                                   | 
+ 292 |  if (r->rtm_flags & RTNH_F_DEAD) {       | True                                   | 
+ 293 |   printf("dead ");                       | True                                   | 
+ 294 |  }                                       | True                                   | 
+ 295 |  if (r->rtm_flags & RTNH_F_ONLINK) {     | True                                   | 
+ 296 |   printf("onlink ");                     | True                                   | 
+ 297 |  }                                       | True                                   | 
+ 298 |  if (r->rtm_flags & RTNH_F_PERVASIVE) {  | True                                   | 
+ 299 |   printf("pervasive ");                  | True                                   | 
+ 300 |  }                                       | True                                   | 
+ 301 |  if (r->rtm_flags & RTM_F_NOTIFY) {      | True                                   | 
+ 302 |   printf("notify ");                     | True                                   | 
+ 303 |  }                                       | True                                   | 
+ 304 |                                          | True                                   | 
+ 305 |  if (r->rtm_family == AF_INET || r->rtm_ | True                                   | 
+ 306 |   if (r->rtm_family == AF_INET) {        | True                                   | 
+ 307 |    if (r->rtm_flags & RTM_F_CLONED) {    | True                                   | 
+ 308 |     printf("%c    cache ", _SL_);        | True                                   | 
+ 309 |     /* upstream: print_cache_flags() pri | True                                   | 
+ 310 |    }                                     | True                                   | 
+ 311 |   }                                      | True                                   | 
+ 312 |   if (tb[RTA_CACHEINFO]) {               | True                                   | 
+ 313 |    struct rta_cacheinfo *ci = RTA_DATA(t | True                                   | 
+ 314 |    if (ci->rta_expires) {                | True                                   | 
+ 315 |     printf(" expires %dsec", ci->rta_exp | True                                   | 
+ 316 |    }                                     | True                                   | 
+ 317 |    if (ci->rta_error != 0) {             | True                                   | 
+ 318 |     printf(" error %d", ci->rta_error);  | True                                   | 
+ 319 |    }                                     | True                                   | 
+ 320 |    /* upstream: print_rta_cacheinfo() pr | True                                   | 
+ 321 |   }                                      | True                                   | 
+ 322 |  }                                       | True                                   | 
+ 323 |  if (tb[RTA_IIF] && G_filter.iif == 0) { | True                                   | 
+ 324 |   printf(" iif %s", ll_index_to_name(*(i | True                                   | 
+ 325 |  }                                       | True                                   | 
+ 326 |  bb_putchar('\n');                       | True                                   | 
+ 327 |  return 0;                               | True                                   | 
+ 328 | }                                        | True                                   | 
+ 329 |                                          | True                                   | 
+ 330 | static int str_is_lock(const char *str)  | True                                   | 
+ 331 | {                                        | True                                   | 
+ 332 |  return strcmp(str, "lock") == 0;        | True                                   | 
+ 333 | }                                        | True                                   | 
+ 334 |                                          | True                                   | 
+ 335 | /* Return value becomes exitcode. It's o | True                                   | 
+ 336 | static int iproute_modify(int cmd, unsig | True                                   | 
+ 337 | {                                        | True                                   | 
+ 338 |  /* If you add stuff here, update iprout | True                                   | 
+ 339 |  static const char keywords[] ALIGN1 =   | True                                   | 
+ 340 |   "src\0""via\0"                         | True                                   | 
+ 341 |   "mtu\0""advmss\0"                      | True                                   | 
+ 342 |   "scope\0""protocol\0"IF_FEATURE_IP_RUL | True                                   | 
+ 343 |   "dev\0""oif\0""to\0""metric\0""onlink\ | True                                   | 
+ 344 | #define keyword_via    (keywords       + | True                                   | 
+ 345 | #define keyword_mtu    (keyword_via    + | True                                   | 
+ 346 | #define keyword_advmss (keyword_mtu    + | True                                   | 
+ 347 | #define keyword_scope  (keyword_advmss + | True                                   | 
+ 348 | #define keyword_proto  (keyword_scope  + | True                                   | 
+ 349 | #define keyword_table  (keyword_proto  + | True                                   | 
+ 350 |  enum {                                  | True                                   | 
+ 351 |   ARG_src,                               | True                                   | 
+ 352 |   ARG_via,                               | True                                   | 
+ 353 |   ARG_mtu,                               | True                                   | 
+ 354 |   ARG_advmss,                            | True                                   | 
+ 355 |   ARG_scope,                             | True                                   | 
+ 356 |   ARG_protocol,                          | True                                   | 
+ 357 | IF_FEATURE_IP_RULE(ARG_table,)           | True                                   | 
+ 358 |   ARG_dev,                               | True                                   | 
+ 359 |   ARG_oif,                               | True                                   | 
+ 360 |   ARG_to,                                | True                                   | 
+ 361 |   ARG_metric,                            | True                                   | 
+ 362 |   ARG_onlink,                            | True                                   | 
+ 363 |  };                                      | True                                   | 
+ 364 |  enum {                                  | True                                   | 
+ 365 |   gw_ok = 1 << 0,                        | True                                   | 
+ 366 |   dst_ok = 1 << 1,                       | True                                   | 
+ 367 |   proto_ok = 1 << 2,                     | True                                   | 
+ 368 |   type_ok = 1 << 3                       | True                                   | 
+ 369 |  };                                      | True                                   | 
+ 370 |  struct rtnl_handle rth;                 | True                                   | 
+ 371 |  struct {                                | True                                   | 
+ 372 |   struct nlmsghdr n;                     | True                                   | 
+ 373 |   struct rtmsg    r;                     | True                                   | 
+ 374 |   char            buf[1024];             | True                                   | 
+ 375 |  } req;                                  | True                                   | 
+ 376 |  char mxbuf[256];                        | True                                   | 
+ 377 |  struct rtattr * mxrta = (void*)mxbuf;   | True                                   | 
+ 378 |  unsigned mxlock = 0;                    | True                                   | 
+ 379 |  char *d = NULL;                         | True                                   | 
+ 380 |  smalluint ok = 0;                       | True                                   | 
+ 381 |  smalluint scope_ok = 0;                 | True                                   | 
+ 382 |  int arg;                                | True                                   | 
+ 383 |                                          | True                                   | 
+ 384 |  memset(&req, 0, sizeof(req));           | True                                   | 
+ 385 |                                          | True                                   | 
+ 386 |  req.n.nlmsg_len = NLMSG_LENGTH(sizeof(s | True                                   | 
+ 387 |  req.n.nlmsg_flags = NLM_F_REQUEST | fla | True                                   | 
+ 388 |  req.n.nlmsg_type = cmd;                 | True                                   | 
+ 389 |  req.r.rtm_family = preferred_family;    | True                                   | 
+ 390 |  if (RT_TABLE_MAIN != 0) /* if it is zer | True                                   | 
+ 391 |   req.r.rtm_table = RT_TABLE_MAIN;       | True                                   | 
+ 392 |  if (RT_SCOPE_NOWHERE != 0)              | True                                   | 
+ 393 |   req.r.rtm_scope = RT_SCOPE_NOWHERE;    | True                                   | 
+ 394 |                                          | True                                   | 
+ 395 |  if (cmd != RTM_DELROUTE) {              | True                                   | 
+ 396 |   req.r.rtm_scope = RT_SCOPE_UNIVERSE;   | True                                   | 
+ 397 |   if (RTPROT_BOOT != 0)                  | True                                   | 
+ 398 |    req.r.rtm_protocol = RTPROT_BOOT;     | True                                   | 
+ 399 |   if (RTN_UNICAST != 0)                  | True                                   | 
+ 400 |    req.r.rtm_type = RTN_UNICAST;         | True                                   | 
+ 401 |  }                                       | True                                   | 
+ 402 |                                          | True                                   | 
+ 403 |  mxrta->rta_type = RTA_METRICS;          | True                                   | 
+ 404 |  mxrta->rta_len = RTA_LENGTH(0);         | True                                   | 
+ 405 |                                          | True                                   | 
+ 406 |  while (*argv) {                         | True                                   | 
+ 407 |   arg = index_in_substrings(keywords, *a | True                                   | 
+ 408 |   if (arg == ARG_src) {                  | True                                   | 
+ 409 |    inet_prefix addr;                     | True                                   | 
+ 410 |    NEXT_ARG();                           | True                                   | 
+ 411 |    get_addr(&addr, *argv, req.r.rtm_fami | True                                   | 
+ 412 |    if (req.r.rtm_family == AF_UNSPEC)    | True                                   | 
+ 413 |     req.r.rtm_family = addr.family;      | True                                   | 
+ 414 |    addattr_l(&req.n, sizeof(req), RTA_PR | True                                   | 
+ 415 |   } else if (arg == ARG_via) {           | True                                   | 
+ 416 |    inet_prefix addr;                     | True                                   | 
+ 417 |    ok |= gw_ok;                          | True                                   | 
+ 418 |    NEXT_ARG();                           | True                                   | 
+ 419 |    get_addr(&addr, *argv, req.r.rtm_fami | True                                   | 
+ 420 |    if (req.r.rtm_family == AF_UNSPEC) {  | True                                   | 
+ 421 |     req.r.rtm_family = addr.family;      | True                                   | 
+ 422 |    }                                     | True                                   | 
+ 423 |    addattr_l(&req.n, sizeof(req), RTA_GA | True                                   | 
+ 424 |   } else if (arg == ARG_mtu) {           | True                                   | 
+ 425 |    unsigned mtu;                         | True                                   | 
+ 426 |    NEXT_ARG();                           | True                                   | 
+ 427 |    if (str_is_lock(*argv)) {             | True                                   | 
+ 428 |     mxlock |= (1 << RTAX_MTU);           | True                                   | 
+ 429 |     NEXT_ARG();                          | True                                   | 
+ 430 |    }                                     | True                                   | 
+ 431 |    mtu = get_unsigned(*argv, keyword_mtu | True                                   | 
+ 432 |    rta_addattr32(mxrta, sizeof(mxbuf), R | True                                   | 
+ 433 |   } else if (arg == ARG_advmss) {        | True                                   | 
+ 434 |    unsigned mss;                         | True                                   | 
+ 435 |    NEXT_ARG();                           | True                                   | 
+ 436 |    if (str_is_lock(*argv)) {             | True                                   | 
+ 437 |     mxlock |= (1 << RTAX_ADVMSS);        | True                                   | 
+ 438 |     NEXT_ARG();                          | True                                   | 
+ 439 |    }                                     | True                                   | 
+ 440 |    mss = get_unsigned(*argv, keyword_adv | True                                   | 
+ 441 |    rta_addattr32(mxrta, sizeof(mxbuf), R | True                                   | 
+ 442 |   } else if (arg == ARG_scope) {         | True                                   | 
+ 443 |    uint32_t scope;                       | True                                   | 
+ 444 |    NEXT_ARG();                           | True                                   | 
+ 445 |    if (rtnl_rtscope_a2n(&scope, *argv))  | True                                   | 
+ 446 |     invarg_1_to_2(*argv, keyword_scope); | True                                   | 
+ 447 |    req.r.rtm_scope = scope;              | True                                   | 
+ 448 |    scope_ok = 1;                         | True                                   | 
+ 449 |   } else if (arg == ARG_protocol) {      | True                                   | 
+ 450 |    uint32_t prot;                        | True                                   | 
+ 451 |    NEXT_ARG();                           | True                                   | 
+ 452 |    if (rtnl_rtprot_a2n(&prot, *argv))    | True                                   | 
+ 453 |     invarg_1_to_2(*argv, keyword_proto); | True                                   | 
+ 454 |    req.r.rtm_protocol = prot;            | True                                   | 
+ 455 |    ok |= proto_ok;                       | True                                   | 
+ 456 | #if ENABLE_FEATURE_IP_RULE               | True                                   | 
+ 457 |   } else if (arg == ARG_table) {         | ENABLE_FEATURE_IP_RULE                 | 
+ 458 |    uint32_t tid;                         | ENABLE_FEATURE_IP_RULE                 | 
+ 459 |    NEXT_ARG();                           | ENABLE_FEATURE_IP_RULE                 | 
+ 460 |    if (rtnl_rttable_a2n(&tid, *argv))    | ENABLE_FEATURE_IP_RULE                 | 
+ 461 |     invarg_1_to_2(*argv, keyword_table); | ENABLE_FEATURE_IP_RULE                 | 
+ 462 | #if HAVE_RTA_TABLE                       | ENABLE_FEATURE_IP_RULE                 | 
+ 463 |    if (tid > 255) {                      | ENABLE_FEATURE_IP_RULE&&HAVE_RTA_TABLE | 
+ 464 |     req.r.rtm_table = RT_TABLE_UNSPEC;   | ENABLE_FEATURE_IP_RULE&&HAVE_RTA_TABLE | 
+ 465 |     addattr32(&req.n, sizeof(req), RTA_T | ENABLE_FEATURE_IP_RULE&&HAVE_RTA_TABLE | 
+ 466 |    } else                                | ENABLE_FEATURE_IP_RULE&&HAVE_RTA_TABLE | 
+ 467 | #endif                                   | ENABLE_FEATURE_IP_RULE                 | 
+ 468 |     req.r.rtm_table = tid;               | ENABLE_FEATURE_IP_RULE                 | 
+ 469 | #endif                                   | True                                   | 
+ 470 |   } else if (arg == ARG_dev || arg == AR | True                                   | 
+ 471 |    NEXT_ARG();                           | True                                   | 
+ 472 |    d = *argv;                            | True                                   | 
+ 473 |   } else if (arg == ARG_metric) {        | True                                   | 
+ 474 | //TODO: "metric", "priority" and "prefer | True                                   | 
+ 475 |    uint32_t metric;                      | True                                   | 
+ 476 |    NEXT_ARG();                           | True                                   | 
+ 477 |    metric = get_u32(*argv, "metric");    | True                                   | 
+ 478 |    addattr32(&req.n, sizeof(req), RTA_PR | True                                   | 
+ 479 |   } else if (arg == ARG_onlink) {        | True                                   | 
+ 480 |    req.r.rtm_flags |= RTNH_F_ONLINK;     | True                                   | 
+ 481 |   } else {                               | True                                   | 
+ 482 |    int type;                             | True                                   | 
+ 483 |    inet_prefix dst;                      | True                                   | 
+ 484 |                                          | True                                   | 
+ 485 |    if (arg == ARG_to) {                  | True                                   | 
+ 486 |     NEXT_ARG();                          | True                                   | 
+ 487 |    }                                     | True                                   | 
+ 488 |    if ((**argv < '0' || **argv > '9')    | True                                   | 
+ 489 |     && rtnl_rtntype_a2n(&type, *argv) == | True                                   | 
+ 490 |    ) {                                   | True                                   | 
+ 491 |     NEXT_ARG();                          | True                                   | 
+ 492 |     req.r.rtm_type = type;               | True                                   | 
+ 493 |     ok |= type_ok;                       | True                                   | 
+ 494 |    }                                     | True                                   | 
+ 495 |                                          | True                                   | 
+ 496 |    if (ok & dst_ok) {                    | True                                   | 
+ 497 |     duparg2("to", *argv);                | True                                   | 
+ 498 |    }                                     | True                                   | 
+ 499 |    get_prefix(&dst, *argv, req.r.rtm_fam | True                                   | 
+ 500 |    if (req.r.rtm_family == AF_UNSPEC) {  | True                                   | 
+ 501 |     req.r.rtm_family = dst.family;       | True                                   | 
+ 502 |    }                                     | True                                   | 
+ 503 |    req.r.rtm_dst_len = dst.bitlen;       | True                                   | 
+ 504 |    ok |= dst_ok;                         | True                                   | 
+ 505 |    if (dst.bytelen) {                    | True                                   | 
+ 506 |     addattr_l(&req.n, sizeof(req), RTA_D | True                                   | 
+ 507 |    }                                     | True                                   | 
+ 508 |   }                                      | True                                   | 
+ 509 | /* Other keywords recognized by iproute2 | True                                   | 
+ 510 | #if 0                                    | True                                   | 
+ 511 |   } else if (strcmp(*argv, "from") == 0) | 0                                      | 
+ 512 |    inet_prefix addr;                     | 0                                      | 
+ 513 |    NEXT_ARG();                           | 0                                      | 
+ 514 |    get_prefix(&addr, *argv, req.r.rtm_fa | 0                                      | 
+ 515 |    if (req.r.rtm_family == AF_UNSPEC)    | 0                                      | 
+ 516 |     req.r.rtm_family = addr.family;      | 0                                      | 
+ 517 |    if (addr.bytelen)                     | 0                                      | 
+ 518 |     addattr_l(&req.n, sizeof(req), RTA_S | 0                                      | 
+ 519 |    req.r.rtm_src_len = addr.bitlen;      | 0                                      | 
+ 520 |   } else if (strcmp(*argv, "tos") == 0 | | 0                                      | 
+ 521 |       matches(*argv, "dsfield") == 0) {  | 0                                      | 
+ 522 |    __u32 tos;                            | 0                                      | 
+ 523 |    NEXT_ARG();                           | 0                                      | 
+ 524 |    if (rtnl_dsfield_a2n(&tos, *argv))    | 0                                      | 
+ 525 |     invarg("\"tos\" value is invalid\n", | 0                                      | 
+ 526 |    req.r.rtm_tos = tos;                  | 0                                      | 
+ 527 |   } else if (strcmp(*argv, "hoplimit") = | 0                                      | 
+ 528 |    unsigned hoplimit;                    | 0                                      | 
+ 529 |    NEXT_ARG();                           | 0                                      | 
+ 530 |    if (strcmp(*argv, "lock") == 0) {     | 0                                      | 
+ 531 |     mxlock |= (1<<RTAX_HOPLIMIT);        | 0                                      | 
+ 532 |     NEXT_ARG();                          | 0                                      | 
+ 533 |    }                                     | 0                                      | 
+ 534 |    if (get_unsigned(&hoplimit, *argv, 0) | 0                                      | 
+ 535 |     invarg("\"hoplimit\" value is invali | 0                                      | 
+ 536 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 537 |   } else if (matches(*argv, "reordering" | 0                                      | 
+ 538 |    unsigned reord;                       | 0                                      | 
+ 539 |    NEXT_ARG();                           | 0                                      | 
+ 540 |    if (strcmp(*argv, "lock") == 0) {     | 0                                      | 
+ 541 |     mxlock |= (1<<RTAX_REORDERING);      | 0                                      | 
+ 542 |     NEXT_ARG();                          | 0                                      | 
+ 543 |    }                                     | 0                                      | 
+ 544 |    if (get_unsigned(&reord, *argv, 0))   | 0                                      | 
+ 545 |     invarg("\"reordering\" value is inva | 0                                      | 
+ 546 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 547 |   } else if (strcmp(*argv, "rtt") == 0)  | 0                                      | 
+ 548 |    unsigned rtt;                         | 0                                      | 
+ 549 |    NEXT_ARG();                           | 0                                      | 
+ 550 |    if (strcmp(*argv, "lock") == 0) {     | 0                                      | 
+ 551 |     mxlock |= (1<<RTAX_RTT);             | 0                                      | 
+ 552 |     NEXT_ARG();                          | 0                                      | 
+ 553 |    }                                     | 0                                      | 
+ 554 |    if (get_time_rtt(&rtt, *argv, &raw))  | 0                                      | 
+ 555 |     invarg("\"rtt\" value is invalid\n", | 0                                      | 
+ 556 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 557 |     (raw) ? rtt : rtt * 8);              | 0                                      | 
+ 558 |   } else if (strcmp(*argv, "rto_min") == | 0                                      | 
+ 559 |    unsigned rto_min;                     | 0                                      | 
+ 560 |    NEXT_ARG();                           | 0                                      | 
+ 561 |    mxlock |= (1<<RTAX_RTO_MIN);          | 0                                      | 
+ 562 |    if (get_time_rtt(&rto_min, *argv, &ra | 0                                      | 
+ 563 |     invarg("\"rto_min\" value is invalid | 0                                      | 
+ 564 |            *argv);                       | 0                                      | 
+ 565 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 566 |           rto_min);                      | 0                                      | 
+ 567 |   } else if (matches(*argv, "window") == | 0                                      | 
+ 568 |    unsigned win;                         | 0                                      | 
+ 569 |    NEXT_ARG();                           | 0                                      | 
+ 570 |    if (strcmp(*argv, "lock") == 0) {     | 0                                      | 
+ 571 |     mxlock |= (1<<RTAX_WINDOW);          | 0                                      | 
+ 572 |     NEXT_ARG();                          | 0                                      | 
+ 573 |    }                                     | 0                                      | 
+ 574 |    if (get_unsigned(&win, *argv, 0))     | 0                                      | 
+ 575 |     invarg("\"window\" value is invalid\ | 0                                      | 
+ 576 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 577 |   } else if (matches(*argv, "cwnd") == 0 | 0                                      | 
+ 578 |    unsigned win;                         | 0                                      | 
+ 579 |    NEXT_ARG();                           | 0                                      | 
+ 580 |    if (strcmp(*argv, "lock") == 0) {     | 0                                      | 
+ 581 |     mxlock |= (1<<RTAX_CWND);            | 0                                      | 
+ 582 |     NEXT_ARG();                          | 0                                      | 
+ 583 |    }                                     | 0                                      | 
+ 584 |    if (get_unsigned(&win, *argv, 0))     | 0                                      | 
+ 585 |     invarg("\"cwnd\" value is invalid\n" | 0                                      | 
+ 586 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 587 |   } else if (matches(*argv, "initcwnd")  | 0                                      | 
+ 588 |    unsigned win;                         | 0                                      | 
+ 589 |    NEXT_ARG();                           | 0                                      | 
+ 590 |    if (strcmp(*argv, "lock") == 0) {     | 0                                      | 
+ 591 |     mxlock |= (1<<RTAX_INITCWND);        | 0                                      | 
+ 592 |     NEXT_ARG();                          | 0                                      | 
+ 593 |    }                                     | 0                                      | 
+ 594 |    if (get_unsigned(&win, *argv, 0))     | 0                                      | 
+ 595 |     invarg("\"initcwnd\" value is invali | 0                                      | 
+ 596 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 597 |   } else if (matches(*argv, "initrwnd")  | 0                                      | 
+ 598 |    unsigned win;                         | 0                                      | 
+ 599 |    NEXT_ARG();                           | 0                                      | 
+ 600 |    if (strcmp(*argv, "lock") == 0) {     | 0                                      | 
+ 601 |     mxlock |= (1<<RTAX_INITRWND);        | 0                                      | 
+ 602 |     NEXT_ARG();                          | 0                                      | 
+ 603 |    }                                     | 0                                      | 
+ 604 |    if (get_unsigned(&win, *argv, 0))     | 0                                      | 
+ 605 |     invarg("\"initrwnd\" value is invali | 0                                      | 
+ 606 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 607 |   } else if (matches(*argv, "features")  | 0                                      | 
+ 608 |    unsigned int features = 0;            | 0                                      | 
+ 609 |                                          | 0                                      | 
+ 610 |    while (argc > 0) {                    | 0                                      | 
+ 611 |     NEXT_ARG();                          | 0                                      | 
+ 612 |                                          | 0                                      | 
+ 613 |     if (strcmp(*argv, "ecn") == 0)       | 0                                      | 
+ 614 |      features |= RTAX_FEATURE_ECN;       | 0                                      | 
+ 615 |     else                                 | 0                                      | 
+ 616 |      invarg("\"features\" value not vali | 0                                      | 
+ 617 |     break;                               | 0                                      | 
+ 618 |    }                                     | 0                                      | 
+ 619 |                                          | 0                                      | 
+ 620 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 621 |   } else if (matches(*argv, "quickack")  | 0                                      | 
+ 622 |    unsigned quickack;                    | 0                                      | 
+ 623 |    NEXT_ARG();                           | 0                                      | 
+ 624 |    if (get_unsigned(&quickack, *argv, 0) | 0                                      | 
+ 625 |     invarg("\"quickack\" value is invali | 0                                      | 
+ 626 |    if (quickack != 1 && quickack != 0)   | 0                                      | 
+ 627 |     invarg("\"quickack\" value should be | 0                                      | 
+ 628 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 629 |   } else if (matches(*argv, "rttvar") == | 0                                      | 
+ 630 |    unsigned win;                         | 0                                      | 
+ 631 |    NEXT_ARG();                           | 0                                      | 
+ 632 |    if (strcmp(*argv, "lock") == 0) {     | 0                                      | 
+ 633 |     mxlock |= (1<<RTAX_RTTVAR);          | 0                                      | 
+ 634 |     NEXT_ARG();                          | 0                                      | 
+ 635 |    }                                     | 0                                      | 
+ 636 |    if (get_time_rtt(&win, *argv, &raw))  | 0                                      | 
+ 637 |     invarg("\"rttvar\" value is invalid\ | 0                                      | 
+ 638 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 639 |     (raw) ? win : win * 4);              | 0                                      | 
+ 640 |   } else if (matches(*argv, "ssthresh")  | 0                                      | 
+ 641 |    unsigned win;                         | 0                                      | 
+ 642 |    NEXT_ARG();                           | 0                                      | 
+ 643 |    if (strcmp(*argv, "lock") == 0) {     | 0                                      | 
+ 644 |     mxlock |= (1<<RTAX_SSTHRESH);        | 0                                      | 
+ 645 |     NEXT_ARG();                          | 0                                      | 
+ 646 |    }                                     | 0                                      | 
+ 647 |    if (get_unsigned(&win, *argv, 0))     | 0                                      | 
+ 648 |     invarg("\"ssthresh\" value is invali | 0                                      | 
+ 649 |    rta_addattr32(mxrta, sizeof(mxbuf), R | 0                                      | 
+ 650 |   } else if (matches(*argv, "realms") == | 0                                      | 
+ 651 |    __u32 realm;                          | 0                                      | 
+ 652 |    NEXT_ARG();                           | 0                                      | 
+ 653 |    if (get_rt_realms(&realm, *argv))     | 0                                      | 
+ 654 |     invarg("\"realm\" value is invalid\n | 0                                      | 
+ 655 |    addattr32(&req.n, sizeof(req), RTA_FL | 0                                      | 
+ 656 |   } else if (strcmp(*argv, "nexthop") == | 0                                      | 
+ 657 |    nhs_ok = 1;                           | 0                                      | 
+ 658 |    break;                                | 0                                      | 
+ 659 |   }                                      | 0                                      | 
+ 660 | #endif                                   | True                                   | 
+ 661 |   argv++;                                | True                                   | 
+ 662 |  }                                       | True                                   | 
+ 663 |                                          | True                                   | 
+ 664 |  xrtnl_open(&rth);                       | True                                   | 
+ 665 |                                          | True                                   | 
+ 666 |  if (d)  {                               | True                                   | 
+ 667 |   int idx;                               | True                                   | 
+ 668 |                                          | True                                   | 
+ 669 |   ll_init_map(&rth);                     | True                                   | 
+ 670 |                                          | True                                   | 
+ 671 |   if (d) {                               | True                                   | 
+ 672 |    idx = xll_name_to_index(d);           | True                                   | 
+ 673 |    addattr32(&req.n, sizeof(req), RTA_OI | True                                   | 
+ 674 |   }                                      | True                                   | 
+ 675 |  }                                       | True                                   | 
+ 676 |                                          | True                                   | 
+ 677 |  if (mxrta->rta_len > RTA_LENGTH(0)) {   | True                                   | 
+ 678 |   if (mxlock) {                          | True                                   | 
+ 679 |    rta_addattr32(mxrta, sizeof(mxbuf), R | True                                   | 
+ 680 |   }                                      | True                                   | 
+ 681 |   addattr_l(&req.n, sizeof(req), RTA_MET | True                                   | 
+ 682 |  }                                       | True                                   | 
+ 683 |                                          | True                                   | 
+ 684 |  if (!scope_ok) {                        | True                                   | 
+ 685 |   if (req.r.rtm_type == RTN_LOCAL || req | True                                   | 
+ 686 |    req.r.rtm_scope = RT_SCOPE_HOST;      | True                                   | 
+ 687 |   else                                   | True                                   | 
+ 688 |   if (req.r.rtm_type == RTN_BROADCAST    | True                                   | 
+ 689 |    || req.r.rtm_type == RTN_MULTICAST    | True                                   | 
+ 690 |    || req.r.rtm_type == RTN_ANYCAST      | True                                   | 
+ 691 |   ) {                                    | True                                   | 
+ 692 |    req.r.rtm_scope = RT_SCOPE_LINK;      | True                                   | 
+ 693 |   }                                      | True                                   | 
+ 694 |   else if (req.r.rtm_type == RTN_UNICAST | True                                   | 
+ 695 |    if (cmd == RTM_DELROUTE)              | True                                   | 
+ 696 |     req.r.rtm_scope = RT_SCOPE_NOWHERE;  | True                                   | 
+ 697 |    else if (!(ok & gw_ok))               | True                                   | 
+ 698 |     req.r.rtm_scope = RT_SCOPE_LINK;     | True                                   | 
+ 699 |   }                                      | True                                   | 
+ 700 |  }                                       | True                                   | 
+ 701 |                                          | True                                   | 
+ 702 |  if (req.r.rtm_family == AF_UNSPEC) {    | True                                   | 
+ 703 |   req.r.rtm_family = AF_INET;            | True                                   | 
+ 704 |  }                                       | True                                   | 
+ 705 |                                          | True                                   | 
+ 706 |  if (rtnl_talk(&rth, &req.n, 0, 0, NULL, | True                                   | 
+ 707 |   return 2;                              | True                                   | 
+ 708 |  }                                       | True                                   | 
+ 709 |                                          | True                                   | 
+ 710 |  return 0;                               | True                                   | 
+ 711 | }                                        | True                                   | 
+ 712 |                                          | True                                   | 
+ 713 | static int rtnl_rtcache_request(struct r | True                                   | 
+ 714 | {                                        | True                                   | 
+ 715 |  struct {                                | True                                   | 
+ 716 |   struct nlmsghdr nlh;                   | True                                   | 
+ 717 |   struct rtmsg rtm;                      | True                                   | 
+ 718 |  } req;                                  | True                                   | 
+ 719 |  struct sockaddr_nl nladdr;              | True                                   | 
+ 720 |                                          | True                                   | 
+ 721 |  memset(&nladdr, 0, sizeof(nladdr));     | True                                   | 
+ 722 |  memset(&req, 0, sizeof(req));           | True                                   | 
+ 723 |  nladdr.nl_family = AF_NETLINK;          | True                                   | 
+ 724 |                                          | True                                   | 
+ 725 |  req.nlh.nlmsg_len = sizeof(req);        | True                                   | 
+ 726 |  if (RTM_GETROUTE)                       | True                                   | 
+ 727 |   req.nlh.nlmsg_type = RTM_GETROUTE;     | True                                   | 
+ 728 |  if (NLM_F_ROOT | NLM_F_REQUEST)         | True                                   | 
+ 729 |   req.nlh.nlmsg_flags = NLM_F_ROOT | NLM | True                                   | 
+ 730 |  /*req.nlh.nlmsg_pid = 0; - memset did i | True                                   | 
+ 731 |  req.nlh.nlmsg_seq = rth->dump = ++rth-> | True                                   | 
+ 732 |  req.rtm.rtm_family = family;            | True                                   | 
+ 733 |  if (RTM_F_CLONED)                       | True                                   | 
+ 734 |   req.rtm.rtm_flags = RTM_F_CLONED;      | True                                   | 
+ 735 |                                          | True                                   | 
+ 736 |  return xsendto(rth->fd, (void*)&req, si | True                                   | 
+ 737 | }                                        | True                                   | 
+ 738 |                                          | True                                   | 
+ 739 | static void iproute_flush_cache(void)    | True                                   | 
+ 740 | {                                        | True                                   | 
+ 741 |  static const char fn[] ALIGN1 = "/proc/ | True                                   | 
+ 742 |  int flush_fd = open_or_warn(fn, O_WRONL | True                                   | 
+ 743 |                                          | True                                   | 
+ 744 |  if (flush_fd < 0) {                     | True                                   | 
+ 745 |   return;                                | True                                   | 
+ 746 |  }                                       | True                                   | 
+ 747 |                                          | True                                   | 
+ 748 |  if (write(flush_fd, "-1", 2) < 2) {     | True                                   | 
+ 749 |   bb_simple_perror_msg("can't flush rout | True                                   | 
+ 750 |   return;                                | True                                   | 
+ 751 |  }                                       | True                                   | 
+ 752 |  close(flush_fd);                        | True                                   | 
+ 753 | }                                        | True                                   | 
+ 754 |                                          | True                                   | 
+ 755 | static void iproute_reset_filter(void)   | True                                   | 
+ 756 | {                                        | True                                   | 
+ 757 |  memset(&G_filter, 0, sizeof(G_filter)); | True                                   | 
+ 758 |  G_filter.mdst.bitlen = -1;              | True                                   | 
+ 759 |  G_filter.msrc.bitlen = -1;              | True                                   | 
+ 760 | }                                        | True                                   | 
+ 761 |                                          | True                                   | 
+ 762 | /* Return value becomes exitcode. It's o | True                                   | 
+ 763 | static int iproute_list_or_flush(char ** | True                                   | 
+ 764 | {                                        | True                                   | 
+ 765 |  int do_ipv6 = preferred_family;         | True                                   | 
+ 766 |  struct rtnl_handle rth;                 | True                                   | 
+ 767 |  char *id = NULL;                        | True                                   | 
+ 768 |  char *od = NULL;                        | True                                   | 
+ 769 |  static const char keywords[] ALIGN1 =   | True                                   | 
+ 770 |   /* If you add stuff here, update iprou | True                                   | 
+ 771 |   /* "ip route list/flush" parameters: * | True                                   | 
+ 772 |   "protocol\0" "dev\0"   "oif\0"   "iif\ | True                                   | 
+ 773 |   "via\0"      "table\0" "cache\0"       | True                                   | 
+ 774 |   "from\0"     "to\0"    "scope\0"       | True                                   | 
+ 775 |   /* and possible further keywords */    | True                                   | 
+ 776 |   "all\0"                                | True                                   | 
+ 777 |   "root\0"                               | True                                   | 
+ 778 |   "match\0"                              | True                                   | 
+ 779 |   "exact\0"                              | True                                   | 
+ 780 |   "main\0"                               | True                                   | 
+ 781 |   ;                                      | True                                   | 
+ 782 |  enum {                                  | True                                   | 
+ 783 |   KW_proto, KW_dev,   KW_oif,  KW_iif,   | True                                   | 
+ 784 |   KW_via,   KW_table, KW_cache,          | True                                   | 
+ 785 |   KW_from,  KW_to,    KW_scope,          | True                                   | 
+ 786 |   /* */                                  | True                                   | 
+ 787 |   KW_all,                                | True                                   | 
+ 788 |   KW_root,                               | True                                   | 
+ 789 |   KW_match,                              | True                                   | 
+ 790 |   KW_exact,                              | True                                   | 
+ 791 |   KW_main,                               | True                                   | 
+ 792 |  };                                      | True                                   | 
+ 793 |  int arg, parm;                          | True                                   | 
+ 794 |                                          | True                                   | 
+ 795 |  iproute_reset_filter();                 | True                                   | 
+ 796 |  G_filter.tb = RT_TABLE_MAIN;            | True                                   | 
+ 797 |                                          | True                                   | 
+ 798 |  if (flush && !*argv)                    | True                                   | 
+ 799 |   bb_error_msg_and_die(bb_msg_requires_a | True                                   | 
+ 800 |                                          | True                                   | 
+ 801 |  while (*argv) {                         | True                                   | 
+ 802 |   arg = index_in_substrings(keywords, *a | True                                   | 
+ 803 |   if (arg == KW_proto) {                 | True                                   | 
+ 804 |    uint32_t prot = 0;                    | True                                   | 
+ 805 |    NEXT_ARG();                           | True                                   | 
+ 806 |    //G_filter.protocolmask = -1;         | True                                   | 
+ 807 |    if (rtnl_rtprot_a2n(&prot, *argv)) {  | True                                   | 
+ 808 |     if (index_in_strings(keywords, *argv | True                                   | 
+ 809 |      invarg_1_to_2(*argv, "protocol");   | True                                   | 
+ 810 |     prot = 0;                            | True                                   | 
+ 811 |     //G_filter.protocolmask = 0;         | True                                   | 
+ 812 |    }                                     | True                                   | 
+ 813 |    //G_filter.protocol = prot;           | True                                   | 
+ 814 |   } else if (arg == KW_dev || arg == KW_ | True                                   | 
+ 815 |    NEXT_ARG();                           | True                                   | 
+ 816 |    od = *argv;                           | True                                   | 
+ 817 |   } else if (arg == KW_iif) {            | True                                   | 
+ 818 |    NEXT_ARG();                           | True                                   | 
+ 819 |    id = *argv;                           | True                                   | 
+ 820 |   } else if (arg == KW_via) {            | True                                   | 
+ 821 |    NEXT_ARG();                           | True                                   | 
+ 822 |    get_prefix(&G_filter.rvia, *argv, do_ | True                                   | 
+ 823 |   } else if (arg == KW_table) { /* table | True                                   | 
+ 824 |    NEXT_ARG();                           | True                                   | 
+ 825 |    parm = index_in_substrings(keywords,  | True                                   | 
+ 826 |    if (parm == KW_cache)                 | True                                   | 
+ 827 |     G_filter.tb = -1;                    | True                                   | 
+ 828 |    else if (parm == KW_all)              | True                                   | 
+ 829 |     G_filter.tb = 0;                     | True                                   | 
+ 830 |    else if (parm != KW_main) {           | True                                   | 
+ 831 | #if ENABLE_FEATURE_IP_RULE               | True                                   | 
+ 832 |     uint32_t tid;                        | ENABLE_FEATURE_IP_RULE                 | 
+ 833 |     if (rtnl_rttable_a2n(&tid, *argv))   | ENABLE_FEATURE_IP_RULE                 | 
+ 834 |      invarg_1_to_2(*argv, "table");      | ENABLE_FEATURE_IP_RULE                 | 
+ 835 |     G_filter.tb = tid;                   | ENABLE_FEATURE_IP_RULE                 | 
+ 836 | #else                                    | True                                   | 
+ 837 |     invarg_1_to_2(*argv, "table");       | !ENABLE_FEATURE_IP_RULE                | 
+ 838 | #endif                                   | True                                   | 
+ 839 |    }                                     | True                                   | 
+ 840 |   } else if (arg == KW_cache) {          | True                                   | 
+ 841 |    /* The command 'ip route flush cache' | True                                   | 
+ 842 |     * Assuming it's a synonym for 'ip ro | True                                   | 
+ 843 |    G_filter.tb = -1;                     | True                                   | 
+ 844 |   } else if (arg == KW_scope) {          | True                                   | 
+ 845 |    uint32_t scope;                       | True                                   | 
+ 846 |    NEXT_ARG();                           | True                                   | 
+ 847 |    G_filter.scopemask = -1;              | True                                   | 
+ 848 |    if (rtnl_rtscope_a2n(&scope, *argv))  | True                                   | 
+ 849 |     if (strcmp(*argv, "all") != 0)       | True                                   | 
+ 850 |      invarg_1_to_2(*argv, "scope");      | True                                   | 
+ 851 |     scope = RT_SCOPE_NOWHERE;            | True                                   | 
+ 852 |     G_filter.scopemask = 0;              | True                                   | 
+ 853 |    }                                     | True                                   | 
+ 854 |    G_filter.scope = scope;               | True                                   | 
+ 855 |   } else if (arg == KW_from) {           | True                                   | 
+ 856 |    NEXT_ARG();                           | True                                   | 
+ 857 |    parm = index_in_substrings(keywords,  | True                                   | 
+ 858 |    if (parm == KW_root) {                | True                                   | 
+ 859 |     NEXT_ARG();                          | True                                   | 
+ 860 |     get_prefix(&G_filter.rsrc, *argv, do | True                                   | 
+ 861 |    } else if (parm == KW_match) {        | True                                   | 
+ 862 |     NEXT_ARG();                          | True                                   | 
+ 863 |     get_prefix(&G_filter.msrc, *argv, do | True                                   | 
+ 864 |    } else {                              | True                                   | 
+ 865 |     if (parm == KW_exact)                | True                                   | 
+ 866 |      NEXT_ARG();                         | True                                   | 
+ 867 |     get_prefix(&G_filter.msrc, *argv, do | True                                   | 
+ 868 |     G_filter.rsrc = G_filter.msrc;       | True                                   | 
+ 869 |    }                                     | True                                   | 
+ 870 |   } else { /* "to" is the default parame | True                                   | 
+ 871 |    if (arg == KW_to) {                   | True                                   | 
+ 872 |     NEXT_ARG();                          | True                                   | 
+ 873 |     arg = index_in_substrings(keywords,  | True                                   | 
+ 874 |    }                                     | True                                   | 
+ 875 |    /* parm = arg; - would be more plausi | True                                   | 
+ 876 |    if (arg == KW_root) {                 | True                                   | 
+ 877 |     NEXT_ARG();                          | True                                   | 
+ 878 |     get_prefix(&G_filter.rdst, *argv, do | True                                   | 
+ 879 |    } else if (arg == KW_match) {         | True                                   | 
+ 880 |     NEXT_ARG();                          | True                                   | 
+ 881 |     get_prefix(&G_filter.mdst, *argv, do | True                                   | 
+ 882 |    } else { /* "to exact" is the default | True                                   | 
+ 883 |     if (arg == KW_exact)                 | True                                   | 
+ 884 |      NEXT_ARG();                         | True                                   | 
+ 885 |     get_prefix(&G_filter.mdst, *argv, do | True                                   | 
+ 886 |     G_filter.rdst = G_filter.mdst;       | True                                   | 
+ 887 |    }                                     | True                                   | 
+ 888 |   }                                      | True                                   | 
+ 889 |   argv++;                                | True                                   | 
+ 890 |  }                                       | True                                   | 
+ 891 |                                          | True                                   | 
+ 892 |  if (do_ipv6 == AF_UNSPEC && G_filter.tb | True                                   | 
+ 893 |   do_ipv6 = AF_INET;                     | True                                   | 
+ 894 |  }                                       | True                                   | 
+ 895 |                                          | True                                   | 
+ 896 |  xrtnl_open(&rth);                       | True                                   | 
+ 897 |  ll_init_map(&rth);                      | True                                   | 
+ 898 |                                          | True                                   | 
+ 899 |  if (id || od)  {                        | True                                   | 
+ 900 |   int idx;                               | True                                   | 
+ 901 |                                          | True                                   | 
+ 902 |   if (id) {                              | True                                   | 
+ 903 |    idx = xll_name_to_index(id);          | True                                   | 
+ 904 |    G_filter.iif = idx;                   | True                                   | 
+ 905 |   }                                      | True                                   | 
+ 906 |   if (od) {                              | True                                   | 
+ 907 |    idx = xll_name_to_index(od);          | True                                   | 
+ 908 |    G_filter.oif = idx;                   | True                                   | 
+ 909 |   }                                      | True                                   | 
+ 910 |  }                                       | True                                   | 
+ 911 |                                          | True                                   | 
+ 912 |  if (flush) {                            | True                                   | 
+ 913 |   char flushb[4096-512];                 | True                                   | 
+ 914 |                                          | True                                   | 
+ 915 |   if (G_filter.tb == -1) { /* "flush tab | True                                   | 
+ 916 |    if (do_ipv6 != AF_INET6)              | True                                   | 
+ 917 |     iproute_flush_cache();               | True                                   | 
+ 918 |    if (do_ipv6 == AF_INET)               | True                                   | 
+ 919 |     return 0;                            | True                                   | 
+ 920 |   }                                      | True                                   | 
+ 921 |                                          | True                                   | 
+ 922 |   G_filter.flushb = flushb;              | True                                   | 
+ 923 |   G_filter.flushp = 0;                   | True                                   | 
+ 924 |   G_filter.flushe = sizeof(flushb);      | True                                   | 
+ 925 |   G_filter.rth = &rth;                   | True                                   | 
+ 926 |                                          | True                                   | 
+ 927 |   for (;;) {                             | True                                   | 
+ 928 |    xrtnl_wilddump_request(&rth, do_ipv6, | True                                   | 
+ 929 |    G_filter.flushed = 0;                 | True                                   | 
+ 930 |    xrtnl_dump_filter(&rth, print_route,  | True                                   | 
+ 931 |    if (G_filter.flushed == 0)            | True                                   | 
+ 932 |     return 0;                            | True                                   | 
+ 933 |    if (flush_update())                   | True                                   | 
+ 934 |     return 1;                            | True                                   | 
+ 935 |   }                                      | True                                   | 
+ 936 |  }                                       | True                                   | 
+ 937 |                                          | True                                   | 
+ 938 |  if (G_filter.tb != -1) {                | True                                   | 
+ 939 |   xrtnl_wilddump_request(&rth, do_ipv6,  | True                                   | 
+ 940 |  } else if (rtnl_rtcache_request(&rth, d | True                                   | 
+ 941 |   bb_simple_perror_msg_and_die("can't se | True                                   | 
+ 942 |  }                                       | True                                   | 
+ 943 |  xrtnl_dump_filter(&rth, print_route, NU | True                                   | 
+ 944 |                                          | True                                   | 
+ 945 |  return 0;                               | True                                   | 
+ 946 | }                                        | True                                   | 
+ 947 |                                          | True                                   | 
+ 948 |                                          | True                                   | 
+ 949 | /* Return value becomes exitcode. It's o | True                                   | 
+ 950 | static int iproute_get(char **argv)      | True                                   | 
+ 951 | {                                        | True                                   | 
+ 952 |  struct rtnl_handle rth;                 | True                                   | 
+ 953 |  struct {                                | True                                   | 
+ 954 |   struct nlmsghdr n;                     | True                                   | 
+ 955 |   struct rtmsg    r;                     | True                                   | 
+ 956 |   char            buf[1024];             | True                                   | 
+ 957 |  } req;                                  | True                                   | 
+ 958 |  char *idev = NULL;                      | True                                   | 
+ 959 |  char *odev = NULL;                      | True                                   | 
+ 960 |  bool connected = 0;                     | True                                   | 
+ 961 |  bool from_ok = 0;                       | True                                   | 
+ 962 |  static const char options[] ALIGN1 =    | True                                   | 
+ 963 |   "from\0""iif\0""oif\0""dev\0""notify\0 | True                                   | 
+ 964 |                                          | True                                   | 
+ 965 |  memset(&req, 0, sizeof(req));           | True                                   | 
+ 966 |                                          | True                                   | 
+ 967 |  iproute_reset_filter();                 | True                                   | 
+ 968 |                                          | True                                   | 
+ 969 |  req.n.nlmsg_len = NLMSG_LENGTH(sizeof(s | True                                   | 
+ 970 |  if (NLM_F_REQUEST)                      | True                                   | 
+ 971 |   req.n.nlmsg_flags = NLM_F_REQUEST;     | True                                   | 
+ 972 |  if (RTM_GETROUTE)                       | True                                   | 
+ 973 |   req.n.nlmsg_type = RTM_GETROUTE;       | True                                   | 
+ 974 |  req.r.rtm_family = preferred_family;    | True                                   | 
+ 975 |  /*req.r.rtm_table = 0; - memset did thi | True                                   | 
+ 976 |  /*req.r.rtm_protocol = 0;*/             | True                                   | 
+ 977 |  /*req.r.rtm_scope = 0;*/                | True                                   | 
+ 978 |  /*req.r.rtm_type = 0;*/                 | True                                   | 
+ 979 |  /*req.r.rtm_src_len = 0;*/              | True                                   | 
+ 980 |  /*req.r.rtm_dst_len = 0;*/              | True                                   | 
+ 981 |  /*req.r.rtm_tos = 0;*/                  | True                                   | 
+ 982 |                                          | True                                   | 
+ 983 |  while (*argv) {                         | True                                   | 
+ 984 |   switch (index_in_strings(options, *arg | True                                   | 
+ 985 |    case 0: /* from */                    | True                                   | 
+ 986 |    {                                     | True                                   | 
+ 987 |     inet_prefix addr;                    | True                                   | 
+ 988 |     NEXT_ARG();                          | True                                   | 
+ 989 |     from_ok = 1;                         | True                                   | 
+ 990 |     get_prefix(&addr, *argv, req.r.rtm_f | True                                   | 
+ 991 |     if (req.r.rtm_family == AF_UNSPEC) { | True                                   | 
+ 992 |      req.r.rtm_family = addr.family;     | True                                   | 
+ 993 |     }                                    | True                                   | 
+ 994 |     if (addr.bytelen) {                  | True                                   | 
+ 995 |      addattr_l(&req.n, sizeof(req), RTA_ | True                                   | 
+ 996 |     }                                    | True                                   | 
+ 997 |     req.r.rtm_src_len = addr.bitlen;     | True                                   | 
+ 998 |     break;                               | True                                   | 
+ 999 |    }                                     | True                                   | 
+1000 |    case 1: /* iif */                     | True                                   | 
+1001 |     NEXT_ARG();                          | True                                   | 
+1002 |     idev = *argv;                        | True                                   | 
+1003 |     break;                               | True                                   | 
+1004 |    case 2: /* oif */                     | True                                   | 
+1005 |    case 3: /* dev */                     | True                                   | 
+1006 |     NEXT_ARG();                          | True                                   | 
+1007 |     odev = *argv;                        | True                                   | 
+1008 |     break;                               | True                                   | 
+1009 |    case 4: /* notify */                  | True                                   | 
+1010 |     req.r.rtm_flags |= RTM_F_NOTIFY;     | True                                   | 
+1011 |     break;                               | True                                   | 
+1012 |    case 5: /* connected */               | True                                   | 
+1013 |     connected = 1;                       | True                                   | 
+1014 |     break;                               | True                                   | 
+1015 |    case 6: /* to */                      | True                                   | 
+1016 |     NEXT_ARG();                          | True                                   | 
+1017 |    default:                              | True                                   | 
+1018 |    {                                     | True                                   | 
+1019 |     inet_prefix addr;                    | True                                   | 
+1020 |     get_prefix(&addr, *argv, req.r.rtm_f | True                                   | 
+1021 |     if (req.r.rtm_family == AF_UNSPEC) { | True                                   | 
+1022 |      req.r.rtm_family = addr.family;     | True                                   | 
+1023 |     }                                    | True                                   | 
+1024 |     if (addr.bytelen) {                  | True                                   | 
+1025 |      addattr_l(&req.n, sizeof(req), RTA_ | True                                   | 
+1026 |     }                                    | True                                   | 
+1027 |     req.r.rtm_dst_len = addr.bitlen;     | True                                   | 
+1028 |    }                                     | True                                   | 
+1029 |   }                                      | True                                   | 
+1030 |   argv++;                                | True                                   | 
+1031 |  }                                       | True                                   | 
+1032 |                                          | True                                   | 
+1033 |  if (req.r.rtm_dst_len == 0) {           | True                                   | 
+1034 |   bb_simple_error_msg_and_die("need at l | True                                   | 
+1035 |  }                                       | True                                   | 
+1036 |                                          | True                                   | 
+1037 |  xrtnl_open(&rth);                       | True                                   | 
+1038 |                                          | True                                   | 
+1039 |  ll_init_map(&rth);                      | True                                   | 
+1040 |                                          | True                                   | 
+1041 |  if (idev || odev)  {                    | True                                   | 
+1042 |   int idx;                               | True                                   | 
+1043 |                                          | True                                   | 
+1044 |   if (idev) {                            | True                                   | 
+1045 |    idx = xll_name_to_index(idev);        | True                                   | 
+1046 |    addattr32(&req.n, sizeof(req), RTA_II | True                                   | 
+1047 |   }                                      | True                                   | 
+1048 |   if (odev) {                            | True                                   | 
+1049 |    idx = xll_name_to_index(odev);        | True                                   | 
+1050 |    addattr32(&req.n, sizeof(req), RTA_OI | True                                   | 
+1051 |   }                                      | True                                   | 
+1052 |  }                                       | True                                   | 
+1053 |                                          | True                                   | 
+1054 |  if (req.r.rtm_family == AF_UNSPEC) {    | True                                   | 
+1055 |   req.r.rtm_family = AF_INET;            | True                                   | 
+1056 |  }                                       | True                                   | 
+1057 |                                          | True                                   | 
+1058 |  if (rtnl_talk(&rth, &req.n, 0, 0, &req. | True                                   | 
+1059 |   return 2;                              | True                                   | 
+1060 |  }                                       | True                                   | 
+1061 |                                          | True                                   | 
+1062 |  if (connected && !from_ok) {            | True                                   | 
+1063 |   struct rtmsg *r = NLMSG_DATA(&req.n);  | True                                   | 
+1064 |   int len = req.n.nlmsg_len;             | True                                   | 
+1065 |   struct rtattr * tb[RTA_MAX+1];         | True                                   | 
+1066 |                                          | True                                   | 
+1067 |   print_route(NULL, &req.n, NULL);       | True                                   | 
+1068 |                                          | True                                   | 
+1069 |   if (req.n.nlmsg_type != RTM_NEWROUTE)  | True                                   | 
+1070 |    bb_simple_error_msg_and_die("not a ro | True                                   | 
+1071 |   }                                      | True                                   | 
+1072 |   len -= NLMSG_LENGTH(sizeof(*r));       | True                                   | 
+1073 |   if (len < 0) {                         | True                                   | 
+1074 |    bb_error_msg_and_die("wrong len %d",  | True                                   | 
+1075 |   }                                      | True                                   | 
+1076 |                                          | True                                   | 
+1077 |   //memset(tb, 0, sizeof(tb)); - parse_r | True                                   | 
+1078 |   parse_rtattr(tb, RTA_MAX, RTM_RTA(r),  | True                                   | 
+1079 |                                          | True                                   | 
+1080 |   if (tb[RTA_PREFSRC]) {                 | True                                   | 
+1081 |    tb[RTA_PREFSRC]->rta_type = RTA_SRC;  | True                                   | 
+1082 |    r->rtm_src_len = 8*RTA_PAYLOAD(tb[RTA | True                                   | 
+1083 |   } else if (!tb[RTA_SRC]) {             | True                                   | 
+1084 |    bb_simple_error_msg_and_die("can't co | True                                   | 
+1085 |   }                                      | True                                   | 
+1086 |   if (!odev && tb[RTA_OIF]) {            | True                                   | 
+1087 |    tb[RTA_OIF]->rta_type = 0;            | True                                   | 
+1088 |   }                                      | True                                   | 
+1089 |   if (tb[RTA_GATEWAY]) {                 | True                                   | 
+1090 |    tb[RTA_GATEWAY]->rta_type = 0;        | True                                   | 
+1091 |   }                                      | True                                   | 
+1092 |   if (!idev && tb[RTA_IIF]) {            | True                                   | 
+1093 |    tb[RTA_IIF]->rta_type = 0;            | True                                   | 
+1094 |   }                                      | True                                   | 
+1095 |   req.n.nlmsg_flags = NLM_F_REQUEST;     | True                                   | 
+1096 |   req.n.nlmsg_type = RTM_GETROUTE;       | True                                   | 
+1097 |                                          | True                                   | 
+1098 |   if (rtnl_talk(&rth, &req.n, 0, 0, &req | True                                   | 
+1099 |    return 2;                             | True                                   | 
+1100 |   }                                      | True                                   | 
+1101 |  }                                       | True                                   | 
+1102 |  print_route(NULL, &req.n, NULL);        | True                                   | 
+1103 |  return 0;                               | True                                   | 
+1104 | }                                        | True                                   | 
+1105 |                                          | True                                   | 
+1106 | /* Return value becomes exitcode. It's o | True                                   | 
+1107 | int FAST_FUNC do_iproute(char **argv)    | True                                   | 
+1108 | {                                        | True                                   | 
+1109 |  static const char ip_route_commands[] A | True                                   | 
+1110 |   "a\0""add\0""append\0""change\0""chg\0 | True                                   | 
+1111 |   "delete\0""get\0""list\0""show\0"      | True                                   | 
+1112 |   "prepend\0""replace\0""test\0""flush\0 | True                                   | 
+1113 |  ;                                       | True                                   | 
+1114 |  enum {                                  | True                                   | 
+1115 |   CMD_a = 0, CMD_add, CMD_append, CMD_ch | True                                   | 
+1116 |   CMD_delete, CMD_get, CMD_list, CMD_sho | True                                   | 
+1117 |   CMD_prepend, CMD_replace, CMD_test, CM | True                                   | 
+1118 |  };                                      | True                                   | 
+1119 |  int command_num;                        | True                                   | 
+1120 |  unsigned flags = 0;                     | True                                   | 
+1121 |  int cmd = RTM_NEWROUTE;                 | True                                   | 
+1122 |                                          | True                                   | 
+1123 |  INIT_G();                               | True                                   | 
+1124 |                                          | True                                   | 
+1125 |  if (!*argv)                             | True                                   | 
+1126 |   return iproute_list_or_flush(argv, 0); | True                                   | 
+1127 |                                          | True                                   | 
+1128 |  /* "Standard" 'ip r a' treats 'a' as 'a | True                                   | 
+1129 |  /* It probably means that it is using " | True                                   | 
+1130 |  command_num = index_in_substrings(ip_ro | True                                   | 
+1131 |                                          | True                                   | 
+1132 |  switch (command_num) {                  | True                                   | 
+1133 |   case CMD_a:                            | True                                   | 
+1134 |   case CMD_add:                          | True                                   | 
+1135 |    flags = NLM_F_CREATE|NLM_F_EXCL;      | True                                   | 
+1136 |    break;                                | True                                   | 
+1137 |   case CMD_append:                       | True                                   | 
+1138 |    flags = NLM_F_CREATE|NLM_F_APPEND;    | True                                   | 
+1139 |    break;                                | True                                   | 
+1140 |   case CMD_change:                       | True                                   | 
+1141 |   case CMD_chg:                          | True                                   | 
+1142 |    flags = NLM_F_REPLACE;                | True                                   | 
+1143 |    break;                                | True                                   | 
+1144 |   case CMD_delete:                       | True                                   | 
+1145 |    cmd = RTM_DELROUTE;                   | True                                   | 
+1146 |    break;                                | True                                   | 
+1147 |   case CMD_get:                          | True                                   | 
+1148 |    return iproute_get(argv + 1);         | True                                   | 
+1149 |   case CMD_list:                         | True                                   | 
+1150 |   case CMD_show:                         | True                                   | 
+1151 |    return iproute_list_or_flush(argv + 1 | True                                   | 
+1152 |   case CMD_prepend:                      | True                                   | 
+1153 |    flags = NLM_F_CREATE;                 | True                                   | 
+1154 |    break;                                | True                                   | 
+1155 |   case CMD_replace:                      | True                                   | 
+1156 |    flags = NLM_F_CREATE|NLM_F_REPLACE;   | True                                   | 
+1157 |    break;                                | True                                   | 
+1158 |   case CMD_test:                         | True                                   | 
+1159 |    flags = NLM_F_EXCL;                   | True                                   | 
+1160 |    break;                                | True                                   | 
+1161 |   case CMD_flush:                        | True                                   | 
+1162 |    return iproute_list_or_flush(argv + 1 | True                                   | 
+1163 |   default:                               | True                                   | 
+1164 |    invarg_1_to_2(*argv, applet_name);    | True                                   | 
+1165 |  }                                       | True                                   | 
+1166 |                                          | True                                   | 
+1167 |  return iproute_modify(cmd, flags, argv  | True                                   | 
+1168 | }                                        | True                                   | 
+-----+------------------------------------------+----------------------------------------+
+     |                                          | +135MB, 379ms                          | 

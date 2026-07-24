@@ -1,0 +1,693 @@
+FILE: data/raw/busybox-1.38.0/networking/brctl.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                                              | 
+-----+------------------------------------------+------------------------------------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                                               | 
+   2 | /*                                       | True                                                                               | 
+   3 |  * Small implementation of brctl for bus | True                                                                               | 
+   4 |  *                                       | True                                                                               | 
+   5 |  * Copyright (C) 2008 by Bernhard Reutne | True                                                                               | 
+   6 |  *                                       | True                                                                               | 
+   7 |  * Some helper functions from bridge-uti | True                                                                               | 
+   8 |  * Copyright (C) 2000 Lennert Buytenhek  | True                                                                               | 
+   9 |  *                                       | True                                                                               | 
+  10 |  * Licensed under GPLv2 or later, see fi | True                                                                               | 
+  11 |  */                                      | True                                                                               | 
+  12 | //config:config BRCTL                    | True                                                                               | 
+  13 | //config: bool "brctl (9.9 kb)"          | True                                                                               | 
+  14 | //config: default y                      | True                                                                               | 
+  15 | //config: help                           | True                                                                               | 
+  16 | //config: Manage ethernet bridges.       | True                                                                               | 
+  17 | //config: Supports addbr/delbr and addif | True                                                                               | 
+  18 | //config:                                | True                                                                               | 
+  19 | //config:config FEATURE_BRCTL_FANCY      | True                                                                               | 
+  20 | //config: bool "Fancy options"           | True                                                                               | 
+  21 | //config: default y                      | True                                                                               | 
+  22 | //config: depends on BRCTL               | True                                                                               | 
+  23 | //config: help                           | True                                                                               | 
+  24 | //config: Add support for extended optio | True                                                                               | 
+  25 | //config:  setageing, setfd, sethello, s | True                                                                               | 
+  26 | //config:  setpathcost, setportprio, set | True                                                                               | 
+  27 | //config:  stp                           | True                                                                               | 
+  28 | //config: This adds about 600 bytes.     | True                                                                               | 
+  29 | //config:                                | True                                                                               | 
+  30 | //config:config FEATURE_BRCTL_SHOW       | True                                                                               | 
+  31 | //config: bool "Support show"            | True                                                                               | 
+  32 | //config: default y                      | True                                                                               | 
+  33 | //config: depends on BRCTL && FEATURE_BR | True                                                                               | 
+  34 | //config: help                           | True                                                                               | 
+  35 | //config: Add support for option which p | True                                                                               | 
+  36 | //config:  show                          | True                                                                               | 
+  37 |                                          | True                                                                               | 
+  38 | //applet:IF_BRCTL(APPLET_NOEXEC(brctl, b | True                                                                               | 
+  39 |                                          | True                                                                               | 
+  40 | //kbuild:lib-$(CONFIG_BRCTL) += brctl.o  | True                                                                               | 
+  41 |                                          | True                                                                               | 
+  42 | //usage:#define brctl_trivial_usage      | True                                                                               | 
+  43 | //usage:       "COMMAND [BRIDGE [ARGS]]" | True                                                                               | 
+  44 | //usage:#define brctl_full_usage "\n\n"  | True                                                                               | 
+  45 | //usage:       "Manage ethernet bridges" | True                                                                               | 
+  46 | //usage:     "\nCommands:"               | True                                                                               | 
+  47 | //usage: IF_FEATURE_BRCTL_SHOW(          | True                                                                               | 
+  48 | //usage:     "\n show [BRIDGE]... Show b | True                                                                               | 
+  49 | //usage: )                               | True                                                                               | 
+  50 | //usage:     "\n addbr BRIDGE  Create BR | True                                                                               | 
+  51 | //usage:     "\n delbr BRIDGE  Delete BR | True                                                                               | 
+  52 | //usage:     "\n addif BRIDGE IFACE Add  | True                                                                               | 
+  53 | //usage:     "\n delif BRIDGE IFACE Dele | True                                                                               | 
+  54 | //usage: IF_FEATURE_BRCTL_FANCY(         | True                                                                               | 
+  55 | //usage:     "\n showmacs BRIDGE   List  | True                                                                               | 
+  56 | //usage:     "\n showstp BRIDGE   Show S | True                                                                               | 
+  57 | //usage:     "\n stp BRIDGE 1/yes/on|0/n | True                                                                               | 
+  58 | //usage:     "\n setageing BRIDGE SECOND | True                                                                               | 
+  59 | //usage:     "\n setfd BRIDGE SECONDS  S | True                                                                               | 
+  60 | //usage:     "\n sethello BRIDGE SECONDS | True                                                                               | 
+  61 | //usage:     "\n setmaxage BRIDGE SECOND | True                                                                               | 
+  62 | //usage:     "\n setbridgeprio BRIDGE PR | True                                                                               | 
+  63 | //usage:     "\n setportprio BRIDGE IFAC | True                                                                               | 
+  64 | //usage:     "\n setpathcost BRIDGE IFAC | True                                                                               | 
+  65 | //usage: )                               | True                                                                               | 
+  66 | // Not yet implemented:                  | True                                                                               | 
+  67 | //   hairpin BRIDGE IFACE on|off Set hai | True                                                                               | 
+  68 |                                          | True                                                                               | 
+  69 | #include "libbb.h"                       | True                                                                               | 
+  70 | #include "common_bufsiz.h"               | True                                                                               | 
+  71 | #include <linux/sockios.h>               | True                                                                               | 
+  72 | #include <net/if.h>                      | True                                                                               | 
+  73 |                                          | True                                                                               | 
+  74 | #ifndef SIOCBRADDBR                      | True                                                                               | 
+  75 | # define SIOCBRADDBR BRCTL_ADD_BRIDGE    | !(SIOCBRADDBR)                                                                     | 
+  76 | #endif                                   | True                                                                               | 
+  77 | #ifndef SIOCBRDELBR                      | True                                                                               | 
+  78 | # define SIOCBRDELBR BRCTL_DEL_BRIDGE    | !(SIOCBRDELBR)                                                                     | 
+  79 | #endif                                   | True                                                                               | 
+  80 | #ifndef SIOCBRADDIF                      | True                                                                               | 
+  81 | # define SIOCBRADDIF BRCTL_ADD_IF        | !(SIOCBRADDIF)                                                                     | 
+  82 | #endif                                   | True                                                                               | 
+  83 | #ifndef SIOCBRDELIF                      | True                                                                               | 
+  84 | # define SIOCBRDELIF BRCTL_DEL_IF        | !(SIOCBRDELIF)                                                                     | 
+  85 | #endif                                   | True                                                                               | 
+  86 |                                          | True                                                                               | 
+  87 | #if ENABLE_FEATURE_BRCTL_FANCY           | True                                                                               | 
+  88 | static unsigned str_to_jiffies(const cha | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  89 | {                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  90 |  double dd;                              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  91 |  char *endptr;                           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  92 | //TODO: needs setlocale(LC_NUMERIC, "C") | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  93 |  dd = /*bb_*/strtod(time_str, &endptr);  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  94 |  if (endptr == time_str || dd < 0)       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  95 |   bb_error_msg_and_die(bb_msg_invalid_ar | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  96 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  97 |  dd *= 100;                              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  98 |  /* For purposes of brctl,               | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+  99 |   * capping SECONDS by ~20 million secon | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 100 |   */                                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 101 |  if (dd > INT_MAX)                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 102 |   dd = INT_MAX;                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 103 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 104 |  return dd;                              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 105 | }                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 106 | #endif                                   | True                                                                               | 
+ 107 |                                          | True                                                                               | 
+ 108 | #define filedata bb_common_bufsiz1       | True                                                                               | 
+ 109 |                                          | True                                                                               | 
+ 110 | #if ENABLE_FEATURE_BRCTL_SHOW || ENABLE_ | True                                                                               | 
+ 111 | static int read_file(const char *name)   | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 112 | {                                        | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 113 |  int n = open_read_close(name, filedata, | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 114 |  if (n < 0) {                            | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 115 |   filedata[0] = '\0';                    | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 116 |  } else {                                | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 117 |   filedata[n] = '\0';                    | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 118 |   if (n != 0 && filedata[n - 1] == '\n') | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 119 |    filedata[--n] = '\0';                 | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 120 |  }                                       | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 121 |  return n;                               | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 122 | }                                        | !ENABLE_FEATURE_BRCTL_FANCY&&ENABLE_FEATURE_BRCTL_SHOW||ENABLE_FEATURE_BRCTL_FANCY | 
+ 123 | #endif                                   | True                                                                               | 
+ 124 |                                          | True                                                                               | 
+ 125 | #if ENABLE_FEATURE_BRCTL_SHOW            | True                                                                               | 
+ 126 | /* NB: we are in /sys/class/net          | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 127 |  */                                      | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 128 | static int show_bridge(const char *name, | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 129 | {                                        | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 130 | /* Output:                               | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 131 |  *bridge name bridge id  STP enabled int | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 132 |  *br0  8000.000000000000 no  eth0        | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 133 |  */                                      | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 134 |  char pathbuf[IFNAMSIZ + sizeof("/bridge | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 135 |  int tabs;                               | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 136 |  DIR *ifaces;                            | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 137 |  struct dirent *ent;                     | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 138 |  char *sfx;                              | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 139 |                                          | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 140 | #if IFNAMSIZ == 16                       | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 141 |  sfx = pathbuf + sprintf(pathbuf, "%.16s | ENABLE_FEATURE_BRCTL_SHOW&&(IFNAMSIZ==16)                                          | 
+ 142 | #else                                    | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 143 |  sfx = pathbuf + sprintf(pathbuf, "%.*s/ | ENABLE_FEATURE_BRCTL_SHOW&&!(IFNAMSIZ==16)                                         | 
+ 144 | #endif                                   | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 145 |  strcpy(sfx, "bridge_id");               | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 146 |  if (read_file(pathbuf) < 0)             | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 147 |   return -1; /* this iface is not a brid | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 148 |                                          | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 149 |  if (need_hdr)                           | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 150 |   puts("bridge name\tbridge id\t\tSTP en | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 151 |  printf("%s\t\t%s\t", name, filedata);   | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 152 |                                          | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 153 |  strcpy(sfx, "stp_state");               | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 154 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 155 |  if (LONE_CHAR(filedata, '0'))           | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 156 |   strcpy(filedata, "no");                | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 157 |  else                                    | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 158 |  if (LONE_CHAR(filedata, '1'))           | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 159 |   strcpy(filedata, "yes");               | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 160 |  fputs_stdout(filedata);                 | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 161 |                                          | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 162 |  /* sfx points past "BR/bridge/", turn i | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 163 |  sfx[-4] = 'f'; sfx[-3] = '\0';          | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 164 |  tabs = 0;                               | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 165 |  ifaces = opendir(pathbuf);              | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 166 |  if (ifaces) {                           | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 167 |   while ((ent = readdir(ifaces)) != NULL | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 168 |    if (DOT_OR_DOTDOT(ent->d_name))       | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 169 |     continue; /* . or .. */              | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 170 |    if (tabs)                             | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 171 |     printf("\t\t\t\t\t");                | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 172 |    else                                  | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 173 |     tabs = 1;                            | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 174 |    printf("\t\t%s\n", ent->d_name);      | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 175 |   }                                      | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 176 |   closedir(ifaces);                      | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 177 |  }                                       | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 178 |  if (!tabs)  /* bridge has no interfaces | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 179 |   bb_putchar('\n');                      | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 180 |  return 0;                               | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 181 | }                                        | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 182 | #endif                                   | True                                                                               | 
+ 183 |                                          | True                                                                               | 
+ 184 | #if ENABLE_FEATURE_BRCTL_FANCY           | True                                                                               | 
+ 185 | static void write_uint(const char *name, | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 186 | {                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 187 |  char pathbuf[IFNAMSIZ + sizeof("/bridge | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 188 |  int fd, n;                              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 189 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 190 | #if IFNAMSIZ == 16                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 191 |  sprintf(pathbuf, "%.16s/%s", name, leaf | ENABLE_FEATURE_BRCTL_FANCY&&(IFNAMSIZ==16)                                         | 
+ 192 | #else                                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 193 |  sprintf(pathbuf, "%.*s/%s", (int)IFNAMS | ENABLE_FEATURE_BRCTL_FANCY&&!(IFNAMSIZ==16)                                        | 
+ 194 | #endif                                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 195 |  fd = xopen(pathbuf, O_WRONLY);          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 196 |  n = sprintf(filedata, "%u\n", val);     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 197 |  if (write(fd, filedata, n) < 0)         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 198 |   bb_simple_perror_msg_and_die(name);    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 199 |  /* So far all callers exit very soon af | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 200 |   * Do not bother closing fd (unless deb | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 201 |   */                                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 202 |  if (ENABLE_FEATURE_CLEAN_UP)            | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 203 |   close(fd);                             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 204 | }                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 205 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 206 | struct fdb_entry {                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 207 |  uint8_t mac_addr[6];                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 208 |  uint8_t port_no;                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 209 |  uint8_t is_local;                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 210 |  uint32_t ageing_timer_value;            | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 211 |  uint8_t port_hi;                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 212 |  uint8_t pad0;                           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 213 |  uint16_t unused;                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 214 | };                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 215 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 216 | static int compare_fdbs(const void *_f0, | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 217 | {                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 218 |  const struct fdb_entry *f0 = _f0;       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 219 |  const struct fdb_entry *f1 = _f1;       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 220 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 221 |  return memcmp(f0->mac_addr, f1->mac_add | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 222 | }                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 223 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 224 | static size_t read_bridge_forward_db(con | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 225 | {                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 226 |  char pathbuf[IFNAMSIZ + sizeof("/brforw | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 227 |  struct fdb_entry *fdb;                  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 228 |  size_t nentries;                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 229 |  int fd;                                 | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 230 |  ssize_t cc;                             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 231 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 232 | #if IFNAMSIZ == 16                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 233 |  sprintf(pathbuf, "%.16s/brforward", nam | ENABLE_FEATURE_BRCTL_FANCY&&(IFNAMSIZ==16)                                         | 
+ 234 | #else                                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 235 |  sprintf(pathbuf, "%.*s/brforward", (int | ENABLE_FEATURE_BRCTL_FANCY&&!(IFNAMSIZ==16)                                        | 
+ 236 | #endif                                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 237 |  fd = open(pathbuf, O_RDONLY);           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 238 |  if (fd < 0)                             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 239 |   bb_error_msg_and_die("bridge %s does n | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 240 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 241 |  fdb = NULL;                             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 242 |  nentries = 0;                           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 243 |  for (;;) {                              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 244 |   fdb = xrealloc_vector(fdb, 4, nentries | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 245 |   cc = full_read(fd, &fdb[nentries], siz | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 246 |   if (cc == 0) {                         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 247 |    break;                                | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 248 |   }                                      | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 249 |   if (cc != sizeof(*fdb)) {              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 250 |    bb_perror_msg_and_die("can't read bri | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 251 |   }                                      | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 252 |   ++nentries;                            | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 253 |  }                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 254 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 255 |  if (ENABLE_FEATURE_CLEAN_UP)            | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 256 |   close(fd);                             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 257 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 258 |  qsort(fdb, nentries, sizeof(*fdb), comp | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 259 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 260 |  *_fdb = fdb;                            | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 261 |  return nentries;                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 262 | }                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 263 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 264 | static void show_bridge_macs(const char  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 265 | {                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 266 |  struct fdb_entry *fdb;                  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 267 |  size_t nentries;                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 268 |  size_t i;                               | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 269 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 270 |  nentries = read_bridge_forward_db(name, | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 271 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 272 |  printf("port no\tmac addr\t\tis local?\ | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 273 |  for (i = 0; i < nentries; ++i) {        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 274 |   const struct fdb_entry *f = &fdb[i];   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 275 |   unsigned tv_sec = f->ageing_timer_valu | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 276 |   unsigned tv_csec = f->ageing_timer_val | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 277 |   printf("%3u\t"                         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 278 |    "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x\t"     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 279 |    "%s\t\t"                              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 280 |    "%4u.%.2u\n",                         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 281 |    f->port_no,                           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 282 |    f->mac_addr[0], f->mac_addr[1], f->ma | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 283 |    f->mac_addr[3], f->mac_addr[4], f->ma | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 284 |    (f->is_local ? "yes" : "no"),         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 285 |    tv_sec, tv_csec                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 286 |   );                                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 287 |  }                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 288 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 289 |  if (ENABLE_FEATURE_CLEAN_UP)            | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 290 |   free(fdb);                             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 291 | }                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 292 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 293 | static void show_bridge_timer(const char | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 294 | {                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 295 |  unsigned long long centisec = xstrtoull | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 296 |  unsigned tv_sec = centisec / 100;       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 297 |  unsigned tv_csec = centisec % 100;      | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 298 |  printf("%s%4u.%.2u", msg, tv_sec, tv_cs | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 299 | }                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 300 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 301 | static const char *show_bridge_state(uns | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 302 | {                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 303 |  /* See linux/if_bridge.h, BR_STATE_ con | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 304 |  static const char state_names[] ALIGN1  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 305 |   "disabled\0" //BR_STATE_DISABLED   0   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 306 |   "listening\0"   //BR_STATE_LISTENING   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 307 |   "learning\0"    //BR_STATE_LEARNING    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 308 |   "forwarding\0"  //BR_STATE_FORWARDING  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 309 |   "blocking"      //BR_STATE_BLOCKING    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 310 |  ;                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 311 |  if (state < 5)                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 312 |   return nth_string(state_names, state); | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 313 |  return utoa(state);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 314 | }                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 315 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 316 | static void printf_xstrtou(const char *f | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 317 | {                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 318 |  printf(fmt, xstrtou(filedata, 0));      | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 319 | }                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 320 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 321 | static NOINLINE void show_bridge_port(co | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 322 | {                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 323 |  char pathbuf[IFNAMSIZ + sizeof("/brport | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 324 |  char *sfx;                              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 325 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 326 | #if IFNAMSIZ == 16                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 327 |  sfx = pathbuf + sprintf(pathbuf, "%.16s | ENABLE_FEATURE_BRCTL_FANCY&&(IFNAMSIZ==16)                                         | 
+ 328 | #else                                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 329 |  sfx = pathbuf + sprintf(pathbuf, "%.*s/ | ENABLE_FEATURE_BRCTL_FANCY&&!(IFNAMSIZ==16)                                        | 
+ 330 | #endif                                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 331 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 332 |  strcpy(sfx, "port_no");                 | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 333 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 334 |  printf("%s (%u)\n", name, xstrtou(filed | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 335 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 336 |  strcpy(sfx + 5, "id"); // "port_id"     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 337 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 338 |  printf_xstrtou(" port id\t\t%.4x");     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 339 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 340 |  strcpy(sfx, "state");                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 341 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 342 |  printf("\t\t\tstate\t\t%15s\n", show_br | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 343 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 344 |  strcpy(sfx, "designated_root");         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 345 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 346 |  printf(" designated root\t%s", filedata | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 347 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 348 |  strcpy(sfx, "path_cost");               | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 349 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 350 |  printf_xstrtou("\tpath cost\t\t%4u\n"); | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 351 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 352 |  strcpy(sfx, "designated_bridge");       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 353 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 354 |  printf(" designated bridge\t%s", fileda | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 355 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 356 |  strcpy(sfx, "message_age_timer");       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 357 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 358 |  show_bridge_timer("\tmessage age timer\ | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 359 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 360 |  strcpy(sfx, "designated_port");         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 361 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 362 |  printf_xstrtou("\n designated port\t%.4 | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 363 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 364 |  strcpy(sfx, "forward_delay_timer");     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 365 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 366 |  show_bridge_timer("\t\t\tforward delay  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 367 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 368 |  strcpy(sfx, "designated_cost");         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 369 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 370 |  printf_xstrtou("\n designated cost\t%4u | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 371 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 372 |  strcpy(sfx, "hold_timer");              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 373 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 374 |  show_bridge_timer("\t\t\thold timer\t\t | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 375 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 376 |  printf("\n flags\t\t\t");               | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 377 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 378 |  strcpy(sfx, "config_pending");          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 379 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 380 |  if (!LONE_CHAR(filedata, '0'))          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 381 |   printf("CONFIG_PENDING ");             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 382 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 383 |  strcpy(sfx, "change_ack");              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 384 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 385 |  if (!LONE_CHAR(filedata, '0'))          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 386 |   printf("TOPOLOGY_CHANGE_ACK ");        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 387 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 388 |  strcpy(sfx, "hairpin_mode");            | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 389 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 390 |  if (!LONE_CHAR(filedata, '0'))          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 391 |   printf_xstrtou("\n hairpin mode\t\t%4u | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 392 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 393 |  printf("\n\n");                         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 394 | }                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 395 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 396 | static void show_bridge_stp(const char * | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 397 | {                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 398 |  char pathbuf[IFNAMSIZ + sizeof("/bridge | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 399 |  char *sfx;                              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 400 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 401 | #if IFNAMSIZ == 16                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 402 |  sfx = pathbuf + sprintf(pathbuf, "%.16s | ENABLE_FEATURE_BRCTL_FANCY&&(IFNAMSIZ==16)                                         | 
+ 403 | #else                                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 404 |  sfx = pathbuf + sprintf(pathbuf, "%.*s/ | ENABLE_FEATURE_BRCTL_FANCY&&!(IFNAMSIZ==16)                                        | 
+ 405 | #endif                                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 406 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 407 |  strcpy(sfx, "bridge_id");               | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 408 |  if (read_file(pathbuf) < 0)             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 409 |   bb_error_msg_and_die("bridge %s does n | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 410 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 411 |  printf("%s\n"                           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 412 |   " bridge id\t\t%s", name, filedata);   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 413 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 414 |  strcpy(sfx, "root_id");                 | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 415 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 416 |  printf("\n designated root\t%s", fileda | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 417 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 418 |  strcpy(sfx + 5, "port"); // "root_port" | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 419 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 420 |  printf_xstrtou("\n root port\t\t%4u\t\t | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 421 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 422 |  strcpy(sfx + 6, "ath_cost"); // "root_p | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 423 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 424 |  printf_xstrtou("path cost\t\t%4u\n");   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 425 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 426 |  strcpy(sfx, "max_age");                 | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 427 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 428 |  show_bridge_timer(" max age\t\t");      | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 429 |  show_bridge_timer("\t\t\tbridge max age | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 430 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 431 |  strcpy(sfx, "hello_time");              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 432 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 433 |  show_bridge_timer("\n hello time\t\t"); | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 434 |  show_bridge_timer("\t\t\tbridge hello t | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 435 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 436 |  strcpy(sfx, "forward_delay");           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 437 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 438 |  show_bridge_timer("\n forward delay\t\t | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 439 |  show_bridge_timer("\t\t\tbridge forward | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 440 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 441 |  strcpy(sfx, "ageing_time");             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 442 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 443 |  show_bridge_timer("\n ageing time\t\t") | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 444 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 445 |  strcpy(sfx, "hello_timer");             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 446 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 447 |  show_bridge_timer("\n hello timer\t\t") | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 448 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 449 |  strcpy(sfx, "tcn_timer");               | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 450 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 451 |  show_bridge_timer("\t\t\ttcn timer\t\t" | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 452 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 453 |  strcpy(sfx, "topology_change_timer");   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 454 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 455 |  show_bridge_timer("\n topology change t | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 456 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 457 |  strcpy(sfx, "gc_timer");                | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 458 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 459 |  show_bridge_timer("\t\t\tgc timer\t\t") | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 460 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 461 |  printf("\n flags\t\t\t");               | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 462 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 463 |  strcpy(sfx, "topology_change");         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 464 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 465 |  if (!LONE_CHAR(filedata, '0'))          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 466 |   printf("TOPOLOGY_CHANGE ");            | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 467 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 468 |  strcpy(sfx, "topology_change_detected") | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 469 |  read_file(pathbuf);                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 470 |  if (!LONE_CHAR(filedata, '0'))          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 471 |   printf("TOPOLOGY_CHANGE_DETECTED ");   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 472 |  printf("\n\n\n");                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 473 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 474 |  /* Show bridge ports */                 | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 475 |  {                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 476 |   DIR *ifaces;                           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 477 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 478 |   /* sfx points past "BR/bridge/", turn  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 479 |   sfx[-4] = 'f'; sfx[-3] = '\0';         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 480 |   ifaces = opendir(pathbuf);             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 481 |   if (ifaces) {                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 482 |    struct dirent *ent;                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 483 |    while ((ent = readdir(ifaces)) != NUL | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 484 |     if (DOT_OR_DOTDOT(ent->d_name))      | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 485 |      continue; /* . or .. */             | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 486 |     show_bridge_port(ent->d_name);       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 487 |    }                                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 488 |    if (ENABLE_FEATURE_CLEAN_UP)          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 489 |     closedir(ifaces);                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 490 |   }                                      | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 491 |  }                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 492 | }                                        | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 493 | #endif                                   | True                                                                               | 
+ 494 |                                          | True                                                                               | 
+ 495 | int brctl_main(int argc, char **argv) MA | True                                                                               | 
+ 496 | int brctl_main(int argc UNUSED_PARAM, ch | True                                                                               | 
+ 497 | {                                        | True                                                                               | 
+ 498 |  static const char keywords[] ALIGN1 =   | True                                                                               | 
+ 499 |   "addbr\0" "delbr\0" "addif\0" "delif\0 | True                                                                               | 
+ 500 |  IF_FEATURE_BRCTL_FANCY(                 | True                                                                               | 
+ 501 |   "stp\0"                                | True                                                                               | 
+ 502 |   "showstp\0"                            | True                                                                               | 
+ 503 |   "setageing\0" "setfd\0" "sethello\0" " | True                                                                               | 
+ 504 |   "setpathcost\0" "setportprio\0"        | True                                                                               | 
+ 505 |   "setbridgeprio\0"                      | True                                                                               | 
+ 506 |   "showmacs\0"                           | True                                                                               | 
+ 507 |  )                                       | True                                                                               | 
+ 508 |  IF_FEATURE_BRCTL_SHOW("show\0");        | True                                                                               | 
+ 509 |  enum { ARG_addbr = 0, ARG_delbr, ARG_ad | True                                                                               | 
+ 510 |   IF_FEATURE_BRCTL_FANCY(,               | True                                                                               | 
+ 511 |    ARG_stp,                              | True                                                                               | 
+ 512 |    ARG_showstp,                          | True                                                                               | 
+ 513 |    ARG_setageing, ARG_setfd, ARG_sethell | True                                                                               | 
+ 514 |    ARG_setpathcost, ARG_setportprio,     | True                                                                               | 
+ 515 |    ARG_setbridgeprio,                    | True                                                                               | 
+ 516 |    ARG_showmacs                          | True                                                                               | 
+ 517 |   )                                      | True                                                                               | 
+ 518 |   IF_FEATURE_BRCTL_SHOW(, ARG_show)      | True                                                                               | 
+ 519 |  };                                      | True                                                                               | 
+ 520 |  int key;                                | True                                                                               | 
+ 521 |  char *br;                               | True                                                                               | 
+ 522 |                                          | True                                                                               | 
+ 523 |  argv++;                                 | True                                                                               | 
+ 524 |  if (!*argv) {                           | True                                                                               | 
+ 525 |   /* bare "brctl" shows --help */        | True                                                                               | 
+ 526 |   bb_show_usage();                       | True                                                                               | 
+ 527 |  }                                       | True                                                                               | 
+ 528 |                                          | True                                                                               | 
+ 529 |  xchdir("/sys/class/net");               | True                                                                               | 
+ 530 |                                          | True                                                                               | 
+ 531 |  key = index_in_strings(keywords, *argv) | True                                                                               | 
+ 532 |  if (key == -1) /* no match found in key | True                                                                               | 
+ 533 |   bb_error_msg_and_die(bb_msg_invalid_ar | True                                                                               | 
+ 534 |  argv++;                                 | True                                                                               | 
+ 535 |                                          | True                                                                               | 
+ 536 | #if ENABLE_FEATURE_BRCTL_SHOW            | True                                                                               | 
+ 537 |  if (key == ARG_show) { /* show [BR]...  | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 538 |   DIR *net;                              | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 539 |   struct dirent *ent;                    | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 540 |   int need_hdr = 1;                      | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 541 |   exitcode_t exitcode = EXIT_SUCCESS;    | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 542 |                                          | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 543 |   if (*argv) {                           | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 544 |    /* "show BR1 BR2 BR3" */              | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 545 |    do {                                  | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 546 |     if (show_bridge(*argv, need_hdr) >=  | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 547 |      need_hdr = 0;                       | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 548 |     } else {                             | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 549 |      bb_error_msg("bridge %s does not ex | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 550 | //TODO: if device exists, but is not a B | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 551 | //says this instead: "device eth0 is not | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 552 |      exitcode = EXIT_FAILURE;            | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 553 |     }                                    | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 554 |    } while (*++argv != NULL);            | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 555 |    return exitcode;                      | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 556 |   }                                      | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 557 |                                          | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 558 |   /* "show" (if no ifaces, shows nothing | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 559 |   net = xopendir(".");                   | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 560 |   while ((ent = readdir(net)) != NULL) { | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 561 |    if (DOT_OR_DOTDOT(ent->d_name))       | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 562 |     continue; /* . or .. */              | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 563 |    if (show_bridge(ent->d_name, need_hdr | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 564 |     need_hdr = 0;                        | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 565 |   }                                      | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 566 |   if (ENABLE_FEATURE_CLEAN_UP)           | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 567 |    closedir(net);                        | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 568 |   return exitcode;                       | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 569 |  }                                       | ENABLE_FEATURE_BRCTL_SHOW                                                          | 
+ 570 | #endif                                   | True                                                                               | 
+ 571 |                                          | True                                                                               | 
+ 572 |  if (!*argv) /* All of the below need at | True                                                                               | 
+ 573 |   bb_show_usage();                       | True                                                                               | 
+ 574 |                                          | True                                                                               | 
+ 575 |  br = *argv++;                           | True                                                                               | 
+ 576 |                                          | True                                                                               | 
+ 577 |  if (key == ARG_addbr || key == ARG_delb | True                                                                               | 
+ 578 |   /* brctl from bridge-utils 1.6 still u | True                                                                               | 
+ 579 |    * for SIOCBRADDBR / SIOCBRDELBR, not  | True                                                                               | 
+ 580 |    */                                    | True                                                                               | 
+ 581 |   int fd = xsocket(AF_INET, SOCK_STREAM, | True                                                                               | 
+ 582 |   ioctl_or_perror_and_die(fd,            | True                                                                               | 
+ 583 |    key == ARG_addbr ? SIOCBRADDBR : SIOC | True                                                                               | 
+ 584 |    br, "bridge %s", br                   | True                                                                               | 
+ 585 |   );                                     | True                                                                               | 
+ 586 |   //close(fd);                           | True                                                                               | 
+ 587 |   //goto done;                           | True                                                                               | 
+ 588 |   /* bridge-utils 1.6 simply ignores tra | True                                                                               | 
+ 589 |    * "brctl addbr BR1 ARGS" ignores ARGS | True                                                                               | 
+ 590 |    */                                    | True                                                                               | 
+ 591 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                                                                               | 
+ 592 |    close(fd);                            | True                                                                               | 
+ 593 |   return EXIT_SUCCESS;                   | True                                                                               | 
+ 594 |  }                                       | True                                                                               | 
+ 595 |                                          | True                                                                               | 
+ 596 | #if ENABLE_FEATURE_BRCTL_FANCY           | True                                                                               | 
+ 597 |  if (key == ARG_showmacs) {              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 598 |   show_bridge_macs(br);                  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 599 |   return EXIT_SUCCESS;                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 600 |  }                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 601 |  if (key == ARG_showstp) {               | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 602 |   show_bridge_stp(br);                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 603 |   return EXIT_SUCCESS;                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 604 |  }                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 605 | #endif                                   | True                                                                               | 
+ 606 |                                          | True                                                                               | 
+ 607 |  if (!*argv) /* All of the below need at | True                                                                               | 
+ 608 |   bb_show_usage();                       | True                                                                               | 
+ 609 |                                          | True                                                                               | 
+ 610 | #if ENABLE_FEATURE_BRCTL_FANCY           | True                                                                               | 
+ 611 |  if (key == ARG_stp) {                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 612 |   static const char no_yes[] ALIGN1 =    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 613 |    "0\0" "off\0" "n\0" "no\0"   /* 0 ..  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 614 |    "1\0" "on\0"  "y\0" "yes\0"; /* 4 ..  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 615 |   int onoff = index_in_strings(no_yes, * | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 616 |   if (onoff < 0)                         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 617 |    bb_error_msg_and_die(bb_msg_invalid_a | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 618 |   onoff = (unsigned)onoff / 4;           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 619 |   write_uint(br, "bridge/stp_state", ono | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 620 |   return EXIT_SUCCESS;                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 621 |  }                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 622 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 623 |  if ((unsigned)(key - ARG_setageing) < 4 | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 624 |   /* setageing BR N: "N*100\n" to /sys/c | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 625 |    * setfd BR N:     "N*100\n" to /sys/c | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 626 |    * sethello BR N:  "N*100\n" to /sys/c | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 627 |    * setmaxage BR N: "N*100\n" to /sys/c | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 628 |    */                                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 629 |   write_uint(br,                         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 630 |    nth_string(                           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 631 |     "bridge/ageing_time"  "\0" /* ARG_se | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 632 |     "bridge/forward_delay""\0" /* ARG_se | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 633 |     "bridge/hello_time"   "\0" /* ARG_se | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 634 |     "bridge/max_age",          /* ARG_se | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 635 |     key - ARG_setageing                  | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 636 |    ),                                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 637 |    str_to_jiffies(*argv)                 | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 638 |   );                                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 639 |   return EXIT_SUCCESS;                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 640 |  }                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 641 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 642 |  if (key == ARG_setbridgeprio) {         | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 643 |   write_uint(br, "bridge/priority", xato | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 644 |   return EXIT_SUCCESS;                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 645 |  }                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 646 |                                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 647 |  if (key == ARG_setpathcost              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 648 |   || key == ARG_setportprio              | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 649 |  ) {                                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 650 |   if (!argv[1])                          | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 651 |    bb_show_usage();                      | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 652 |   /* BR is not used (and ignored!) for t | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 653 |    * "setpathcost BR PORT N" writes "N\n | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 654 |    * /sys/class/net/PORT/brport/path_cos | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 655 |    * "setportprio BR PORT N" writes "N\n | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 656 |    * /sys/class/net/PORT/brport/priority | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 657 |    */                                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 658 |   write_uint(argv[0],                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 659 |    nth_string(                           | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 660 |     "brport/path_cost" "\0" /* ARG_setpa | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 661 |     "brport/priority",      /* ARG_setpo | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 662 |     key - ARG_setpathcost                | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 663 |    ),                                    | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 664 |    xatoi_positive(argv[1])               | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 665 |   );                                     | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 666 |   return EXIT_SUCCESS;                   | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 667 |  }                                       | ENABLE_FEATURE_BRCTL_FANCY                                                         | 
+ 668 | #endif                                   | True                                                                               | 
+ 669 |  /* always true: if (key == ARG_addif || | True                                                                               | 
+ 670 |   struct ifreq ifr;                      | True                                                                               | 
+ 671 |   int fd = xsocket(AF_INET, SOCK_STREAM, | True                                                                               | 
+ 672 |                                          | True                                                                               | 
+ 673 |   strncpy_IFNAMSIZ(ifr.ifr_name, br);    | True                                                                               | 
+ 674 |   ifr.ifr_ifindex = if_nametoindex(*argv | True                                                                               | 
+ 675 |   if (ifr.ifr_ifindex == 0) {            | True                                                                               | 
+ 676 |    bb_perror_msg_and_die("iface %s", *ar | True                                                                               | 
+ 677 |   }                                      | True                                                                               | 
+ 678 |   ioctl_or_perror_and_die(fd,            | True                                                                               | 
+ 679 |    key == ARG_addif ? SIOCBRADDIF : SIOC | True                                                                               | 
+ 680 |    &ifr, "bridge %s", br                 | True                                                                               | 
+ 681 |   );                                     | True                                                                               | 
+ 682 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                                                                               | 
+ 683 |    close(fd);                            | True                                                                               | 
+ 684 |  }                                       | True                                                                               | 
+ 685 |                                          | True                                                                               | 
+ 686 |  return EXIT_SUCCESS;                    | True                                                                               | 
+ 687 | }                                        | True                                                                               | 
+-----+------------------------------------------+------------------------------------------------------------------------------------+
+     |                                          | +124MB, 304ms                                                                      | 

@@ -1,0 +1,374 @@
+FILE: data/raw/busybox-1.38.0/util-linux/mkfs_reiser.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * mkfs_reiser: utility to create Reiser | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Busybox'ed (2009) by Vladimir Dronnik | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config MKFS_REISER              | True                      | 
+  10 | //config: bool "mkfs_reiser"             | True                      | 
+  11 | //config: default n                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Utility to create ReiserFS fil | True                      | 
+  14 | //config: Note: this applet needs a lot  | True                      | 
+  15 |                                          | True                      | 
+  16 | //applet:IF_MKFS_REISER(APPLET_ODDNAME(m | True                      | 
+  17 |                                          | True                      | 
+  18 | //kbuild:lib-$(CONFIG_MKFS_REISER) += mk | True                      | 
+  19 |                                          | True                      | 
+  20 | //usage:#define mkfs_reiser_trivial_usag | True                      | 
+  21 | //usage:       "[-f] [-l LABEL] BLOCKDEV | True                      | 
+  22 | //usage:#define mkfs_reiser_full_usage " | True                      | 
+  23 | //usage:       "Make a ReiserFS V3 files | True                      | 
+  24 | //usage:     "\n -f Force"               | True                      | 
+  25 | //usage:     "\n -l LBL Volume label"    | True                      | 
+  26 |                                          | True                      | 
+  27 | #include "libbb.h"                       | True                      | 
+  28 | #include <linux/fs.h>                    | True                      | 
+  29 |                                          | True                      | 
+  30 | struct journal_params {                  | True                      | 
+  31 |  uint32_t jp_journal_1st_block;      /*  | True                      | 
+  32 |  uint32_t jp_journal_dev;            /*  | True                      | 
+  33 |  uint32_t jp_journal_size;           /*  | True                      | 
+  34 |  uint32_t jp_journal_trans_max;      /*  | True                      | 
+  35 |  uint32_t jp_journal_magic;          /*  | True                      | 
+  36 |  uint32_t jp_journal_max_batch;      /*  | True                      | 
+  37 |  uint32_t jp_journal_max_commit_age; /*  | True                      | 
+  38 |  uint32_t jp_journal_max_trans_age;  /*  | True                      | 
+  39 | };                                       | True                      | 
+  40 |                                          | True                      | 
+  41 | struct reiserfs_journal_header {         | True                      | 
+  42 |  uint32_t jh_last_flush_trans_id;    /*  | True                      | 
+  43 |  uint32_t jh_first_unflushed_offset; /*  | True                      | 
+  44 |  uint32_t jh_mount_id;                   | True                      | 
+  45 |  struct journal_params jh_journal;       | True                      | 
+  46 |  uint32_t jh_last_check_mount_id;    /*  | True                      | 
+  47 | };                                       | True                      | 
+  48 |                                          | True                      | 
+  49 | struct reiserfs_super_block {            | True                      | 
+  50 |  uint32_t sb_block_count;            /*  | True                      | 
+  51 |  uint32_t sb_free_blocks;            /*  | True                      | 
+  52 |  uint32_t sb_root_block;             /*  | True                      | 
+  53 |                                          | True                      | 
+  54 |  struct journal_params sb_journal;   /*  | True                      | 
+  55 |                                          | True                      | 
+  56 |  uint16_t sb_blocksize;          /* 44 * | True                      | 
+  57 |  uint16_t sb_oid_maxsize;        /* 46 m | True                      | 
+  58 |  uint16_t sb_oid_cursize;        /* 48 c | True                      | 
+  59 |  uint16_t sb_umount_state;       /* 50 t | True                      | 
+  60 |                                          | True                      | 
+  61 |  char s_magic[10];               /* 52 " | True                      | 
+  62 |  uint16_t sb_fs_state;           /* 62 i | True                      | 
+  63 |  uint32_t sb_hash_function_code; /* 64 c | True                      | 
+  64 |  uint16_t sb_tree_height;        /* 68 h | True                      | 
+  65 |  uint16_t sb_bmap_nr;            /* 70 a | True                      | 
+  66 |  uint16_t sb_version;            /* 72 t | True                      | 
+  67 |  uint16_t sb_reserved_for_journal;  /* 7 | True                      | 
+  68 |  uint32_t sb_inode_generation;   /* 76 * | True                      | 
+  69 |  uint32_t sb_flags;              /* 80 R | True                      | 
+  70 |  unsigned char s_uuid[16];       /* 84 f | True                      | 
+  71 |  unsigned char s_label[16];      /* 100  | True                      | 
+  72 |  uint16_t sb_mnt_count;          /* 116  | True                      | 
+  73 |  uint16_t sb_max_mnt_count;      /* 118  | True                      | 
+  74 |  uint32_t sb_lastcheck;          /* 120  | True                      | 
+  75 |  uint32_t sb_check_interval;     /* 124  | True                      | 
+  76 | /* zero filled by mkreiserfs and reiserf | True                      | 
+  77 |  char s_unused[76];              /* 128  | True                      | 
+  78 |  /* 204 */                               | True                      | 
+  79 | };                                       | True                      | 
+  80 |                                          | True                      | 
+  81 | /* Header of a disk block.  More precise | True                      | 
+  82 |    or internal node, and not the header  | True                      | 
+  83 | struct block_head {                      | True                      | 
+  84 |  uint16_t blk2_level;        /* Level of | True                      | 
+  85 |  uint16_t blk2_nr_item;      /* Number o | True                      | 
+  86 |  uint16_t blk2_free_space;   /* Block fr | True                      | 
+  87 |  uint16_t blk_reserved;                  | True                      | 
+  88 |  uint32_t reserved[4];                   | True                      | 
+  89 | };                                       | True                      | 
+  90 |                                          | True                      | 
+  91 | #define REISERFS_DISK_OFFSET_IN_BYTES (6 | True                      | 
+  92 |                                          | True                      | 
+  93 | #define REISERFS_3_6_SUPER_MAGIC_STRING  | True                      | 
+  94 | #define REISERFS_FORMAT_3_6     2        | True                      | 
+  95 | #define DEFAULT_MAX_MNT_COUNT   30       | True                      | 
+  96 | #define DEFAULT_CHECK_INTERVAL  (180 * 6 | True                      | 
+  97 |                                          | True                      | 
+  98 | #define FS_CLEANLY_UMOUNTED     1 /* thi | True                      | 
+  99 |                                          | True                      | 
+ 100 | #define JOURNAL_MIN_SIZE        512      | True                      | 
+ 101 | /* biggest possible single transaction,  | True                      | 
+ 102 | #define JOURNAL_TRANS_MAX       1024     | True                      | 
+ 103 | #define JOURNAL_TRANS_MIN       256      | True                      | 
+ 104 | #define JOURNAL_DEFAULT_RATIO   8        | True                      | 
+ 105 | #define JOURNAL_MIN_RATIO       2        | True                      | 
+ 106 | /* max blocks to batch into one transact | True                      | 
+ 107 | #define JOURNAL_MAX_BATCH       900      | True                      | 
+ 108 | #define JOURNAL_MAX_COMMIT_AGE  30       | True                      | 
+ 109 |                                          | True                      | 
+ 110 |                                          | True                      | 
+ 111 | // Standard mkreiserfs 3.6.21:           | True                      | 
+ 112 | //   -b | --block-size N              si | True                      | 
+ 113 | //   -j | --journal-device FILE       pa | True                      | 
+ 114 | //   -s | --journal-size N            si | True                      | 
+ 115 | //   -o | --journal-offset N          of | True                      | 
+ 116 | //                                    th | True                      | 
+ 117 | //   -t | --transaction-max-size N    ma | True                      | 
+ 118 | //   -B | --badblocks file            st | True                      | 
+ 119 | //   -h | --hash rupasov|tea|r5       ha | True                      | 
+ 120 | //   -u | --uuid UUID                 st | True                      | 
+ 121 | //   -l | --label LABEL               st | True                      | 
+ 122 | //   --format 3.5|3.6                 ol | True                      | 
+ 123 | //   -f | --force                     sp | True                      | 
+ 124 | //                                    di | True                      | 
+ 125 | //                                    sp | True                      | 
+ 126 | //   -q | --quiet                     qu | True                      | 
+ 127 | //                                    qu | True                      | 
+ 128 | //                                    by | True                      | 
+ 129 | //   -d | --debug                     pr | True                      | 
+ 130 | //   -V                               pr | True                      | 
+ 131 |                                          | True                      | 
+ 132 | // Options not commented below are taken | True                      | 
+ 133 | enum {                                   | True                      | 
+ 134 |  OPT_b = 1 << 0,                         | True                      | 
+ 135 |  OPT_j = 1 << 1,                         | True                      | 
+ 136 |  OPT_s = 1 << 2,                         | True                      | 
+ 137 |  OPT_o = 1 << 3,                         | True                      | 
+ 138 |  OPT_t = 1 << 4,                         | True                      | 
+ 139 |  OPT_B = 1 << 5,                         | True                      | 
+ 140 |  OPT_h = 1 << 6,                         | True                      | 
+ 141 |  OPT_u = 1 << 7,                         | True                      | 
+ 142 |  OPT_l = 1 << 8,  // label               | True                      | 
+ 143 |  OPT_f = 1 << 9,  // ask no questions    | True                      | 
+ 144 |  OPT_q = 1 << 10,                        | True                      | 
+ 145 |  OPT_d = 1 << 11,                        | True                      | 
+ 146 |  //OPT_V = 1 << 12, // -V version. bbox  | True                      | 
+ 147 | };                                       | True                      | 
+ 148 |                                          | True                      | 
+ 149 | int mkfs_reiser_main(int argc, char **ar | True                      | 
+ 150 | int mkfs_reiser_main(int argc UNUSED_PAR | True                      | 
+ 151 | {                                        | True                      | 
+ 152 |  unsigned blocksize = 4096;              | True                      | 
+ 153 |  unsigned journal_blocks = 8192;         | True                      | 
+ 154 |  unsigned blocks, bitmap_blocks, i, bloc | True                      | 
+ 155 |  time_t timestamp;                       | True                      | 
+ 156 |  const char *label = "";                 | True                      | 
+ 157 |  struct stat st;                         | True                      | 
+ 158 |  int fd;                                 | True                      | 
+ 159 |  uint8_t *buf;                           | True                      | 
+ 160 |  struct reiserfs_super_block *sb;        | True                      | 
+ 161 |  struct journal_params *jp;              | True                      | 
+ 162 |  struct block_head *root;                | True                      | 
+ 163 |                                          | True                      | 
+ 164 |  // using global "option_mask32" instead | True                      | 
+ 165 |  // we are register starved here         | True                      | 
+ 166 |  /*opts =*/ getopt32(argv, "^" "b:+j:s:o | True                      | 
+ 167 |   NULL, NULL, NULL, NULL, NULL, NULL, NU | True                      | 
+ 168 |  argv += optind; // argv[0] -- device    | True                      | 
+ 169 |                                          | True                      | 
+ 170 |  // check the device is a block device   | True                      | 
+ 171 |  fd = xopen(argv[0], O_WRONLY | O_EXCL); | True                      | 
+ 172 |  xfstat(fd, &st, argv[0]);               | True                      | 
+ 173 |  if (!S_ISBLK(st.st_mode) && !(option_ma | True                      | 
+ 174 |   bb_error_msg_and_die("%s: not a block  | True                      | 
+ 175 |                                          | True                      | 
+ 176 |  // check if it is mounted               | True                      | 
+ 177 |  // N.B. what if we format a file? find_ | True                      | 
+ 178 |  // it is loop block device which is mou | True                      | 
+ 179 |  if (find_mount_point(argv[0], 0))       | True                      | 
+ 180 |   bb_simple_error_msg_and_die("can't for | True                      | 
+ 181 |                                          | True                      | 
+ 182 |  // open the device, get size in blocks  | True                      | 
+ 183 |  blocks = get_volume_size_in_bytes(fd, a | True                      | 
+ 184 |                                          | True                      | 
+ 185 |  // block number sanity check            | True                      | 
+ 186 |  // we have a limit: skipped area, super | True                      | 
+ 187 |  // all have to be addressed by one firs | True                      | 
+ 188 |  block = REISERFS_DISK_OFFSET_IN_BYTES / | True                      | 
+ 189 |   + 1  // sb                             | True                      | 
+ 190 |   + 1  // bitmap#0                       | True                      | 
+ 191 |   + journal_blocks+1 // journal          | True                      | 
+ 192 |  ;                                       | True                      | 
+ 193 |                                          | True                      | 
+ 194 |  // count overhead                       | True                      | 
+ 195 |  bitmap_blocks = (blocks - 1) / (blocksi | True                      | 
+ 196 |  i = block + bitmap_blocks;              | True                      | 
+ 197 |                                          | True                      | 
+ 198 |  // check overhead                       | True                      | 
+ 199 |  if (MIN(blocksize * 8, blocks) < i)     | True                      | 
+ 200 |   bb_error_msg_and_die("need >= %u block | True                      | 
+ 201 |                                          | True                      | 
+ 202 |  // ask confirmation?                    | True                      | 
+ 203 |  // TODO: ???                            | True                      | 
+ 204 |                                          | True                      | 
+ 205 |  // wipe out first REISERFS_DISK_OFFSET_ | True                      | 
+ 206 |  // TODO: do we really need to wipe?!    | True                      | 
+ 207 |  xlseek(fd, REISERFS_DISK_OFFSET_IN_BYTE | True                      | 
+ 208 |                                          | True                      | 
+ 209 |  // fill superblock                      | True                      | 
+ 210 |  sb = (struct reiserfs_super_block *)xza | True                      | 
+ 211 |  // block count                          | True                      | 
+ 212 |  STORE_LE(sb->sb_block_count, blocks);   | True                      | 
+ 213 |  STORE_LE(sb->sb_free_blocks, blocks - i | True                      | 
+ 214 |  // TODO: decypher!                      | True                      | 
+ 215 |  STORE_LE(sb->sb_root_block, block);     | True                      | 
+ 216 |  // fill journal related fields          | True                      | 
+ 217 |  jp = &sb->sb_journal;                   | True                      | 
+ 218 |  STORE_LE(jp->jp_journal_1st_block, REIS | True                      | 
+ 219 |  timestamp = time(NULL);                 | True                      | 
+ 220 |  srand(timestamp);                       | True                      | 
+ 221 |  STORE_LE(jp->jp_journal_magic, rand()); | True                      | 
+ 222 |  STORE_LE(jp->jp_journal_size, journal_b | True                      | 
+ 223 |  STORE_LE(jp->jp_journal_trans_max, JOUR | True                      | 
+ 224 |  STORE_LE(jp->jp_journal_max_batch, JOUR | True                      | 
+ 225 |  STORE_LE(jp->jp_journal_max_commit_age, | True                      | 
+ 226 |  // sizes                                | True                      | 
+ 227 |  STORE_LE(sb->sb_blocksize, blocksize);  | True                      | 
+ 228 |  STORE_LE(sb->sb_oid_maxsize, (blocksize | True                      | 
+ 229 |  STORE_LE(sb->sb_oid_cursize, 2); // "." | True                      | 
+ 230 |  strcpy(sb->s_magic, REISERFS_3_6_SUPER_ | True                      | 
+ 231 |  STORE_LE(sb->sb_bmap_nr, (bitmap_blocks | True                      | 
+ 232 |  // misc                                 | True                      | 
+ 233 |  STORE_LE(sb->sb_version, REISERFS_FORMA | True                      | 
+ 234 |  STORE_LE(sb->sb_lastcheck, timestamp);  | True                      | 
+ 235 |  STORE_LE(sb->sb_check_interval, DEFAULT | True                      | 
+ 236 |  STORE_LE(sb->sb_mnt_count, 1);          | True                      | 
+ 237 |  STORE_LE(sb->sb_max_mnt_count, DEFAULT_ | True                      | 
+ 238 |  STORE_LE(sb->sb_umount_state, FS_CLEANL | True                      | 
+ 239 |  STORE_LE(sb->sb_tree_height, 2);        | True                      | 
+ 240 |  STORE_LE(sb->sb_hash_function_code, 3); | True                      | 
+ 241 |  STORE_LE(sb->sb_flags, 1);              | True                      | 
+ 242 |  //STORE_LE(sb->sb_reserved_for_journal, | True                      | 
+ 243 |  // create UUID                          | True                      | 
+ 244 |  generate_uuid(sb->s_uuid);              | True                      | 
+ 245 |  // write the label                      | True                      | 
+ 246 |  safe_strncpy((char *)sb->s_label, label | True                      | 
+ 247 |                                          | True                      | 
+ 248 |  // TODO: EMPIRIC! ENDIANNESS!           | True                      | 
+ 249 |  // superblock has only 204 bytes. What  | True                      | 
+ 250 |  buf = (uint8_t *)sb;                    | True                      | 
+ 251 |  buf[205] = 1;                           | True                      | 
+ 252 |  buf[209] = 3;                           | True                      | 
+ 253 |                                          | True                      | 
+ 254 |  // put superblock                       | True                      | 
+ 255 |  xwrite(fd, sb, blocksize);              | True                      | 
+ 256 |                                          | True                      | 
+ 257 |  // create bitmaps                       | True                      | 
+ 258 |  buf = xzalloc(blocksize);               | True                      | 
+ 259 |                                          | True                      | 
+ 260 |  // bitmap #0 uses initial "block"+1 blo | True                      | 
+ 261 |  i = block + 1;                          | True                      | 
+ 262 |  memset(buf, 0xFF, i / 8);               | True                      | 
+ 263 |  buf[i / 8] = (1 << (i & 7)) - 1; //0..7 | True                      | 
+ 264 |  // mark trailing absent blocks, if any  | True                      | 
+ 265 |  if (blocks < 8*blocksize) {             | True                      | 
+ 266 |   unsigned n = 8*blocksize - blocks;     | True                      | 
+ 267 |   i = n / 8;                             | True                      | 
+ 268 |   buf[blocksize - i - 1] |= 0x7F00 >> (n | True                      | 
+ 269 |   memset(buf + blocksize - i, 0xFF, i);  | True                      | 
+ 270 |  }                                       | True                      | 
+ 271 |  // put bitmap #0                        | True                      | 
+ 272 |  xwrite(fd, buf, blocksize);             | True                      | 
+ 273 |                                          | True                      | 
+ 274 |  // now go journal blocks                | True                      | 
+ 275 |  memset(buf, 0, blocksize);              | True                      | 
+ 276 |  for (i = 0; i < journal_blocks; i++)    | True                      | 
+ 277 |   xwrite(fd, buf, blocksize);            | True                      | 
+ 278 |  // dump journal control block           | True                      | 
+ 279 |  memcpy(&((struct reiserfs_journal_heade | True                      | 
+ 280 |  xwrite(fd, buf, blocksize);             | True                      | 
+ 281 |                                          | True                      | 
+ 282 |  // other bitmaps are in every (8*blocks | True                      | 
+ 283 |  // N.B. they use the only block -- name | True                      | 
+ 284 |  buf[0] = 0x01;                          | True                      | 
+ 285 |  // put bitmaps                          | True                      | 
+ 286 |  for (i = 1; i < bitmap_blocks; i++) {   | True                      | 
+ 287 |   xlseek(fd, i*8*blocksize * blocksize,  | True                      | 
+ 288 |   // mark trailing absent blocks, if any | True                      | 
+ 289 |   if (i == bitmap_blocks - 1 && (blocks  | True                      | 
+ 290 |    unsigned n = 8*blocksize - blocks % ( | True                      | 
+ 291 |    unsigned j = n / 8;                   | True                      | 
+ 292 |    buf[blocksize - j - 1] |= 0x7F00 >> ( | True                      | 
+ 293 |    memset(buf + blocksize - j, 0xFF, j); | True                      | 
+ 294 |   }                                      | True                      | 
+ 295 |   xwrite(fd, buf, blocksize);            | True                      | 
+ 296 |  }                                       | True                      | 
+ 297 |                                          | True                      | 
+ 298 |  // fill root block                      | True                      | 
+ 299 |  // block head                           | True                      | 
+ 300 |  memset(buf, 0, blocksize);              | True                      | 
+ 301 |  root = (struct block_head *)buf;        | True                      | 
+ 302 |  STORE_LE(root->blk2_level, 1); // leaf  | True                      | 
+ 303 |  STORE_LE(root->blk2_nr_item, 2); // "." | True                      | 
+ 304 |  STORE_LE(root->blk2_free_space, blocksi | True                      | 
+ 305 |  // item head                            | True                      | 
+ 306 |  // root directory                       | True                      | 
+ 307 |  // TODO: EMPIRIC! ENDIANNESS!           | True                      | 
+ 308 |  // TODO: indented assignments seem to b | True                      | 
+ 309 | buf[4] = 0134;                           | True                      | 
+ 310 | buf[24] = 01;                            | True                      | 
+ 311 | buf[28] = 02;                            | True                      | 
+ 312 | buf[42] = 054;                           | True                      | 
+ 313 | buf[44] = 0324;                          | True                      | 
+ 314 | buf[45] = 017;                           | True                      | 
+ 315 | buf[46] = 01;                            | True                      | 
+ 316 | buf[48] = 01;                            | True                      | 
+ 317 | buf[52] = 02;                            | True                      | 
+ 318 | buf[56] = 01;                            | True                      | 
+ 319 | buf[60] = 0364;                          | True                      | 
+ 320 | buf[61] = 01;                            | True                      | 
+ 321 | buf[64] = 02;                            | True                      | 
+ 322 | buf[66] = 060;                           | True                      | 
+ 323 | buf[68] = 0244;                          | True                      | 
+ 324 | buf[69] = 017;                           | True                      | 
+ 325 | buf[4004] = 01;                          | True                      | 
+ 326 | buf[4008] = 01;                          | True                      | 
+ 327 | buf[4012] = 02;                          | True                      | 
+ 328 | buf[4016] = 050;                         | True                      | 
+ 329 | buf[4018] = 04;                          | True                      | 
+ 330 | buf[4020] = 02;                          | True                      | 
+ 331 | buf[4028] = 01;                          | True                      | 
+ 332 | buf[4032] = 040;                         | True                      | 
+ 333 | buf[4034] = 04;                          | True                      | 
+ 334 |                                          | True                      | 
+ 335 | buf[4036] = 056; buf[4037] = 056; // ".. | True                      | 
+ 336 | buf[4044] = 056;   // "."                | True                      | 
+ 337 |                                          | True                      | 
+ 338 | buf[4052] = 0355;                        | True                      | 
+ 339 | buf[4053] = 0101;                        | True                      | 
+ 340 | buf[4056] = 03;                          | True                      | 
+ 341 | buf[4060] = 060;                         | True                      | 
+ 342 |   buf[4076] = 0173;                      | True                      | 
+ 343 |   buf[4077] = 0240;                      | True                      | 
+ 344 |  buf[4078] = 0344;                       | True                      | 
+ 345 |  buf[4079] = 0112;                       | True                      | 
+ 346 |   buf[4080] = 0173;                      | True                      | 
+ 347 |   buf[4081] = 0240;                      | True                      | 
+ 348 |  buf[4082] = 0344;                       | True                      | 
+ 349 |  buf[4083] = 0112;                       | True                      | 
+ 350 |   buf[4084] = 0173;                      | True                      | 
+ 351 |   buf[4085] = 0240;                      | True                      | 
+ 352 |  buf[4086] = 0344;                       | True                      | 
+ 353 |  buf[4087] = 0112;                       | True                      | 
+ 354 | buf[4088] = 01;                          | True                      | 
+ 355 |                                          | True                      | 
+ 356 |  // put root block                       | True                      | 
+ 357 |  xlseek(fd, block * blocksize, SEEK_SET) | True                      | 
+ 358 |  xwrite(fd, buf, blocksize);             | True                      | 
+ 359 |                                          | True                      | 
+ 360 |  // cleanup                              | True                      | 
+ 361 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 362 |   free(buf);                             | True                      | 
+ 363 |   free(sb);                              | True                      | 
+ 364 |  }                                       | True                      | 
+ 365 |                                          | True                      | 
+ 366 |  xclose(fd);                             | True                      | 
+ 367 |  return EXIT_SUCCESS;                    | True                      | 
+ 368 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +109MB, 246ms             | 

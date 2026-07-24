@@ -1,0 +1,1177 @@
+FILE: data/raw/busybox-1.38.0/archival/libarchive/unxz/xz_dec_lzma2.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                          | 
+-----+------------------------------------------+----------------------------------------------------------------+
+   1 | /*                                       | True                                                           | 
+   2 |  * LZMA2 decoder                         | True                                                           | 
+   3 |  *                                       | True                                                           | 
+   4 |  * Authors: Lasse Collin <lasse.collin@t | True                                                           | 
+   5 |  *          Igor Pavlov <http://7-zip.or | True                                                           | 
+   6 |  *                                       | True                                                           | 
+   7 |  * This file has been put into the publi | True                                                           | 
+   8 |  * You can do whatever you want with thi | True                                                           | 
+   9 |  */                                      | True                                                           | 
+  10 |                                          | True                                                           | 
+  11 | #include "xz_private.h"                  | True                                                           | 
+  12 | #include "xz_lzma2.h"                    | True                                                           | 
+  13 |                                          | True                                                           | 
+  14 | /*                                       | True                                                           | 
+  15 |  * Range decoder initialization eats the | True                                                           | 
+  16 |  */                                      | True                                                           | 
+  17 | #define RC_INIT_BYTES 5                  | True                                                           | 
+  18 |                                          | True                                                           | 
+  19 | /*                                       | True                                                           | 
+  20 |  * Minimum number of usable input buffer | True                                                           | 
+  21 |  * The worst case is that we decode 22 b | True                                                           | 
+  22 |  * direct bits. This may decode at maxim | True                                                           | 
+  23 |  * lzma_main() does an extra normalizati | True                                                           | 
+  24 |  * need to put 21 here.                  | True                                                           | 
+  25 |  */                                      | True                                                           | 
+  26 | #define LZMA_IN_REQUIRED 21              | True                                                           | 
+  27 |                                          | True                                                           | 
+  28 | /*                                       | True                                                           | 
+  29 |  * Dictionary (history buffer)           | True                                                           | 
+  30 |  *                                       | True                                                           | 
+  31 |  * These are always true:                | True                                                           | 
+  32 |  *    start <= pos <= full <= end        | True                                                           | 
+  33 |  *    pos <= limit <= end                | True                                                           | 
+  34 |  *                                       | True                                                           | 
+  35 |  * In multi-call mode, also these are tr | True                                                           | 
+  36 |  *    end == size                        | True                                                           | 
+  37 |  *    size <= size_max                   | True                                                           | 
+  38 |  *    allocated <= size                  | True                                                           | 
+  39 |  *                                       | True                                                           | 
+  40 |  * Most of these variables are size_t to | True                                                           | 
+  41 |  * in which the dictionary variables add | True                                                           | 
+  42 |  * buffer directly.                      | True                                                           | 
+  43 |  */                                      | True                                                           | 
+  44 | struct dictionary {                      | True                                                           | 
+  45 |  /* Beginning of the history buffer */   | True                                                           | 
+  46 |  uint8_t *buf;                           | True                                                           | 
+  47 |                                          | True                                                           | 
+  48 |  /* Old position in buf (before decoding | True                                                           | 
+  49 |  size_t start;                           | True                                                           | 
+  50 |                                          | True                                                           | 
+  51 |  /* Position in buf */                   | True                                                           | 
+  52 |  size_t pos;                             | True                                                           | 
+  53 |                                          | True                                                           | 
+  54 |  /*                                      | True                                                           | 
+  55 |   * How full dictionary is. This is used | True                                                           | 
+  56 |   * would read beyond the beginning of t | True                                                           | 
+  57 |   */                                     | True                                                           | 
+  58 |  size_t full;                            | True                                                           | 
+  59 |                                          | True                                                           | 
+  60 |  /* Write limit; we don't write to buf[l | True                                                           | 
+  61 |  size_t limit;                           | True                                                           | 
+  62 |                                          | True                                                           | 
+  63 |  /*                                      | True                                                           | 
+  64 |   * End of the dictionary buffer. In mul | True                                                           | 
+  65 |   * the same as the dictionary size. In  | True                                                           | 
+  66 |   * indicates the size of the output buf | True                                                           | 
+  67 |   */                                     | True                                                           | 
+  68 |  size_t end;                             | True                                                           | 
+  69 |                                          | True                                                           | 
+  70 |  /*                                      | True                                                           | 
+  71 |   * Size of the dictionary as specified  | True                                                           | 
+  72 |   * together with "full" to detect corru | True                                                           | 
+  73 |   * read beyond the beginning of the unc | True                                                           | 
+  74 |   */                                     | True                                                           | 
+  75 |  uint32_t size;                          | True                                                           | 
+  76 |                                          | True                                                           | 
+  77 |  /*                                      | True                                                           | 
+  78 |   * Maximum allowed dictionary size in m | True                                                           | 
+  79 |   * This is ignored in single-call mode. | True                                                           | 
+  80 |   */                                     | True                                                           | 
+  81 |  uint32_t size_max;                      | True                                                           | 
+  82 |                                          | True                                                           | 
+  83 |  /*                                      | True                                                           | 
+  84 |   * Amount of memory currently allocated | True                                                           | 
+  85 |   * This is used only with XZ_DYNALLOC.  | True                                                           | 
+  86 |   * size_max is always the same as the a | True                                                           | 
+  87 |   */                                     | True                                                           | 
+  88 |  uint32_t allocated;                     | True                                                           | 
+  89 |                                          | True                                                           | 
+  90 |  /* Operation mode */                    | True                                                           | 
+  91 |  enum xz_mode mode;                      | True                                                           | 
+  92 | };                                       | True                                                           | 
+  93 |                                          | True                                                           | 
+  94 | /* Range decoder */                      | True                                                           | 
+  95 | struct rc_dec {                          | True                                                           | 
+  96 |  uint32_t range;                         | True                                                           | 
+  97 |  uint32_t code;                          | True                                                           | 
+  98 |                                          | True                                                           | 
+  99 |  /*                                      | True                                                           | 
+ 100 |   * Number of initializing bytes remaini | True                                                           | 
+ 101 |   * by rc_read_init().                   | True                                                           | 
+ 102 |   */                                     | True                                                           | 
+ 103 |  uint32_t init_bytes_left;               | True                                                           | 
+ 104 |                                          | True                                                           | 
+ 105 |  /*                                      | True                                                           | 
+ 106 |   * Buffer from which we read our input. | True                                                           | 
+ 107 |   * temp.buf or the caller-provided inpu | True                                                           | 
+ 108 |   */                                     | True                                                           | 
+ 109 |  const uint8_t *in;                      | True                                                           | 
+ 110 |  size_t in_pos;                          | True                                                           | 
+ 111 |  size_t in_limit;                        | True                                                           | 
+ 112 | };                                       | True                                                           | 
+ 113 |                                          | True                                                           | 
+ 114 | /* Probabilities for a length decoder. * | True                                                           | 
+ 115 | struct lzma_len_dec {                    | True                                                           | 
+ 116 |  /* Probability of match length being at | True                                                           | 
+ 117 |  uint16_t choice;                        | True                                                           | 
+ 118 |                                          | True                                                           | 
+ 119 |  /* Probability of match length being at | True                                                           | 
+ 120 |  uint16_t choice2;                       | True                                                           | 
+ 121 |                                          | True                                                           | 
+ 122 |  /* Probabilities for match lengths 2-9  | True                                                           | 
+ 123 |  uint16_t low[POS_STATES_MAX][LEN_LOW_SY | True                                                           | 
+ 124 |                                          | True                                                           | 
+ 125 |  /* Probabilities for match lengths 10-1 | True                                                           | 
+ 126 |  uint16_t mid[POS_STATES_MAX][LEN_MID_SY | True                                                           | 
+ 127 |                                          | True                                                           | 
+ 128 |  /* Probabilities for match lengths 18-2 | True                                                           | 
+ 129 |  uint16_t high[LEN_HIGH_SYMBOLS];        | True                                                           | 
+ 130 | };                                       | True                                                           | 
+ 131 |                                          | True                                                           | 
+ 132 | struct lzma_dec {                        | True                                                           | 
+ 133 |  /* Distances of latest four matches */  | True                                                           | 
+ 134 |  uint32_t rep0;                          | True                                                           | 
+ 135 |  uint32_t rep1;                          | True                                                           | 
+ 136 |  uint32_t rep2;                          | True                                                           | 
+ 137 |  uint32_t rep3;                          | True                                                           | 
+ 138 |                                          | True                                                           | 
+ 139 |  /* Types of the most recently seen LZMA | True                                                           | 
+ 140 |  enum lzma_state state;                  | True                                                           | 
+ 141 |                                          | True                                                           | 
+ 142 |  /*                                      | True                                                           | 
+ 143 |   * Length of a match. This is updated s | True                                                           | 
+ 144 |   * be called again to finish repeating  | True                                                           | 
+ 145 |   */                                     | True                                                           | 
+ 146 |  uint32_t len;                           | True                                                           | 
+ 147 |                                          | True                                                           | 
+ 148 |  /*                                      | True                                                           | 
+ 149 |   * LZMA properties or related bit masks | True                                                           | 
+ 150 |   * context bits, a mask dervied from th | True                                                           | 
+ 151 |   * position bits, and a mask dervied fr | True                                                           | 
+ 152 |   * position bits)                       | True                                                           | 
+ 153 |   */                                     | True                                                           | 
+ 154 |  uint32_t lc;                            | True                                                           | 
+ 155 |  uint32_t literal_pos_mask; /* (1 << lp) | True                                                           | 
+ 156 |  uint32_t pos_mask;         /* (1 << pb) | True                                                           | 
+ 157 |                                          | True                                                           | 
+ 158 |  /* If 1, it's a match. Otherwise it's a | True                                                           | 
+ 159 |  uint16_t is_match[STATES][POS_STATES_MA | True                                                           | 
+ 160 |                                          | True                                                           | 
+ 161 |  /* If 1, it's a repeated match. The dis | True                                                           | 
+ 162 |  uint16_t is_rep[STATES];                | True                                                           | 
+ 163 |                                          | True                                                           | 
+ 164 |  /*                                      | True                                                           | 
+ 165 |   * If 0, distance of a repeated match i | True                                                           | 
+ 166 |   * Otherwise check is_rep1.             | True                                                           | 
+ 167 |   */                                     | True                                                           | 
+ 168 |  uint16_t is_rep0[STATES];               | True                                                           | 
+ 169 |                                          | True                                                           | 
+ 170 |  /*                                      | True                                                           | 
+ 171 |   * If 0, distance of a repeated match i | True                                                           | 
+ 172 |   * Otherwise check is_rep2.             | True                                                           | 
+ 173 |   */                                     | True                                                           | 
+ 174 |  uint16_t is_rep1[STATES];               | True                                                           | 
+ 175 |                                          | True                                                           | 
+ 176 |  /* If 0, distance of a repeated match i | True                                                           | 
+ 177 |  uint16_t is_rep2[STATES];               | True                                                           | 
+ 178 |                                          | True                                                           | 
+ 179 |  /*                                      | True                                                           | 
+ 180 |   * If 1, the repeated match has length  | True                                                           | 
+ 181 |   * the length is decoded from rep_len_d | True                                                           | 
+ 182 |   */                                     | True                                                           | 
+ 183 |  uint16_t is_rep0_long[STATES][POS_STATE | True                                                           | 
+ 184 |                                          | True                                                           | 
+ 185 |  /*                                      | True                                                           | 
+ 186 |   * Probability tree for the highest two | True                                                           | 
+ 187 |   * distance. There is a separate probab | True                                                           | 
+ 188 |   * lengths of 2 (i.e. MATCH_LEN_MIN), 3 | True                                                           | 
+ 189 |   */                                     | True                                                           | 
+ 190 |  uint16_t dist_slot[DIST_STATES][DIST_SL | True                                                           | 
+ 191 |                                          | True                                                           | 
+ 192 |  /*                                      | True                                                           | 
+ 193 |   * Probility trees for additional bits  | True                                                           | 
+ 194 |   * when the distance is in the range [4 | True                                                           | 
+ 195 |   */                                     | True                                                           | 
+ 196 |  uint16_t dist_special[FULL_DISTANCES -  | True                                                           | 
+ 197 |                                          | True                                                           | 
+ 198 |  /*                                      | True                                                           | 
+ 199 |   * Probability tree for the lowest four | True                                                           | 
+ 200 |   * distance that is equal to or greater | True                                                           | 
+ 201 |   */                                     | True                                                           | 
+ 202 |  uint16_t dist_align[ALIGN_SIZE];        | True                                                           | 
+ 203 |                                          | True                                                           | 
+ 204 |  /* Length of a normal match */          | True                                                           | 
+ 205 |  struct lzma_len_dec match_len_dec;      | True                                                           | 
+ 206 |                                          | True                                                           | 
+ 207 |  /* Length of a repeated match */        | True                                                           | 
+ 208 |  struct lzma_len_dec rep_len_dec;        | True                                                           | 
+ 209 |                                          | True                                                           | 
+ 210 |  /* Probabilities of literals */         | True                                                           | 
+ 211 |  uint16_t literal[LITERAL_CODERS_MAX][LI | True                                                           | 
+ 212 | };                                       | True                                                           | 
+ 213 |                                          | True                                                           | 
+ 214 | struct lzma2_dec {                       | True                                                           | 
+ 215 |  /* Position in xz_dec_lzma2_run(). */   | True                                                           | 
+ 216 |  enum lzma2_seq {                        | True                                                           | 
+ 217 |   SEQ_CONTROL,                           | True                                                           | 
+ 218 |   SEQ_UNCOMPRESSED_1,                    | True                                                           | 
+ 219 |   SEQ_UNCOMPRESSED_2,                    | True                                                           | 
+ 220 |   SEQ_COMPRESSED_0,                      | True                                                           | 
+ 221 |   SEQ_COMPRESSED_1,                      | True                                                           | 
+ 222 |   SEQ_PROPERTIES,                        | True                                                           | 
+ 223 |   SEQ_LZMA_PREPARE,                      | True                                                           | 
+ 224 |   SEQ_LZMA_RUN,                          | True                                                           | 
+ 225 |   SEQ_COPY                               | True                                                           | 
+ 226 |  } sequence;                             | True                                                           | 
+ 227 |                                          | True                                                           | 
+ 228 |  /* Next position after decoding the com | True                                                           | 
+ 229 |  enum lzma2_seq next_sequence;           | True                                                           | 
+ 230 |                                          | True                                                           | 
+ 231 |  /* Uncompressed size of LZMA chunk (2 M | True                                                           | 
+ 232 |  uint32_t uncompressed;                  | True                                                           | 
+ 233 |                                          | True                                                           | 
+ 234 |  /*                                      | True                                                           | 
+ 235 |   * Compressed size of LZMA chunk or com | True                                                           | 
+ 236 |   * size of uncompressed chunk (64 KiB a | True                                                           | 
+ 237 |   */                                     | True                                                           | 
+ 238 |  uint32_t compressed;                    | True                                                           | 
+ 239 |                                          | True                                                           | 
+ 240 |  /*                                      | True                                                           | 
+ 241 |   * True if dictionary reset is needed.  | True                                                           | 
+ 242 |   * the first chunk (LZMA or uncompresse | True                                                           | 
+ 243 |   */                                     | True                                                           | 
+ 244 |  bool need_dict_reset;                   | True                                                           | 
+ 245 |                                          | True                                                           | 
+ 246 |  /*                                      | True                                                           | 
+ 247 |   * True if new LZMA properties are need | True                                                           | 
+ 248 |   * before the first LZMA chunk.         | True                                                           | 
+ 249 |   */                                     | True                                                           | 
+ 250 |  bool need_props;                        | True                                                           | 
+ 251 | };                                       | True                                                           | 
+ 252 |                                          | True                                                           | 
+ 253 | struct xz_dec_lzma2 {                    | True                                                           | 
+ 254 |  /*                                      | True                                                           | 
+ 255 |   * The order below is important on x86  | True                                                           | 
+ 256 |   * it shouldn't hurt on other platforms | True                                                           | 
+ 257 |   * including lzma.pos_mask are in the f | True                                                           | 
+ 258 |   * which allows using smaller instructi | True                                                           | 
+ 259 |   * variables. On x86-64, fewer variable | True                                                           | 
+ 260 |   * bytes, but this is still the best or | True                                                           | 
+ 261 |   * the readability by splitting the str | True                                                           | 
+ 262 |   */                                     | True                                                           | 
+ 263 |  struct rc_dec rc;                       | True                                                           | 
+ 264 |  struct dictionary dict;                 | True                                                           | 
+ 265 |  struct lzma2_dec lzma2;                 | True                                                           | 
+ 266 |  struct lzma_dec lzma;                   | True                                                           | 
+ 267 |                                          | True                                                           | 
+ 268 |  /*                                      | True                                                           | 
+ 269 |   * Temporary buffer which holds small n | True                                                           | 
+ 270 |   * decoder calls. See lzma2_lzma() for  | True                                                           | 
+ 271 |   */                                     | True                                                           | 
+ 272 |  struct {                                | True                                                           | 
+ 273 |   uint32_t size;                         | True                                                           | 
+ 274 |   uint8_t buf[3 * LZMA_IN_REQUIRED];     | True                                                           | 
+ 275 |  } temp;                                 | True                                                           | 
+ 276 | };                                       | True                                                           | 
+ 277 |                                          | True                                                           | 
+ 278 | /**************                          | True                                                           | 
+ 279 |  * Dictionary *                          | True                                                           | 
+ 280 |  **************/                         | True                                                           | 
+ 281 |                                          | True                                                           | 
+ 282 | /*                                       | True                                                           | 
+ 283 |  * Reset the dictionary state. When in s | True                                                           | 
+ 284 |  * of the dictionary to point to the act | True                                                           | 
+ 285 |  */                                      | True                                                           | 
+ 286 | static void XZ_FUNC dict_reset(struct di | True                                                           | 
+ 287 | {                                        | True                                                           | 
+ 288 |  if (DEC_IS_SINGLE(dict->mode)) {        | True                                                           | 
+ 289 |   dict->buf = b->out + b->out_pos;       | True                                                           | 
+ 290 |   dict->end = b->out_size - b->out_pos;  | True                                                           | 
+ 291 |  }                                       | True                                                           | 
+ 292 |                                          | True                                                           | 
+ 293 |  dict->start = 0;                        | True                                                           | 
+ 294 |  dict->pos = 0;                          | True                                                           | 
+ 295 |  dict->limit = 0;                        | True                                                           | 
+ 296 |  dict->full = 0;                         | True                                                           | 
+ 297 | }                                        | True                                                           | 
+ 298 |                                          | True                                                           | 
+ 299 | /* Set dictionary write limit */         | True                                                           | 
+ 300 | static void XZ_FUNC dict_limit(struct di | True                                                           | 
+ 301 | {                                        | True                                                           | 
+ 302 |  if (dict->end - dict->pos <= out_max)   | True                                                           | 
+ 303 |   dict->limit = dict->end;               | True                                                           | 
+ 304 |  else                                    | True                                                           | 
+ 305 |   dict->limit = dict->pos + out_max;     | True                                                           | 
+ 306 | }                                        | True                                                           | 
+ 307 |                                          | True                                                           | 
+ 308 | /* Return true if at least one byte can  | True                                                           | 
+ 309 | static __always_inline bool XZ_FUNC dict | True                                                           | 
+ 310 | {                                        | True                                                           | 
+ 311 |  return dict->pos < dict->limit;         | True                                                           | 
+ 312 | }                                        | True                                                           | 
+ 313 |                                          | True                                                           | 
+ 314 | /*                                       | True                                                           | 
+ 315 |  * Get a byte from the dictionary at the | True                                                           | 
+ 316 |  * assumed to valid, or as a special cas | True                                                           | 
+ 317 |  * still empty. This special case is nee | True                                                           | 
+ 318 |  * avoid writing a '\0' to the end of th | True                                                           | 
+ 319 |  */                                      | True                                                           | 
+ 320 | static __always_inline uint32_t XZ_FUNC  | True                                                           | 
+ 321 |   const struct dictionary *dict, uint32_ | True                                                           | 
+ 322 | {                                        | True                                                           | 
+ 323 |  size_t offset = dict->pos - dist - 1;   | True                                                           | 
+ 324 |                                          | True                                                           | 
+ 325 |  if (dist >= dict->pos)                  | True                                                           | 
+ 326 |   offset += dict->end;                   | True                                                           | 
+ 327 |                                          | True                                                           | 
+ 328 |  return dict->full > 0 ? dict->buf[offse | True                                                           | 
+ 329 | }                                        | True                                                           | 
+ 330 |                                          | True                                                           | 
+ 331 | /*                                       | True                                                           | 
+ 332 |  * Put one byte into the dictionary. It  | True                                                           | 
+ 333 |  */                                      | True                                                           | 
+ 334 | static inline void XZ_FUNC dict_put(stru | True                                                           | 
+ 335 | {                                        | True                                                           | 
+ 336 |  dict->buf[dict->pos++] = byte;          | True                                                           | 
+ 337 |                                          | True                                                           | 
+ 338 |  if (dict->full < dict->pos)             | True                                                           | 
+ 339 |   dict->full = dict->pos;                | True                                                           | 
+ 340 | }                                        | True                                                           | 
+ 341 |                                          | True                                                           | 
+ 342 | /*                                       | True                                                           | 
+ 343 |  * Repeat given number of bytes from the | True                                                           | 
+ 344 |  * invalid, false is returned. On succes | True                                                           | 
+ 345 |  * updated to indicate how many bytes we | True                                                           | 
+ 346 |  */                                      | True                                                           | 
+ 347 | static bool XZ_FUNC dict_repeat(         | True                                                           | 
+ 348 |   struct dictionary *dict, uint32_t *len | True                                                           | 
+ 349 | {                                        | True                                                           | 
+ 350 |  size_t back;                            | True                                                           | 
+ 351 |  uint32_t left;                          | True                                                           | 
+ 352 |                                          | True                                                           | 
+ 353 |  if (dist >= dict->full || dist >= dict- | True                                                           | 
+ 354 |   return false;                          | True                                                           | 
+ 355 |                                          | True                                                           | 
+ 356 |  left = min_t(size_t, dict->limit - dict | True                                                           | 
+ 357 |  *len -= left;                           | True                                                           | 
+ 358 |                                          | True                                                           | 
+ 359 |  back = dict->pos - dist - 1;            | True                                                           | 
+ 360 |  if (dist >= dict->pos)                  | True                                                           | 
+ 361 |   back += dict->end;                     | True                                                           | 
+ 362 |                                          | True                                                           | 
+ 363 |  do {                                    | True                                                           | 
+ 364 |   dict->buf[dict->pos++] = dict->buf[bac | True                                                           | 
+ 365 |   if (back == dict->end)                 | True                                                           | 
+ 366 |    back = 0;                             | True                                                           | 
+ 367 |  } while (--left > 0);                   | True                                                           | 
+ 368 |                                          | True                                                           | 
+ 369 |  if (dict->full < dict->pos)             | True                                                           | 
+ 370 |   dict->full = dict->pos;                | True                                                           | 
+ 371 |                                          | True                                                           | 
+ 372 |  return true;                            | True                                                           | 
+ 373 | }                                        | True                                                           | 
+ 374 |                                          | True                                                           | 
+ 375 | /* Copy uncompressed data as is from inp | True                                                           | 
+ 376 | static void XZ_FUNC dict_uncompressed(   | True                                                           | 
+ 377 |   struct dictionary *dict, struct xz_buf | True                                                           | 
+ 378 | {                                        | True                                                           | 
+ 379 |  size_t copy_size;                       | True                                                           | 
+ 380 |                                          | True                                                           | 
+ 381 |  while (*left > 0 && b->in_pos < b->in_s | True                                                           | 
+ 382 |    && b->out_pos < b->out_size) {        | True                                                           | 
+ 383 |   copy_size = min(b->in_size - b->in_pos | True                                                           | 
+ 384 |     b->out_size - b->out_pos);           | !(__KERNEL__)                                                  | 
+ 385 |   if (copy_size > dict->end - dict->pos) | True                                                           | 
+ 386 |    copy_size = dict->end - dict->pos;    | True                                                           | 
+ 387 |   if (copy_size > *left)                 | True                                                           | 
+ 388 |    copy_size = *left;                    | True                                                           | 
+ 389 |                                          | True                                                           | 
+ 390 |   *left -= copy_size;                    | True                                                           | 
+ 391 |                                          | True                                                           | 
+ 392 |   memcpy(dict->buf + dict->pos, b->in +  | True                                                           | 
+ 393 |   dict->pos += copy_size;                | True                                                           | 
+ 394 |                                          | True                                                           | 
+ 395 |   if (dict->full < dict->pos)            | True                                                           | 
+ 396 |    dict->full = dict->pos;               | True                                                           | 
+ 397 |                                          | True                                                           | 
+ 398 |   if (DEC_IS_MULTI(dict->mode)) {        | True                                                           | 
+ 399 |    if (dict->pos == dict->end)           | True                                                           | 
+ 400 |     dict->pos = 0;                       | True                                                           | 
+ 401 |                                          | True                                                           | 
+ 402 |    memcpy(b->out + b->out_pos, b->in + b | True                                                           | 
+ 403 |      copy_size);                         | True                                                           | 
+ 404 |   }                                      | True                                                           | 
+ 405 |                                          | True                                                           | 
+ 406 |   dict->start = dict->pos;               | True                                                           | 
+ 407 |                                          | True                                                           | 
+ 408 |   b->out_pos += copy_size;               | True                                                           | 
+ 409 |   b->in_pos += copy_size;                | True                                                           | 
+ 410 |  }                                       | True                                                           | 
+ 411 | }                                        | True                                                           | 
+ 412 |                                          | True                                                           | 
+ 413 | /*                                       | True                                                           | 
+ 414 |  * Flush pending data from dictionary to | True                                                           | 
+ 415 |  * enough space in b->out. This is guara | True                                                           | 
+ 416 |  * before decoding data into the diction | True                                                           | 
+ 417 |  */                                      | True                                                           | 
+ 418 | static uint32_t XZ_FUNC dict_flush(struc | True                                                           | 
+ 419 | {                                        | True                                                           | 
+ 420 |  size_t copy_size = dict->pos - dict->st | True                                                           | 
+ 421 |                                          | True                                                           | 
+ 422 |  if (DEC_IS_MULTI(dict->mode)) {         | True                                                           | 
+ 423 |   if (dict->pos == dict->end)            | True                                                           | 
+ 424 |    dict->pos = 0;                        | True                                                           | 
+ 425 |                                          | True                                                           | 
+ 426 |   memcpy(b->out + b->out_pos, dict->buf  | True                                                           | 
+ 427 |     copy_size);                          | True                                                           | 
+ 428 |  }                                       | True                                                           | 
+ 429 |                                          | True                                                           | 
+ 430 |  dict->start = dict->pos;                | True                                                           | 
+ 431 |  b->out_pos += copy_size;                | True                                                           | 
+ 432 |  return copy_size;                       | True                                                           | 
+ 433 | }                                        | True                                                           | 
+ 434 |                                          | True                                                           | 
+ 435 | /*****************                       | True                                                           | 
+ 436 |  * Range decoder *                       | True                                                           | 
+ 437 |  *****************/                      | True                                                           | 
+ 438 |                                          | True                                                           | 
+ 439 | /* Reset the range decoder. */           | True                                                           | 
+ 440 | static void XZ_FUNC rc_reset(struct rc_d | True                                                           | 
+ 441 | {                                        | True                                                           | 
+ 442 |  rc->range = (uint32_t)-1;               | True                                                           | 
+ 443 |  rc->code = 0;                           | True                                                           | 
+ 444 |  rc->init_bytes_left = RC_INIT_BYTES;    | True                                                           | 
+ 445 | }                                        | True                                                           | 
+ 446 |                                          | True                                                           | 
+ 447 | /*                                       | True                                                           | 
+ 448 |  * Read the first five initial bytes int | True                                                           | 
+ 449 |  * read already. (Yes, the first byte ge | True                                                           | 
+ 450 |  */                                      | True                                                           | 
+ 451 | static bool XZ_FUNC rc_read_init(struct  | True                                                           | 
+ 452 | {                                        | True                                                           | 
+ 453 |  while (rc->init_bytes_left > 0) {       | True                                                           | 
+ 454 |   if (b->in_pos == b->in_size)           | True                                                           | 
+ 455 |    return false;                         | True                                                           | 
+ 456 |                                          | True                                                           | 
+ 457 |   rc->code = (rc->code << 8) + b->in[b-> | True                                                           | 
+ 458 |   --rc->init_bytes_left;                 | True                                                           | 
+ 459 |  }                                       | True                                                           | 
+ 460 |                                          | True                                                           | 
+ 461 |  return true;                            | True                                                           | 
+ 462 | }                                        | True                                                           | 
+ 463 |                                          | True                                                           | 
+ 464 | /* Return true if there may not be enoug | True                                                           | 
+ 465 | static inline bool XZ_FUNC rc_limit_exce | True                                                           | 
+ 466 | {                                        | True                                                           | 
+ 467 |  return rc->in_pos > rc->in_limit;       | True                                                           | 
+ 468 | }                                        | True                                                           | 
+ 469 |                                          | True                                                           | 
+ 470 | /*                                       | True                                                           | 
+ 471 |  * Return true if it is possible (from p | True                                                           | 
+ 472 |  * we have reached the end of the LZMA c | True                                                           | 
+ 473 |  */                                      | True                                                           | 
+ 474 | static inline bool XZ_FUNC rc_is_finishe | True                                                           | 
+ 475 | {                                        | True                                                           | 
+ 476 |  return rc->code == 0;                   | True                                                           | 
+ 477 | }                                        | True                                                           | 
+ 478 |                                          | True                                                           | 
+ 479 | /* Read the next input byte if needed. * | True                                                           | 
+ 480 | static __always_inline void XZ_FUNC rc_n | True                                                           | 
+ 481 | {                                        | True                                                           | 
+ 482 |  if (rc->range < RC_TOP_VALUE) {         | True                                                           | 
+ 483 |   rc->range <<= RC_SHIFT_BITS;           | True                                                           | 
+ 484 |   rc->code = (rc->code << RC_SHIFT_BITS) | True                                                           | 
+ 485 |  }                                       | True                                                           | 
+ 486 | }                                        | True                                                           | 
+ 487 |                                          | True                                                           | 
+ 488 | /*                                       | True                                                           | 
+ 489 |  * Decode one bit. In some versions, thi | True                                                           | 
+ 490 |  * functions so that the compiler is sup | True                                                           | 
+ 491 |  * an extra branch. In this particular v | True                                                           | 
+ 492 |  * doesn't seem to be a good idea (teste | True                                                           | 
+ 493 |  * on x86). Using a non-split version re | True                                                           | 
+ 494 |  *                                       | True                                                           | 
+ 495 |  * NOTE: This must return an int. Do not | True                                                           | 
+ 496 |  * of the code generated by GCC 3.x decr | True                                                           | 
+ 497 |  * and it generates 10-20 % faster code  | True                                                           | 
+ 498 |  */                                      | True                                                           | 
+ 499 | static __always_inline int XZ_FUNC rc_bi | True                                                           | 
+ 500 | {                                        | True                                                           | 
+ 501 |  uint32_t bound;                         | True                                                           | 
+ 502 |  int bit;                                | True                                                           | 
+ 503 |                                          | True                                                           | 
+ 504 |  rc_normalize(rc);                       | True                                                           | 
+ 505 |  bound = (rc->range >> RC_BIT_MODEL_TOTA | True                                                           | 
+ 506 |  if (rc->code < bound) {                 | True                                                           | 
+ 507 |   rc->range = bound;                     | True                                                           | 
+ 508 |   *prob += (RC_BIT_MODEL_TOTAL - *prob)  | True                                                           | 
+ 509 |   bit = 0;                               | True                                                           | 
+ 510 |  } else {                                | True                                                           | 
+ 511 |   rc->range -= bound;                    | True                                                           | 
+ 512 |   rc->code -= bound;                     | True                                                           | 
+ 513 |   *prob -= *prob >> RC_MOVE_BITS;        | True                                                           | 
+ 514 |   bit = 1;                               | True                                                           | 
+ 515 |  }                                       | True                                                           | 
+ 516 |                                          | True                                                           | 
+ 517 |  return bit;                             | True                                                           | 
+ 518 | }                                        | True                                                           | 
+ 519 |                                          | True                                                           | 
+ 520 | /* Decode a bittree starting from the mo | True                                                           | 
+ 521 | static __always_inline uint32_t XZ_FUNC  | True                                                           | 
+ 522 |   struct rc_dec *rc, uint16_t *probs, ui | True                                                           | 
+ 523 | {                                        | True                                                           | 
+ 524 |  uint32_t symbol = 1;                    | True                                                           | 
+ 525 |                                          | True                                                           | 
+ 526 |  do {                                    | True                                                           | 
+ 527 |   if (rc_bit(rc, &probs[symbol]))        | True                                                           | 
+ 528 |    symbol = (symbol << 1) + 1;           | True                                                           | 
+ 529 |   else                                   | True                                                           | 
+ 530 |    symbol <<= 1;                         | True                                                           | 
+ 531 |  } while (symbol < limit);               | True                                                           | 
+ 532 |                                          | True                                                           | 
+ 533 |  return symbol;                          | True                                                           | 
+ 534 | }                                        | True                                                           | 
+ 535 |                                          | True                                                           | 
+ 536 | /* Decode a bittree starting from the le | True                                                           | 
+ 537 | static __always_inline void XZ_FUNC rc_b | True                                                           | 
+ 538 |   uint16_t *probs, uint32_t *dest, uint3 | True                                                           | 
+ 539 | {                                        | True                                                           | 
+ 540 |  uint32_t symbol = 1;                    | True                                                           | 
+ 541 |  uint32_t i = 0;                         | True                                                           | 
+ 542 |                                          | True                                                           | 
+ 543 |  do {                                    | True                                                           | 
+ 544 |   if (rc_bit(rc, &probs[symbol])) {      | True                                                           | 
+ 545 |    symbol = (symbol << 1) + 1;           | True                                                           | 
+ 546 |    *dest += 1 << i;                      | True                                                           | 
+ 547 |   } else {                               | True                                                           | 
+ 548 |    symbol <<= 1;                         | True                                                           | 
+ 549 |   }                                      | True                                                           | 
+ 550 |  } while (++i < limit);                  | True                                                           | 
+ 551 | }                                        | True                                                           | 
+ 552 |                                          | True                                                           | 
+ 553 | /* Decode direct bits (fixed fifty-fifty | True                                                           | 
+ 554 | static inline void XZ_FUNC rc_direct(    | True                                                           | 
+ 555 |   struct rc_dec *rc, uint32_t *dest, uin | True                                                           | 
+ 556 | {                                        | True                                                           | 
+ 557 |  uint32_t mask;                          | True                                                           | 
+ 558 |                                          | True                                                           | 
+ 559 |  do {                                    | True                                                           | 
+ 560 |   rc_normalize(rc);                      | True                                                           | 
+ 561 |   rc->range >>= 1;                       | True                                                           | 
+ 562 |   rc->code -= rc->range;                 | True                                                           | 
+ 563 |   mask = (uint32_t)0 - (rc->code >> 31); | True                                                           | 
+ 564 |   rc->code += rc->range & mask;          | True                                                           | 
+ 565 |   *dest = (*dest << 1) + (mask + 1);     | True                                                           | 
+ 566 |  } while (--limit > 0);                  | True                                                           | 
+ 567 | }                                        | True                                                           | 
+ 568 |                                          | True                                                           | 
+ 569 | /********                                | True                                                           | 
+ 570 |  * LZMA *                                | True                                                           | 
+ 571 |  ********/                               | True                                                           | 
+ 572 |                                          | True                                                           | 
+ 573 | /* Get pointer to literal coder probabil | True                                                           | 
+ 574 | static uint16_t * XZ_FUNC lzma_literal_p | True                                                           | 
+ 575 | {                                        | True                                                           | 
+ 576 |  uint32_t prev_byte = dict_get(&s->dict, | True                                                           | 
+ 577 |  uint32_t low = prev_byte >> (8 - s->lzm | True                                                           | 
+ 578 |  uint32_t high = (s->dict.pos & s->lzma. | True                                                           | 
+ 579 |  return s->lzma.literal[low + high];     | True                                                           | 
+ 580 | }                                        | True                                                           | 
+ 581 |                                          | True                                                           | 
+ 582 | /* Decode a literal (one 8-bit byte) */  | True                                                           | 
+ 583 | static void XZ_FUNC lzma_literal(struct  | True                                                           | 
+ 584 | {                                        | True                                                           | 
+ 585 |  uint16_t *probs;                        | True                                                           | 
+ 586 |  uint32_t symbol;                        | True                                                           | 
+ 587 |  uint32_t match_byte;                    | True                                                           | 
+ 588 |  uint32_t match_bit;                     | True                                                           | 
+ 589 |  uint32_t offset;                        | True                                                           | 
+ 590 |  uint32_t i;                             | True                                                           | 
+ 591 |                                          | True                                                           | 
+ 592 |  probs = lzma_literal_probs(s);          | True                                                           | 
+ 593 |                                          | True                                                           | 
+ 594 |  if (lzma_state_is_literal(s->lzma.state | True                                                           | 
+ 595 |   symbol = rc_bittree(&s->rc, probs, 0x1 | True                                                           | 
+ 596 |  } else {                                | True                                                           | 
+ 597 |   symbol = 1;                            | True                                                           | 
+ 598 |   match_byte = dict_get(&s->dict, s->lzm | True                                                           | 
+ 599 |   offset = 0x100;                        | True                                                           | 
+ 600 |                                          | True                                                           | 
+ 601 |   do {                                   | True                                                           | 
+ 602 |    match_bit = match_byte & offset;      | True                                                           | 
+ 603 |    match_byte <<= 1;                     | True                                                           | 
+ 604 |    i = offset + match_bit + symbol;      | True                                                           | 
+ 605 |                                          | True                                                           | 
+ 606 |    if (rc_bit(&s->rc, &probs[i])) {      | True                                                           | 
+ 607 |     symbol = (symbol << 1) + 1;          | True                                                           | 
+ 608 |     offset &= match_bit;                 | True                                                           | 
+ 609 |    } else {                              | True                                                           | 
+ 610 |     symbol <<= 1;                        | True                                                           | 
+ 611 |     offset &= ~match_bit;                | True                                                           | 
+ 612 |    }                                     | True                                                           | 
+ 613 |   } while (symbol < 0x100);              | True                                                           | 
+ 614 |  }                                       | True                                                           | 
+ 615 |                                          | True                                                           | 
+ 616 |  dict_put(&s->dict, (uint8_t)symbol);    | True                                                           | 
+ 617 |  lzma_state_literal(&s->lzma.state);     | True                                                           | 
+ 618 | }                                        | True                                                           | 
+ 619 |                                          | True                                                           | 
+ 620 | /* Decode the length of the match into s | True                                                           | 
+ 621 | static void XZ_FUNC lzma_len(struct xz_d | True                                                           | 
+ 622 |   uint32_t pos_state)                    | True                                                           | 
+ 623 | {                                        | True                                                           | 
+ 624 |  uint16_t *probs;                        | True                                                           | 
+ 625 |  uint32_t limit;                         | True                                                           | 
+ 626 |                                          | True                                                           | 
+ 627 |  if (!rc_bit(&s->rc, &l->choice)) {      | True                                                           | 
+ 628 |   probs = l->low[pos_state];             | True                                                           | 
+ 629 |   limit = LEN_LOW_SYMBOLS;               | True                                                           | 
+ 630 |   s->lzma.len = MATCH_LEN_MIN;           | True                                                           | 
+ 631 |  } else {                                | True                                                           | 
+ 632 |   if (!rc_bit(&s->rc, &l->choice2)) {    | True                                                           | 
+ 633 |    probs = l->mid[pos_state];            | True                                                           | 
+ 634 |    limit = LEN_MID_SYMBOLS;              | True                                                           | 
+ 635 |    s->lzma.len = MATCH_LEN_MIN + LEN_LOW | True                                                           | 
+ 636 |   } else {                               | True                                                           | 
+ 637 |    probs = l->high;                      | True                                                           | 
+ 638 |    limit = LEN_HIGH_SYMBOLS;             | True                                                           | 
+ 639 |    s->lzma.len = MATCH_LEN_MIN + LEN_LOW | True                                                           | 
+ 640 |      + LEN_MID_SYMBOLS;                  | True                                                           | 
+ 641 |   }                                      | True                                                           | 
+ 642 |  }                                       | True                                                           | 
+ 643 |                                          | True                                                           | 
+ 644 |  s->lzma.len += rc_bittree(&s->rc, probs | True                                                           | 
+ 645 | }                                        | True                                                           | 
+ 646 |                                          | True                                                           | 
+ 647 | /* Decode a match. The distance will be  | True                                                           | 
+ 648 | static void XZ_FUNC lzma_match(struct xz | True                                                           | 
+ 649 | {                                        | True                                                           | 
+ 650 |  uint16_t *probs;                        | True                                                           | 
+ 651 |  uint32_t dist_slot;                     | True                                                           | 
+ 652 |  uint32_t limit;                         | True                                                           | 
+ 653 |                                          | True                                                           | 
+ 654 |  lzma_state_match(&s->lzma.state);       | True                                                           | 
+ 655 |                                          | True                                                           | 
+ 656 |  s->lzma.rep3 = s->lzma.rep2;            | True                                                           | 
+ 657 |  s->lzma.rep2 = s->lzma.rep1;            | True                                                           | 
+ 658 |  s->lzma.rep1 = s->lzma.rep0;            | True                                                           | 
+ 659 |                                          | True                                                           | 
+ 660 |  lzma_len(s, &s->lzma.match_len_dec, pos | True                                                           | 
+ 661 |                                          | True                                                           | 
+ 662 |  probs = s->lzma.dist_slot[lzma_get_dist | True                                                           | 
+ 663 |  dist_slot = rc_bittree(&s->rc, probs, D | True                                                           | 
+ 664 |                                          | True                                                           | 
+ 665 |  if (dist_slot < DIST_MODEL_START) {     | True                                                           | 
+ 666 |   s->lzma.rep0 = dist_slot;              | True                                                           | 
+ 667 |  } else {                                | True                                                           | 
+ 668 |   limit = (dist_slot >> 1) - 1;          | True                                                           | 
+ 669 |   s->lzma.rep0 = 2 + (dist_slot & 1);    | True                                                           | 
+ 670 |                                          | True                                                           | 
+ 671 |   if (dist_slot < DIST_MODEL_END) {      | True                                                           | 
+ 672 |    s->lzma.rep0 <<= limit;               | True                                                           | 
+ 673 |    probs = s->lzma.dist_special + s->lzm | True                                                           | 
+ 674 |      - dist_slot - 1;                    | True                                                           | 
+ 675 |    rc_bittree_reverse(&s->rc, probs,     | True                                                           | 
+ 676 |      &s->lzma.rep0, limit);              | True                                                           | 
+ 677 |   } else {                               | True                                                           | 
+ 678 |    rc_direct(&s->rc, &s->lzma.rep0, limi | True                                                           | 
+ 679 |    s->lzma.rep0 <<= ALIGN_BITS;          | True                                                           | 
+ 680 |    rc_bittree_reverse(&s->rc, s->lzma.di | True                                                           | 
+ 681 |      &s->lzma.rep0, ALIGN_BITS);         | True                                                           | 
+ 682 |   }                                      | True                                                           | 
+ 683 |  }                                       | True                                                           | 
+ 684 | }                                        | True                                                           | 
+ 685 |                                          | True                                                           | 
+ 686 | /*                                       | True                                                           | 
+ 687 |  * Decode a repeated match. The distance | True                                                           | 
+ 688 |  * seen matches. The distance will be st | True                                                           | 
+ 689 |  */                                      | True                                                           | 
+ 690 | static void XZ_FUNC lzma_rep_match(struc | True                                                           | 
+ 691 | {                                        | True                                                           | 
+ 692 |  uint32_t tmp;                           | True                                                           | 
+ 693 |                                          | True                                                           | 
+ 694 |  if (!rc_bit(&s->rc, &s->lzma.is_rep0[s- | True                                                           | 
+ 695 |   if (!rc_bit(&s->rc, &s->lzma.is_rep0_l | True                                                           | 
+ 696 |     s->lzma.state][pos_state])) {        | True                                                           | 
+ 697 |    lzma_state_short_rep(&s->lzma.state); | True                                                           | 
+ 698 |    s->lzma.len = 1;                      | True                                                           | 
+ 699 |    return;                               | True                                                           | 
+ 700 |   }                                      | True                                                           | 
+ 701 |  } else {                                | True                                                           | 
+ 702 |   if (!rc_bit(&s->rc, &s->lzma.is_rep1[s | True                                                           | 
+ 703 |    tmp = s->lzma.rep1;                   | True                                                           | 
+ 704 |   } else {                               | True                                                           | 
+ 705 |    if (!rc_bit(&s->rc, &s->lzma.is_rep2[ | True                                                           | 
+ 706 |     tmp = s->lzma.rep2;                  | True                                                           | 
+ 707 |    } else {                              | True                                                           | 
+ 708 |     tmp = s->lzma.rep3;                  | True                                                           | 
+ 709 |     s->lzma.rep3 = s->lzma.rep2;         | True                                                           | 
+ 710 |    }                                     | True                                                           | 
+ 711 |                                          | True                                                           | 
+ 712 |    s->lzma.rep2 = s->lzma.rep1;          | True                                                           | 
+ 713 |   }                                      | True                                                           | 
+ 714 |                                          | True                                                           | 
+ 715 |   s->lzma.rep1 = s->lzma.rep0;           | True                                                           | 
+ 716 |   s->lzma.rep0 = tmp;                    | True                                                           | 
+ 717 |  }                                       | True                                                           | 
+ 718 |                                          | True                                                           | 
+ 719 |  lzma_state_long_rep(&s->lzma.state);    | True                                                           | 
+ 720 |  lzma_len(s, &s->lzma.rep_len_dec, pos_s | True                                                           | 
+ 721 | }                                        | True                                                           | 
+ 722 |                                          | True                                                           | 
+ 723 | /* LZMA decoder core */                  | True                                                           | 
+ 724 | static bool XZ_FUNC lzma_main(struct xz_ | True                                                           | 
+ 725 | {                                        | True                                                           | 
+ 726 |  uint32_t pos_state;                     | True                                                           | 
+ 727 |                                          | True                                                           | 
+ 728 |  /*                                      | True                                                           | 
+ 729 |   * If the dictionary was reached during | True                                                           | 
+ 730 |   * finish the possibly pending repeat i | True                                                           | 
+ 731 |   */                                     | True                                                           | 
+ 732 |  if (dict_has_space(&s->dict) && s->lzma | True                                                           | 
+ 733 |   dict_repeat(&s->dict, &s->lzma.len, s- | True                                                           | 
+ 734 |                                          | True                                                           | 
+ 735 |  /*                                      | True                                                           | 
+ 736 |   * Decode more LZMA symbols. One iterat | True                                                           | 
+ 737 |   * LZMA_IN_REQUIRED - 1 bytes.          | True                                                           | 
+ 738 |   */                                     | True                                                           | 
+ 739 |  while (dict_has_space(&s->dict) && !rc_ | True                                                           | 
+ 740 |   pos_state = s->dict.pos & s->lzma.pos_ | True                                                           | 
+ 741 |                                          | True                                                           | 
+ 742 |   if (!rc_bit(&s->rc, &s->lzma.is_match[ | True                                                           | 
+ 743 |     s->lzma.state][pos_state])) {        | True                                                           | 
+ 744 |    lzma_literal(s);                      | True                                                           | 
+ 745 |   } else {                               | True                                                           | 
+ 746 |    if (rc_bit(&s->rc, &s->lzma.is_rep[s- | True                                                           | 
+ 747 |     lzma_rep_match(s, pos_state);        | True                                                           | 
+ 748 |    else                                  | True                                                           | 
+ 749 |     lzma_match(s, pos_state);            | True                                                           | 
+ 750 |                                          | True                                                           | 
+ 751 |    if (!dict_repeat(&s->dict, &s->lzma.l | True                                                           | 
+ 752 |     return false;                        | True                                                           | 
+ 753 |   }                                      | True                                                           | 
+ 754 |  }                                       | True                                                           | 
+ 755 |                                          | True                                                           | 
+ 756 |  /*                                      | True                                                           | 
+ 757 |   * Having the range decoder always norm | True                                                           | 
+ 758 |   * this function makes it easier to cor | True                                                           | 
+ 759 |   */                                     | True                                                           | 
+ 760 |  rc_normalize(&s->rc);                   | True                                                           | 
+ 761 |                                          | True                                                           | 
+ 762 |  return true;                            | True                                                           | 
+ 763 | }                                        | True                                                           | 
+ 764 |                                          | True                                                           | 
+ 765 | /*                                       | True                                                           | 
+ 766 |  * Reset the LZMA decoder and range deco | True                                                           | 
+ 767 |  * here, because LZMA state may be reset | True                                                           | 
+ 768 |  */                                      | True                                                           | 
+ 769 | static void XZ_FUNC lzma_reset(struct xz | True                                                           | 
+ 770 | {                                        | True                                                           | 
+ 771 |  uint16_t *probs;                        | True                                                           | 
+ 772 |  size_t i;                               | True                                                           | 
+ 773 |                                          | True                                                           | 
+ 774 |  s->lzma.state = STATE_LIT_LIT;          | True                                                           | 
+ 775 |  s->lzma.rep0 = 0;                       | True                                                           | 
+ 776 |  s->lzma.rep1 = 0;                       | True                                                           | 
+ 777 |  s->lzma.rep2 = 0;                       | True                                                           | 
+ 778 |  s->lzma.rep3 = 0;                       | True                                                           | 
+ 779 |                                          | True                                                           | 
+ 780 |  /*                                      | True                                                           | 
+ 781 |   * All probabilities are initialized to | True                                                           | 
+ 782 |   * makes the code smaller by avoiding a | True                                                           | 
+ 783 |   * probability array.                   | True                                                           | 
+ 784 |   *                                      | True                                                           | 
+ 785 |   * This could be optimized so that only | True                                                           | 
+ 786 |   * probabilities that are actually requ | True                                                           | 
+ 787 |   * we would write 12 KiB less.          | True                                                           | 
+ 788 |   */                                     | True                                                           | 
+ 789 |  probs = s->lzma.is_match[0];            | True                                                           | 
+ 790 |  for (i = 0; i < PROBS_TOTAL; ++i)       | True                                                           | 
+ 791 |   probs[i] = RC_BIT_MODEL_TOTAL / 2;     | True                                                           | 
+ 792 |                                          | True                                                           | 
+ 793 |  rc_reset(&s->rc);                       | True                                                           | 
+ 794 | }                                        | True                                                           | 
+ 795 |                                          | True                                                           | 
+ 796 | /*                                       | True                                                           | 
+ 797 |  * Decode and validate LZMA properties ( | True                                                           | 
+ 798 |  * from the decoded lp and pb values. On | True                                                           | 
+ 799 |  * reset and true is returned.           | True                                                           | 
+ 800 |  */                                      | True                                                           | 
+ 801 | static bool XZ_FUNC lzma_props(struct xz | True                                                           | 
+ 802 | {                                        | True                                                           | 
+ 803 |  if (props > (4 * 5 + 4) * 9 + 8)        | True                                                           | 
+ 804 |   return false;                          | True                                                           | 
+ 805 |                                          | True                                                           | 
+ 806 |  s->lzma.pos_mask = 0;                   | True                                                           | 
+ 807 |  while (props >= 9 * 5) {                | True                                                           | 
+ 808 |   props -= 9 * 5;                        | True                                                           | 
+ 809 |   ++s->lzma.pos_mask;                    | True                                                           | 
+ 810 |  }                                       | True                                                           | 
+ 811 |                                          | True                                                           | 
+ 812 |  s->lzma.pos_mask = (1 << s->lzma.pos_ma | True                                                           | 
+ 813 |                                          | True                                                           | 
+ 814 |  s->lzma.literal_pos_mask = 0;           | True                                                           | 
+ 815 |  while (props >= 9) {                    | True                                                           | 
+ 816 |   props -= 9;                            | True                                                           | 
+ 817 |   ++s->lzma.literal_pos_mask;            | True                                                           | 
+ 818 |  }                                       | True                                                           | 
+ 819 |                                          | True                                                           | 
+ 820 |  s->lzma.lc = props;                     | True                                                           | 
+ 821 |                                          | True                                                           | 
+ 822 |  if (s->lzma.lc + s->lzma.literal_pos_ma | True                                                           | 
+ 823 |   return false;                          | True                                                           | 
+ 824 |                                          | True                                                           | 
+ 825 |  s->lzma.literal_pos_mask = (1 << s->lzm | True                                                           | 
+ 826 |                                          | True                                                           | 
+ 827 |  lzma_reset(s);                          | True                                                           | 
+ 828 |                                          | True                                                           | 
+ 829 |  return true;                            | True                                                           | 
+ 830 | }                                        | True                                                           | 
+ 831 |                                          | True                                                           | 
+ 832 | /*********                               | True                                                           | 
+ 833 |  * LZMA2 *                               | True                                                           | 
+ 834 |  *********/                              | True                                                           | 
+ 835 |                                          | True                                                           | 
+ 836 | /*                                       | True                                                           | 
+ 837 |  * The LZMA decoder assumes that if the  | True                                                           | 
+ 838 |  * been exceeded, it is safe to read up  | True                                                           | 
+ 839 |  * wrapper function takes care of making | True                                                           | 
+ 840 |  *                                       | True                                                           | 
+ 841 |  * As long as there is plenty of input l | True                                                           | 
+ 842 |  * chunk, we decode directly from the ca | True                                                           | 
+ 843 |  * there's LZMA_IN_REQUIRED bytes left.  | True                                                           | 
+ 844 |  * s->temp.buf, which (hopefully) gets f | True                                                           | 
+ 845 |  * function. We decode a few bytes from  | True                                                           | 
+ 846 |  * continue decoding from the caller-sup | True                                                           | 
+ 847 |  */                                      | True                                                           | 
+ 848 | static bool XZ_FUNC lzma2_lzma(struct xz | True                                                           | 
+ 849 | {                                        | True                                                           | 
+ 850 |  size_t in_avail;                        | True                                                           | 
+ 851 |  uint32_t tmp;                           | True                                                           | 
+ 852 |                                          | True                                                           | 
+ 853 |  in_avail = b->in_size - b->in_pos;      | True                                                           | 
+ 854 |  if (s->temp.size > 0 || s->lzma2.compre | True                                                           | 
+ 855 |   tmp = 2 * LZMA_IN_REQUIRED - s->temp.s | True                                                           | 
+ 856 |   if (tmp > s->lzma2.compressed - s->tem | True                                                           | 
+ 857 |    tmp = s->lzma2.compressed - s->temp.s | True                                                           | 
+ 858 |   if (tmp > in_avail)                    | True                                                           | 
+ 859 |    tmp = in_avail;                       | True                                                           | 
+ 860 |                                          | True                                                           | 
+ 861 |   memcpy(s->temp.buf + s->temp.size, b-> | True                                                           | 
+ 862 |                                          | True                                                           | 
+ 863 |   if (s->temp.size + tmp == s->lzma2.com | True                                                           | 
+ 864 |    memzero(s->temp.buf + s->temp.size +  | !(__KERNEL__)||(__KERNEL__)&&!(XZ_PREBOOT)                     | 
+ 865 |      sizeof(s->temp.buf)                 | !(__KERNEL__)||(__KERNEL__)&&!(XZ_PREBOOT)                     | 
+ 866 |       - s->temp.size - tmp);             | !(__KERNEL__)||(__KERNEL__)&&!(XZ_PREBOOT)                     | 
+ 867 |    s->rc.in_limit = s->temp.size + tmp;  | True                                                           | 
+ 868 |   } else if (s->temp.size + tmp < LZMA_I | True                                                           | 
+ 869 |    s->temp.size += tmp;                  | True                                                           | 
+ 870 |    b->in_pos += tmp;                     | True                                                           | 
+ 871 |    return true;                          | True                                                           | 
+ 872 |   } else {                               | True                                                           | 
+ 873 |    s->rc.in_limit = s->temp.size + tmp - | True                                                           | 
+ 874 |   }                                      | True                                                           | 
+ 875 |                                          | True                                                           | 
+ 876 |   s->rc.in = s->temp.buf;                | True                                                           | 
+ 877 |   s->rc.in_pos = 0;                      | True                                                           | 
+ 878 |                                          | True                                                           | 
+ 879 |   if (!lzma_main(s) || s->rc.in_pos > s- | True                                                           | 
+ 880 |    return false;                         | True                                                           | 
+ 881 |                                          | True                                                           | 
+ 882 |   s->lzma2.compressed -= s->rc.in_pos;   | True                                                           | 
+ 883 |                                          | True                                                           | 
+ 884 |   if (s->rc.in_pos < s->temp.size) {     | True                                                           | 
+ 885 |    s->temp.size -= s->rc.in_pos;         | True                                                           | 
+ 886 |    memmove(s->temp.buf, s->temp.buf + s- | True                                                           | 
+ 887 |      s->temp.size);                      | True                                                           | 
+ 888 |    return true;                          | True                                                           | 
+ 889 |   }                                      | True                                                           | 
+ 890 |                                          | True                                                           | 
+ 891 |   b->in_pos += s->rc.in_pos - s->temp.si | True                                                           | 
+ 892 |   s->temp.size = 0;                      | True                                                           | 
+ 893 |  }                                       | True                                                           | 
+ 894 |                                          | True                                                           | 
+ 895 |  in_avail = b->in_size - b->in_pos;      | True                                                           | 
+ 896 |  if (in_avail >= LZMA_IN_REQUIRED) {     | True                                                           | 
+ 897 |   s->rc.in = b->in;                      | True                                                           | 
+ 898 |   s->rc.in_pos = b->in_pos;              | True                                                           | 
+ 899 |                                          | True                                                           | 
+ 900 |   if (in_avail >= s->lzma2.compressed +  | True                                                           | 
+ 901 |    s->rc.in_limit = b->in_pos + s->lzma2 | True                                                           | 
+ 902 |   else                                   | True                                                           | 
+ 903 |    s->rc.in_limit = b->in_size - LZMA_IN | True                                                           | 
+ 904 |                                          | True                                                           | 
+ 905 |   if (!lzma_main(s))                     | True                                                           | 
+ 906 |    return false;                         | True                                                           | 
+ 907 |                                          | True                                                           | 
+ 908 |   in_avail = s->rc.in_pos - b->in_pos;   | True                                                           | 
+ 909 |   if (in_avail > s->lzma2.compressed)    | True                                                           | 
+ 910 |    return false;                         | True                                                           | 
+ 911 |                                          | True                                                           | 
+ 912 |   s->lzma2.compressed -= in_avail;       | True                                                           | 
+ 913 |   b->in_pos = s->rc.in_pos;              | True                                                           | 
+ 914 |  }                                       | True                                                           | 
+ 915 |                                          | True                                                           | 
+ 916 |  in_avail = b->in_size - b->in_pos;      | True                                                           | 
+ 917 |  if (in_avail < LZMA_IN_REQUIRED) {      | True                                                           | 
+ 918 |   if (in_avail > s->lzma2.compressed)    | True                                                           | 
+ 919 |    in_avail = s->lzma2.compressed;       | True                                                           | 
+ 920 |                                          | True                                                           | 
+ 921 |   memcpy(s->temp.buf, b->in + b->in_pos, | True                                                           | 
+ 922 |   s->temp.size = in_avail;               | True                                                           | 
+ 923 |   b->in_pos += in_avail;                 | True                                                           | 
+ 924 |  }                                       | True                                                           | 
+ 925 |                                          | True                                                           | 
+ 926 |  return true;                            | True                                                           | 
+ 927 | }                                        | True                                                           | 
+ 928 |                                          | True                                                           | 
+ 929 | /*                                       | True                                                           | 
+ 930 |  * Take care of the LZMA2 control layer, | True                                                           | 
+ 931 |  * decoding or copying of uncompressed c | True                                                           | 
+ 932 |  */                                      | True                                                           | 
+ 933 | XZ_EXTERN NOINLINE enum xz_ret XZ_FUNC x | ((XZ_H)|(__KERNEL__)|(XZ_EXTERN)|(XZ_PRIVATE_H)|(XZ_CONFIG_H)) | 
+ 934 |   struct xz_dec_lzma2 *s, struct xz_buf  | True                                                           | 
+ 935 | {                                        | True                                                           | 
+ 936 |  uint32_t tmp;                           | True                                                           | 
+ 937 |                                          | True                                                           | 
+ 938 |  while (b->in_pos < b->in_size || s->lzm | True                                                           | 
+ 939 |   switch (s->lzma2.sequence) {           | True                                                           | 
+ 940 |   case SEQ_CONTROL:                      | True                                                           | 
+ 941 |    /*                                    | True                                                           | 
+ 942 |     * LZMA2 control byte                 | True                                                           | 
+ 943 |     *                                    | True                                                           | 
+ 944 |     * Exact values:                      | True                                                           | 
+ 945 |     *   0x00   End marker                | True                                                           | 
+ 946 |     *   0x01   Dictionary reset followed | True                                                           | 
+ 947 |     *          an uncompressed chunk     | True                                                           | 
+ 948 |     *   0x02   Uncompressed chunk (no di | True                                                           | 
+ 949 |     *                                    | True                                                           | 
+ 950 |     * Highest three bits (s->control & 0 | True                                                           | 
+ 951 |     *   0xE0   Dictionary reset, new pro | True                                                           | 
+ 952 |     *          reset, followed by LZMA c | True                                                           | 
+ 953 |     *   0xC0   New properties and state  | True                                                           | 
+ 954 |     *          by LZMA compressed chunk  | True                                                           | 
+ 955 |     *          reset)                    | True                                                           | 
+ 956 |     *   0xA0   State reset using old pro | True                                                           | 
+ 957 |     *          followed by LZMA compress | True                                                           | 
+ 958 |     *          dictionary reset)         | True                                                           | 
+ 959 |     *   0x80   LZMA chunk (no dictionary | True                                                           | 
+ 960 |     *                                    | True                                                           | 
+ 961 |     * For LZMA compressed chunks, the lo | True                                                           | 
+ 962 |     * (s->control & 1F) are the highest  | True                                                           | 
+ 963 |     * uncompressed size (bits 16-20).    | True                                                           | 
+ 964 |     *                                    | True                                                           | 
+ 965 |     * A new LZMA2 stream must begin with | True                                                           | 
+ 966 |     * reset. The first LZMA chunk must s | True                                                           | 
+ 967 |     * properties and reset the LZMA stat | True                                                           | 
+ 968 |     *                                    | True                                                           | 
+ 969 |     * Values that don't match anything d | True                                                           | 
+ 970 |     * are invalid and we return XZ_DATA_ | True                                                           | 
+ 971 |     */                                   | True                                                           | 
+ 972 |    tmp = b->in[b->in_pos++];             | True                                                           | 
+ 973 |                                          | True                                                           | 
+ 974 |    if (tmp == 0x00)                      | True                                                           | 
+ 975 |     return XZ_STREAM_END;                | True                                                           | 
+ 976 |                                          | True                                                           | 
+ 977 |    if (tmp >= 0xE0 || tmp == 0x01) {     | True                                                           | 
+ 978 |     s->lzma2.need_props = true;          | True                                                           | 
+ 979 |     s->lzma2.need_dict_reset = false;    | True                                                           | 
+ 980 |     dict_reset(&s->dict, b);             | True                                                           | 
+ 981 |    } else if (s->lzma2.need_dict_reset)  | True                                                           | 
+ 982 |     return XZ_DATA_ERROR;                | True                                                           | 
+ 983 |    }                                     | True                                                           | 
+ 984 |                                          | True                                                           | 
+ 985 |    if (tmp >= 0x80) {                    | True                                                           | 
+ 986 |     s->lzma2.uncompressed = (tmp & 0x1F) | True                                                           | 
+ 987 |     s->lzma2.sequence = SEQ_UNCOMPRESSED | True                                                           | 
+ 988 |                                          | True                                                           | 
+ 989 |     if (tmp >= 0xC0) {                   | True                                                           | 
+ 990 |      /*                                  | True                                                           | 
+ 991 |       * When there are new properties,   | True                                                           | 
+ 992 |       * state reset is done at           | True                                                           | 
+ 993 |       * SEQ_PROPERTIES.                  | True                                                           | 
+ 994 |       */                                 | True                                                           | 
+ 995 |      s->lzma2.need_props = false;        | True                                                           | 
+ 996 |      s->lzma2.next_sequence              | True                                                           | 
+ 997 |        = SEQ_PROPERTIES;                 | True                                                           | 
+ 998 |     } else if (s->lzma2.need_props) {    | True                                                           | 
+ 999 |      return XZ_DATA_ERROR;               | True                                                           | 
+1000 |     } else {                             | True                                                           | 
+1001 |      s->lzma2.next_sequence              | True                                                           | 
+1002 |        = SEQ_LZMA_PREPARE;               | True                                                           | 
+1003 |      if (tmp >= 0xA0)                    | True                                                           | 
+1004 |       lzma_reset(s);                     | True                                                           | 
+1005 |     }                                    | True                                                           | 
+1006 |    } else {                              | True                                                           | 
+1007 |     if (tmp > 0x02)                      | True                                                           | 
+1008 |      return XZ_DATA_ERROR;               | True                                                           | 
+1009 |                                          | True                                                           | 
+1010 |     s->lzma2.sequence = SEQ_COMPRESSED_0 | True                                                           | 
+1011 |     s->lzma2.next_sequence = SEQ_COPY;   | True                                                           | 
+1012 |    }                                     | True                                                           | 
+1013 |                                          | True                                                           | 
+1014 |    break;                                | True                                                           | 
+1015 |                                          | True                                                           | 
+1016 |   case SEQ_UNCOMPRESSED_1:               | True                                                           | 
+1017 |    s->lzma2.uncompressed                 | True                                                           | 
+1018 |      += (uint32_t)b->in[b->in_pos++] <<  | True                                                           | 
+1019 |    s->lzma2.sequence = SEQ_UNCOMPRESSED_ | True                                                           | 
+1020 |    break;                                | True                                                           | 
+1021 |                                          | True                                                           | 
+1022 |   case SEQ_UNCOMPRESSED_2:               | True                                                           | 
+1023 |    s->lzma2.uncompressed                 | True                                                           | 
+1024 |      += (uint32_t)b->in[b->in_pos++] + 1 | True                                                           | 
+1025 |    s->lzma2.sequence = SEQ_COMPRESSED_0; | True                                                           | 
+1026 |    break;                                | True                                                           | 
+1027 |                                          | True                                                           | 
+1028 |   case SEQ_COMPRESSED_0:                 | True                                                           | 
+1029 |    s->lzma2.compressed                   | True                                                           | 
+1030 |      = (uint32_t)b->in[b->in_pos++] << 8 | True                                                           | 
+1031 |    s->lzma2.sequence = SEQ_COMPRESSED_1; | True                                                           | 
+1032 |    break;                                | True                                                           | 
+1033 |                                          | True                                                           | 
+1034 |   case SEQ_COMPRESSED_1:                 | True                                                           | 
+1035 |    s->lzma2.compressed                   | True                                                           | 
+1036 |      += (uint32_t)b->in[b->in_pos++] + 1 | True                                                           | 
+1037 |    s->lzma2.sequence = s->lzma2.next_seq | True                                                           | 
+1038 |    break;                                | True                                                           | 
+1039 |                                          | True                                                           | 
+1040 |   case SEQ_PROPERTIES:                   | True                                                           | 
+1041 |    if (!lzma_props(s, b->in[b->in_pos++] | True                                                           | 
+1042 |     return XZ_DATA_ERROR;                | True                                                           | 
+1043 |                                          | True                                                           | 
+1044 |    s->lzma2.sequence = SEQ_LZMA_PREPARE; | True                                                           | 
+1045 |                                          | True                                                           | 
+1046 |   case SEQ_LZMA_PREPARE:                 | True                                                           | 
+1047 |    if (s->lzma2.compressed < RC_INIT_BYT | True                                                           | 
+1048 |     return XZ_DATA_ERROR;                | True                                                           | 
+1049 |                                          | True                                                           | 
+1050 |    if (!rc_read_init(&s->rc, b))         | True                                                           | 
+1051 |     return XZ_OK;                        | True                                                           | 
+1052 |                                          | True                                                           | 
+1053 |    s->lzma2.compressed -= RC_INIT_BYTES; | True                                                           | 
+1054 |    s->lzma2.sequence = SEQ_LZMA_RUN;     | True                                                           | 
+1055 |                                          | True                                                           | 
+1056 |   case SEQ_LZMA_RUN:                     | True                                                           | 
+1057 |    /*                                    | True                                                           | 
+1058 |     * Set dictionary limit to indicate h | True                                                           | 
+1059 |     * to be encoded at maximum. Decode n | True                                                           | 
+1060 |     * dictionary. Flush the new data fro | True                                                           | 
+1061 |     * b->out. Check if we finished decod | True                                                           | 
+1062 |     * In case the dictionary got full bu | True                                                           | 
+1063 |     * the output buffer yet, we may run  | True                                                           | 
+1064 |     * multiple times without changing s- | True                                                           | 
+1065 |     */                                   | True                                                           | 
+1066 |    dict_limit(&s->dict, min_t(size_t,    | True                                                           | 
+1067 |      b->out_size - b->out_pos,           | !(__KERNEL__)                                                  | 
+1068 |      s->lzma2.uncompressed));            | !(__KERNEL__)                                                  | 
+1069 |    if (!lzma2_lzma(s, b))                | True                                                           | 
+1070 |     return XZ_DATA_ERROR;                | True                                                           | 
+1071 |                                          | True                                                           | 
+1072 |    s->lzma2.uncompressed -= dict_flush(& | True                                                           | 
+1073 |                                          | True                                                           | 
+1074 |    if (s->lzma2.uncompressed == 0) {     | True                                                           | 
+1075 |     if (s->lzma2.compressed > 0 || s->lz | True                                                           | 
+1076 |       || !rc_is_finished(&s->rc))        | True                                                           | 
+1077 |      return XZ_DATA_ERROR;               | True                                                           | 
+1078 |                                          | True                                                           | 
+1079 |     rc_reset(&s->rc);                    | True                                                           | 
+1080 |     s->lzma2.sequence = SEQ_CONTROL;     | True                                                           | 
+1081 |    } else if (b->out_pos == b->out_size  | True                                                           | 
+1082 |      || (b->in_pos == b->in_size         | True                                                           | 
+1083 |       && s->temp.size                    | True                                                           | 
+1084 |       < s->lzma2.compressed)) {          | True                                                           | 
+1085 |     return XZ_OK;                        | True                                                           | 
+1086 |    }                                     | True                                                           | 
+1087 |                                          | True                                                           | 
+1088 |    break;                                | True                                                           | 
+1089 |                                          | True                                                           | 
+1090 |   case SEQ_COPY:                         | True                                                           | 
+1091 |    dict_uncompressed(&s->dict, b, &s->lz | True                                                           | 
+1092 |    if (s->lzma2.compressed > 0)          | True                                                           | 
+1093 |     return XZ_OK;                        | True                                                           | 
+1094 |                                          | True                                                           | 
+1095 |    s->lzma2.sequence = SEQ_CONTROL;      | True                                                           | 
+1096 |    break;                                | True                                                           | 
+1097 |   }                                      | True                                                           | 
+1098 |  }                                       | True                                                           | 
+1099 |                                          | True                                                           | 
+1100 |  return XZ_OK;                           | True                                                           | 
+1101 | }                                        | True                                                           | 
+1102 |                                          | True                                                           | 
+1103 | XZ_EXTERN struct xz_dec_lzma2 * XZ_FUNC  | ((XZ_H)|(__KERNEL__)|(XZ_EXTERN)|(XZ_PRIVATE_H)|(XZ_CONFIG_H)) | 
+1104 |   enum xz_mode mode, uint32_t dict_max)  | True                                                           | 
+1105 | {                                        | True                                                           | 
+1106 |  struct xz_dec_lzma2 *s = kmalloc(sizeof | True                                                           | 
+1107 |  if (s == NULL)                          | True                                                           | 
+1108 |   return NULL;                           | True                                                           | 
+1109 |                                          | True                                                           | 
+1110 |  s->dict.mode = mode;                    | True                                                           | 
+1111 |  s->dict.size_max = dict_max;            | True                                                           | 
+1112 |                                          | True                                                           | 
+1113 |  if (DEC_IS_PREALLOC(mode)) {            | True                                                           | 
+1114 |   s->dict.buf = vmalloc(dict_max);       | True                                                           | 
+1115 |   if (s->dict.buf == NULL) {             | True                                                           | 
+1116 |    kfree(s);                             | !(__KERNEL__)                                                  | 
+1117 |    return NULL;                          | True                                                           | 
+1118 |   }                                      | True                                                           | 
+1119 |  } else if (DEC_IS_DYNALLOC(mode)) {     | True                                                           | 
+1120 |   s->dict.buf = NULL;                    | True                                                           | 
+1121 |   s->dict.allocated = 0;                 | True                                                           | 
+1122 |  }                                       | True                                                           | 
+1123 |                                          | True                                                           | 
+1124 |  return s;                               | True                                                           | 
+1125 | }                                        | True                                                           | 
+1126 |                                          | True                                                           | 
+1127 | XZ_EXTERN enum xz_ret XZ_FUNC xz_dec_lzm | ((XZ_H)|(__KERNEL__)|(XZ_EXTERN)|(XZ_PRIVATE_H)|(XZ_CONFIG_H)) | 
+1128 |   struct xz_dec_lzma2 *s, uint8_t props) | True                                                           | 
+1129 | {                                        | True                                                           | 
+1130 |  /* This limits dictionary size to 3 GiB | True                                                           | 
+1131 |  if (props > 39)                         | True                                                           | 
+1132 |   return XZ_OPTIONS_ERROR;               | True                                                           | 
+1133 |                                          | True                                                           | 
+1134 |  s->dict.size = 2 + (props & 1);         | True                                                           | 
+1135 |  s->dict.size <<= (props >> 1) + 11;     | True                                                           | 
+1136 |                                          | True                                                           | 
+1137 |  if (DEC_IS_MULTI(s->dict.mode)) {       | True                                                           | 
+1138 |   if (s->dict.size > s->dict.size_max)   | True                                                           | 
+1139 |    return XZ_MEMLIMIT_ERROR;             | True                                                           | 
+1140 |                                          | True                                                           | 
+1141 |   s->dict.end = s->dict.size;            | True                                                           | 
+1142 |                                          | True                                                           | 
+1143 |   if (DEC_IS_DYNALLOC(s->dict.mode)) {   | True                                                           | 
+1144 |    if (s->dict.allocated < s->dict.size) | True                                                           | 
+1145 |     vfree(s->dict.buf);                  | !(__KERNEL__)                                                  | 
+1146 |     s->dict.buf = vmalloc(s->dict.size); | True                                                           | 
+1147 |     if (s->dict.buf == NULL) {           | True                                                           | 
+1148 |      s->dict.allocated = 0;              | True                                                           | 
+1149 |      return XZ_MEM_ERROR;                | True                                                           | 
+1150 |     }                                    | True                                                           | 
+1151 |    }                                     | True                                                           | 
+1152 |   }                                      | True                                                           | 
+1153 |  }                                       | True                                                           | 
+1154 |                                          | True                                                           | 
+1155 |  s->lzma.len = 0;                        | True                                                           | 
+1156 |                                          | True                                                           | 
+1157 |  s->lzma2.sequence = SEQ_CONTROL;        | True                                                           | 
+1158 |  s->lzma2.need_dict_reset = true;        | True                                                           | 
+1159 |                                          | True                                                           | 
+1160 |  s->temp.size = 0;                       | True                                                           | 
+1161 |                                          | True                                                           | 
+1162 |  return XZ_OK;                           | True                                                           | 
+1163 | }                                        | True                                                           | 
+1164 |                                          | True                                                           | 
+1165 | XZ_EXTERN void XZ_FUNC xz_dec_lzma2_end( | ((XZ_H)|(__KERNEL__)|(XZ_EXTERN)|(XZ_PRIVATE_H)|(XZ_CONFIG_H)) | 
+1166 | {                                        | True                                                           | 
+1167 |  if (DEC_IS_MULTI(s->dict.mode))         | True                                                           | 
+1168 |   vfree(s->dict.buf);                    | !(__KERNEL__)                                                  | 
+1169 |                                          | True                                                           | 
+1170 |  kfree(s);                               | !(__KERNEL__)                                                  | 
+1171 | }                                        | True                                                           | 
+-----+------------------------------------------+----------------------------------------------------------------+
+     |                                          | +191MB, 650ms                                                  | 

@@ -1,0 +1,1972 @@
+FILE: data/raw/busybox-1.38.0/archival/dpkg.c
+Resultado PCLocator:
+   # | line of code                             | Merge                        | 
+-----+------------------------------------------+------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                         | 
+   2 | /*                                       | True                         | 
+   3 |  *  mini dpkg implementation for busybox | True                         | 
+   4 |  *  this is not meant as a replacement f | True                         | 
+   5 |  *                                       | True                         | 
+   6 |  *  written by glenn mcgrath with the he | True                         | 
+   7 |  *  copyright (c) 2001 by glenn mcgrath  | True                         | 
+   8 |  *                                       | True                         | 
+   9 |  *  parts of the version comparison code | True                         | 
+  10 |  *  application which is licensed GPLv2  | True                         | 
+  11 |  *  copyright (c) 1995 Ian Jackson <ian@ | True                         | 
+  12 |  *                                       | True                         | 
+  13 |  *  started life as a busybox implementa | True                         | 
+  14 |  *                                       | True                         | 
+  15 |  * Licensed under GPLv2 or later, see fi | True                         | 
+  16 |  */                                      | True                         | 
+  17 | /*                                       | True                         | 
+  18 |  * known difference between busybox dpkg | True                         | 
+  19 |  * consider important, its worth keeping | True                         | 
+  20 |  * make it easier to maintain.           | True                         | 
+  21 |  *  - the first value for the confflile: | True                         | 
+  22 |  *  - when installing a package the stat | True                         | 
+  23 |  *      section, rather than just after  | True                         | 
+  24 |  *                                       | True                         | 
+  25 |  * bugs that need to be fixed            | True                         | 
+  26 |  *  - (unknown, please let me know when  | True                         | 
+  27 |  */                                      | True                         | 
+  28 | //config:config DPKG                     | True                         | 
+  29 | //config: bool "dpkg (43 kb)"            | True                         | 
+  30 | //config: default y                      | True                         | 
+  31 | //config: select FEATURE_SEAMLESS_GZ     | True                         | 
+  32 | //config: help                           | True                         | 
+  33 | //config: dpkg is a medium-level tool to | True                         | 
+  34 | //config: Debian packages.               | True                         | 
+  35 | //config:                                | True                         | 
+  36 | //config: This implementation of dpkg ha | True                         | 
+  37 | //config: you should use the official dp | True                         | 
+  38 |                                          | True                         | 
+  39 | //applet:IF_DPKG(APPLET(dpkg, BB_DIR_USR | True                         | 
+  40 |                                          | True                         | 
+  41 | //kbuild:lib-$(CONFIG_DPKG) += dpkg.o    | True                         | 
+  42 |                                          | True                         | 
+  43 | //usage:#define dpkg_trivial_usage       | True                         | 
+  44 | //usage:       "[-ilCPru] [-F OPT] PACKA | True                         | 
+  45 | //usage:#define dpkg_full_usage "\n\n"   | True                         | 
+  46 | //usage:       "Install, remove and mana | True                         | 
+  47 | //usage: IF_LONG_OPTS(                   | True                         | 
+  48 | //usage:     "\n -i,--install Install th | True                         | 
+  49 | //usage:     "\n -l,--list List of insta | True                         | 
+  50 | //usage:     "\n --configure Configure a | True                         | 
+  51 | //usage:     "\n -P,--purge Purge all fi | True                         | 
+  52 | //usage:     "\n -r,--remove Remove all  | True                         | 
+  53 | //usage:     "\n --unpack Unpack a packa | True                         | 
+  54 | //usage:     "\n --force-depends Ignore  | True                         | 
+  55 | //usage:     "\n --force-confnew Overwri | True                         | 
+  56 | //usage:     "\n --force-confold Keep ol | True                         | 
+  57 | //usage: )                               | True                         | 
+  58 | //usage: IF_NOT_LONG_OPTS(               | True                         | 
+  59 | //usage:     "\n -i  Install the package | True                         | 
+  60 | //usage:     "\n -l  List of installed p | True                         | 
+  61 | //usage:     "\n -C  Configure an unpack | True                         | 
+  62 | //usage:     "\n -P  Purge all files of  | True                         | 
+  63 | //usage:     "\n -r  Remove all but the  | True                         | 
+  64 | //usage:     "\n -u  Unpack a package, b | True                         | 
+  65 | //usage:     "\n -F depends Ignore depen | True                         | 
+  66 | //usage:     "\n -F confnew Overwrite ex | True                         | 
+  67 | //usage:     "\n -F confold Keep old con | True                         | 
+  68 | //usage: )                               | True                         | 
+  69 |                                          | True                         | 
+  70 | #include "libbb.h"                       | True                         | 
+  71 | #include <fnmatch.h>                     | True                         | 
+  72 | #include "bb_archive.h"                  | True                         | 
+  73 |                                          | True                         | 
+  74 | /* note: if you vary hash_prime sizes be | True                         | 
+  75 |  * 1) tweaking these will have a big eff | True                         | 
+  76 |  * 2) for computational efficiency these | True                         | 
+  77 |  *    larger than the maximum number of  | True                         | 
+  78 |  * 3) all _hash_prime's must be a prime  | True                         | 
+  79 |  *    for a prime, try http://www.utm.ed | True                         | 
+  80 |  * 4) if you go bigger than 15 bits you  | True                         | 
+  81 |  *    sometimes cast to an unsigned, if  | True                         | 
+  82 |  *    int's and chaos is assured, 16381  | True                         | 
+  83 |  */                                      | True                         | 
+  84 |                                          | True                         | 
+  85 | /* NAME_HASH_PRIME, Stores package names | True                         | 
+  86 |  * I estimate it should be at least 50%  | True                         | 
+  87 |  * as there a lot of duplicate version n | True                         | 
+  88 | #define NAME_HASH_PRIME 16381            | True                         | 
+  89 |                                          | True                         | 
+  90 | /* PACKAGE_HASH_PRIME, Maximum number of | True                         | 
+  91 |  * It must not be smaller than STATUS_HA | True                         | 
+  92 |  * Currently only packages from status_h | True                         | 
+  93 |  * future this may be used to store pack | True                         | 
+  94 |  * but an available_hashtable, and even  | True                         | 
+  95 |  * Package can be stored more than once  | True                         | 
+  96 |  * e.g. The same package may have differ | True                         | 
+  97 |  *      and available file */            | True                         | 
+  98 | #define PACKAGE_HASH_PRIME 10007         | True                         | 
+  99 | typedef struct edge_s {                  | True                         | 
+ 100 |  unsigned operator:4; /* was:3 */        | True                         | 
+ 101 |  unsigned type:4;                        | True                         | 
+ 102 |  unsigned name:16; /* was:14 */          | True                         | 
+ 103 |  unsigned version:16; /* was:14 */       | True                         | 
+ 104 | } edge_t;                                | True                         | 
+ 105 |                                          | True                         | 
+ 106 | typedef struct common_node_s {           | True                         | 
+ 107 |  unsigned name:16; /* was:14 */          | True                         | 
+ 108 |  unsigned version:16; /* was:14 */       | True                         | 
+ 109 |  unsigned num_of_edges:16; /* was:14 */  | True                         | 
+ 110 |  edge_t **edge;                          | True                         | 
+ 111 | } common_node_t;                         | True                         | 
+ 112 |                                          | True                         | 
+ 113 | /* Currently it doesn't store packages t | True                         | 
+ 114 |  * So it only really has to be the size  | True                         | 
+ 115 |  * likely to be installed at any one tim | True                         | 
+ 116 | #define STATUS_HASH_PRIME 8191           | True                         | 
+ 117 | typedef struct status_node_s {           | True                         | 
+ 118 |  unsigned package:16; /* was:14 */       | True                         | 
+ 119 |  unsigned status:16; /* was:14 */        | True                         | 
+ 120 | } status_node_t;                         | True                         | 
+ 121 |                                          | True                         | 
+ 122 |                                          | True                         | 
+ 123 | /* Globals */                            | True                         | 
+ 124 | struct globals {                         | True                         | 
+ 125 |  char          *name_hashtable[NAME_HASH | True                         | 
+ 126 |  common_node_t *package_hashtable[PACKAG | True                         | 
+ 127 |  status_node_t *status_hashtable[STATUS_ | True                         | 
+ 128 | };                                       | True                         | 
+ 129 | #define G (*ptr_to_globals)              | True                         | 
+ 130 | #define name_hashtable    (G.name_hashta | True                         | 
+ 131 | #define package_hashtable (G.package_has | True                         | 
+ 132 | #define status_hashtable  (G.status_hash | True                         | 
+ 133 | #define INIT_G() do { \                  | True                         | 
+ 134 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                         | 
+ 135 | } while (0)                              | True                         | 
+ 136 |                                          | True                         | 
+ 137 |                                          | True                         | 
+ 138 | /* Even numbers are for 'extras', like o | True                         | 
+ 139 | enum edge_type_e {                       | True                         | 
+ 140 |  EDGE_NULL = 0,                          | True                         | 
+ 141 |  EDGE_PRE_DEPENDS = 1,                   | True                         | 
+ 142 |  EDGE_OR_PRE_DEPENDS = 2,                | True                         | 
+ 143 |  EDGE_DEPENDS = 3,                       | True                         | 
+ 144 |  EDGE_OR_DEPENDS = 4,                    | True                         | 
+ 145 |  EDGE_REPLACES = 5,                      | True                         | 
+ 146 |  EDGE_PROVIDES = 7,                      | True                         | 
+ 147 |  EDGE_CONFLICTS = 9,                     | True                         | 
+ 148 |  EDGE_SUGGESTS = 11,                     | True                         | 
+ 149 |  EDGE_RECOMMENDS = 13,                   | True                         | 
+ 150 |  EDGE_ENHANCES = 15                      | True                         | 
+ 151 | };                                       | True                         | 
+ 152 | enum operator_e {                        | True                         | 
+ 153 |  VER_NULL = 0,                           | True                         | 
+ 154 |  VER_EQUAL = 1,                          | True                         | 
+ 155 |  VER_LESS = 2,                           | True                         | 
+ 156 |  VER_LESS_EQUAL = 3,                     | True                         | 
+ 157 |  VER_MORE = 4,                           | True                         | 
+ 158 |  VER_MORE_EQUAL = 5,                     | True                         | 
+ 159 |  VER_ANY = 6                             | True                         | 
+ 160 | };                                       | True                         | 
+ 161 |                                          | True                         | 
+ 162 | typedef struct deb_file_s {              | True                         | 
+ 163 |  char *control_file;                     | True                         | 
+ 164 |  char *filename;                         | True                         | 
+ 165 |  unsigned package:16; /* was:14 */       | True                         | 
+ 166 | } deb_file_t;                            | True                         | 
+ 167 |                                          | True                         | 
+ 168 |                                          | True                         | 
+ 169 | static void make_hash(const char *key, u | True                         | 
+ 170 | {                                        | True                         | 
+ 171 |  unsigned long hash_num = key[0];        | True                         | 
+ 172 |  int len = strlen(key);                  | True                         | 
+ 173 |  int i;                                  | True                         | 
+ 174 |                                          | True                         | 
+ 175 |  /* Maybe i should have uses a "proper"  | True                         | 
+ 176 |   * of making one up myself, seems to be | True                         | 
+ 177 |  for (i = 1; i < len; i++) {             | True                         | 
+ 178 |   /* shifts the ascii based value and ad | True                         | 
+ 179 |    * shift amount is mod 24 because long | True                         | 
+ 180 |    * to be shifted is 8, don't want to s | True                         | 
+ 181 |    * no effect */                        | True                         | 
+ 182 |   hash_num += (key[i] + key[i-1]) << ((k | True                         | 
+ 183 |  }                                       | True                         | 
+ 184 |  *start = (unsigned) hash_num % hash_pri | True                         | 
+ 185 |  *decrement = (unsigned) 1 + (hash_num % | True                         | 
+ 186 | }                                        | True                         | 
+ 187 |                                          | True                         | 
+ 188 | /* this adds the key to the hash table * | True                         | 
+ 189 | static int search_name_hashtable(const c | True                         | 
+ 190 | {                                        | True                         | 
+ 191 |  unsigned probe_address;                 | True                         | 
+ 192 |  unsigned probe_decrement;               | True                         | 
+ 193 |                                          | True                         | 
+ 194 |  make_hash(key, &probe_address, &probe_d | True                         | 
+ 195 |  while (name_hashtable[probe_address] != | True                         | 
+ 196 |   if (strcmp(name_hashtable[probe_addres | True                         | 
+ 197 |    return probe_address;                 | True                         | 
+ 198 |   }                                      | True                         | 
+ 199 |   probe_address -= probe_decrement;      | True                         | 
+ 200 |   if ((int)probe_address < 0) {          | True                         | 
+ 201 |    probe_address += NAME_HASH_PRIME;     | True                         | 
+ 202 |   }                                      | True                         | 
+ 203 |  }                                       | True                         | 
+ 204 |  name_hashtable[probe_address] = xstrdup | True                         | 
+ 205 |  return probe_address;                   | True                         | 
+ 206 | }                                        | True                         | 
+ 207 |                                          | True                         | 
+ 208 | /* this DOESN'T add the key to the hasht | True                         | 
+ 209 |  * TODO make it consistent with search_n | True                         | 
+ 210 |  */                                      | True                         | 
+ 211 | static unsigned search_status_hashtable( | True                         | 
+ 212 | {                                        | True                         | 
+ 213 |  unsigned probe_address;                 | True                         | 
+ 214 |  unsigned probe_decrement;               | True                         | 
+ 215 |                                          | True                         | 
+ 216 |  make_hash(key, &probe_address, &probe_d | True                         | 
+ 217 |  while (status_hashtable[probe_address]  | True                         | 
+ 218 |   if (strcmp(key, name_hashtable[package | True                         | 
+ 219 |    break;                                | True                         | 
+ 220 |   }                                      | True                         | 
+ 221 |   probe_address -= probe_decrement;      | True                         | 
+ 222 |   if ((int)probe_address < 0) {          | True                         | 
+ 223 |    probe_address += STATUS_HASH_PRIME;   | True                         | 
+ 224 |   }                                      | True                         | 
+ 225 |  }                                       | True                         | 
+ 226 |  return probe_address;                   | True                         | 
+ 227 | }                                        | True                         | 
+ 228 |                                          | True                         | 
+ 229 | static int order(char x)                 | True                         | 
+ 230 | {                                        | True                         | 
+ 231 |  return (x == '~' ? -1                   | True                         | 
+ 232 |   : x == '\0' ? 0                        | True                         | 
+ 233 |   : isdigit(x) ? 0                       | True                         | 
+ 234 |   : isalpha(x) ? x                       | True                         | 
+ 235 |   : (unsigned char)x + 256               | True                         | 
+ 236 |  );                                      | True                         | 
+ 237 | }                                        | True                         | 
+ 238 |                                          | True                         | 
+ 239 | /* This code is taken from dpkg and modi | True                         | 
+ 240 | static int version_compare_part(const ch | True                         | 
+ 241 | {                                        | True                         | 
+ 242 |  if (!val) val = "";                     | True                         | 
+ 243 |  if (!ref) ref = "";                     | True                         | 
+ 244 |                                          | True                         | 
+ 245 |  while (*val || *ref) {                  | True                         | 
+ 246 |   int first_diff;                        | True                         | 
+ 247 |                                          | True                         | 
+ 248 |   while ((*val && !isdigit(*val)) || (*r | True                         | 
+ 249 |    int vc = order(*val);                 | True                         | 
+ 250 |    int rc = order(*ref);                 | True                         | 
+ 251 |    if (vc != rc)                         | True                         | 
+ 252 |     return vc - rc;                      | True                         | 
+ 253 |    val++;                                | True                         | 
+ 254 |    ref++;                                | True                         | 
+ 255 |   }                                      | True                         | 
+ 256 |                                          | True                         | 
+ 257 |   while (*val == '0')                    | True                         | 
+ 258 |    val++;                                | True                         | 
+ 259 |   while (*ref == '0')                    | True                         | 
+ 260 |    ref++;                                | True                         | 
+ 261 |                                          | True                         | 
+ 262 |   first_diff = 0;                        | True                         | 
+ 263 |   while (isdigit(*val) && isdigit(*ref)) | True                         | 
+ 264 |    if (first_diff == 0)                  | True                         | 
+ 265 |     first_diff = *val - *ref;            | True                         | 
+ 266 |    val++;                                | True                         | 
+ 267 |    ref++;                                | True                         | 
+ 268 |   }                                      | True                         | 
+ 269 |   if (isdigit(*val))                     | True                         | 
+ 270 |    return 1;                             | True                         | 
+ 271 |   if (isdigit(*ref))                     | True                         | 
+ 272 |    return -1;                            | True                         | 
+ 273 |   if (first_diff)                        | True                         | 
+ 274 |    return first_diff;                    | True                         | 
+ 275 |  }                                       | True                         | 
+ 276 |  return 0;                               | True                         | 
+ 277 | }                                        | True                         | 
+ 278 |                                          | True                         | 
+ 279 | /* if ver1 < ver2 return -1,             | True                         | 
+ 280 |  * if ver1 = ver2 return 0,              | True                         | 
+ 281 |  * if ver1 > ver2 return 1,              | True                         | 
+ 282 |  */                                      | True                         | 
+ 283 | static int version_compare(const unsigne | True                         | 
+ 284 | {                                        | True                         | 
+ 285 |  char *ch_ver1 = name_hashtable[ver1];   | True                         | 
+ 286 |  char *ch_ver2 = name_hashtable[ver2];   | True                         | 
+ 287 |  unsigned epoch1 = 0, epoch2 = 0;        | True                         | 
+ 288 |  char *colon;                            | True                         | 
+ 289 |  char *deb_ver1, *deb_ver2;              | True                         | 
+ 290 |  char *upstream_ver1;                    | True                         | 
+ 291 |  char *upstream_ver2;                    | True                         | 
+ 292 |  int result;                             | True                         | 
+ 293 |                                          | True                         | 
+ 294 |  /* Compare epoch */                     | True                         | 
+ 295 |  colon = strchr(ch_ver1, ':');           | True                         | 
+ 296 |  if (colon) {                            | True                         | 
+ 297 |   epoch1 = atoi(ch_ver1);                | True                         | 
+ 298 |   ch_ver1 = colon + 1;                   | True                         | 
+ 299 |  }                                       | True                         | 
+ 300 |  colon = strchr(ch_ver2, ':');           | True                         | 
+ 301 |  if (colon) {                            | True                         | 
+ 302 |   epoch2 = atoi(ch_ver2);                | True                         | 
+ 303 |   ch_ver2 = colon + 1;                   | True                         | 
+ 304 |  }                                       | True                         | 
+ 305 |  if (epoch1 < epoch2) {                  | True                         | 
+ 306 |   return -1;                             | True                         | 
+ 307 |  }                                       | True                         | 
+ 308 |  if (epoch1 > epoch2) {                  | True                         | 
+ 309 |   return 1;                              | True                         | 
+ 310 |  }                                       | True                         | 
+ 311 |                                          | True                         | 
+ 312 |  /* Compare upstream version */          | True                         | 
+ 313 |  upstream_ver1 = xstrdup(ch_ver1);       | True                         | 
+ 314 |  upstream_ver2 = xstrdup(ch_ver2);       | True                         | 
+ 315 |                                          | True                         | 
+ 316 |  /* Chop off debian version, and store f | True                         | 
+ 317 |  deb_ver1 = strrchr(upstream_ver1, '-'); | True                         | 
+ 318 |  deb_ver2 = strrchr(upstream_ver2, '-'); | True                         | 
+ 319 |  if (deb_ver1) {                         | True                         | 
+ 320 |   *deb_ver1++ = '\0';                    | True                         | 
+ 321 |  }                                       | True                         | 
+ 322 |  if (deb_ver2) {                         | True                         | 
+ 323 |   *deb_ver2++ = '\0';                    | True                         | 
+ 324 |  }                                       | True                         | 
+ 325 |  result = version_compare_part(upstream_ | True                         | 
+ 326 |  if (result == 0) {                      | True                         | 
+ 327 |   /* Compare debian versions */          | True                         | 
+ 328 |   result = version_compare_part(deb_ver1 | True                         | 
+ 329 |  }                                       | True                         | 
+ 330 |                                          | True                         | 
+ 331 |  free(upstream_ver1);                    | True                         | 
+ 332 |  free(upstream_ver2);                    | True                         | 
+ 333 |  return result;                          | True                         | 
+ 334 | }                                        | True                         | 
+ 335 |                                          | True                         | 
+ 336 | static int test_version(const unsigned v | True                         | 
+ 337 | {                                        | True                         | 
+ 338 |  const int version_result = version_comp | True                         | 
+ 339 |  switch (operator) {                     | True                         | 
+ 340 |  case VER_ANY:                           | True                         | 
+ 341 |   return TRUE;                           | True                         | 
+ 342 |  case VER_EQUAL:                         | True                         | 
+ 343 |   return (version_result == 0);          | True                         | 
+ 344 |  case VER_LESS:                          | True                         | 
+ 345 |   return (version_result < 0);           | True                         | 
+ 346 |  case VER_LESS_EQUAL:                    | True                         | 
+ 347 |   return (version_result <= 0);          | True                         | 
+ 348 |  case VER_MORE:                          | True                         | 
+ 349 |   return (version_result > 0);           | True                         | 
+ 350 |  case VER_MORE_EQUAL:                    | True                         | 
+ 351 |   return (version_result >= 0);          | True                         | 
+ 352 |  }                                       | True                         | 
+ 353 |  return FALSE;                           | True                         | 
+ 354 | }                                        | True                         | 
+ 355 |                                          | True                         | 
+ 356 | static int search_package_hashtable(cons | True                         | 
+ 357 | {                                        | True                         | 
+ 358 |  unsigned probe_address;                 | True                         | 
+ 359 |  unsigned probe_decrement;               | True                         | 
+ 360 |                                          | True                         | 
+ 361 |  make_hash(name_hashtable[name], &probe_ | True                         | 
+ 362 |  while (package_hashtable[probe_address] | True                         | 
+ 363 |   if (package_hashtable[probe_address]-> | True                         | 
+ 364 |    if (operator == VER_ANY) {            | True                         | 
+ 365 |     return probe_address;                | True                         | 
+ 366 |    }                                     | True                         | 
+ 367 |    if (test_version(package_hashtable[pr | True                         | 
+ 368 |     return probe_address;                | True                         | 
+ 369 |    }                                     | True                         | 
+ 370 |   }                                      | True                         | 
+ 371 |   probe_address -= probe_decrement;      | True                         | 
+ 372 |   if ((int)probe_address < 0) {          | True                         | 
+ 373 |    probe_address += PACKAGE_HASH_PRIME;  | True                         | 
+ 374 |   }                                      | True                         | 
+ 375 |  }                                       | True                         | 
+ 376 |  return probe_address;                   | True                         | 
+ 377 | }                                        | True                         | 
+ 378 |                                          | True                         | 
+ 379 | /*                                       | True                         | 
+ 380 |  * This function searches through the en | True                         | 
+ 381 |  * for a package which provides "needle" | True                         | 
+ 382 |  * the package_hashtable for the providi | True                         | 
+ 383 |  *                                       | True                         | 
+ 384 |  * needle is the index into name_hashtab | True                         | 
+ 385 |  * looking for.                          | True                         | 
+ 386 |  *                                       | True                         | 
+ 387 |  * start_at is the index in the package_ | True                         | 
+ 388 |  * at. If start_at is -1 then start at t | True                         | 
+ 389 |  * for repeated searches since more than | True                         | 
+ 390 |  * needle.                               | True                         | 
+ 391 |  *                                       | True                         | 
+ 392 |  * FIXME: I don't think this is very eff | True                         | 
+ 393 |  * it simple for now until it proves to  | True                         | 
+ 394 |  */                                      | True                         | 
+ 395 | static int search_for_provides(int needl | True                         | 
+ 396 | {                                        | True                         | 
+ 397 |  int i, j;                               | True                         | 
+ 398 |  common_node_t *p;                       | True                         | 
+ 399 |  for (i = start_at + 1; i < PACKAGE_HASH | True                         | 
+ 400 |   p = package_hashtable[i];              | True                         | 
+ 401 |   if (p == NULL)                         | True                         | 
+ 402 |    continue;                             | True                         | 
+ 403 |   for (j = 0; j < p->num_of_edges; j++)  | True                         | 
+ 404 |    if (p->edge[j]->type == EDGE_PROVIDES | True                         | 
+ 405 |     return i;                            | True                         | 
+ 406 |  }                                       | True                         | 
+ 407 |  return -1;                              | True                         | 
+ 408 | }                                        | True                         | 
+ 409 |                                          | True                         | 
+ 410 | /*                                       | True                         | 
+ 411 |  * Add an edge to a node                 | True                         | 
+ 412 |  */                                      | True                         | 
+ 413 | static void add_edge_to_node(common_node | True                         | 
+ 414 | {                                        | True                         | 
+ 415 |  node->edge = xrealloc_vector(node->edge | True                         | 
+ 416 |  node->edge[node->num_of_edges++] = edge | True                         | 
+ 417 | }                                        | True                         | 
+ 418 |                                          | True                         | 
+ 419 | /*                                       | True                         | 
+ 420 |  * Create one new node and one new edge  | True                         | 
+ 421 |  *                                       | True                         | 
+ 422 |  * Dependencies which contain multiple a | True                         | 
+ 423 |  * an EDGE_OR_PRE_DEPENDS or EDGE_OR_DEP | True                         | 
+ 424 |  * number of EDGE_PRE_DEPENDS or EDGE_DE | True                         | 
+ 425 |  * the OR edge contains the full depende | True                         | 
+ 426 |  * field contains the number of EDGE nod | True                         | 
+ 427 |  * this alternative.                     | True                         | 
+ 428 |  */                                      | True                         | 
+ 429 | static void add_split_dependencies(commo | True                         | 
+ 430 | {                                        | True                         | 
+ 431 |  char *line = xstrdup(whole_line);       | True                         | 
+ 432 |  char *line2;                            | True                         | 
+ 433 |  char *line_ptr1 = NULL;                 | True                         | 
+ 434 |  char *line_ptr2 = NULL;                 | True                         | 
+ 435 |  char *field;                            | True                         | 
+ 436 |  char *field2;                           | True                         | 
+ 437 |  char *version;                          | True                         | 
+ 438 |  edge_t *edge;                           | True                         | 
+ 439 |  edge_t *or_edge;                        | True                         | 
+ 440 |  int offset_ch;                          | True                         | 
+ 441 |                                          | True                         | 
+ 442 |  field = strtok_r(line, ",", &line_ptr1) | True                         | 
+ 443 |  do {                                    | True                         | 
+ 444 |   /* skip leading spaces */              | True                         | 
+ 445 |   field += strspn(field, " ");           | True                         | 
+ 446 |   line2 = xstrdup(field);                | True                         | 
+ 447 |   field2 = strtok_r(line2, "|", &line_pt | True                         | 
+ 448 |   or_edge = NULL;                        | True                         | 
+ 449 |   if ((edge_type == EDGE_DEPENDS || edge | True                         | 
+ 450 |    && (strcmp(field, field2) != 0)       | True                         | 
+ 451 |   ) {                                    | True                         | 
+ 452 |    or_edge = xzalloc(sizeof(edge_t));    | True                         | 
+ 453 |    or_edge->type = edge_type + 1;        | True                         | 
+ 454 |    or_edge->name = search_name_hashtable | True                         | 
+ 455 |    //or_edge->version = 0; // tracks the | True                         | 
+ 456 |    add_edge_to_node(parent_node, or_edge | True                         | 
+ 457 |   }                                      | True                         | 
+ 458 |                                          | True                         | 
+ 459 |   do {                                   | True                         | 
+ 460 |    edge = xmalloc(sizeof(edge_t));       | True                         | 
+ 461 |    edge->type = edge_type;               | True                         | 
+ 462 |                                          | True                         | 
+ 463 |    /* Skip any extra leading spaces */   | True                         | 
+ 464 |    field2 += strspn(field2, " ");        | True                         | 
+ 465 |                                          | True                         | 
+ 466 |    /* Get dependency version info */     | True                         | 
+ 467 |    version = strchr(field2, '(');        | True                         | 
+ 468 |    if (version == NULL) {                | True                         | 
+ 469 |     edge->operator = VER_ANY;            | True                         | 
+ 470 |     /* Get the versions hash number, add | True                         | 
+ 471 |     edge->version = search_name_hashtabl | True                         | 
+ 472 |    } else {                              | True                         | 
+ 473 |     /* Skip leading ' ' or '(' */        | True                         | 
+ 474 |     version += strspn(version, " (");    | True                         | 
+ 475 |     /* Calculate length of any operator  | True                         | 
+ 476 |     offset_ch = strspn(version, "<=>");  | True                         | 
+ 477 |     /* Determine operator */             | True                         | 
+ 478 |     if (offset_ch > 0) {                 | True                         | 
+ 479 |      if (strncmp(version, "=", offset_ch | True                         | 
+ 480 |       edge->operator = VER_EQUAL;        | True                         | 
+ 481 |      } else if (strncmp(version, "<<", o | True                         | 
+ 482 |       edge->operator = VER_LESS;         | True                         | 
+ 483 |      } else if (strncmp(version, "<=", o | True                         | 
+ 484 |       edge->operator = VER_LESS_EQUAL;   | True                         | 
+ 485 |      } else if (strncmp(version, ">>", o | True                         | 
+ 486 |       edge->operator = VER_MORE;         | True                         | 
+ 487 |      } else if (strncmp(version, ">=", o | True                         | 
+ 488 |       edge->operator = VER_MORE_EQUAL;   | True                         | 
+ 489 |      } else {                            | True                         | 
+ 490 |       bb_simple_error_msg_and_die("illeg | True                         | 
+ 491 |      }                                   | True                         | 
+ 492 |     }                                    | True                         | 
+ 493 |     /* skip to start of version numbers  | True                         | 
+ 494 |     version += offset_ch;                | True                         | 
+ 495 |     version += strspn(version, " ");     | True                         | 
+ 496 |                                          | True                         | 
+ 497 |     /* Truncate version at trailing ' '  | True                         | 
+ 498 |     version[strcspn(version, " )")] = '\ | True                         | 
+ 499 |     /* Get the versions hash number, add | True                         | 
+ 500 |     edge->version = search_name_hashtabl | True                         | 
+ 501 |    }                                     | True                         | 
+ 502 |                                          | True                         | 
+ 503 |    /* Get the dependency name */         | True                         | 
+ 504 |    field2[strcspn(field2, " (")] = '\0'; | True                         | 
+ 505 |    edge->name = search_name_hashtable(fi | True                         | 
+ 506 |                                          | True                         | 
+ 507 |    if (or_edge)                          | True                         | 
+ 508 |     or_edge->version++;                  | True                         | 
+ 509 |                                          | True                         | 
+ 510 |    add_edge_to_node(parent_node, edge);  | True                         | 
+ 511 |    field2 = strtok_r(NULL, "|", &line_pt | True                         | 
+ 512 |   } while (field2 != NULL);              | True                         | 
+ 513 |                                          | True                         | 
+ 514 |   free(line2);                           | True                         | 
+ 515 |   field = strtok_r(NULL, ",", &line_ptr1 | True                         | 
+ 516 |  } while (field != NULL);                | True                         | 
+ 517 |                                          | True                         | 
+ 518 |  free(line);                             | True                         | 
+ 519 | }                                        | True                         | 
+ 520 |                                          | True                         | 
+ 521 | static void free_package(common_node_t * | True                         | 
+ 522 | {                                        | True                         | 
+ 523 |  unsigned i;                             | True                         | 
+ 524 |  if (node) {                             | True                         | 
+ 525 |   for (i = 0; i < node->num_of_edges; i+ | True                         | 
+ 526 |    free(node->edge[i]);                  | True                         | 
+ 527 |   }                                      | True                         | 
+ 528 |   free(node->edge);                      | True                         | 
+ 529 |   free(node);                            | True                         | 
+ 530 |  }                                       | True                         | 
+ 531 | }                                        | True                         | 
+ 532 |                                          | True                         | 
+ 533 | /*                                       | True                         | 
+ 534 |  * Gets the next package field from pack | True                         | 
+ 535 |  * and field value, it returns the int o | True                         | 
+ 536 |  */                                      | True                         | 
+ 537 | static int read_package_field(const char | True                         | 
+ 538 | {                                        | True                         | 
+ 539 |  int offset_name_start = 0;              | True                         | 
+ 540 |  int offset_name_end = 0;                | True                         | 
+ 541 |  int offset_value_start = 0;             | True                         | 
+ 542 |  int offset_value_end = 0;               | True                         | 
+ 543 |  int offset = 0;                         | True                         | 
+ 544 |  int next_offset;                        | True                         | 
+ 545 |  int name_length;                        | True                         | 
+ 546 |  int value_length;                       | True                         | 
+ 547 |  int exit_flag = FALSE;                  | True                         | 
+ 548 |                                          | True                         | 
+ 549 |  if (package_buffer == NULL) {           | True                         | 
+ 550 |   *field_name = NULL;                    | True                         | 
+ 551 |   *field_value = NULL;                   | True                         | 
+ 552 |   return -1;                             | True                         | 
+ 553 |  }                                       | True                         | 
+ 554 |  while (1) {                             | True                         | 
+ 555 |   next_offset = offset + 1;              | True                         | 
+ 556 |   switch (package_buffer[offset]) {      | True                         | 
+ 557 |    case '\0':                            | True                         | 
+ 558 |     exit_flag = TRUE;                    | True                         | 
+ 559 |     break;                               | True                         | 
+ 560 |    case ':':                             | True                         | 
+ 561 |     if (offset_name_end == 0) {          | True                         | 
+ 562 |      offset_name_end = offset;           | True                         | 
+ 563 |      offset_value_start = next_offset;   | True                         | 
+ 564 |     }                                    | True                         | 
+ 565 |     /* TODO: Name might still have trail | True                         | 
+ 566 |      * immediately after name */         | True                         | 
+ 567 |     break;                               | True                         | 
+ 568 |    case '\n':                            | True                         | 
+ 569 |     /* TODO: The char next_offset may be | True                         | 
+ 570 |     if (package_buffer[next_offset] != ' | True                         | 
+ 571 |      exit_flag = TRUE;                   | True                         | 
+ 572 |      break;                              | True                         | 
+ 573 |     }                                    | True                         | 
+ 574 |    case '\t':                            | True                         | 
+ 575 |    case ' ':                             | True                         | 
+ 576 |     /* increment the value start point i | True                         | 
+ 577 |     if (offset_name_start == offset) {   | True                         | 
+ 578 |      offset_name_start++;                | True                         | 
+ 579 |     }                                    | True                         | 
+ 580 |     if (offset_value_start == offset) {  | True                         | 
+ 581 |      offset_value_start++;               | True                         | 
+ 582 |     }                                    | True                         | 
+ 583 |     break;                               | True                         | 
+ 584 |   }                                      | True                         | 
+ 585 |   if (exit_flag) {                       | True                         | 
+ 586 |    /* Check that the names are valid */  | True                         | 
+ 587 |    offset_value_end = offset;            | True                         | 
+ 588 |    name_length = offset_name_end - offse | True                         | 
+ 589 |    value_length = offset_value_end - off | True                         | 
+ 590 |    if (name_length == 0) {               | True                         | 
+ 591 |     break;                               | True                         | 
+ 592 |    }                                     | True                         | 
+ 593 |    if ((name_length > 0) && (value_lengt | True                         | 
+ 594 |     break;                               | True                         | 
+ 595 |    }                                     | True                         | 
+ 596 |                                          | True                         | 
+ 597 |    /* If not valid, start fresh with nex | True                         | 
+ 598 |    exit_flag = FALSE;                    | True                         | 
+ 599 |    offset_name_start = offset + 1;       | True                         | 
+ 600 |    offset_name_end = 0;                  | True                         | 
+ 601 |    offset_value_start = offset + 1;      | True                         | 
+ 602 |    offset_value_end = offset + 1;        | True                         | 
+ 603 |    offset++;                             | True                         | 
+ 604 |   }                                      | True                         | 
+ 605 |   offset++;                              | True                         | 
+ 606 |  }                                       | True                         | 
+ 607 |  *field_name = NULL;                     | True                         | 
+ 608 |  if (name_length) {                      | True                         | 
+ 609 |   *field_name = xstrndup(&package_buffer | True                         | 
+ 610 |  }                                       | True                         | 
+ 611 |  *field_value = NULL;                    | True                         | 
+ 612 |  if (value_length > 0) {                 | True                         | 
+ 613 |   *field_value = xstrndup(&package_buffe | True                         | 
+ 614 |  }                                       | True                         | 
+ 615 |  return next_offset;                     | True                         | 
+ 616 | }                                        | True                         | 
+ 617 |                                          | True                         | 
+ 618 | static unsigned fill_package_struct(char | True                         | 
+ 619 | {                                        | True                         | 
+ 620 |  static const char field_names[] ALIGN1  | True                         | 
+ 621 |   "Package\0""Version\0"                 | True                         | 
+ 622 |   "Pre-Depends\0""Depends\0""Replaces\0" | True                         | 
+ 623 |   "Conflicts\0""Suggests\0""Recommends\0 | True                         | 
+ 624 |                                          | True                         | 
+ 625 |  common_node_t *new_node = xzalloc(sizeo | True                         | 
+ 626 |  char *field_name;                       | True                         | 
+ 627 |  char *field_value;                      | True                         | 
+ 628 |  int field_start = 0;                    | True                         | 
+ 629 |  int num = -1;                           | True                         | 
+ 630 |  int buffer_length = strlen(control_buff | True                         | 
+ 631 |                                          | True                         | 
+ 632 |  new_node->version = search_name_hashtab | True                         | 
+ 633 |  while (field_start < buffer_length) {   | True                         | 
+ 634 |   unsigned field_num;                    | True                         | 
+ 635 |                                          | True                         | 
+ 636 |   field_start += read_package_field(&con | True                         | 
+ 637 |     &field_name, &field_value);          | True                         | 
+ 638 |                                          | True                         | 
+ 639 |   if (field_name == NULL) {              | True                         | 
+ 640 |    goto fill_package_struct_cleanup;     | True                         | 
+ 641 |   }                                      | True                         | 
+ 642 |                                          | True                         | 
+ 643 |   field_num = index_in_strings(field_nam | True                         | 
+ 644 |   switch (field_num) {                   | True                         | 
+ 645 |   case 0: /* Package */                  | True                         | 
+ 646 |    new_node->name = search_name_hashtabl | True                         | 
+ 647 |    break;                                | True                         | 
+ 648 |   case 1: /* Version */                  | True                         | 
+ 649 |    new_node->version = search_name_hasht | True                         | 
+ 650 |    break;                                | True                         | 
+ 651 |   case 2: /* Pre-Depends */              | True                         | 
+ 652 |    add_split_dependencies(new_node, fiel | True                         | 
+ 653 |    break;                                | True                         | 
+ 654 |   case 3: /* Depends */                  | True                         | 
+ 655 |    add_split_dependencies(new_node, fiel | True                         | 
+ 656 |    break;                                | True                         | 
+ 657 |   case 4: /* Replaces */                 | True                         | 
+ 658 |    add_split_dependencies(new_node, fiel | True                         | 
+ 659 |    break;                                | True                         | 
+ 660 |   case 5: /* Provides */                 | True                         | 
+ 661 |    add_split_dependencies(new_node, fiel | True                         | 
+ 662 |    break;                                | True                         | 
+ 663 |   case 6: /* Conflicts */                | True                         | 
+ 664 |    add_split_dependencies(new_node, fiel | True                         | 
+ 665 |    break;                                | True                         | 
+ 666 |   case 7: /* Suggests */                 | True                         | 
+ 667 |    add_split_dependencies(new_node, fiel | True                         | 
+ 668 |    break;                                | True                         | 
+ 669 |   case 8: /* Recommends */               | True                         | 
+ 670 |    add_split_dependencies(new_node, fiel | True                         | 
+ 671 |    break;                                | True                         | 
+ 672 |   case 9: /* Enhances */                 | True                         | 
+ 673 |    add_split_dependencies(new_node, fiel | True                         | 
+ 674 |    break;                                | True                         | 
+ 675 |   }                                      | True                         | 
+ 676 |  fill_package_struct_cleanup:            | True                         | 
+ 677 |   free(field_name);                      | True                         | 
+ 678 |   free(field_value);                     | True                         | 
+ 679 |  }                                       | True                         | 
+ 680 |                                          | True                         | 
+ 681 |  if (new_node->version == search_name_ha | True                         | 
+ 682 |   free_package(new_node);                | True                         | 
+ 683 |   return -1;                             | True                         | 
+ 684 |  }                                       | True                         | 
+ 685 |  num = search_package_hashtable(new_node | True                         | 
+ 686 |  free_package(package_hashtable[num]);   | True                         | 
+ 687 |  package_hashtable[num] = new_node;      | True                         | 
+ 688 |  return num;                             | True                         | 
+ 689 | }                                        | True                         | 
+ 690 |                                          | True                         | 
+ 691 | /* if num = 1, it returns the want statu | True                         | 
+ 692 | static unsigned get_status(const unsigne | True                         | 
+ 693 | {                                        | True                         | 
+ 694 |  char *status_string = name_hashtable[st | True                         | 
+ 695 |  char *state_sub_string;                 | True                         | 
+ 696 |  unsigned state_sub_num;                 | True                         | 
+ 697 |  int len;                                | True                         | 
+ 698 |  int i;                                  | True                         | 
+ 699 |                                          | True                         | 
+ 700 |  /* set tmp_string to point to the start | True                         | 
+ 701 |  for (i = 1; i < num; i++) {             | True                         | 
+ 702 |   /* skip past a word */                 | True                         | 
+ 703 |   status_string += strcspn(status_string | True                         | 
+ 704 |   /* skip past the separating spaces */  | True                         | 
+ 705 |   status_string += strspn(status_string, | True                         | 
+ 706 |  }                                       | True                         | 
+ 707 |  len = strcspn(status_string, " \n");    | True                         | 
+ 708 |  state_sub_string = xstrndup(status_stri | True                         | 
+ 709 |  state_sub_num = search_name_hashtable(s | True                         | 
+ 710 |  free(state_sub_string);                 | True                         | 
+ 711 |  return state_sub_num;                   | True                         | 
+ 712 | }                                        | True                         | 
+ 713 |                                          | True                         | 
+ 714 | static void set_status(const unsigned st | True                         | 
+ 715 | {                                        | True                         | 
+ 716 |  const unsigned new_value_num = search_n | True                         | 
+ 717 |  unsigned want = get_status(status_node_ | True                         | 
+ 718 |  unsigned flag = get_status(status_node_ | True                         | 
+ 719 |  unsigned status = get_status(status_nod | True                         | 
+ 720 |  char *new_status;                       | True                         | 
+ 721 |                                          | True                         | 
+ 722 |  switch (position) {                     | True                         | 
+ 723 |   case 1:                                | True                         | 
+ 724 |    want = new_value_num;                 | True                         | 
+ 725 |    break;                                | True                         | 
+ 726 |   case 2:                                | True                         | 
+ 727 |    flag = new_value_num;                 | True                         | 
+ 728 |    break;                                | True                         | 
+ 729 |   case 3:                                | True                         | 
+ 730 |    status = new_value_num;               | True                         | 
+ 731 |    break;                                | True                         | 
+ 732 |   default:                               | True                         | 
+ 733 |    bb_simple_error_msg_and_die("DEBUG ON | True                         | 
+ 734 |  }                                       | True                         | 
+ 735 |                                          | True                         | 
+ 736 |  new_status = xasprintf("%s %s %s", name | True                         | 
+ 737 |  status_hashtable[status_node_num]->stat | True                         | 
+ 738 |  free(new_status);                       | True                         | 
+ 739 | }                                        | True                         | 
+ 740 |                                          | True                         | 
+ 741 | static const char *describe_status(int s | True                         | 
+ 742 | {                                        | True                         | 
+ 743 |  int status_want, status_state;          | True                         | 
+ 744 |  if (status_hashtable[status_num] == NUL | True                         | 
+ 745 |   return "is not installed or flagged to | True                         | 
+ 746 |                                          | True                         | 
+ 747 |  status_want = get_status(status_num, 1) | True                         | 
+ 748 |  status_state = get_status(status_num, 3 | True                         | 
+ 749 |                                          | True                         | 
+ 750 |  if (status_state == search_name_hashtab | True                         | 
+ 751 |   if (status_want == search_name_hashtab | True                         | 
+ 752 |    return "is installed";                | True                         | 
+ 753 |   if (status_want == search_name_hashtab | True                         | 
+ 754 |    return "is marked to be removed";     | True                         | 
+ 755 |   if (status_want == search_name_hashtab | True                         | 
+ 756 |    return "is marked to be purged";      | True                         | 
+ 757 |  }                                       | True                         | 
+ 758 |  if (status_want == search_name_hashtabl | True                         | 
+ 759 |   return "is in an indeterminate state"; | True                         | 
+ 760 |  if (status_want == search_name_hashtabl | True                         | 
+ 761 |   return "is marked to be installed";    | True                         | 
+ 762 |                                          | True                         | 
+ 763 |  return "is not installed or flagged to  | True                         | 
+ 764 | }                                        | True                         | 
+ 765 |                                          | True                         | 
+ 766 | static void index_status_file(const char | True                         | 
+ 767 | {                                        | True                         | 
+ 768 |  FILE *status_file;                      | True                         | 
+ 769 |  char *control_buffer;                   | True                         | 
+ 770 |  char *status_line;                      | True                         | 
+ 771 |  status_node_t *status_node = NULL;      | True                         | 
+ 772 |  unsigned status_num;                    | True                         | 
+ 773 |                                          | True                         | 
+ 774 |  status_file = xfopen_for_read(filename) | True                         | 
+ 775 |  while ((control_buffer = xmalloc_fgetli | True                         | 
+ 776 |   const unsigned package_num = fill_pack | True                         | 
+ 777 |   if (package_num != -1) {               | True                         | 
+ 778 |    status_node = xmalloc(sizeof(status_n | True                         | 
+ 779 |    /* fill_package_struct doesn't handle | True                         | 
+ 780 |    status_line = strstr(control_buffer,  | True                         | 
+ 781 |    if (status_line != NULL) {            | True                         | 
+ 782 |     status_line += 7;                    | True                         | 
+ 783 |     status_line += strspn(status_line, " | True                         | 
+ 784 |     status_line = xstrndup(status_line,  | True                         | 
+ 785 |     status_node->status = search_name_ha | True                         | 
+ 786 |     free(status_line);                   | True                         | 
+ 787 |    }                                     | True                         | 
+ 788 |    status_node->package = package_num;   | True                         | 
+ 789 |    status_num = search_status_hashtable( | True                         | 
+ 790 |    status_hashtable[status_num] = status | True                         | 
+ 791 |   }                                      | True                         | 
+ 792 |   free(control_buffer);                  | True                         | 
+ 793 |  }                                       | True                         | 
+ 794 |  fclose(status_file);                    | True                         | 
+ 795 | }                                        | True                         | 
+ 796 |                                          | True                         | 
+ 797 | static void write_buffer_no_status(FILE  | True                         | 
+ 798 | {                                        | True                         | 
+ 799 |  char *name;                             | True                         | 
+ 800 |  char *value;                            | True                         | 
+ 801 |  int start = 0;                          | True                         | 
+ 802 |  while (1) {                             | True                         | 
+ 803 |   start += read_package_field(&control_b | True                         | 
+ 804 |   if (name == NULL) {                    | True                         | 
+ 805 |    break;                                | True                         | 
+ 806 |   }                                      | True                         | 
+ 807 |   if (strcmp(name, "Status") != 0) {     | True                         | 
+ 808 |    fprintf(new_status_file, "%s: %s\n",  | True                         | 
+ 809 |   }                                      | True                         | 
+ 810 |  }                                       | True                         | 
+ 811 | }                                        | True                         | 
+ 812 |                                          | True                         | 
+ 813 | /* This could do with a cleanup */       | True                         | 
+ 814 | static void write_status_file(deb_file_t | True                         | 
+ 815 | {                                        | True                         | 
+ 816 |  FILE *old_status_file = xfopen_for_read | True                         | 
+ 817 |  FILE *new_status_file = xfopen_for_writ | True                         | 
+ 818 |  char *package_name;                     | True                         | 
+ 819 |  char *status_from_file;                 | True                         | 
+ 820 |  char *control_buffer = NULL;            | True                         | 
+ 821 |  char *tmp_string;                       | True                         | 
+ 822 |  int status_num;                         | True                         | 
+ 823 |  int field_start = 0;                    | True                         | 
+ 824 |  int write_flag;                         | True                         | 
+ 825 |  int i = 0;                              | True                         | 
+ 826 |                                          | True                         | 
+ 827 |  /* Update previously known packages */  | True                         | 
+ 828 |  while ((control_buffer = xmalloc_fgetli | True                         | 
+ 829 |   tmp_string = strstr(control_buffer, "P | True                         | 
+ 830 |   if (tmp_string == NULL) {              | True                         | 
+ 831 |    continue;                             | True                         | 
+ 832 |   }                                      | True                         | 
+ 833 |                                          | True                         | 
+ 834 |   tmp_string += 8;                       | True                         | 
+ 835 |   tmp_string += strspn(tmp_string, " \n\ | True                         | 
+ 836 |   package_name = xstrndup(tmp_string, st | True                         | 
+ 837 |   write_flag = FALSE;                    | True                         | 
+ 838 |   tmp_string = strstr(control_buffer, "S | True                         | 
+ 839 |   if (tmp_string != NULL) {              | True                         | 
+ 840 |    /* Separate the status value from the | True                         | 
+ 841 |    tmp_string += 7;                      | True                         | 
+ 842 |    tmp_string += strspn(tmp_string, " \n | True                         | 
+ 843 |    status_from_file = xstrndup(tmp_strin | True                         | 
+ 844 |   } else {                               | True                         | 
+ 845 |    status_from_file = NULL;              | True                         | 
+ 846 |   }                                      | True                         | 
+ 847 |                                          | True                         | 
+ 848 |   /* Find this package in the status has | True                         | 
+ 849 |   status_num = search_status_hashtable(p | True                         | 
+ 850 |   if (status_hashtable[status_num] != NU | True                         | 
+ 851 |    const char *status_from_hashtable = n | True                         | 
+ 852 |    if (strcmp(status_from_file, status_f | True                         | 
+ 853 |     /* New status isn't exactly the same | True                         | 
+ 854 |     const int state_status = get_status( | True                         | 
+ 855 |     if ((strcmp("installed", name_hashta | True                         | 
+ 856 |      || (strcmp("unpacked", name_hashtab | True                         | 
+ 857 |     ) {                                  | True                         | 
+ 858 |      /* We need to add the control file  | True                         | 
+ 859 |      i = 0;                              | True                         | 
+ 860 |      while (deb_file[i] != NULL) {       | True                         | 
+ 861 |       if (strcmp(package_name, name_hash | True                         | 
+ 862 |        /* Write a status file entry with | True                         | 
+ 863 |        /* remove trailing \n's */        | True                         | 
+ 864 |        write_buffer_no_status(new_status | True                         | 
+ 865 |        set_status(status_num, "ok", 2);  | True                         | 
+ 866 |        fprintf(new_status_file, "Status: | True                         | 
+ 867 |          name_hashtable[status_hashtable | True                         | 
+ 868 |        write_flag = TRUE;                | True                         | 
+ 869 |        break;                            | True                         | 
+ 870 |       }                                  | True                         | 
+ 871 |       i++;                               | True                         | 
+ 872 |      }                                   | True                         | 
+ 873 |      /* This is temperary, debugging onl | True                         | 
+ 874 |      if (deb_file[i] == NULL) {          | True                         | 
+ 875 |       bb_error_msg_and_die("ALERT: canno | True                         | 
+ 876 |        "your status file may be broken,  | True                         | 
+ 877 |        "incorrect for %s", package_name) | True                         | 
+ 878 |      }                                   | True                         | 
+ 879 |     }                                    | True                         | 
+ 880 |     else if (strcmp("not-installed", nam | True                         | 
+ 881 |      /* Only write the Package, Status,  | True                         | 
+ 882 |      fprintf(new_status_file, "Package:  | True                         | 
+ 883 |      fprintf(new_status_file, "Status: % | True                         | 
+ 884 |                                          | True                         | 
+ 885 |      while (1) {                         | True                         | 
+ 886 |       char *field_name;                  | True                         | 
+ 887 |       char *field_value;                 | True                         | 
+ 888 |       field_start += read_package_field( | True                         | 
+ 889 |       if (field_name == NULL) {          | True                         | 
+ 890 |        break;                            | True                         | 
+ 891 |       }                                  | True                         | 
+ 892 |       if ((strcmp(field_name, "Priority" | True                         | 
+ 893 |        || (strcmp(field_name, "Section") | True                         | 
+ 894 |       ) {                                | True                         | 
+ 895 |        fprintf(new_status_file, "%s: %s\ | True                         | 
+ 896 |       }                                  | True                         | 
+ 897 |      }                                   | True                         | 
+ 898 |      write_flag = TRUE;                  | True                         | 
+ 899 |      fputs("\n", new_status_file);       | True                         | 
+ 900 |     }                                    | True                         | 
+ 901 |     else if (strcmp("config-files", name | True                         | 
+ 902 |      /* only change the status line */   | True                         | 
+ 903 |      while (1) {                         | True                         | 
+ 904 |       char *field_name;                  | True                         | 
+ 905 |       char *field_value;                 | True                         | 
+ 906 |       field_start += read_package_field( | True                         | 
+ 907 |       if (field_name == NULL) {          | True                         | 
+ 908 |        break;                            | True                         | 
+ 909 |       }                                  | True                         | 
+ 910 |       /* Setup start point for next fiel | True                         | 
+ 911 |       if (strcmp(field_name, "Status") = | True                         | 
+ 912 |        fprintf(new_status_file, "Status: | True                         | 
+ 913 |       } else {                           | True                         | 
+ 914 |        fprintf(new_status_file, "%s: %s\ | True                         | 
+ 915 |       }                                  | True                         | 
+ 916 |      }                                   | True                         | 
+ 917 |      write_flag = TRUE;                  | True                         | 
+ 918 |      fputs("\n", new_status_file);       | True                         | 
+ 919 |     }                                    | True                         | 
+ 920 |    }                                     | True                         | 
+ 921 |   }                                      | True                         | 
+ 922 |   /* If the package from the status file | True                         | 
+ 923 |   if (!write_flag) {                     | True                         | 
+ 924 |    fprintf(new_status_file, "%s\n\n", co | True                         | 
+ 925 |   }                                      | True                         | 
+ 926 |                                          | True                         | 
+ 927 |   free(status_from_file);                | True                         | 
+ 928 |   free(package_name);                    | True                         | 
+ 929 |   free(control_buffer);                  | True                         | 
+ 930 |  }                                       | True                         | 
+ 931 |                                          | True                         | 
+ 932 |  /* Write any new packages */            | True                         | 
+ 933 |  for (i = 0; deb_file[i] != NULL; i++) { | True                         | 
+ 934 |   status_num = search_status_hashtable(n | True                         | 
+ 935 |   if (strcmp("reinstreq", name_hashtable | True                         | 
+ 936 |    write_buffer_no_status(new_status_fil | True                         | 
+ 937 |    set_status(status_num, "ok", 2);      | True                         | 
+ 938 |    fprintf(new_status_file, "Status: %s\ | True                         | 
+ 939 |   }                                      | True                         | 
+ 940 |  }                                       | True                         | 
+ 941 |  fclose(old_status_file);                | True                         | 
+ 942 |  fclose(new_status_file);                | True                         | 
+ 943 |                                          | True                         | 
+ 944 |  /* Create a separate backfile to dpkg * | True                         | 
+ 945 |  if (rename("/var/lib/dpkg/status", "/va | True                         | 
+ 946 |   if (errno != ENOENT)                   | True                         | 
+ 947 |    bb_simple_error_msg_and_die("can't cr | True                         | 
+ 948 |   /* Its ok if renaming the status file  | True                         | 
+ 949 |    * file doesn't exist, maybe we are st | True                         | 
+ 950 |   bb_simple_error_msg("no status file fo | True                         | 
+ 951 |  }                                       | True                         | 
+ 952 |                                          | True                         | 
+ 953 |  xrename("/var/lib/dpkg/status.udeb", "/ | True                         | 
+ 954 | }                                        | True                         | 
+ 955 |                                          | True                         | 
+ 956 | /* This function returns TRUE if the giv | True                         | 
+ 957 |  * dependency of type depend_type.       | True                         | 
+ 958 |  *                                       | True                         | 
+ 959 |  * A pre-depends is satisfied only if a  | True                         | 
+ 960 |  * which a regular depends can be satisf | True                         | 
+ 961 |  * to install.                           | True                         | 
+ 962 |  */                                      | True                         | 
+ 963 | static int package_satisfies_dependency( | True                         | 
+ 964 | {                                        | True                         | 
+ 965 |  int status_num = search_status_hashtabl | True                         | 
+ 966 |                                          | True                         | 
+ 967 |  /* status could be unknown if package i | True                         | 
+ 968 |   * provides which cannot satisfy any de | True                         | 
+ 969 |   */                                     | True                         | 
+ 970 |  if (status_hashtable[status_num] == NUL | True                         | 
+ 971 |   return 0;                              | True                         | 
+ 972 |                                          | True                         | 
+ 973 |  switch (depend_type) {                  | True                         | 
+ 974 |  case EDGE_PRE_DEPENDS: return get_statu | True                         | 
+ 975 |  case EDGE_DEPENDS:     return get_statu | True                         | 
+ 976 |  }                                       | True                         | 
+ 977 |  return 0;                               | True                         | 
+ 978 | }                                        | True                         | 
+ 979 |                                          | True                         | 
+ 980 | static int check_deps(deb_file_t **deb_f | True                         | 
+ 981 | {                                        | True                         | 
+ 982 |  int *conflicts = NULL;                  | True                         | 
+ 983 |  int conflicts_num = 0;                  | True                         | 
+ 984 |  int i = deb_start;                      | True                         | 
+ 985 |  int j;                                  | True                         | 
+ 986 |                                          | True                         | 
+ 987 |  /* Check for conflicts                  | True                         | 
+ 988 |   * TODO: TEST if conflicts with other p | True                         | 
+ 989 |   *                                      | True                         | 
+ 990 |   * Add install packages and the package | True                         | 
+ 991 |   * to the list of files to check confli | True                         | 
+ 992 |   */                                     | True                         | 
+ 993 |                                          | True                         | 
+ 994 |  /* Create array of package numbers to c | True                         | 
+ 995 |   * installed package for conflicts*/    | True                         | 
+ 996 |  while (deb_file[i] != NULL) {           | True                         | 
+ 997 |   const unsigned package_num = deb_file[ | True                         | 
+ 998 |   conflicts = xrealloc_vector(conflicts, | True                         | 
+ 999 |   conflicts[conflicts_num] = package_num | True                         | 
+1000 |   conflicts_num++;                       | True                         | 
+1001 |   /* add provides to conflicts list */   | True                         | 
+1002 |   for (j = 0; j < package_hashtable[pack | True                         | 
+1003 |    if (package_hashtable[package_num]->e | True                         | 
+1004 |     const int conflicts_package_num = se | True                         | 
+1005 |      package_hashtable[package_num]->edg | True                         | 
+1006 |      package_hashtable[package_num]->edg | True                         | 
+1007 |      package_hashtable[package_num]->edg | True                         | 
+1008 |     if (package_hashtable[conflicts_pack | True                         | 
+1009 |      /* create a new package */          | True                         | 
+1010 |      common_node_t *new_node = xzalloc(s | True                         | 
+1011 |      new_node->name = package_hashtable[ | True                         | 
+1012 |      new_node->version = package_hashtab | True                         | 
+1013 |      package_hashtable[conflicts_package | True                         | 
+1014 |     }                                    | True                         | 
+1015 |     conflicts = xrealloc_vector(conflict | True                         | 
+1016 |     conflicts[conflicts_num] = conflicts | True                         | 
+1017 |     conflicts_num++;                     | True                         | 
+1018 |    }                                     | True                         | 
+1019 |   }                                      | True                         | 
+1020 |   i++;                                   | True                         | 
+1021 |  }                                       | True                         | 
+1022 |                                          | True                         | 
+1023 |  /* Check conflicts */                   | True                         | 
+1024 |  i = 0;                                  | True                         | 
+1025 |  while (deb_file[i] != NULL) {           | True                         | 
+1026 |   const common_node_t *package_node = pa | True                         | 
+1027 |   int status_num = 0;                    | True                         | 
+1028 |   status_num = search_status_hashtable(n | True                         | 
+1029 |                                          | True                         | 
+1030 |   if (get_status(status_num, 3) == searc | True                         | 
+1031 |    i++;                                  | True                         | 
+1032 |    continue;                             | True                         | 
+1033 |   }                                      | True                         | 
+1034 |                                          | True                         | 
+1035 |   for (j = 0; j < package_node->num_of_e | True                         | 
+1036 |    const edge_t *package_edge = package_ | True                         | 
+1037 |                                          | True                         | 
+1038 |    if (package_edge->type == EDGE_CONFLI | True                         | 
+1039 |     const unsigned package_num =         | True                         | 
+1040 |      search_package_hashtable(package_ed | True                         | 
+1041 |         package_edge->version,           | True                         | 
+1042 |         package_edge->operator);         | True                         | 
+1043 |     int result = 0;                      | True                         | 
+1044 |     if (package_hashtable[package_num] ! | True                         | 
+1045 |      status_num = search_status_hashtabl | True                         | 
+1046 |                                          | True                         | 
+1047 |      if (get_status(status_num, 1) == se | True                         | 
+1048 |       result = test_version(package_hash | True                         | 
+1049 |        package_edge->version, package_ed | True                         | 
+1050 |      }                                   | True                         | 
+1051 |     }                                    | True                         | 
+1052 |                                          | True                         | 
+1053 |     if (result) {                        | True                         | 
+1054 |      bb_error_msg_and_die("package %s co | True                         | 
+1055 |       name_hashtable[package_node->name] | True                         | 
+1056 |       name_hashtable[package_edge->name] | True                         | 
+1057 |     }                                    | True                         | 
+1058 |    }                                     | True                         | 
+1059 |   }                                      | True                         | 
+1060 |   i++;                                   | True                         | 
+1061 |  }                                       | True                         | 
+1062 |                                          | True                         | 
+1063 |                                          | True                         | 
+1064 |  /* Check dependentcies */               | True                         | 
+1065 |  for (i = 0; i < PACKAGE_HASH_PRIME; i++ | True                         | 
+1066 |   int status_num = 0;                    | True                         | 
+1067 |   int number_of_alternatives = 0;        | True                         | 
+1068 |   const edge_t * root_of_alternatives =  | True                         | 
+1069 |   const common_node_t *package_node = pa | True                         | 
+1070 |                                          | True                         | 
+1071 |   /* If the package node does not exist  | True                         | 
+1072 |    * package is a virtual one. In which  | True                         | 
+1073 |    * no dependencies to check.           | True                         | 
+1074 |    */                                    | True                         | 
+1075 |   if (package_node == NULL) continue;    | True                         | 
+1076 |                                          | True                         | 
+1077 |   status_num = search_status_hashtable(n | True                         | 
+1078 |                                          | True                         | 
+1079 |   /* If there is no status then this pac | True                         | 
+1080 |    * virtual one provided by something e | True                         | 
+1081 |    * case there are no dependencies to c | True                         | 
+1082 |    */                                    | True                         | 
+1083 |   if (status_hashtable[status_num] == NU | True                         | 
+1084 |                                          | True                         | 
+1085 |   /* If we don't want this package insta | True                         | 
+1086 |    * as well ignore it's dependencies.   | True                         | 
+1087 |    */                                    | True                         | 
+1088 |   if (get_status(status_num, 1) != searc | True                         | 
+1089 |    continue;                             | True                         | 
+1090 |   }                                      | True                         | 
+1091 |                                          | True                         | 
+1092 |   /* This code is tested only for EDGE_D | True                         | 
+1093 |    * have no suitable pre-depends availa | True                         | 
+1094 |    * reason that it shouldn't work thoug | True                         | 
+1095 |    */                                    | True                         | 
+1096 |   for (j = 0; j < package_node->num_of_e | True                         | 
+1097 |    const edge_t *package_edge = package_ | True                         | 
+1098 |    unsigned package_num;                 | True                         | 
+1099 |                                          | True                         | 
+1100 |    if (package_edge->type == EDGE_OR_PRE | True                         | 
+1101 |     || package_edge->type == EDGE_OR_DEP | True                         | 
+1102 |    ) {                                   | True                         | 
+1103 |     /* start an EDGE_OR_ list */         | True                         | 
+1104 |     number_of_alternatives = package_edg | True                         | 
+1105 |     root_of_alternatives = package_edge; | True                         | 
+1106 |     continue;                            | True                         | 
+1107 |    }                                     | True                         | 
+1108 |    if (number_of_alternatives == 0) {  / | True                         | 
+1109 |     number_of_alternatives = 1;          | True                         | 
+1110 |     root_of_alternatives = NULL;         | True                         | 
+1111 |    }                                     | True                         | 
+1112 |                                          | True                         | 
+1113 |    package_num = search_package_hashtabl | True                         | 
+1114 |                                          | True                         | 
+1115 |    if (package_edge->type == EDGE_PRE_DE | True                         | 
+1116 |     || package_edge->type == EDGE_DEPEND | True                         | 
+1117 |    ) {                                   | True                         | 
+1118 |     int result = 1;                      | True                         | 
+1119 |     status_num = 0;                      | True                         | 
+1120 |                                          | True                         | 
+1121 |     /* If we are inside an alternative t | True                         | 
+1122 |      * this edge is the right type.      | True                         | 
+1123 |      *                                   | True                         | 
+1124 |      * EDGE_DEPENDS == OR_DEPENDS -1     | True                         | 
+1125 |      * EDGE_PRE_DEPENDS == OR_PRE_DEPEND | True                         | 
+1126 |      */                                  | True                         | 
+1127 |     if (root_of_alternatives && package_ | True                         | 
+1128 |      bb_error_msg_and_die("fatal error,  | True                         | 
+1129 |        package_edge->type, root_of_alter | True                         | 
+1130 |                                          | True                         | 
+1131 |     if (package_hashtable[package_num] ! | True                         | 
+1132 |      result = !package_satisfies_depende | True                         | 
+1133 |                                          | True                         | 
+1134 |     if (result) { /* check for other pac | True                         | 
+1135 |      int provider = -1;                  | True                         | 
+1136 |                                          | True                         | 
+1137 |      while ((provider = search_for_provi | True                         | 
+1138 |       if (package_hashtable[provider] == | True                         | 
+1139 |        puts("Have a provider but no pack | True                         | 
+1140 |        continue;                         | True                         | 
+1141 |       }                                  | True                         | 
+1142 |       result = !package_satisfies_depend | True                         | 
+1143 |                                          | True                         | 
+1144 |       if (result == 0)                   | True                         | 
+1145 |        break;                            | True                         | 
+1146 |      }                                   | True                         | 
+1147 |     }                                    | True                         | 
+1148 |                                          | True                         | 
+1149 |     /* It must be already installed, or  | True                         | 
+1150 |     number_of_alternatives--;            | True                         | 
+1151 |     if (result && number_of_alternatives | True                         | 
+1152 |      if (root_of_alternatives)           | True                         | 
+1153 |       bb_error_msg_and_die(              | True                         | 
+1154 |        "package %s %sdepends on %s, whic | True                         | 
+1155 |        name_hashtable[package_node->name | True                         | 
+1156 |        package_edge->type == EDGE_PRE_DE | True                         | 
+1157 |        name_hashtable[root_of_alternativ | True                         | 
+1158 |        "cannot be satisfied");           | True                         | 
+1159 |      bb_error_msg_and_die(               | True                         | 
+1160 |       "package %s %sdepends on %s, which | True                         | 
+1161 |       name_hashtable[package_node->name] | True                         | 
+1162 |       package_edge->type == EDGE_PRE_DEP | True                         | 
+1163 |       name_hashtable[package_edge->name] | True                         | 
+1164 |       describe_status(status_num));      | True                         | 
+1165 |     }                                    | True                         | 
+1166 |     if (result == 0 && number_of_alterna | True                         | 
+1167 |      /* we've found a package which      | True                         | 
+1168 |       * satisfies the dependency,        | True                         | 
+1169 |       * so skip over the rest of         | True                         | 
+1170 |       * the alternatives.                | True                         | 
+1171 |       */                                 | True                         | 
+1172 |      j += number_of_alternatives;        | True                         | 
+1173 |      number_of_alternatives = 0;         | True                         | 
+1174 |     }                                    | True                         | 
+1175 |    }                                     | True                         | 
+1176 |   }                                      | True                         | 
+1177 |  }                                       | True                         | 
+1178 |  free(conflicts);                        | True                         | 
+1179 |  return TRUE;                            | True                         | 
+1180 | }                                        | True                         | 
+1181 |                                          | True                         | 
+1182 | static char **create_list(const char *fi | True                         | 
+1183 | {                                        | True                         | 
+1184 |  FILE *list_stream;                      | True                         | 
+1185 |  char **file_list;                       | True                         | 
+1186 |  char *line;                             | True                         | 
+1187 |  int count;                              | True                         | 
+1188 |                                          | True                         | 
+1189 |  /* don't use [xw]fopen here, handle err | True                         | 
+1190 |  list_stream = fopen_for_read(filename); | True                         | 
+1191 |  if (list_stream == NULL) {              | True                         | 
+1192 |   return NULL;                           | True                         | 
+1193 |  }                                       | True                         | 
+1194 |                                          | True                         | 
+1195 |  file_list = NULL;                       | True                         | 
+1196 |  count = 0;                              | True                         | 
+1197 |  while ((line = xmalloc_fgetline(list_st | True                         | 
+1198 |   file_list = xrealloc_vector(file_list, | True                         | 
+1199 |   file_list[count++] = line;             | True                         | 
+1200 |   /*file_list[count] = NULL; - xrealloc_ | True                         | 
+1201 |  }                                       | True                         | 
+1202 |  fclose(list_stream);                    | True                         | 
+1203 |                                          | True                         | 
+1204 |  return file_list;                       | True                         | 
+1205 | }                                        | True                         | 
+1206 |                                          | True                         | 
+1207 | /** This tests if the filename is an "im | True                         | 
+1208 |  *  Debians dpkg test if directories are | True                         | 
+1209 |  *  implementation doesn't and would rem | True                         | 
+1210 |  */                                      | True                         | 
+1211 | static int is_builtin_exclude(const char | True                         | 
+1212 | {                                        | True                         | 
+1213 |  if (*name++ != '/')                     | True                         | 
+1214 |   return 0;                              | True                         | 
+1215 |  if (index_in_strings(".\0" "etc\0" "opt | True                         | 
+1216 |    name) >= 0)                           | True                         | 
+1217 |   return 1;                              | True                         | 
+1218 |  if (is_prefixed_with(name, "usr/")) {   | True                         | 
+1219 |   name += sizeof("usr/") - 1;            | True                         | 
+1220 |   if (is_prefixed_with(name, "local/"))  | True                         | 
+1221 |    name += sizeof("local/") - 1;         | True                         | 
+1222 |  }                                       | True                         | 
+1223 |                                          | True                         | 
+1224 |  return index_in_strings("bin\0" "lib\0" | True                         | 
+1225 |    name) >= 0;                           | True                         | 
+1226 | }                                        | True                         | 
+1227 |                                          | True                         | 
+1228 | /* maybe i should try and hook this into | True                         | 
+1229 | static int remove_file_array(char **remo | True                         | 
+1230 | {                                        | True                         | 
+1231 |  struct stat path_stat;                  | True                         | 
+1232 |  int remove_flag = 1; /* not removed any | True                         | 
+1233 |  int i, j;                               | True                         | 
+1234 |                                          | True                         | 
+1235 |  if (remove_names == NULL) {             | True                         | 
+1236 |   return 0;                              | True                         | 
+1237 |  }                                       | True                         | 
+1238 |  for (i = 0; remove_names[i] != NULL; i+ | True                         | 
+1239 |   if (is_builtin_exclude(remove_names[i] | True                         | 
+1240 |    continue;                             | True                         | 
+1241 |   if (exclude_names != NULL) {           | True                         | 
+1242 |    for (j = 0; exclude_names[j] != NULL; | True                         | 
+1243 |     if (strcmp(remove_names[i], exclude_ | True                         | 
+1244 |      goto skip;                          | True                         | 
+1245 |     }                                    | True                         | 
+1246 |    }                                     | True                         | 
+1247 |   }                                      | True                         | 
+1248 |   /* TODO: why we are checking lstat? we | True                         | 
+1249 |   if (lstat(remove_names[i], &path_stat) | True                         | 
+1250 |    continue;                             | True                         | 
+1251 |   }                                      | True                         | 
+1252 |   if (S_ISDIR(path_stat.st_mode)) {      | True                         | 
+1253 |    remove_flag &= rmdir(remove_names[i]) | True                         | 
+1254 |   } else {                               | True                         | 
+1255 |    remove_flag &= unlink(remove_names[i] | True                         | 
+1256 |   }                                      | True                         | 
+1257 |  skip:                                   | True                         | 
+1258 |   continue;                              | True                         | 
+1259 |  }                                       | True                         | 
+1260 |  return (remove_flag == 0);              | True                         | 
+1261 | }                                        | True                         | 
+1262 |                                          | True                         | 
+1263 | static void run_package_script_or_die(co | True                         | 
+1264 | {                                        | True                         | 
+1265 |  char *script_path;                      | True                         | 
+1266 |  int result;                             | True                         | 
+1267 |                                          | True                         | 
+1268 |  script_path = xasprintf("/var/lib/dpkg/ | True                         | 
+1269 |                                          | True                         | 
+1270 |  /* If the file doesn't exist it isn't f | True                         | 
+1271 |  result = access(script_path, F_OK) ? EX | True                         | 
+1272 |  free(script_path);                      | True                         | 
+1273 |  if (result)                             | True                         | 
+1274 |   bb_error_msg_and_die("%s failed, exit  | True                         | 
+1275 | }                                        | True                         | 
+1276 |                                          | True                         | 
+1277 | /*                                       | True                         | 
+1278 | The policy manual defines what scripts g | True                         | 
+1279 | what arguments. I realize that busybox d | True                         | 
+1280 | these scenarios, but it does support som | True                         | 
+1281 | however, run them with any parameters in | True                         | 
+1282 | Here are the scripts:                    | True                         | 
+1283 |                                          | True                         | 
+1284 | preinst install                          | True                         | 
+1285 | preinst install <old_version>            | True                         | 
+1286 | preinst upgrade <old_version>            | True                         | 
+1287 | preinst abort_upgrade <new_version>      | True                         | 
+1288 | postinst configure <most_recent_version> | True                         | 
+1289 | postinst abort-upgade <new_version>      | True                         | 
+1290 | postinst abort-remove                    | True                         | 
+1291 | postinst abort-remove in-favour <package | True                         | 
+1292 | postinst abort-deconfigure in-favor <fai | True                         | 
+1293 | prerm remove                             | True                         | 
+1294 | prerm upgrade <new_version>              | True                         | 
+1295 | prerm failed-upgrade <old_version>       | True                         | 
+1296 | prerm remove in-favor <package> <new_ver | True                         | 
+1297 | prerm deconfigure in-favour <package> <v | True                         | 
+1298 | postrm remove                            | True                         | 
+1299 | postrm purge                             | True                         | 
+1300 | postrm upgrade <new_version>             | True                         | 
+1301 | postrm failed-upgrade <old_version>      | True                         | 
+1302 | postrm abort-install                     | True                         | 
+1303 | postrm abort-install <old_version>       | True                         | 
+1304 | postrm abort-upgrade <old_version>       | True                         | 
+1305 | postrm disappear <overwriter> <version>  | True                         | 
+1306 | */                                       | True                         | 
+1307 | static const char *const all_control_fil | True                         | 
+1308 |  "preinst", "postinst", "prerm", "postrm | True                         | 
+1309 |  "list", "md5sums", "shlibs", "conffiles | True                         | 
+1310 |  "config", "templates"                   | True                         | 
+1311 | };                                       | True                         | 
+1312 |                                          | True                         | 
+1313 | static char **all_control_list(const cha | True                         | 
+1314 | {                                        | True                         | 
+1315 |  unsigned i = 0;                         | True                         | 
+1316 |  char **remove_files;                    | True                         | 
+1317 |                                          | True                         | 
+1318 |  /* Create a list of all /var/lib/dpkg/i | True                         | 
+1319 |  remove_files = xzalloc(sizeof(all_contr | True                         | 
+1320 |  while (i < ARRAY_SIZE(all_control_files | True                         | 
+1321 |   remove_files[i] = xasprintf("/var/lib/ | True                         | 
+1322 |     package_name, all_control_files[i]); | True                         | 
+1323 |   i++;                                   | True                         | 
+1324 |  }                                       | True                         | 
+1325 |                                          | True                         | 
+1326 |  return remove_files;                    | True                         | 
+1327 | }                                        | True                         | 
+1328 |                                          | True                         | 
+1329 | static void free_array(char **array)     | True                         | 
+1330 | {                                        | True                         | 
+1331 |  if (array) {                            | True                         | 
+1332 |   unsigned i = 0;                        | True                         | 
+1333 |   while (array[i]) {                     | True                         | 
+1334 |    free(array[i]);                       | True                         | 
+1335 |    i++;                                  | True                         | 
+1336 |   }                                      | True                         | 
+1337 |   free(array);                           | True                         | 
+1338 |  }                                       | True                         | 
+1339 | }                                        | True                         | 
+1340 |                                          | True                         | 
+1341 | /* This function lists information on th | True                         | 
+1342 |  * the status_hashtable to retrieve the  | True                         | 
+1343 |  * scanning the status file. The resulti | True                         | 
+1344 |  */                                      | True                         | 
+1345 | static void list_packages(const char *pa | True                         | 
+1346 | {                                        | True                         | 
+1347 |  int i;                                  | True                         | 
+1348 |                                          | True                         | 
+1349 |  puts("    Name           Version");     | True                         | 
+1350 |  puts("+++-==============-============== | True                         | 
+1351 |                                          | True                         | 
+1352 |  /* go through status hash, dereference  | True                         | 
+1353 |  for (i = 0; i < STATUS_HASH_PRIME+1; i+ | True                         | 
+1354 |   if (status_hashtable[i]) {             | True                         | 
+1355 |    const char *stat_str;  /* status stri | True                         | 
+1356 |    const char *name_str;  /* package nam | True                         | 
+1357 |    const char *vers_str;  /* version */  | True                         | 
+1358 |    char  s1, s2;          /* status abbr | True                         | 
+1359 |    int   spccnt;          /* space count | True                         | 
+1360 |    int   j;                              | True                         | 
+1361 |                                          | True                         | 
+1362 |    stat_str = name_hashtable[status_hash | True                         | 
+1363 |    name_str = name_hashtable[package_has | True                         | 
+1364 |    vers_str = name_hashtable[package_has | True                         | 
+1365 |                                          | True                         | 
+1366 |    if (pattern && fnmatch(pattern, name_ | True                         | 
+1367 |     continue;                            | True                         | 
+1368 |                                          | True                         | 
+1369 |    /* get abbreviation for status field  | True                         | 
+1370 |    s1 = stat_str[0] == 'i' ? 'i' : 'r';  | True                         | 
+1371 |                                          | True                         | 
+1372 |    /* get abbreviation for status field  | True                         | 
+1373 |    for (j = 0, spccnt = 0; stat_str[j] & | True                         | 
+1374 |     if (stat_str[j] == ' ') spccnt++;    | True                         | 
+1375 |    }                                     | True                         | 
+1376 |    s2 = stat_str[j];                     | True                         | 
+1377 |                                          | True                         | 
+1378 |    /* print out the line formatted like  | True                         | 
+1379 |    printf("%c%c  %-14s %s\n", s1, s2, na | True                         | 
+1380 |   }                                      | True                         | 
+1381 |  }                                       | True                         | 
+1382 | }                                        | True                         | 
+1383 |                                          | True                         | 
+1384 | static void remove_package(const unsigne | True                         | 
+1385 | {                                        | True                         | 
+1386 |  const char *package_name = name_hashtab | True                         | 
+1387 |  const char *package_version = name_hash | True                         | 
+1388 |  const unsigned status_num = search_stat | True                         | 
+1389 |  const int package_name_length = strlen( | True                         | 
+1390 |  char **remove_files;                    | True                         | 
+1391 |  char **exclude_files;                   | True                         | 
+1392 |  char list_name[package_name_length + 25 | True                         | 
+1393 |  char conffile_name[package_name_length  | True                         | 
+1394 |                                          | True                         | 
+1395 |  if (noisy)                              | True                         | 
+1396 |   printf("Removing %s (%s)...\n", packag | True                         | 
+1397 |                                          | True                         | 
+1398 |  /* Run prerm script */                  | True                         | 
+1399 |  run_package_script_or_die(package_name, | True                         | 
+1400 |                                          | True                         | 
+1401 |  /* Create a list of files to remove, an | True                         | 
+1402 |  sprintf(list_name, "/var/lib/dpkg/info/ | True                         | 
+1403 |  remove_files = create_list(list_name);  | True                         | 
+1404 |                                          | True                         | 
+1405 |  sprintf(conffile_name, "/var/lib/dpkg/i | True                         | 
+1406 |  exclude_files = create_list(conffile_na | True                         | 
+1407 |                                          | True                         | 
+1408 |  /* Some directories can't be removed st | True                         | 
+1409 |  while (remove_file_array(remove_files,  | True                         | 
+1410 |   continue;                              | True                         | 
+1411 |  free_array(exclude_files);              | True                         | 
+1412 |  free_array(remove_files);               | True                         | 
+1413 |                                          | True                         | 
+1414 |  /* Create a list of files in /var/lib/d | True                         | 
+1415 |  exclude_files = xzalloc(sizeof(exclude_ | True                         | 
+1416 |  exclude_files[0] = xstrdup(conffile_nam | True                         | 
+1417 |  exclude_files[1] = xasprintf("/var/lib/ | True                         | 
+1418 |                                          | True                         | 
+1419 |  /* Create a list of all /var/lib/dpkg/i | True                         | 
+1420 |  remove_files = all_control_list(package | True                         | 
+1421 |                                          | True                         | 
+1422 |  remove_file_array(remove_files, exclude | True                         | 
+1423 |  free_array(remove_files);               | True                         | 
+1424 |  free_array(exclude_files);              | True                         | 
+1425 |                                          | True                         | 
+1426 |  /* rename <package>.conffiles to <packa | True                         | 
+1427 |   * The conffiles control file isn't req | True                         | 
+1428 |   * error out if it's missing.  */       | True                         | 
+1429 |  rename(conffile_name, list_name);       | True                         | 
+1430 |                                          | True                         | 
+1431 |  /* Change package status */             | True                         | 
+1432 |  set_status(status_num, "config-files",  | True                         | 
+1433 | }                                        | True                         | 
+1434 |                                          | True                         | 
+1435 | static void purge_package(const unsigned | True                         | 
+1436 | {                                        | True                         | 
+1437 |  const char *package_name = name_hashtab | True                         | 
+1438 |  const char *package_version = name_hash | True                         | 
+1439 |  const unsigned status_num = search_stat | True                         | 
+1440 |  char **remove_files;                    | True                         | 
+1441 |  char **exclude_files;                   | True                         | 
+1442 |  char list_name[strlen(package_name) + 2 | True                         | 
+1443 |                                          | True                         | 
+1444 |  printf("Purging %s (%s)...\n", package_ | True                         | 
+1445 |                                          | True                         | 
+1446 |  /* Run prerm script */                  | True                         | 
+1447 |  run_package_script_or_die(package_name, | True                         | 
+1448 |                                          | True                         | 
+1449 |  /* Create a list of files to remove */  | True                         | 
+1450 |  sprintf(list_name, "/var/lib/dpkg/info/ | True                         | 
+1451 |  remove_files = create_list(list_name);  | True                         | 
+1452 |                                          | True                         | 
+1453 |  /* Some directories cant be removed str | True                         | 
+1454 |  while (remove_file_array(remove_files,  | True                         | 
+1455 |   continue;                              | True                         | 
+1456 |  free_array(remove_files);               | True                         | 
+1457 |                                          | True                         | 
+1458 |  /* Create a list of all /var/lib/dpkg/i | True                         | 
+1459 |  remove_files = all_control_list(package | True                         | 
+1460 |                                          | True                         | 
+1461 |  /* Delete all of them except the postrm | True                         | 
+1462 |  exclude_files = xzalloc(sizeof(exclude_ | True                         | 
+1463 |  exclude_files[0] = xasprintf("/var/lib/ | True                         | 
+1464 |  remove_file_array(remove_files, exclude | True                         | 
+1465 |  free_array(exclude_files);              | True                         | 
+1466 |                                          | True                         | 
+1467 |  /* Run and remove postrm script */      | True                         | 
+1468 |  run_package_script_or_die(package_name, | True                         | 
+1469 |  remove_file_array(remove_files, NULL);  | True                         | 
+1470 |                                          | True                         | 
+1471 |  free_array(remove_files);               | True                         | 
+1472 |                                          | True                         | 
+1473 |  /* Change package status */             | True                         | 
+1474 |  set_status(status_num, "not-installed", | True                         | 
+1475 | }                                        | True                         | 
+1476 |                                          | True                         | 
+1477 | static archive_handle_t *init_archive_de | True                         | 
+1478 | {                                        | True                         | 
+1479 |  archive_handle_t *ar_handle;            | True                         | 
+1480 |                                          | True                         | 
+1481 |  /* Setup an ar archive handle that refe | True                         | 
+1482 |  ar_handle = init_handle();              | True                         | 
+1483 |  ar_handle->filter = filter_accept_list_ | True                         | 
+1484 |  ar_handle->src_fd = xopen(filename, O_R | True                         | 
+1485 |                                          | True                         | 
+1486 |  return ar_handle;                       | True                         | 
+1487 | }                                        | True                         | 
+1488 |                                          | True                         | 
+1489 | static void init_archive_deb_control(arc | True                         | 
+1490 | {                                        | True                         | 
+1491 |  archive_handle_t *tar_handle;           | True                         | 
+1492 |                                          | True                         | 
+1493 |  /* Setup the tar archive handle */      | True                         | 
+1494 |  tar_handle = init_handle();             | True                         | 
+1495 |  tar_handle->src_fd = ar_handle->src_fd; | True                         | 
+1496 |                                          | True                         | 
+1497 |  /* We don't care about data.tar.* or de | True                         | 
+1498 |  llist_add_to(&(ar_handle->accept), (cha | True                         | 
+1499 | #if ENABLE_FEATURE_SEAMLESS_GZ           | True                         | 
+1500 |  llist_add_to(&(ar_handle->accept), (cha | ENABLE_FEATURE_SEAMLESS_GZ   | 
+1501 | #endif                                   | True                         | 
+1502 | #if ENABLE_FEATURE_SEAMLESS_BZ2          | True                         | 
+1503 |  llist_add_to(&(ar_handle->accept), (cha | ENABLE_FEATURE_SEAMLESS_BZ2  | 
+1504 | #endif                                   | True                         | 
+1505 | #if ENABLE_FEATURE_SEAMLESS_XZ           | True                         | 
+1506 |  llist_add_to(&(ar_handle->accept), (cha | ENABLE_FEATURE_SEAMLESS_XZ   | 
+1507 | #endif                                   | True                         | 
+1508 |                                          | True                         | 
+1509 |  /* Assign the tar handle as a subarchiv | True                         | 
+1510 |  ar_handle->dpkg__sub_archive = tar_hand | True                         | 
+1511 | }                                        | True                         | 
+1512 |                                          | True                         | 
+1513 | static void init_archive_deb_data(archiv | True                         | 
+1514 | {                                        | True                         | 
+1515 |  archive_handle_t *tar_handle;           | True                         | 
+1516 |                                          | True                         | 
+1517 |  /* Setup the tar archive handle */      | True                         | 
+1518 |  tar_handle = init_handle();             | True                         | 
+1519 |  tar_handle->src_fd = ar_handle->src_fd; | True                         | 
+1520 |                                          | True                         | 
+1521 |  /* We don't care about control.tar.* or | True                         | 
+1522 |  llist_add_to(&(ar_handle->accept), (cha | True                         | 
+1523 | #if ENABLE_FEATURE_SEAMLESS_GZ           | True                         | 
+1524 |  llist_add_to(&(ar_handle->accept), (cha | ENABLE_FEATURE_SEAMLESS_GZ   | 
+1525 | #endif                                   | True                         | 
+1526 | #if ENABLE_FEATURE_SEAMLESS_BZ2          | True                         | 
+1527 |  llist_add_to(&(ar_handle->accept), (cha | ENABLE_FEATURE_SEAMLESS_BZ2  | 
+1528 | #endif                                   | True                         | 
+1529 | #if ENABLE_FEATURE_SEAMLESS_LZMA         | True                         | 
+1530 |  llist_add_to(&(ar_handle->accept), (cha | ENABLE_FEATURE_SEAMLESS_LZMA | 
+1531 | #endif                                   | True                         | 
+1532 | #if ENABLE_FEATURE_SEAMLESS_XZ           | True                         | 
+1533 |  llist_add_to(&(ar_handle->accept), (cha | ENABLE_FEATURE_SEAMLESS_XZ   | 
+1534 | #endif                                   | True                         | 
+1535 |                                          | True                         | 
+1536 |  /* Assign the tar handle as a subarchiv | True                         | 
+1537 |  ar_handle->dpkg__sub_archive = tar_hand | True                         | 
+1538 | }                                        | True                         | 
+1539 |                                          | True                         | 
+1540 | static void FAST_FUNC data_extract_to_bu | True                         | 
+1541 | {                                        | True                         | 
+1542 |  unsigned size = archive_handle->file_he | True                         | 
+1543 |                                          | True                         | 
+1544 |  archive_handle->dpkg__buffer = xzalloc( | True                         | 
+1545 |  xread(archive_handle->src_fd, archive_h | True                         | 
+1546 | }                                        | True                         | 
+1547 |                                          | True                         | 
+1548 | static char *deb_extract_control_file_to | True                         | 
+1549 | {                                        | True                         | 
+1550 |  ar_handle->dpkg__sub_archive->action_da | True                         | 
+1551 |  ar_handle->dpkg__sub_archive->accept =  | True                         | 
+1552 |  ar_handle->dpkg__sub_archive->filter =  | True                         | 
+1553 |                                          | True                         | 
+1554 |  unpack_ar_archive(ar_handle);           | True                         | 
+1555 |  close(ar_handle->src_fd);               | True                         | 
+1556 |                                          | True                         | 
+1557 |  return ar_handle->dpkg__sub_archive->dp | True                         | 
+1558 | }                                        | True                         | 
+1559 |                                          | True                         | 
+1560 | static void append_control_file_to_llist | True                         | 
+1561 | {                                        | True                         | 
+1562 |  FILE *fp;                               | True                         | 
+1563 |  char *filename, *line;                  | True                         | 
+1564 |                                          | True                         | 
+1565 |  filename = xasprintf("/var/lib/dpkg/inf | True                         | 
+1566 |  fp = fopen_for_read(filename);          | True                         | 
+1567 |  free(filename);                         | True                         | 
+1568 |  if (fp != NULL) {                       | True                         | 
+1569 |   while ((line = xmalloc_fgetline(fp)) ! | True                         | 
+1570 |    llist_add_to(ll, line);               | True                         | 
+1571 |   fclose(fp);                            | True                         | 
+1572 |  }                                       | True                         | 
+1573 | }                                        | True                         | 
+1574 |                                          | True                         | 
+1575 | static char FAST_FUNC filter_rename_conf | True                         | 
+1576 | {                                        | True                         | 
+1577 |  int fd;                                 | True                         | 
+1578 |  char *name_ptr = archive_handle->file_h | True                         | 
+1579 |                                          | True                         | 
+1580 |  /* Is this file marked as config file?  | True                         | 
+1581 |  if (!find_list_entry(archive_handle->ac | True                         | 
+1582 |   return EXIT_SUCCESS; /* no */          | True                         | 
+1583 |                                          | True                         | 
+1584 |  fd = open(name_ptr, O_RDONLY);          | True                         | 
+1585 |  if (fd >= 0) {                          | True                         | 
+1586 |   md5_ctx_t md5;                         | True                         | 
+1587 |   char *md5line, *buf;                   | True                         | 
+1588 |   int count;                             | True                         | 
+1589 |                                          | True                         | 
+1590 |   /* Calculate MD5 of existing file */   | True                         | 
+1591 |   buf = xmalloc(4096);                   | True                         | 
+1592 |   md5_begin(&md5);                       | True                         | 
+1593 |   while ((count = safe_read(fd, buf, 409 | True                         | 
+1594 |    md5_hash(&md5, buf, count);           | True                         | 
+1595 |   md5_end(&md5, buf); /* using buf as re | True                         | 
+1596 |   close(fd);                             | True                         | 
+1597 |                                          | True                         | 
+1598 |   md5line = xmalloc(16 * 2 + 2 + strlen( | True                         | 
+1599 |   sprintf(bin2hex(md5line, buf, 16), "   | True                         | 
+1600 |   free(buf);                             | True                         | 
+1601 |                                          | True                         | 
+1602 |   /* Is it changed after install? */     | True                         | 
+1603 |   if (find_list_entry(archive_handle->ac | True                         | 
+1604 |    printf("Warning: Creating %s as %s.dp | True                         | 
+1605 |    archive_handle->file_header->name = x | True                         | 
+1606 |   }                                      | True                         | 
+1607 |   free(md5line);                         | True                         | 
+1608 |  }                                       | True                         | 
+1609 |  return EXIT_SUCCESS;                    | True                         | 
+1610 | }                                        | True                         | 
+1611 |                                          | True                         | 
+1612 | static void FAST_FUNC data_extract_all_p | True                         | 
+1613 | {                                        | True                         | 
+1614 |  char *name_ptr = archive_handle->file_h | True                         | 
+1615 |                                          | True                         | 
+1616 |  /* Skip all leading "/" */              | True                         | 
+1617 |  while (*name_ptr == '/')                | True                         | 
+1618 |   name_ptr++;                            | True                         | 
+1619 |  /* Skip all leading "./" and "../" */   | True                         | 
+1620 |  while (name_ptr[0] == '.') {            | True                         | 
+1621 |   if (name_ptr[1] == '.')                | True                         | 
+1622 |    name_ptr++;                           | True                         | 
+1623 |   if (name_ptr[1] != '/')                | True                         | 
+1624 |    break;                                | True                         | 
+1625 |   name_ptr += 2;                         | True                         | 
+1626 |  }                                       | True                         | 
+1627 |                                          | True                         | 
+1628 |  if (name_ptr[0] != '\0') {              | True                         | 
+1629 |   archive_handle->file_header->name = xa | True                         | 
+1630 |   data_extract_all(archive_handle);      | True                         | 
+1631 |   if (fnmatch("*.dpkg-new", archive_hand | True                         | 
+1632 |    /* remove .dpkg-new suffix */         | True                         | 
+1633 |    archive_handle->file_header->name[str | True                         | 
+1634 |   }                                      | True                         | 
+1635 |  }                                       | True                         | 
+1636 | }                                        | True                         | 
+1637 |                                          | True                         | 
+1638 | enum {                                   | True                         | 
+1639 |  /* Commands */                          | True                         | 
+1640 |  OPT_configure            = (1 << 0),    | True                         | 
+1641 |  OPT_install              = (1 << 1),    | True                         | 
+1642 |  OPT_list_installed       = (1 << 2),    | True                         | 
+1643 |  OPT_purge                = (1 << 3),    | True                         | 
+1644 |  OPT_remove               = (1 << 4),    | True                         | 
+1645 |  OPT_unpack               = (1 << 5),    | True                         | 
+1646 |  OPTMASK_cmd              = (1 << 6) - 1 | True                         | 
+1647 |  /* Options */                           | True                         | 
+1648 |  OPT_force                = (1 << 6),    | True                         | 
+1649 |  OPT_force_ignore_depends = (1 << 7),    | True                         | 
+1650 |  OPT_force_confnew        = (1 << 8),    | True                         | 
+1651 |  OPT_force_confold        = (1 << 9),    | True                         | 
+1652 | };                                       | True                         | 
+1653 |                                          | True                         | 
+1654 | static void unpack_package(deb_file_t *d | True                         | 
+1655 | {                                        | True                         | 
+1656 |  const char *package_name = name_hashtab | True                         | 
+1657 |  const unsigned status_num = search_stat | True                         | 
+1658 |  const unsigned status_package_num = sta | True                         | 
+1659 |  char *info_prefix;                      | True                         | 
+1660 |  char *list_filename;                    | True                         | 
+1661 |  archive_handle_t *archive_handle;       | True                         | 
+1662 |  FILE *out_stream;                       | True                         | 
+1663 |  llist_t *accept_list;                   | True                         | 
+1664 |  llist_t *conffile_list;                 | True                         | 
+1665 |  int i;                                  | True                         | 
+1666 |                                          | True                         | 
+1667 |  /* If existing version, remove it first | True                         | 
+1668 |  conffile_list = NULL;                   | True                         | 
+1669 |  if (strcmp(name_hashtable[get_status(st | True                         | 
+1670 |   /* Package is already installed, remov | True                         | 
+1671 |   printf("Preparing to replace %s %s (us | True                         | 
+1672 |    name_hashtable[package_hashtable[stat | True                         | 
+1673 |    deb_file->filename);                  | True                         | 
+1674 |                                          | True                         | 
+1675 |   /* Read md5sums from old package */    | True                         | 
+1676 |   if (!(option_mask32 & OPT_force_confol | True                         | 
+1677 |    append_control_file_to_llist(package_ | True                         | 
+1678 |                                          | True                         | 
+1679 |   remove_package(status_package_num, 0); | True                         | 
+1680 |  } else {                                | True                         | 
+1681 |   printf("Unpacking %s (from %s)...\n",  | True                         | 
+1682 |  }                                       | True                         | 
+1683 |                                          | True                         | 
+1684 |  /* Extract control.tar.gz to /var/lib/d | True                         | 
+1685 |  info_prefix = xasprintf("/var/lib/dpkg/ | True                         | 
+1686 |  archive_handle = init_archive_deb_ar(de | True                         | 
+1687 |  init_archive_deb_control(archive_handle | True                         | 
+1688 |                                          | True                         | 
+1689 |  accept_list = NULL;                     | True                         | 
+1690 |  i = 0;                                  | True                         | 
+1691 |  while (i < ARRAY_SIZE(all_control_files | True                         | 
+1692 |   char *c = concat_path_file(".", all_co | True                         | 
+1693 |   llist_add_to(&accept_list, c);         | True                         | 
+1694 |   i++;                                   | True                         | 
+1695 |  }                                       | True                         | 
+1696 |  archive_handle->dpkg__sub_archive->acce | True                         | 
+1697 |  archive_handle->dpkg__sub_archive->filt | True                         | 
+1698 |  archive_handle->dpkg__sub_archive->acti | True                         | 
+1699 |  archive_handle->dpkg__sub_archive->dpkg | True                         | 
+1700 |  archive_handle->dpkg__sub_archive->ah_f | True                         | 
+1701 |  unpack_ar_archive(archive_handle);      | True                         | 
+1702 |                                          | True                         | 
+1703 |  /* Run the preinst prior to extracting  | True                         | 
+1704 |  run_package_script_or_die(package_name, | True                         | 
+1705 |                                          | True                         | 
+1706 |  /* Don't overwrite existing config file | True                         | 
+1707 |  if (!(option_mask32 & OPT_force_confnew | True                         | 
+1708 |   append_control_file_to_llist(package_n | True                         | 
+1709 |                                          | True                         | 
+1710 |  /* Extract data.tar.gz to the root dire | True                         | 
+1711 |  archive_handle = init_archive_deb_ar(de | True                         | 
+1712 |  init_archive_deb_data(archive_handle);  | True                         | 
+1713 |  archive_handle->dpkg__sub_archive->acce | True                         | 
+1714 |  /* Why ARCHIVE_REMEMBER_NAMES?          | True                         | 
+1715 |   * We want names collected in ->passed  | True                         | 
+1716 |   * is NULL (otherwise get_header_tar ma | True                         | 
+1717 |   */                                     | True                         | 
+1718 |  archive_handle->dpkg__sub_archive->ah_f | True                         | 
+1719 |  archive_handle->dpkg__sub_archive->filt | True                         | 
+1720 |  archive_handle->dpkg__sub_archive->acti | True                         | 
+1721 |  archive_handle->dpkg__sub_archive->dpkg | True                         | 
+1722 |  unpack_ar_archive(archive_handle);      | True                         | 
+1723 |                                          | True                         | 
+1724 |  /* Create the list file */              | True                         | 
+1725 |  list_filename = xasprintf("/var/lib/dpk | True                         | 
+1726 |  out_stream = xfopen_for_write(list_file | True                         | 
+1727 |  archive_handle->dpkg__sub_archive->pass | True                         | 
+1728 |  while (archive_handle->dpkg__sub_archiv | True                         | 
+1729 |   char *filename = llist_pop(&archive_ha | True                         | 
+1730 |   /* the leading . has been stripped by  | True                         | 
+1731 |   fprintf(out_stream, "%s\n", filename); | True                         | 
+1732 |   free(filename);                        | True                         | 
+1733 |  }                                       | True                         | 
+1734 |  fclose(out_stream);                     | True                         | 
+1735 |                                          | True                         | 
+1736 |  /* change status */                     | True                         | 
+1737 |  set_status(status_num, "install", 1);   | True                         | 
+1738 |  set_status(status_num, "unpacked", 3);  | True                         | 
+1739 |                                          | True                         | 
+1740 |  free(info_prefix);                      | True                         | 
+1741 |  free(list_filename);                    | True                         | 
+1742 | }                                        | True                         | 
+1743 |                                          | True                         | 
+1744 | static void configure_package(deb_file_t | True                         | 
+1745 | {                                        | True                         | 
+1746 |  const char *package_name = name_hashtab | True                         | 
+1747 |  const char *package_version = name_hash | True                         | 
+1748 |  const int status_num = search_status_ha | True                         | 
+1749 |                                          | True                         | 
+1750 |  printf("Setting up %s (%s)...\n", packa | True                         | 
+1751 |                                          | True                         | 
+1752 |  /* Run the postinst script */           | True                         | 
+1753 |  /* TODO: handle failure gracefully */   | True                         | 
+1754 |  run_package_script_or_die(package_name, | True                         | 
+1755 |                                          | True                         | 
+1756 |  /* Change status to reflect success */  | True                         | 
+1757 |  set_status(status_num, "install", 1);   | True                         | 
+1758 |  set_status(status_num, "installed", 3); | True                         | 
+1759 | }                                        | True                         | 
+1760 |                                          | True                         | 
+1761 | int dpkg_main(int argc, char **argv) MAI | True                         | 
+1762 | int dpkg_main(int argc UNUSED_PARAM, cha | True                         | 
+1763 | {                                        | True                         | 
+1764 |  deb_file_t **deb_file = NULL;           | True                         | 
+1765 |  status_node_t *status_node;             | True                         | 
+1766 |  char *str_f;                            | True                         | 
+1767 |  int opt;                                | True                         | 
+1768 |  int package_num;                        | True                         | 
+1769 |  int deb_count = 0;                      | True                         | 
+1770 |  int state_status;                       | True                         | 
+1771 |  int status_num;                         | True                         | 
+1772 |  int i;                                  | True                         | 
+1773 | #if ENABLE_LONG_OPTS                     | True                         | 
+1774 |  static const char dpkg_longopts[] ALIGN | ENABLE_LONG_OPTS             | 
+1775 | // FIXME: we use -C non-compatibly, shou | ENABLE_LONG_OPTS             | 
+1776 | // "-C|--audit Check for broken package( | ENABLE_LONG_OPTS             | 
+1777 |   "configure\0"      No_argument         | ENABLE_LONG_OPTS             | 
+1778 |   "force\0"          Required_argument   | ENABLE_LONG_OPTS             | 
+1779 |   "install\0"        No_argument         | ENABLE_LONG_OPTS             | 
+1780 |   "list\0"           No_argument         | ENABLE_LONG_OPTS             | 
+1781 |   "purge\0"          No_argument         | ENABLE_LONG_OPTS             | 
+1782 |   "remove\0"         No_argument         | ENABLE_LONG_OPTS             | 
+1783 |   "unpack\0"         No_argument         | ENABLE_LONG_OPTS             | 
+1784 |   "force-depends\0"  No_argument         | ENABLE_LONG_OPTS             | 
+1785 |   "force-confnew\0"  No_argument         | ENABLE_LONG_OPTS             | 
+1786 |   "force-confold\0"  No_argument         | ENABLE_LONG_OPTS             | 
+1787 |   ;                                      | ENABLE_LONG_OPTS             | 
+1788 | #endif                                   | True                         | 
+1789 |                                          | True                         | 
+1790 |  INIT_G();                               | True                         | 
+1791 |                                          | True                         | 
+1792 |  opt = getopt32long(argv, "CilPruF:", dp | True                         | 
+1793 |  argv += optind;                         | True                         | 
+1794 |  //if (opt & OPT_configure) ... // -C    | True                         | 
+1795 |  if (opt & OPT_force) { // -F (--force i | True                         | 
+1796 |   if (strcmp(str_f, "depends") == 0)     | True                         | 
+1797 |    opt |= OPT_force_ignore_depends;      | True                         | 
+1798 |   else if (strcmp(str_f, "confnew") == 0 | True                         | 
+1799 |    opt |= OPT_force_confnew;             | True                         | 
+1800 |   else if (strcmp(str_f, "confold") == 0 | True                         | 
+1801 |    opt |= OPT_force_confold;             | True                         | 
+1802 |   else                                   | True                         | 
+1803 |    bb_show_usage();                      | True                         | 
+1804 |   option_mask32 = opt;                   | True                         | 
+1805 |  }                                       | True                         | 
+1806 |  //if (opt & OPT_install) ... // -i      | True                         | 
+1807 |  //if (opt & OPT_list_installed) ... //  | True                         | 
+1808 |  //if (opt & OPT_purge) ... // -P        | True                         | 
+1809 |  //if (opt & OPT_remove) ... // -r       | True                         | 
+1810 |  //if (opt & OPT_unpack) ... // -u (--un | True                         | 
+1811 |  if (!(opt & OPTMASK_cmd) /* no cmd */   | True                         | 
+1812 |   || ((opt & OPTMASK_cmd) & ((opt & OPTM | True                         | 
+1813 |  ) {                                     | True                         | 
+1814 |   bb_show_usage();                       | True                         | 
+1815 |  }                                       | True                         | 
+1816 |                                          | True                         | 
+1817 | /* puts("(Reading database ... xxxxx fil | True                         | 
+1818 |  index_status_file("/var/lib/dpkg/status | True                         | 
+1819 |                                          | True                         | 
+1820 |  /* if the list action was given print t | True                         | 
+1821 |  if (opt & OPT_list_installed) {         | True                         | 
+1822 |   list_packages(argv[0]); /* param can b | True                         | 
+1823 |   return EXIT_SUCCESS;                   | True                         | 
+1824 |  }                                       | True                         | 
+1825 |                                          | True                         | 
+1826 |  /* Read arguments and store relevant in | True                         | 
+1827 |  while (*argv) {                         | True                         | 
+1828 |   /* deb_count = nb_elem - 1 and we need | True                         | 
+1829 |   deb_file = xrealloc_vector(deb_file, 2 | True                         | 
+1830 |   deb_file[deb_count] = xzalloc(sizeof(d | True                         | 
+1831 |   if (opt & (OPT_install | OPT_unpack))  | True                         | 
+1832 |    /* -i/-u: require filename */         | True                         | 
+1833 |    archive_handle_t *archive_handle;     | True                         | 
+1834 |    llist_t *control_list = NULL;         | True                         | 
+1835 |                                          | True                         | 
+1836 |    /* Extract the control file */        | True                         | 
+1837 |    llist_add_to(&control_list, (char*)". | True                         | 
+1838 |    archive_handle = init_archive_deb_ar( | True                         | 
+1839 |    init_archive_deb_control(archive_hand | True                         | 
+1840 |    deb_file[deb_count]->control_file = d | True                         | 
+1841 |    if (deb_file[deb_count]->control_file | True                         | 
+1842 |     bb_simple_error_msg_and_die("can't e | True                         | 
+1843 |    }                                     | True                         | 
+1844 |    deb_file[deb_count]->filename = xstrd | True                         | 
+1845 |    package_num = fill_package_struct(deb | True                         | 
+1846 |                                          | True                         | 
+1847 |    if (package_num == -1) {              | True                         | 
+1848 |     bb_error_msg("invalid control file i | True                         | 
+1849 |     argv++;                              | True                         | 
+1850 |     continue;                            | True                         | 
+1851 |    }                                     | True                         | 
+1852 |    deb_file[deb_count]->package = (unsig | True                         | 
+1853 |                                          | True                         | 
+1854 |    /* Add the package to the status hash | True                         | 
+1855 |    if (opt & (OPT_unpack | OPT_install)) | True                         | 
+1856 |     /* Try and find a currently installe | True                         | 
+1857 |     status_num = search_status_hashtable | True                         | 
+1858 |     /* If no previous entry was found in | True                         | 
+1859 |     if (status_hashtable[status_num] ==  | True                         | 
+1860 |      || status_hashtable[status_num]->st | True                         | 
+1861 |     ) {                                  | True                         | 
+1862 |      status_node = xmalloc(sizeof(status | True                         | 
+1863 |      status_node->package = deb_file[deb | True                         | 
+1864 |      /* reinstreq isn't changed to "ok"  | True                         | 
+1865 |       * is written to the status file*/  | True                         | 
+1866 |      status_node->status = search_name_h | True                         | 
+1867 |      status_hashtable[status_num] = stat | True                         | 
+1868 |     } else {                             | True                         | 
+1869 |      set_status(status_num, "install", 1 | True                         | 
+1870 |      set_status(status_num, "reinstreq", | True                         | 
+1871 |     }                                    | True                         | 
+1872 |    }                                     | True                         | 
+1873 |   } else if (opt & (OPT_configure | OPT_ | True                         | 
+1874 |    /* -C/-p/-r: require package name */  | True                         | 
+1875 |    deb_file[deb_count]->package = search | True                         | 
+1876 |      search_name_hashtable(argv[0]),     | True                         | 
+1877 |      search_name_hashtable("ANY"), VER_A | True                         | 
+1878 |    if (package_hashtable[deb_file[deb_co | True                         | 
+1879 |     bb_error_msg_and_die("package %s is  | True                         | 
+1880 |    }                                     | True                         | 
+1881 |    package_num = deb_file[deb_count]->pa | True                         | 
+1882 |    status_num = search_status_hashtable( | True                         | 
+1883 |    state_status = get_status(status_num, | True                         | 
+1884 |                                          | True                         | 
+1885 |    /* check package status is "installed | True                         | 
+1886 |    if (opt & OPT_remove) {               | True                         | 
+1887 |     if (strcmp(name_hashtable[state_stat | True                         | 
+1888 |      || strcmp(name_hashtable[state_stat | True                         | 
+1889 |     ) {                                  | True                         | 
+1890 |      bb_error_msg_and_die("%s is already | True                         | 
+1891 |     }                                    | True                         | 
+1892 |     set_status(status_num, "deinstall",  | True                         | 
+1893 |    } else if (opt & OPT_purge) {         | True                         | 
+1894 |     /* if package status is "conf-files" | True                         | 
+1895 |     if (strcmp(name_hashtable[state_stat | True                         | 
+1896 |      bb_error_msg_and_die("%s is already | True                         | 
+1897 |     }                                    | True                         | 
+1898 |     set_status(status_num, "purge", 1);  | True                         | 
+1899 |    }                                     | True                         | 
+1900 |   }                                      | True                         | 
+1901 |   deb_count++;                           | True                         | 
+1902 |   argv++;                                | True                         | 
+1903 |  }                                       | True                         | 
+1904 |  if (!deb_count)                         | True                         | 
+1905 |   bb_simple_error_msg_and_die("no packag | True                         | 
+1906 |  deb_file[deb_count] = NULL;             | True                         | 
+1907 |                                          | True                         | 
+1908 |  /* Check that the deb file arguments ar | True                         | 
+1909 |  if (!(opt & OPT_force_ignore_depends))  | True                         | 
+1910 |   if (!check_deps(deb_file, 0 /*, deb_co | True                         | 
+1911 |    bb_simple_error_msg_and_die("dependen | True                         | 
+1912 |   }                                      | True                         | 
+1913 |  }                                       | True                         | 
+1914 |                                          | True                         | 
+1915 |  /* TODO: install or remove packages in  | True                         | 
+1916 |  for (i = 0; i < deb_count; i++) {       | True                         | 
+1917 |   /* Remove or purge packages */         | True                         | 
+1918 |   if (opt & OPT_remove) {                | True                         | 
+1919 |    remove_package(deb_file[i]->package,  | True                         | 
+1920 |   }                                      | True                         | 
+1921 |   else if (opt & OPT_purge) {            | True                         | 
+1922 |    purge_package(deb_file[i]->package);  | True                         | 
+1923 |   }                                      | True                         | 
+1924 |   else if (opt & OPT_unpack) {           | True                         | 
+1925 |    unpack_package(deb_file[i]);          | True                         | 
+1926 |   }                                      | True                         | 
+1927 |   else if (opt & OPT_install) {          | True                         | 
+1928 |    unpack_package(deb_file[i]);          | True                         | 
+1929 |    /* package is configured in second pa | True                         | 
+1930 |   }                                      | True                         | 
+1931 |   else if (opt & OPT_configure) {        | True                         | 
+1932 |    configure_package(deb_file[i]);       | True                         | 
+1933 |   }                                      | True                         | 
+1934 |  }                                       | True                         | 
+1935 |  /* configure installed packages */      | True                         | 
+1936 |  if (opt & OPT_install) {                | True                         | 
+1937 |   for (i = 0; i < deb_count; i++)        | True                         | 
+1938 |    configure_package(deb_file[i]);       | True                         | 
+1939 |  }                                       | True                         | 
+1940 |                                          | True                         | 
+1941 |  write_status_file(deb_file);            | True                         | 
+1942 |                                          | True                         | 
+1943 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                         | 
+1944 |   for (i = 0; i < deb_count; i++) {      | True                         | 
+1945 |    free(deb_file[i]->control_file);      | True                         | 
+1946 |    free(deb_file[i]->filename);          | True                         | 
+1947 |    free(deb_file[i]);                    | True                         | 
+1948 |   }                                      | True                         | 
+1949 |                                          | True                         | 
+1950 |   free(deb_file);                        | True                         | 
+1951 |                                          | True                         | 
+1952 |   for (i = 0; i < NAME_HASH_PRIME; i++)  | True                         | 
+1953 |    free(name_hashtable[i]);              | True                         | 
+1954 |   }                                      | True                         | 
+1955 |                                          | True                         | 
+1956 |   for (i = 0; i < PACKAGE_HASH_PRIME; i+ | True                         | 
+1957 |    free_package(package_hashtable[i]);   | True                         | 
+1958 |   }                                      | True                         | 
+1959 |                                          | True                         | 
+1960 |   for (i = 0; i < STATUS_HASH_PRIME; i++ | True                         | 
+1961 |    free(status_hashtable[i]);            | True                         | 
+1962 |   }                                      | True                         | 
+1963 |  }                                       | True                         | 
+1964 |                                          | True                         | 
+1965 |  return EXIT_SUCCESS;                    | True                         | 
+1966 | }                                        | True                         | 
+-----+------------------------------------------+------------------------------+
+     |                                          | +211MB, 325ms                | 

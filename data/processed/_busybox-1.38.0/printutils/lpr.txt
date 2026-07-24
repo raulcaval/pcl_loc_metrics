@@ -1,0 +1,299 @@
+FILE: data/raw/busybox-1.38.0/printutils/lpr.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * bare bones version of lpr & lpq: BSD  | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2008 by Vladimir Dronni | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Original idea and code:               | True                      | 
+   8 |  *      Walter Harms <WHarms@bfs.de>     | True                      | 
+   9 |  *                                       | True                      | 
+  10 |  * Licensed under GPLv2, see file LICENS | True                      | 
+  11 |  *                                       | True                      | 
+  12 |  * See RFC 1179 for protocol description | True                      | 
+  13 |  */                                      | True                      | 
+  14 | //config:config LPR                      | True                      | 
+  15 | //config: bool "lpr (10 kb)"             | True                      | 
+  16 | //config: default y                      | True                      | 
+  17 | //config: help                           | True                      | 
+  18 | //config: lpr sends files (or standard i | True                      | 
+  19 | //config:                                | True                      | 
+  20 | //config:config LPQ                      | True                      | 
+  21 | //config: bool "lpq (10 kb)"             | True                      | 
+  22 | //config: default y                      | True                      | 
+  23 | //config: help                           | True                      | 
+  24 | //config: lpq is a print spool queue exa | True                      | 
+  25 |                                          | True                      | 
+  26 | //              APPLET_ODDNAME:name main | True                      | 
+  27 | //applet:IF_LPQ(APPLET_ODDNAME(lpq, lpqr | True                      | 
+  28 | //applet:IF_LPR(APPLET_ODDNAME(lpr, lpqr | True                      | 
+  29 |                                          | True                      | 
+  30 | //kbuild:lib-$(CONFIG_LPR) += lpr.o      | True                      | 
+  31 | //kbuild:lib-$(CONFIG_LPQ) += lpr.o      | True                      | 
+  32 |                                          | True                      | 
+  33 | //usage:#define lpr_trivial_usage        | True                      | 
+  34 | //usage:       "-P queue[@host[:port]] - | True                      | 
+  35 | /* -C CLASS exists too, not shown.       | True                      | 
+  36 |  * CLASS is supposed to be printed on ba | True                      | 
+  37 | //usage:#define lpr_full_usage "\n\n"    | True                      | 
+  38 | //usage:       " -P lp service to connec | True                      | 
+  39 | //usage:     "\n -m Send mail on complet | True                      | 
+  40 | //usage:     "\n -h Print banner page to | True                      | 
+  41 | //usage:     "\n -V Verbose"             | True                      | 
+  42 | //usage:                                 | True                      | 
+  43 | //usage:#define lpq_trivial_usage        | True                      | 
+  44 | //usage:       "[-P queue[@host[:port]]] | True                      | 
+  45 | //usage:#define lpq_full_usage "\n\n"    | True                      | 
+  46 | //usage:       " -P lp service to connec | True                      | 
+  47 | //usage:     "\n -d Delete jobs"         | True                      | 
+  48 | //usage:     "\n -f Force any waiting jo | True                      | 
+  49 | //usage:     "\n -s Short display"       | True                      | 
+  50 |                                          | True                      | 
+  51 | #include "libbb.h"                       | True                      | 
+  52 |                                          | True                      | 
+  53 | /*                                       | True                      | 
+  54 |  * LPD returns binary 0 on success.      | True                      | 
+  55 |  * Otherwise it returns error message.   | True                      | 
+  56 |  */                                      | True                      | 
+  57 | static void get_response_or_say_and_die( | True                      | 
+  58 | {                                        | True                      | 
+  59 |  ssize_t sz;                             | True                      | 
+  60 |  char buf[128];                          | True                      | 
+  61 |                                          | True                      | 
+  62 |  buf[0] = ' ';                           | True                      | 
+  63 |  sz = safe_read(fd, buf, 1);             | True                      | 
+  64 |  if ('\0' != buf[0]) {                   | True                      | 
+  65 |   // request has failed                  | True                      | 
+  66 |   // try to make sure last char is '\n', | True                      | 
+  67 |   // superfluous one                     | True                      | 
+  68 |   sz = full_read(fd, buf + 1, 126);      | True                      | 
+  69 |   bb_error_msg("error while %s%s", errms | True                      | 
+  70 |     (sz > 0 ? ". Server said:" : ""));   | True                      | 
+  71 |   if (sz > 0) {                          | True                      | 
+  72 |    // sz = (bytes in buf) - 1            | True                      | 
+  73 |    if (buf[sz] != '\n')                  | True                      | 
+  74 |     buf[++sz] = '\n';                    | True                      | 
+  75 |    safe_write(STDERR_FILENO, buf, sz + 1 | True                      | 
+  76 |   }                                      | True                      | 
+  77 |   xfunc_die();                           | True                      | 
+  78 |  }                                       | True                      | 
+  79 | }                                        | True                      | 
+  80 |                                          | True                      | 
+  81 | int lpqr_main(int argc, char **argv) MAI | True                      | 
+  82 | int lpqr_main(int argc UNUSED_PARAM, cha | True                      | 
+  83 | {                                        | True                      | 
+  84 |  enum {                                  | True                      | 
+  85 |   OPT_P           = 1 << 0, // -P queue[ | True                      | 
+  86 |   OPT_U           = 1 << 1, // -U userna | True                      | 
+  87 |                                          | True                      | 
+  88 |   LPR_V           = 1 << 2, // -V: be ve | True                      | 
+  89 |   LPR_h           = 1 << 3, // -h: want  | True                      | 
+  90 |   LPR_C           = 1 << 4, // -C class: | True                      | 
+  91 |   LPR_J           = 1 << 5, // -J title: | True                      | 
+  92 |   LPR_m           = 1 << 6, // -m: send  | True                      | 
+  93 |                                          | True                      | 
+  94 |   LPQ_SHORT_FMT   = 1 << 2, // -s: short | True                      | 
+  95 |   LPQ_DELETE      = 1 << 3, // -d: delet | True                      | 
+  96 |   LPQ_FORCE       = 1 << 4, // -f: force | True                      | 
+  97 |  };                                      | True                      | 
+  98 |  char tempfile[sizeof("/tmp/lprXXXXXX")] | True                      | 
+  99 |  const char *job_title;                  | True                      | 
+ 100 |  const char *printer_class = "";   // pr | True                      | 
+ 101 |  const char *queue;                // na | True                      | 
+ 102 |  const char *server = "localhost"; // se | True                      | 
+ 103 |  char *hostname;                         | True                      | 
+ 104 |  // N.B. IMHO getenv("USER") can be way  | True                      | 
+ 105 |  const char *user = xuid2uname(getuid()) | True                      | 
+ 106 |  unsigned job;                           | True                      | 
+ 107 |  unsigned opts;                          | True                      | 
+ 108 |  int fd;                                 | True                      | 
+ 109 |                                          | True                      | 
+ 110 |  queue = getenv("PRINTER");              | True                      | 
+ 111 |  if (!queue)                             | True                      | 
+ 112 |   queue = "lp";                          | True                      | 
+ 113 |                                          | True                      | 
+ 114 |  // parse options                        | True                      | 
+ 115 |  // TODO: set opt_complementary: s,d,f a | True                      | 
+ 116 |  opts = getopt32(argv,                   | True                      | 
+ 117 |   (/*lp*/'r' == applet_name[2]) ? "P:U:V | True                      | 
+ 118 |   , &queue, &user                        | True                      | 
+ 119 |   , &printer_class, &job_title           | True                      | 
+ 120 |  );                                      | True                      | 
+ 121 |  argv += optind;                         | True                      | 
+ 122 |                                          | True                      | 
+ 123 |  {                                       | True                      | 
+ 124 |   // queue name is to the left of '@'    | True                      | 
+ 125 |   char *s = (char *)strchr(queue, '@');  | True                      | 
+ 126 |   if (s) {                               | True                      | 
+ 127 |    // server name is to the right of '@' | True                      | 
+ 128 |    *s = '\0';                            | True                      | 
+ 129 |    server = s + 1;                       | True                      | 
+ 130 |   }                                      | True                      | 
+ 131 |  }                                       | True                      | 
+ 132 |                                          | True                      | 
+ 133 |  // do connect                           | True                      | 
+ 134 |  fd = create_and_connect_stream_or_die(s | True                      | 
+ 135 |                                          | True                      | 
+ 136 |  //                                      | True                      | 
+ 137 |  // LPQ ------------------------         | True                      | 
+ 138 |  //                                      | True                      | 
+ 139 |  if (/*lp*/'q' == applet_name[2]) {      | True                      | 
+ 140 |   char cmd;                              | True                      | 
+ 141 |   // force printing of every job still i | True                      | 
+ 142 |   if (opts & LPQ_FORCE) {                | True                      | 
+ 143 |    cmd = 1;                              | True                      | 
+ 144 |    goto command;                         | True                      | 
+ 145 |   // delete job(s)                       | True                      | 
+ 146 |   } else if (opts & LPQ_DELETE) {        | True                      | 
+ 147 |    fdprintf(fd, "\x5" "%s %s", queue, us | True                      | 
+ 148 |    while (*argv) {                       | True                      | 
+ 149 |     fdprintf(fd, " %s", *argv++);        | True                      | 
+ 150 |    }                                     | True                      | 
+ 151 |    bb_putchar('\n');                     | True                      | 
+ 152 |   // dump current jobs status            | True                      | 
+ 153 |   // N.B. periodical polling should be a | True                      | 
+ 154 |   // via "watch -n delay lpq"            | True                      | 
+ 155 |   // They say it's the UNIX-way :)       | True                      | 
+ 156 |   } else {                               | True                      | 
+ 157 |    cmd = (opts & LPQ_SHORT_FMT) ? 3 : 4; | True                      | 
+ 158 |  command:                                | True                      | 
+ 159 |    fdprintf(fd, "%c" "%s\n", cmd, queue) | True                      | 
+ 160 |    bb_copyfd_eof(fd, STDOUT_FILENO);     | True                      | 
+ 161 |   }                                      | True                      | 
+ 162 |                                          | True                      | 
+ 163 |   return EXIT_SUCCESS;                   | True                      | 
+ 164 |  }                                       | True                      | 
+ 165 |                                          | True                      | 
+ 166 |  //                                      | True                      | 
+ 167 |  // LPR ------------------------         | True                      | 
+ 168 |  //                                      | True                      | 
+ 169 |  if (opts & LPR_V)                       | True                      | 
+ 170 |   bb_simple_error_msg("connected to serv | True                      | 
+ 171 |                                          | True                      | 
+ 172 |  job = getpid() % 1000;                  | True                      | 
+ 173 |  hostname = safe_gethostname();          | True                      | 
+ 174 |                                          | True                      | 
+ 175 |  // no files given on command line? -> u | True                      | 
+ 176 |  if (!*argv)                             | True                      | 
+ 177 |   *--argv = (char *)"-";                 | True                      | 
+ 178 |                                          | True                      | 
+ 179 |  fdprintf(fd, "\x2" "%s\n", queue);      | True                      | 
+ 180 |  get_response_or_say_and_die(fd, "settin | True                      | 
+ 181 |                                          | True                      | 
+ 182 |  // process files                        | True                      | 
+ 183 |  do {                                    | True                      | 
+ 184 |   unsigned cflen;                        | True                      | 
+ 185 |   int dfd;                               | True                      | 
+ 186 |   struct stat st;                        | True                      | 
+ 187 |   char *c;                               | True                      | 
+ 188 |   char *remote_filename;                 | True                      | 
+ 189 |   char *controlfile;                     | True                      | 
+ 190 |                                          | True                      | 
+ 191 |   // if data file is stdin, we need to d | True                      | 
+ 192 |   if (LONE_DASH(*argv)) {                | True                      | 
+ 193 |    strcpy(tempfile, "/tmp/lprXXXXXX");   | True                      | 
+ 194 |    dfd = xmkstemp(tempfile);             | True                      | 
+ 195 |    bb_copyfd_eof(STDIN_FILENO, dfd);     | True                      | 
+ 196 |    xlseek(dfd, 0, SEEK_SET);             | True                      | 
+ 197 |    *argv = (char*)bb_msg_standard_input; | True                      | 
+ 198 |   } else {                               | True                      | 
+ 199 |    dfd = xopen(*argv, O_RDONLY);         | True                      | 
+ 200 |   }                                      | True                      | 
+ 201 |                                          | True                      | 
+ 202 |   st.st_size = 0; /* paranoia: fstat may | True                      | 
+ 203 |   fstat(dfd, &st);                       | True                      | 
+ 204 |                                          | True                      | 
+ 205 |   /* Apparently, some servers are buggy  | True                      | 
+ 206 |    * Standard lpr works around it by ref | True                      | 
+ 207 |    */                                    | True                      | 
+ 208 |   if (st.st_size == 0) {                 | True                      | 
+ 209 |    bb_simple_error_msg("nothing to print | True                      | 
+ 210 |    continue;                             | True                      | 
+ 211 |   }                                      | True                      | 
+ 212 |                                          | True                      | 
+ 213 |   /* "The name ... should start with ASC | True                      | 
+ 214 |    * followed by a three digit job numbe | True                      | 
+ 215 |    * by the host name which has construc | True                      | 
+ 216 |    * We supply 'c' or 'd' as needed for  | True                      | 
+ 217 |   remote_filename = xasprintf("fA%03u%s" | True                      | 
+ 218 |                                          | True                      | 
+ 219 |   // create control file                 | True                      | 
+ 220 |   // TODO: all lines but 2 last are cons | True                      | 
+ 221 |   controlfile = xasprintf(               | True                      | 
+ 222 |    "H" "%.32s\n" "P" "%.32s\n" /* H HOST | True                      | 
+ 223 |    "C" "%.32s\n" /* C CLASS - printed on | True                      | 
+ 224 |    "J" "%.99s\n" /* J JOBNAME */         | True                      | 
+ 225 |    /* "class name for banner page and jo | True                      | 
+ 226 |     * for banner page commands must prec | True                      | 
+ 227 |    "L" "%.32s\n" /* L USER - print banne | True                      | 
+ 228 |    "M" "%.32s\n" /* M WHOM_TO_MAIL */    | True                      | 
+ 229 |    "l" "d%.31s\n" /* l DATA_FILE_NAME (" | True                      | 
+ 230 |    , hostname, user                      | True                      | 
+ 231 |    , printer_class /* can be "" */       | True                      | 
+ 232 |    , ((opts & LPR_J) ? job_title : *argv | True                      | 
+ 233 |    , (opts & LPR_h) ? user : ""          | True                      | 
+ 234 |    , (opts & LPR_m) ? user : ""          | True                      | 
+ 235 |    , remote_filename                     | True                      | 
+ 236 |   );                                     | True                      | 
+ 237 |   // delete possible "\nX\n" (that is, o | True                      | 
+ 238 |   c = controlfile;                       | True                      | 
+ 239 |   while ((c = strchr(c, '\n')) != NULL)  | True                      | 
+ 240 |    if (c[1] && c[2] == '\n') {           | True                      | 
+ 241 |     overlapping_strcpy(c, c+2);          | True                      | 
+ 242 |    } else {                              | True                      | 
+ 243 |     c++;                                 | True                      | 
+ 244 |    }                                     | True                      | 
+ 245 |   }                                      | True                      | 
+ 246 |                                          | True                      | 
+ 247 |   // send control file                   | True                      | 
+ 248 |   if (opts & LPR_V)                      | True                      | 
+ 249 |    bb_simple_error_msg("sending control  | True                      | 
+ 250 |   /* "Acknowledgement processing must oc | True                      | 
+ 251 |    * after the command is sent." */      | True                      | 
+ 252 |   cflen = (unsigned)strlen(controlfile); | True                      | 
+ 253 |   fdprintf(fd, "\x2" "%u c%s\n", cflen,  | True                      | 
+ 254 |   get_response_or_say_and_die(fd, "sendi | True                      | 
+ 255 |   /* "Once all of the contents have      | True                      | 
+ 256 |    * been delivered, an octet of zero bi | True                      | 
+ 257 |    * an indication that the file being s | True                      | 
+ 258 |    * A second level of acknowledgement p | True                      | 
+ 259 |    * must occur at this point." */       | True                      | 
+ 260 |   full_write(fd, controlfile, cflen + 1) | True                      | 
+ 261 |   get_response_or_say_and_die(fd, "sendi | True                      | 
+ 262 |                                          | True                      | 
+ 263 |   // send data file, with name "dfaXXX"  | True                      | 
+ 264 |   if (opts & LPR_V)                      | True                      | 
+ 265 |    bb_simple_error_msg("sending data fil | True                      | 
+ 266 |   fdprintf(fd, "\x3" "%"OFF_FMT"u d%s\n" | True                      | 
+ 267 |   get_response_or_say_and_die(fd, "sendi | True                      | 
+ 268 |   if (bb_copyfd_size(dfd, fd, st.st_size | True                      | 
+ 269 |    // We're screwed. We sent less bytes  | True                      | 
+ 270 |    bb_simple_error_msg_and_die("local fi | True                      | 
+ 271 |   }                                      | True                      | 
+ 272 |   write(fd, "", 1); // send ACK          | True                      | 
+ 273 |   get_response_or_say_and_die(fd, "sendi | True                      | 
+ 274 |                                          | True                      | 
+ 275 |   // delete temporary file if we dumped  | True                      | 
+ 276 |   if (*argv == (char*)bb_msg_standard_in | True                      | 
+ 277 |    unlink(tempfile);                     | True                      | 
+ 278 |                                          | True                      | 
+ 279 |   // cleanup                             | True                      | 
+ 280 |   close(fd);                             | True                      | 
+ 281 |   free(remote_filename);                 | True                      | 
+ 282 |   free(controlfile);                     | True                      | 
+ 283 |                                          | True                      | 
+ 284 |   // say job accepted                    | True                      | 
+ 285 |   if (opts & LPR_V)                      | True                      | 
+ 286 |    bb_simple_error_msg("job accepted");  | True                      | 
+ 287 |                                          | True                      | 
+ 288 |   // next, please!                       | True                      | 
+ 289 |   job = (job + 1) % 1000;                | True                      | 
+ 290 |  } while (*++argv);                      | True                      | 
+ 291 |                                          | True                      | 
+ 292 |  return EXIT_SUCCESS;                    | True                      | 
+ 293 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +16MB, 237ms              | 

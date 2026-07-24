@@ -1,0 +1,579 @@
+FILE: data/raw/busybox-1.38.0/util-linux/fbset.c
+Resultado PCLocator:
+   # | line of code                             | Merge                         | 
+-----+------------------------------------------+-------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                          | 
+   2 | /*                                       | True                          | 
+   3 |  * Mini fbset implementation for busybox | True                          | 
+   4 |  *                                       | True                          | 
+   5 |  * Copyright (C) 1999 by Randolph Chung  | True                          | 
+   6 |  *                                       | True                          | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                          | 
+   8 |  *                                       | True                          | 
+   9 |  * This is a from-scratch implementation | True                          | 
+  10 |  * implementation was a good reference.  | True                          | 
+  11 |  * the GPL, and is (c) 1995-1999 by:     | True                          | 
+  12 |  *     Geert Uytterhoeven (Geert.Uytterh | True                          | 
+  13 |  */                                      | True                          | 
+  14 | //config:config FBSET                    | True                          | 
+  15 | //config: bool "fbset (6.2 kb)"          | True                          | 
+  16 | //config: default y                      | True                          | 
+  17 | //config: help                           | True                          | 
+  18 | //config: fbset is used to show or chang | True                          | 
+  19 | //config: device. The frame buffer devic | True                          | 
+  20 | //config: interface to access a graphics | True                          | 
+  21 | //config: if you wish to enable the 'fbs | True                          | 
+  22 | //config:                                | True                          | 
+  23 | //config:config FEATURE_FBSET_FANCY      | True                          | 
+  24 | //config: bool "Enable extra options"    | True                          | 
+  25 | //config: default y                      | True                          | 
+  26 | //config: depends on FBSET               | True                          | 
+  27 | //config: help                           | True                          | 
+  28 | //config: This option enables extended f | True                          | 
+  29 | //config: framebuffer size, color depth, | True                          | 
+  30 | //config: display. Enable this option if | True                          | 
+  31 | //config: options.                       | True                          | 
+  32 | //config:                                | True                          | 
+  33 | //config:config FEATURE_FBSET_READMODE   | True                          | 
+  34 | //config: bool "Enable readmode support" | True                          | 
+  35 | //config: default y                      | True                          | 
+  36 | //config: depends on FBSET               | True                          | 
+  37 | //config: help                           | True                          | 
+  38 | //config: This option allows fbset to re | True                          | 
+  39 | //config: default as /etc/fb.modes, whic | True                          | 
+  40 | //config: device to pre-defined video mo | True                          | 
+  41 |                                          | True                          | 
+  42 | //applet:IF_FBSET(APPLET(fbset, BB_DIR_U | True                          | 
+  43 |                                          | True                          | 
+  44 | //kbuild:lib-$(CONFIG_FBSET) += fbset.o  | True                          | 
+  45 |                                          | True                          | 
+  46 | //usage:#define fbset_trivial_usage      | True                          | 
+  47 | //usage:       "[OPTIONS] [MODE]"        | True                          | 
+  48 | //usage:#define fbset_full_usage "\n\n"  | True                          | 
+  49 | //usage:       "Show and modify frame bu | True                          | 
+  50 | //usage:                                 | True                          | 
+  51 | //usage:#define fbset_example_usage      | True                          | 
+  52 | //usage:       "$ fbset\n"               | True                          | 
+  53 | //usage:       "mode \"1024x768-76\"\n"  | True                          | 
+  54 | //usage:       " # D: 78.653 MHz, H: 59. | True                          | 
+  55 | //usage:       " geometry 1024 768 1024  | True                          | 
+  56 | //usage:       " timings 12714 128 32 16 | True                          | 
+  57 | //usage:       " accel false\n"          | True                          | 
+  58 | //usage:       " rgba 5/11,6/5,5/0,0/0\n | True                          | 
+  59 | //usage:       "endmode\n"               | True                          | 
+  60 |                                          | True                          | 
+  61 | #include "libbb.h"                       | True                          | 
+  62 |                                          | True                          | 
+  63 | #define DEFAULTFBDEV  FB_0               | True                          | 
+  64 | #define DEFAULTFBMODE "/etc/fb.modes"    | True                          | 
+  65 |                                          | True                          | 
+  66 | /* Stuff stolen from the kernel's fb.h * | True                          | 
+  67 | #define FB_ACTIVATE_ALL 64               | True                          | 
+  68 | enum {                                   | True                          | 
+  69 |  FBIOGET_VSCREENINFO = 0x4600,           | True                          | 
+  70 |  FBIOPUT_VSCREENINFO = 0x4601            | True                          | 
+  71 | };                                       | True                          | 
+  72 |                                          | True                          | 
+  73 | struct fb_bitfield {                     | True                          | 
+  74 |  uint32_t offset;                /* begi | True                          | 
+  75 |  uint32_t length;                /* leng | True                          | 
+  76 |  uint32_t msb_right;             /* !=0: | True                          | 
+  77 | };                                       | True                          | 
+  78 | struct fb_var_screeninfo {               | True                          | 
+  79 |  uint32_t xres;                  /* visi | True                          | 
+  80 |  uint32_t yres;                          | True                          | 
+  81 |  uint32_t xres_virtual;          /* virt | True                          | 
+  82 |  uint32_t yres_virtual;                  | True                          | 
+  83 |  uint32_t xoffset;               /* offs | True                          | 
+  84 |  uint32_t yoffset;               /* reso | True                          | 
+  85 |                                          | True                          | 
+  86 |  uint32_t bits_per_pixel;                | True                          | 
+  87 |  uint32_t grayscale;             /* !=0  | True                          | 
+  88 |                                          | True                          | 
+  89 |  struct fb_bitfield red;         /* bitf | True                          | 
+  90 |  struct fb_bitfield green;       /* else | True                          | 
+  91 |  struct fb_bitfield blue;                | True                          | 
+  92 |  struct fb_bitfield transp;      /* tran | True                          | 
+  93 |                                          | True                          | 
+  94 |  uint32_t nonstd;                /* !=0  | True                          | 
+  95 |                                          | True                          | 
+  96 |  uint32_t activate;              /* see  | True                          | 
+  97 |                                          | True                          | 
+  98 |  uint32_t height;                /* heig | True                          | 
+  99 |  uint32_t width;                 /* widt | True                          | 
+ 100 |                                          | True                          | 
+ 101 |  uint32_t accel_flags;           /* acce | True                          | 
+ 102 |                                          | True                          | 
+ 103 |  /* Timing: All values in pixclocks, exc | True                          | 
+ 104 |  uint32_t pixclock;              /* pixe | True                          | 
+ 105 |  uint32_t left_margin;           /* time | True                          | 
+ 106 |  uint32_t right_margin;          /* time | True                          | 
+ 107 |  uint32_t upper_margin;          /* time | True                          | 
+ 108 |  uint32_t lower_margin;                  | True                          | 
+ 109 |  uint32_t hsync_len;             /* leng | True                          | 
+ 110 |  uint32_t vsync_len;             /* leng | True                          | 
+ 111 |  uint32_t sync;                  /* see  | True                          | 
+ 112 |  uint32_t vmode;                 /* see  | True                          | 
+ 113 |  uint32_t reserved[6];           /* Rese | True                          | 
+ 114 | };                                       | True                          | 
+ 115 |                                          | True                          | 
+ 116 | static void copy_if_gt0(uint32_t *src, u | True                          | 
+ 117 | {                                        | True                          | 
+ 118 |  do {                                    | True                          | 
+ 119 |   if ((int32_t) *src > 0)                | True                          | 
+ 120 |    *dst = *src;                          | True                          | 
+ 121 |   src++;                                 | True                          | 
+ 122 |   dst++;                                 | True                          | 
+ 123 |  } while (--cnt);                        | True                          | 
+ 124 | }                                        | True                          | 
+ 125 |                                          | True                          | 
+ 126 | static NOINLINE void copy_changed_values | True                          | 
+ 127 |   struct fb_var_screeninfo *base,        | True                          | 
+ 128 |   struct fb_var_screeninfo *set)         | True                          | 
+ 129 | {                                        | True                          | 
+ 130 |  //if ((int32_t) set->xres > 0) base->xr | True                          | 
+ 131 |  //if ((int32_t) set->yres > 0) base->yr | True                          | 
+ 132 |  //if ((int32_t) set->xres_virtual > 0)  | True                          | 
+ 133 |  //if ((int32_t) set->yres_virtual > 0)  | True                          | 
+ 134 |  copy_if_gt0(&set->xres, &base->xres, 4) | True                          | 
+ 135 |                                          | True                          | 
+ 136 |  if ((int32_t) set->bits_per_pixel > 0)  | True                          | 
+ 137 |  //copy_if_gt0(&set->bits_per_pixel, &ba | True                          | 
+ 138 |                                          | True                          | 
+ 139 |  //if ((int32_t) set->pixclock > 0)      | True                          | 
+ 140 |  //if ((int32_t) set->left_margin > 0)   | True                          | 
+ 141 |  //if ((int32_t) set->right_margin > 0)  | True                          | 
+ 142 |  //if ((int32_t) set->upper_margin > 0)  | True                          | 
+ 143 |  //if ((int32_t) set->lower_margin > 0)  | True                          | 
+ 144 |  //if ((int32_t) set->hsync_len > 0) bas | True                          | 
+ 145 |  //if ((int32_t) set->vsync_len > 0) bas | True                          | 
+ 146 |  //if ((int32_t) set->sync > 0)  base->s | True                          | 
+ 147 |  //if ((int32_t) set->vmode > 0) base->v | True                          | 
+ 148 |  copy_if_gt0(&set->pixclock, &base->pixc | True                          | 
+ 149 | }                                        | True                          | 
+ 150 |                                          | True                          | 
+ 151 |                                          | True                          | 
+ 152 | enum {                                   | True                          | 
+ 153 |  CMD_FB = 1,                             | True                          | 
+ 154 |  CMD_DB = 2,                             | True                          | 
+ 155 |  CMD_GEOMETRY = 3,                       | True                          | 
+ 156 |  CMD_TIMING = 4,                         | True                          | 
+ 157 |  CMD_ACCEL = 5,                          | True                          | 
+ 158 |  CMD_HSYNC = 6,                          | True                          | 
+ 159 |  CMD_VSYNC = 7,                          | True                          | 
+ 160 |  CMD_LACED = 8,                          | True                          | 
+ 161 |  CMD_DOUBLE = 9,                         | True                          | 
+ 162 | /* CMD_XCOMPAT =     10, */              | True                          | 
+ 163 |  CMD_ALL = 11,                           | True                          | 
+ 164 |  CMD_INFO = 12,                          | True                          | 
+ 165 |  CMD_SHOW = 13,                          | True                          | 
+ 166 |  CMD_CHANGE = 14,                        | True                          | 
+ 167 |                                          | True                          | 
+ 168 | #if ENABLE_FEATURE_FBSET_FANCY           | True                          | 
+ 169 |  CMD_XRES = 100,                         | ENABLE_FEATURE_FBSET_FANCY    | 
+ 170 |  CMD_YRES = 101,                         | ENABLE_FEATURE_FBSET_FANCY    | 
+ 171 |  CMD_VXRES = 102,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 172 |  CMD_VYRES = 103,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 173 |  CMD_DEPTH = 104,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 174 |  CMD_MATCH = 105,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 175 |  CMD_PIXCLOCK = 106,                     | ENABLE_FEATURE_FBSET_FANCY    | 
+ 176 |  CMD_LEFT = 107,                         | ENABLE_FEATURE_FBSET_FANCY    | 
+ 177 |  CMD_RIGHT = 108,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 178 |  CMD_UPPER = 109,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 179 |  CMD_LOWER = 110,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 180 |  CMD_HSLEN = 111,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 181 |  CMD_VSLEN = 112,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 182 |  CMD_CSYNC = 113,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 183 |  CMD_GSYNC = 114,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 184 |  CMD_EXTSYNC = 115,                      | ENABLE_FEATURE_FBSET_FANCY    | 
+ 185 |  CMD_BCAST = 116,                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 186 |  CMD_RGBA = 117,                         | ENABLE_FEATURE_FBSET_FANCY    | 
+ 187 |  CMD_STEP = 118,                         | ENABLE_FEATURE_FBSET_FANCY    | 
+ 188 |  CMD_MOVE = 119,                         | ENABLE_FEATURE_FBSET_FANCY    | 
+ 189 | #endif                                   | True                          | 
+ 190 | };                                       | True                          | 
+ 191 |                                          | True                          | 
+ 192 | static const struct cmdoptions_t {       | True                          | 
+ 193 |  const char name[9];                     | True                          | 
+ 194 |  const unsigned char param_count;        | True                          | 
+ 195 |  const unsigned char code;               | True                          | 
+ 196 | } g_cmdoptions[] ALIGN1 = {              | True                          | 
+ 197 |  /*"12345678" + NUL */                   | True                          | 
+ 198 | //TODO: convert to index_in_strings()    | True                          | 
+ 199 |  { "fb"      , 1, CMD_FB       },        | True                          | 
+ 200 |  { "db"      , 1, CMD_DB       },        | True                          | 
+ 201 |  { "a"       , 0, CMD_ALL      },        | True                          | 
+ 202 |  { "i"       , 0, CMD_INFO     },        | True                          | 
+ 203 |  { "g"       , 5, CMD_GEOMETRY },        | True                          | 
+ 204 |  { "t"       , 7, CMD_TIMING   },        | True                          | 
+ 205 |  { "accel"   , 1, CMD_ACCEL    },        | True                          | 
+ 206 |  { "hsync"   , 1, CMD_HSYNC    },        | True                          | 
+ 207 |  { "vsync"   , 1, CMD_VSYNC    },        | True                          | 
+ 208 |  { "laced"   , 1, CMD_LACED    },        | True                          | 
+ 209 |  { "double"  , 1, CMD_DOUBLE   },        | True                          | 
+ 210 |  { "show"    , 0, CMD_SHOW     },        | True                          | 
+ 211 |  { "s"       , 0, CMD_SHOW     },        | True                          | 
+ 212 | #if ENABLE_FEATURE_FBSET_FANCY           | True                          | 
+ 213 |  { "all"     , 0, CMD_ALL      },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 214 |  { "xres"    , 1, CMD_XRES     },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 215 |  { "yres"    , 1, CMD_YRES     },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 216 |  { "vxres"   , 1, CMD_VXRES    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 217 |  { "vyres"   , 1, CMD_VYRES    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 218 |  { "depth"   , 1, CMD_DEPTH    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 219 |  { "match"   , 0, CMD_MATCH    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 220 |  { "geometry", 5, CMD_GEOMETRY },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 221 |  { "pixclock", 1, CMD_PIXCLOCK },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 222 |  { "left"    , 1, CMD_LEFT     },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 223 |  { "right"   , 1, CMD_RIGHT    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 224 |  { "upper"   , 1, CMD_UPPER    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 225 |  { "lower"   , 1, CMD_LOWER    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 226 |  { "hslen"   , 1, CMD_HSLEN    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 227 |  { "vslen"   , 1, CMD_VSLEN    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 228 |  { "timings" , 7, CMD_TIMING   },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 229 |  { "csync"   , 1, CMD_CSYNC    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 230 |  { "gsync"   , 1, CMD_GSYNC    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 231 |  { "extsync" , 1, CMD_EXTSYNC  },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 232 |  { "bcast"   , 1, CMD_BCAST    },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 233 |  { "rgba"    , 1, CMD_RGBA     },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 234 |  { "step"    , 1, CMD_STEP     },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 235 |  { "move"    , 1, CMD_MOVE     },        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 236 | #endif                                   | True                          | 
+ 237 | };                                       | True                          | 
+ 238 |                                          | True                          | 
+ 239 | /* taken from linux/fb.h */              | True                          | 
+ 240 | enum {                                   | True                          | 
+ 241 |  FB_SYNC_HOR_HIGH_ACT = 1,       /* hori | True                          | 
+ 242 |  FB_SYNC_VERT_HIGH_ACT = 2,      /* vert | True                          | 
+ 243 | #if ENABLE_FEATURE_FBSET_READMODE        | True                          | 
+ 244 |  FB_VMODE_INTERLACED = 1,        /* inte | ENABLE_FEATURE_FBSET_READMODE | 
+ 245 |  FB_VMODE_DOUBLE = 2,            /* doub | ENABLE_FEATURE_FBSET_READMODE | 
+ 246 |  FB_SYNC_EXT = 4,                /* exte | ENABLE_FEATURE_FBSET_READMODE | 
+ 247 |  FB_SYNC_COMP_HIGH_ACT = 8,      /* comp | ENABLE_FEATURE_FBSET_READMODE | 
+ 248 | #endif                                   | True                          | 
+ 249 | };                                       | True                          | 
+ 250 |                                          | True                          | 
+ 251 | #if ENABLE_FEATURE_FBSET_READMODE        | True                          | 
+ 252 | static void ss(uint32_t *x, uint32_t fla | ENABLE_FEATURE_FBSET_READMODE | 
+ 253 | {                                        | ENABLE_FEATURE_FBSET_READMODE | 
+ 254 |  if (strcmp(buf, what) == 0)             | ENABLE_FEATURE_FBSET_READMODE | 
+ 255 |   *x &= ~flag;                           | ENABLE_FEATURE_FBSET_READMODE | 
+ 256 |  else                                    | ENABLE_FEATURE_FBSET_READMODE | 
+ 257 |   *x |= flag;                            | ENABLE_FEATURE_FBSET_READMODE | 
+ 258 | }                                        | ENABLE_FEATURE_FBSET_READMODE | 
+ 259 |                                          | ENABLE_FEATURE_FBSET_READMODE | 
+ 260 | /* Mode db file contains mode definition | ENABLE_FEATURE_FBSET_READMODE | 
+ 261 |  * mode "800x600-48-lace"                | ENABLE_FEATURE_FBSET_READMODE | 
+ 262 |  *     # D: 36.00 MHz, H: 33.835 kHz, V: | ENABLE_FEATURE_FBSET_READMODE | 
+ 263 |  *     geometry 800 600 800 600 8        | ENABLE_FEATURE_FBSET_READMODE | 
+ 264 |  *     timings 27778 56 80 79 11 128 12  | ENABLE_FEATURE_FBSET_READMODE | 
+ 265 |  *     laced true                        | ENABLE_FEATURE_FBSET_READMODE | 
+ 266 |  *     hsync high                        | ENABLE_FEATURE_FBSET_READMODE | 
+ 267 |  *     vsync high                        | ENABLE_FEATURE_FBSET_READMODE | 
+ 268 |  * endmode                               | ENABLE_FEATURE_FBSET_READMODE | 
+ 269 |  */                                      | ENABLE_FEATURE_FBSET_READMODE | 
+ 270 | static NOINLINE int read_mode_db(struct  | ENABLE_FEATURE_FBSET_READMODE | 
+ 271 |      const char *mode)                   | ENABLE_FEATURE_FBSET_READMODE | 
+ 272 | {                                        | ENABLE_FEATURE_FBSET_READMODE | 
+ 273 |  char *token[2], *p, *s;                 | ENABLE_FEATURE_FBSET_READMODE | 
+ 274 |  parser_t *parser = config_open(fn);     | ENABLE_FEATURE_FBSET_READMODE | 
+ 275 |                                          | ENABLE_FEATURE_FBSET_READMODE | 
+ 276 |  while (config_read(parser, token, 2, 1, | ENABLE_FEATURE_FBSET_READMODE | 
+ 277 |   if (strcmp(token[0], "mode") != 0 || ! | ENABLE_FEATURE_FBSET_READMODE | 
+ 278 |    continue;                             | ENABLE_FEATURE_FBSET_READMODE | 
+ 279 |   p = strstr(token[1], mode);            | ENABLE_FEATURE_FBSET_READMODE | 
+ 280 |   if (!p)                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 281 |    continue;                             | ENABLE_FEATURE_FBSET_READMODE | 
+ 282 |   s = p + strlen(mode);                  | ENABLE_FEATURE_FBSET_READMODE | 
+ 283 |   //bb_error_msg("CHECK[%s][%s][%d]", mo | ENABLE_FEATURE_FBSET_READMODE | 
+ 284 |   /* exact match? */                     | ENABLE_FEATURE_FBSET_READMODE | 
+ 285 |   if (((!*s || isspace(*s)) && '"' != s[ | ENABLE_FEATURE_FBSET_READMODE | 
+ 286 |    || ('"' == *s && '"' == p[-1]) /* end | ENABLE_FEATURE_FBSET_READMODE | 
+ 287 |   ) {                                    | ENABLE_FEATURE_FBSET_READMODE | 
+ 288 |    //bb_error_msg("FOUND[%s][%s][%s][%d] | ENABLE_FEATURE_FBSET_READMODE | 
+ 289 |    break;                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 290 |   }                                      | ENABLE_FEATURE_FBSET_READMODE | 
+ 291 |  }                                       | ENABLE_FEATURE_FBSET_READMODE | 
+ 292 |                                          | ENABLE_FEATURE_FBSET_READMODE | 
+ 293 |  if (!token[0])                          | ENABLE_FEATURE_FBSET_READMODE | 
+ 294 |   return 0;                              | ENABLE_FEATURE_FBSET_READMODE | 
+ 295 |                                          | ENABLE_FEATURE_FBSET_READMODE | 
+ 296 |  while (config_read(parser, token, 2, 1, | ENABLE_FEATURE_FBSET_READMODE | 
+ 297 |   int i;                                 | ENABLE_FEATURE_FBSET_READMODE | 
+ 298 |                                          | ENABLE_FEATURE_FBSET_READMODE | 
+ 299 | //bb_error_msg("???[%s][%s]", token[0],  | ENABLE_FEATURE_FBSET_READMODE | 
+ 300 |   if (strcmp(token[0], "endmode") == 0)  | ENABLE_FEATURE_FBSET_READMODE | 
+ 301 | //bb_error_msg("OK[%s]", mode);          | ENABLE_FEATURE_FBSET_READMODE | 
+ 302 |    return 1;                             | ENABLE_FEATURE_FBSET_READMODE | 
+ 303 |   }                                      | ENABLE_FEATURE_FBSET_READMODE | 
+ 304 |   p = token[1];                          | ENABLE_FEATURE_FBSET_READMODE | 
+ 305 |   i = index_in_strings(                  | ENABLE_FEATURE_FBSET_READMODE | 
+ 306 |    "geometry\0timings\0interlaced\0doubl | ENABLE_FEATURE_FBSET_READMODE | 
+ 307 |    token[0]);                            | ENABLE_FEATURE_FBSET_READMODE | 
+ 308 |   switch (i) {                           | ENABLE_FEATURE_FBSET_READMODE | 
+ 309 |   case 0:                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 310 |    if (sizeof(int) == sizeof(base->xres) | ENABLE_FEATURE_FBSET_READMODE | 
+ 311 |     sscanf(p, "%d %d %d %d %d",          | ENABLE_FEATURE_FBSET_READMODE | 
+ 312 |      &base->xres, &base->yres,           | ENABLE_FEATURE_FBSET_READMODE | 
+ 313 |      &base->xres_virtual, &base->yres_vi | ENABLE_FEATURE_FBSET_READMODE | 
+ 314 |      &base->bits_per_pixel);             | ENABLE_FEATURE_FBSET_READMODE | 
+ 315 |    } else {                              | ENABLE_FEATURE_FBSET_READMODE | 
+ 316 |     int base_xres, base_yres;            | ENABLE_FEATURE_FBSET_READMODE | 
+ 317 |     int base_xres_virtual, base_yres_vir | ENABLE_FEATURE_FBSET_READMODE | 
+ 318 |     int base_bits_per_pixel;             | ENABLE_FEATURE_FBSET_READMODE | 
+ 319 |     sscanf(p, "%d %d %d %d %d",          | ENABLE_FEATURE_FBSET_READMODE | 
+ 320 |      &base_xres, &base_yres,             | ENABLE_FEATURE_FBSET_READMODE | 
+ 321 |      &base_xres_virtual, &base_yres_virt | ENABLE_FEATURE_FBSET_READMODE | 
+ 322 |      &base_bits_per_pixel);              | ENABLE_FEATURE_FBSET_READMODE | 
+ 323 |     base->xres = base_xres;              | ENABLE_FEATURE_FBSET_READMODE | 
+ 324 |     base->yres = base_yres;              | ENABLE_FEATURE_FBSET_READMODE | 
+ 325 |     base->xres_virtual = base_xres_virtu | ENABLE_FEATURE_FBSET_READMODE | 
+ 326 |     base->yres_virtual = base_yres_virtu | ENABLE_FEATURE_FBSET_READMODE | 
+ 327 |     base->bits_per_pixel = base_bits_per | ENABLE_FEATURE_FBSET_READMODE | 
+ 328 |    }                                     | ENABLE_FEATURE_FBSET_READMODE | 
+ 329 | //bb_error_msg("GEO[%s]", p);            | ENABLE_FEATURE_FBSET_READMODE | 
+ 330 |    break;                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 331 |   case 1:                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 332 |    if (sizeof(int) == sizeof(base->xres) | ENABLE_FEATURE_FBSET_READMODE | 
+ 333 |     sscanf(p, "%d %d %d %d %d %d %d",    | ENABLE_FEATURE_FBSET_READMODE | 
+ 334 |      &base->pixclock,                    | ENABLE_FEATURE_FBSET_READMODE | 
+ 335 |      &base->left_margin, &base->right_ma | ENABLE_FEATURE_FBSET_READMODE | 
+ 336 |      &base->upper_margin, &base->lower_m | ENABLE_FEATURE_FBSET_READMODE | 
+ 337 |      &base->hsync_len, &base->vsync_len) | ENABLE_FEATURE_FBSET_READMODE | 
+ 338 |    } else {                              | ENABLE_FEATURE_FBSET_READMODE | 
+ 339 |     int base_pixclock;                   | ENABLE_FEATURE_FBSET_READMODE | 
+ 340 |     int base_left_margin, base_right_mar | ENABLE_FEATURE_FBSET_READMODE | 
+ 341 |     int base_upper_margin, base_lower_ma | ENABLE_FEATURE_FBSET_READMODE | 
+ 342 |     int base_hsync_len, base_vsync_len;  | ENABLE_FEATURE_FBSET_READMODE | 
+ 343 |     sscanf(p, "%d %d %d %d %d %d %d",    | ENABLE_FEATURE_FBSET_READMODE | 
+ 344 |      &base_pixclock,                     | ENABLE_FEATURE_FBSET_READMODE | 
+ 345 |      &base_left_margin, &base_right_marg | ENABLE_FEATURE_FBSET_READMODE | 
+ 346 |      &base_upper_margin, &base_lower_mar | ENABLE_FEATURE_FBSET_READMODE | 
+ 347 |      &base_hsync_len, &base_vsync_len);  | ENABLE_FEATURE_FBSET_READMODE | 
+ 348 |     base->pixclock = base_pixclock;      | ENABLE_FEATURE_FBSET_READMODE | 
+ 349 |     base->left_margin = base_left_margin | ENABLE_FEATURE_FBSET_READMODE | 
+ 350 |     base->right_margin = base_right_marg | ENABLE_FEATURE_FBSET_READMODE | 
+ 351 |     base->upper_margin = base_upper_marg | ENABLE_FEATURE_FBSET_READMODE | 
+ 352 |     base->lower_margin = base_lower_marg | ENABLE_FEATURE_FBSET_READMODE | 
+ 353 |     base->hsync_len = base_hsync_len;    | ENABLE_FEATURE_FBSET_READMODE | 
+ 354 |     base->vsync_len = base_vsync_len;    | ENABLE_FEATURE_FBSET_READMODE | 
+ 355 |    }                                     | ENABLE_FEATURE_FBSET_READMODE | 
+ 356 | //bb_error_msg("TIM[%s]", p);            | ENABLE_FEATURE_FBSET_READMODE | 
+ 357 |    break;                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 358 |   case 2:                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 359 |   case 3: {                              | ENABLE_FEATURE_FBSET_READMODE | 
+ 360 |    static const uint32_t syncs[] = {FB_V | ENABLE_FEATURE_FBSET_READMODE | 
+ 361 |    ss(&base->vmode, syncs[i-2], p, "fals | ENABLE_FEATURE_FBSET_READMODE | 
+ 362 | //bb_error_msg("VMODE[%s]", p);          | ENABLE_FEATURE_FBSET_READMODE | 
+ 363 |    break;                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 364 |   }                                      | ENABLE_FEATURE_FBSET_READMODE | 
+ 365 |   case 4:                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 366 |   case 5:                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 367 |   case 6: {                              | ENABLE_FEATURE_FBSET_READMODE | 
+ 368 |    static const uint32_t syncs[] = {FB_S | ENABLE_FEATURE_FBSET_READMODE | 
+ 369 |    ss(&base->sync, syncs[i-4], p, "low") | ENABLE_FEATURE_FBSET_READMODE | 
+ 370 | //bb_error_msg("SYNC[%s]", p);           | ENABLE_FEATURE_FBSET_READMODE | 
+ 371 |    break;                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 372 |   }                                      | ENABLE_FEATURE_FBSET_READMODE | 
+ 373 |   case 7:                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 374 |    ss(&base->sync, FB_SYNC_EXT, p, "fals | ENABLE_FEATURE_FBSET_READMODE | 
+ 375 | //bb_error_msg("EXTSYNC[%s]", p);        | ENABLE_FEATURE_FBSET_READMODE | 
+ 376 |    break;                                | ENABLE_FEATURE_FBSET_READMODE | 
+ 377 |   case 8: {                              | ENABLE_FEATURE_FBSET_READMODE | 
+ 378 |    int red_offset, red_length;           | ENABLE_FEATURE_FBSET_READMODE | 
+ 379 |    int green_offset, green_length;       | ENABLE_FEATURE_FBSET_READMODE | 
+ 380 |    int blue_offset, blue_length;         | ENABLE_FEATURE_FBSET_READMODE | 
+ 381 |    int transp_offset, transp_length;     | ENABLE_FEATURE_FBSET_READMODE | 
+ 382 |                                          | ENABLE_FEATURE_FBSET_READMODE | 
+ 383 |    sscanf(p, "%d/%d,%d/%d,%d/%d,%d/%d",  | ENABLE_FEATURE_FBSET_READMODE | 
+ 384 |     &red_length, &red_offset,            | ENABLE_FEATURE_FBSET_READMODE | 
+ 385 |     &green_length, &green_offset,        | ENABLE_FEATURE_FBSET_READMODE | 
+ 386 |     &blue_length, &blue_offset,          | ENABLE_FEATURE_FBSET_READMODE | 
+ 387 |     &transp_length, &transp_offset);     | ENABLE_FEATURE_FBSET_READMODE | 
+ 388 |    base->red.offset = red_offset;        | ENABLE_FEATURE_FBSET_READMODE | 
+ 389 |    base->red.length = red_length;        | ENABLE_FEATURE_FBSET_READMODE | 
+ 390 |    base->red.msb_right = 0;              | ENABLE_FEATURE_FBSET_READMODE | 
+ 391 |    base->green.offset = green_offset;    | ENABLE_FEATURE_FBSET_READMODE | 
+ 392 |    base->green.length = green_length;    | ENABLE_FEATURE_FBSET_READMODE | 
+ 393 |    base->green.msb_right = 0;            | ENABLE_FEATURE_FBSET_READMODE | 
+ 394 |    base->blue.offset = blue_offset;      | ENABLE_FEATURE_FBSET_READMODE | 
+ 395 |    base->blue.length = blue_length;      | ENABLE_FEATURE_FBSET_READMODE | 
+ 396 |    base->blue.msb_right = 0;             | ENABLE_FEATURE_FBSET_READMODE | 
+ 397 |    base->transp.offset = transp_offset;  | ENABLE_FEATURE_FBSET_READMODE | 
+ 398 |    base->transp.length = transp_length;  | ENABLE_FEATURE_FBSET_READMODE | 
+ 399 |    base->transp.msb_right = 0;           | ENABLE_FEATURE_FBSET_READMODE | 
+ 400 |   }                                      | ENABLE_FEATURE_FBSET_READMODE | 
+ 401 |   }                                      | ENABLE_FEATURE_FBSET_READMODE | 
+ 402 |  }                                       | ENABLE_FEATURE_FBSET_READMODE | 
+ 403 |  return 0;                               | ENABLE_FEATURE_FBSET_READMODE | 
+ 404 | }                                        | ENABLE_FEATURE_FBSET_READMODE | 
+ 405 | #endif                                   | True                          | 
+ 406 |                                          | True                          | 
+ 407 | static NOINLINE void showmode(struct fb_ | True                          | 
+ 408 | {                                        | True                          | 
+ 409 |  double drate = 0, hrate = 0, vrate = 0; | True                          | 
+ 410 |                                          | True                          | 
+ 411 |  if (v->pixclock) {                      | True                          | 
+ 412 |   drate = 1e12 / v->pixclock;            | True                          | 
+ 413 |   hrate = drate / (v->left_margin + v->x | True                          | 
+ 414 |   vrate = hrate / (v->upper_margin + v-> | True                          | 
+ 415 |  }                                       | True                          | 
+ 416 |  printf("\nmode \"%ux%u-%u\"\n"          | True                          | 
+ 417 | #if ENABLE_FEATURE_FBSET_FANCY           | True                          | 
+ 418 |  "\t# D: %.3f MHz, H: %.3f kHz, V: %.3f  | ENABLE_FEATURE_FBSET_FANCY    | 
+ 419 | #endif                                   | True                          | 
+ 420 |  "\tgeometry %u %u %u %u %u\n"           | True                          | 
+ 421 |  "\ttimings %u %u %u %u %u %u %u\n"      | True                          | 
+ 422 |  "\taccel %s\n"                          | True                          | 
+ 423 |  "\trgba %u/%u,%u/%u,%u/%u,%u/%u\n"      | True                          | 
+ 424 |  "endmode\n\n",                          | True                          | 
+ 425 |   v->xres, v->yres, (int) (vrate + 0.5), | True                          | 
+ 426 | #if ENABLE_FEATURE_FBSET_FANCY           | True                          | 
+ 427 |   drate / 1e6, hrate / 1e3, vrate,       | ENABLE_FEATURE_FBSET_FANCY    | 
+ 428 | #endif                                   | True                          | 
+ 429 |   v->xres, v->yres, v->xres_virtual, v-> | True                          | 
+ 430 |   v->pixclock, v->left_margin, v->right_ | True                          | 
+ 431 |    v->hsync_len, v->vsync_len,           | True                          | 
+ 432 |   (v->accel_flags > 0 ? "true" : "false" | True                          | 
+ 433 |   v->red.length, v->red.offset, v->green | True                          | 
+ 434 |    v->blue.length, v->blue.offset, v->tr | True                          | 
+ 435 | }                                        | True                          | 
+ 436 |                                          | True                          | 
+ 437 | int fbset_main(int argc, char **argv) MA | True                          | 
+ 438 | int fbset_main(int argc, char **argv)    | True                          | 
+ 439 | {                                        | True                          | 
+ 440 |  enum {                                  | True                          | 
+ 441 |   OPT_CHANGE   = (1 << 0),               | True                          | 
+ 442 |   OPT_SHOW     = (1 << 1),               | True                          | 
+ 443 |   OPT_READMODE = (1 << 2),               | True                          | 
+ 444 |   OPT_ALL      = (1 << 3),               | True                          | 
+ 445 |  };                                      | True                          | 
+ 446 |  struct fb_var_screeninfo var_old, var_s | True                          | 
+ 447 |  int fh, i;                              | True                          | 
+ 448 |  unsigned options = 0;                   | True                          | 
+ 449 |                                          | True                          | 
+ 450 |  const char *fbdev = DEFAULTFBDEV;       | True                          | 
+ 451 |  IF_FEATURE_FBSET_READMODE(const char *m | True                          | 
+ 452 |  char *thisarg;                          | True                          | 
+ 453 |  char *mode = mode; /* for compiler */   | True                          | 
+ 454 |                                          | True                          | 
+ 455 |  memset(&var_set, 0xff, sizeof(var_set)) | True                          | 
+ 456 |                                          | True                          | 
+ 457 |  /* parse cmd args.... why do they have  | True                          | 
+ 458 |  argv++;                                 | True                          | 
+ 459 |  argc--;                                 | True                          | 
+ 460 |  for (; argc > 0 && (thisarg = *argv) != | True                          | 
+ 461 |   if (thisarg[0] != '-') {               | True                          | 
+ 462 |    if (!ENABLE_FEATURE_FBSET_READMODE || | True                          | 
+ 463 |     bb_show_usage();                     | True                          | 
+ 464 |    mode = thisarg;                       | True                          | 
+ 465 |    options |= OPT_READMODE;              | True                          | 
+ 466 |    goto contin;                          | True                          | 
+ 467 |   }                                      | True                          | 
+ 468 |   for (i = 0; i < ARRAY_SIZE(g_cmdoption | True                          | 
+ 469 |    if (strcmp(thisarg + 1, g_cmdoptions[ | True                          | 
+ 470 |     continue;                            | True                          | 
+ 471 |    if (argc <= g_cmdoptions[i].param_cou | True                          | 
+ 472 |     bb_show_usage();                     | True                          | 
+ 473 |                                          | True                          | 
+ 474 |    switch (g_cmdoptions[i].code) {       | True                          | 
+ 475 |    case CMD_FB:                          | True                          | 
+ 476 |     fbdev = argv[1];                     | True                          | 
+ 477 |     break;                               | True                          | 
+ 478 |    case CMD_DB:                          | True                          | 
+ 479 |     IF_FEATURE_FBSET_READMODE(modefile = | True                          | 
+ 480 |     break;                               | True                          | 
+ 481 |    case CMD_ALL:                         | True                          | 
+ 482 |     options |= OPT_ALL;                  | True                          | 
+ 483 |     break;                               | True                          | 
+ 484 |    case CMD_SHOW:                        | True                          | 
+ 485 |     options |= OPT_SHOW;                 | True                          | 
+ 486 |     break;                               | True                          | 
+ 487 |    case CMD_GEOMETRY:                    | True                          | 
+ 488 |     var_set.xres = xatou32(argv[1]);     | True                          | 
+ 489 |     var_set.yres = xatou32(argv[2]);     | True                          | 
+ 490 |     var_set.xres_virtual = xatou32(argv[ | True                          | 
+ 491 |     var_set.yres_virtual = xatou32(argv[ | True                          | 
+ 492 |     var_set.bits_per_pixel = xatou32(arg | True                          | 
+ 493 |     break;                               | True                          | 
+ 494 |    case CMD_TIMING:                      | True                          | 
+ 495 |     var_set.pixclock = xatou32(argv[1]); | True                          | 
+ 496 |     var_set.left_margin = xatou32(argv[2 | True                          | 
+ 497 |     var_set.right_margin = xatou32(argv[ | True                          | 
+ 498 |     var_set.upper_margin = xatou32(argv[ | True                          | 
+ 499 |     var_set.lower_margin = xatou32(argv[ | True                          | 
+ 500 |     var_set.hsync_len = xatou32(argv[6]) | True                          | 
+ 501 |     var_set.vsync_len = xatou32(argv[7]) | True                          | 
+ 502 |     break;                               | True                          | 
+ 503 |    case CMD_ACCEL:                       | True                          | 
+ 504 |     break;                               | True                          | 
+ 505 |    case CMD_HSYNC:                       | True                          | 
+ 506 |     var_set.sync |= FB_SYNC_HOR_HIGH_ACT | True                          | 
+ 507 |     break;                               | True                          | 
+ 508 |    case CMD_VSYNC:                       | True                          | 
+ 509 |     var_set.sync |= FB_SYNC_VERT_HIGH_AC | True                          | 
+ 510 |     break;                               | True                          | 
+ 511 | #if ENABLE_FEATURE_FBSET_FANCY           | True                          | 
+ 512 |    case CMD_XRES:                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 513 |     var_set.xres = xatou32(argv[1]);     | ENABLE_FEATURE_FBSET_FANCY    | 
+ 514 |     break;                               | ENABLE_FEATURE_FBSET_FANCY    | 
+ 515 |    case CMD_YRES:                        | ENABLE_FEATURE_FBSET_FANCY    | 
+ 516 |     var_set.yres = xatou32(argv[1]);     | ENABLE_FEATURE_FBSET_FANCY    | 
+ 517 |     break;                               | ENABLE_FEATURE_FBSET_FANCY    | 
+ 518 |    case CMD_DEPTH:                       | ENABLE_FEATURE_FBSET_FANCY    | 
+ 519 |     var_set.bits_per_pixel = xatou32(arg | ENABLE_FEATURE_FBSET_FANCY    | 
+ 520 |     break;                               | ENABLE_FEATURE_FBSET_FANCY    | 
+ 521 |    case CMD_PIXCLOCK:                    | ENABLE_FEATURE_FBSET_FANCY    | 
+ 522 |     var_set.pixclock = xatou32(argv[1]); | ENABLE_FEATURE_FBSET_FANCY    | 
+ 523 |     break;                               | ENABLE_FEATURE_FBSET_FANCY    | 
+ 524 | #endif                                   | True                          | 
+ 525 |    default:                              | True                          | 
+ 526 |     bb_perror_msg_and_die("option '%s' n | True                          | 
+ 527 |             g_cmdoptions[i].name);       | True                          | 
+ 528 |    }                                     | True                          | 
+ 529 |    switch (g_cmdoptions[i].code) {       | True                          | 
+ 530 |    case CMD_FB:                          | True                          | 
+ 531 |    case CMD_DB:                          | True                          | 
+ 532 |    case CMD_ALL:                         | True                          | 
+ 533 |    case CMD_SHOW:                        | True                          | 
+ 534 |     break;                               | True                          | 
+ 535 |    default:                              | True                          | 
+ 536 |     /* other commands imply changes */   | True                          | 
+ 537 |     options |= OPT_CHANGE;               | True                          | 
+ 538 |    }                                     | True                          | 
+ 539 |    argc -= g_cmdoptions[i].param_count;  | True                          | 
+ 540 |    argv += g_cmdoptions[i].param_count;  | True                          | 
+ 541 |    goto contin;                          | True                          | 
+ 542 |   }                                      | True                          | 
+ 543 |   bb_show_usage();                       | True                          | 
+ 544 |  contin: ;                               | True                          | 
+ 545 |  }                                       | True                          | 
+ 546 |                                          | True                          | 
+ 547 |  fh = xopen(fbdev, O_RDONLY);            | True                          | 
+ 548 |  xioctl(fh, FBIOGET_VSCREENINFO, &var_ol | True                          | 
+ 549 |                                          | True                          | 
+ 550 |  if (options & OPT_READMODE) {           | True                          | 
+ 551 | #if ENABLE_FEATURE_FBSET_READMODE        | True                          | 
+ 552 |   if (!read_mode_db(&var_old, modefile,  | ENABLE_FEATURE_FBSET_READMODE | 
+ 553 |    bb_error_msg_and_die("unknown video m | ENABLE_FEATURE_FBSET_READMODE | 
+ 554 |   }                                      | ENABLE_FEATURE_FBSET_READMODE | 
+ 555 |   options |= OPT_CHANGE;                 | ENABLE_FEATURE_FBSET_READMODE | 
+ 556 | #endif                                   | True                          | 
+ 557 |  }                                       | True                          | 
+ 558 |                                          | True                          | 
+ 559 |  if (options & OPT_CHANGE) {             | True                          | 
+ 560 |   copy_changed_values(&var_old, &var_set | True                          | 
+ 561 |   if (options & OPT_ALL)                 | True                          | 
+ 562 |    var_old.activate = FB_ACTIVATE_ALL;   | True                          | 
+ 563 |   xioctl(fh, FBIOPUT_VSCREENINFO, &var_o | True                          | 
+ 564 |  }                                       | True                          | 
+ 565 |                                          | True                          | 
+ 566 |  if (options == 0 || (options & OPT_SHOW | True                          | 
+ 567 |   showmode(&var_old);                    | True                          | 
+ 568 |                                          | True                          | 
+ 569 |  if (ENABLE_FEATURE_CLEAN_UP)            | True                          | 
+ 570 |   close(fh);                             | True                          | 
+ 571 |                                          | True                          | 
+ 572 |  return EXIT_SUCCESS;                    | True                          | 
+ 573 | }                                        | True                          | 
+-----+------------------------------------------+-------------------------------+
+     |                                          | +117MB, 272ms                 | 

@@ -1,0 +1,185 @@
+FILE: data/raw/busybox-1.38.0/networking/pscan.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * Pscan is a mini port scanner implemen | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * Copyright 2007 Tito Ragusa <farmatito | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   7 |  */                                      | True                      | 
+   8 | //config:config PSCAN                    | True                      | 
+   9 | //config: bool "pscan (6.2 kb)"          | True                      | 
+  10 | //config: default y                      | True                      | 
+  11 | //config: help                           | True                      | 
+  12 | //config: Simple network port scanner.   | True                      | 
+  13 |                                          | True                      | 
+  14 | //applet:IF_PSCAN(APPLET(pscan, BB_DIR_U | True                      | 
+  15 |                                          | True                      | 
+  16 | //kbuild:lib-$(CONFIG_PSCAN) += pscan.o  | True                      | 
+  17 |                                          | True                      | 
+  18 | //usage:#define pscan_trivial_usage      | True                      | 
+  19 | //usage:       "[-cb] [-p MIN_PORT] [-P  | True                      | 
+  20 | //usage:#define pscan_full_usage "\n\n"  | True                      | 
+  21 | //usage:       "Scan HOST, print all ope | True                      | 
+  22 | //usage:     "\n -c Show closed ports to | True                      | 
+  23 | //usage:     "\n -b Show blocked ports t | True                      | 
+  24 | //usage:     "\n -p PORT Scan from this  | True                      | 
+  25 | //usage:     "\n -P PORT Scan up to this | True                      | 
+  26 | //usage:     "\n -t MS Timeout (default  | True                      | 
+  27 | //usage:     "\n -T MS Minimum rtt (defa | True                      | 
+  28 |                                          | True                      | 
+  29 | #include "libbb.h"                       | True                      | 
+  30 |                                          | True                      | 
+  31 | /* debugging */                          | True                      | 
+  32 | #ifdef DEBUG_PSCAN                       | True                      | 
+  33 | #define DMSG(...) bb_error_msg(__VA_ARGS | (DEBUG_PSCAN)             | 
+  34 | #define DERR(...) bb_perror_msg(__VA_ARG | (DEBUG_PSCAN)             | 
+  35 | #else                                    | True                      | 
+  36 | #define DMSG(...) ((void)0)              | !(DEBUG_PSCAN)            | 
+  37 | #define DERR(...) ((void)0)              | !(DEBUG_PSCAN)            | 
+  38 | #endif                                   | True                      | 
+  39 |                                          | True                      | 
+  40 | static const char *port_name(char **p_et | True                      | 
+  41 | {                                        | True                      | 
+  42 |  char *server;                           | True                      | 
+  43 |                                          | True                      | 
+  44 |  server = bb_get_servname_by_port(p_etc_ | True                      | 
+  45 |  if (server)                             | True                      | 
+  46 |   return server;                         | True                      | 
+  47 |  return "unknown";                       | True                      | 
+  48 | }                                        | True                      | 
+  49 |                                          | True                      | 
+  50 | /* We don't expect to see 1000+ seconds  | True                      | 
+  51 | #define MONOTONIC_US() ((unsigned)monoto | True                      | 
+  52 |                                          | True                      | 
+  53 | int pscan_main(int argc, char **argv) MA | True                      | 
+  54 | int pscan_main(int argc UNUSED_PARAM, ch | True                      | 
+  55 | {                                        | True                      | 
+  56 |  const char *opt_max_port = "1024";      | True                      | 
+  57 |  const char *opt_min_port = "1";         | True                      | 
+  58 |  const char *opt_timeout = "5000";       | True                      | 
+  59 |  /* We estimate rtt and wait rtt*4 befor | True                      | 
+  60 |   * totally blocked. min rtt of 5 ms may | True                      | 
+  61 |   * scanning an Internet host behind sat | True                      | 
+  62 |   * Rule of thumb: with min_rtt of N mse | True                      | 
+  63 |   * will take N seconds at absolute mini | True                      | 
+  64 |  const char *opt_min_rtt = "5";          | True                      | 
+  65 |  char *p_etc_services = NULL;            | True                      | 
+  66 |  const char *result_str;                 | True                      | 
+  67 |  len_and_sockaddr *lsap;                 | True                      | 
+  68 |  int s;                                  | True                      | 
+  69 |  unsigned opt;                           | True                      | 
+  70 |  unsigned port, max_port, nports;        | True                      | 
+  71 |  unsigned closed_ports = 0;              | True                      | 
+  72 |  unsigned open_ports = 0;                | True                      | 
+  73 |  /* all in usec */                       | True                      | 
+  74 |  unsigned timeout;                       | True                      | 
+  75 |  unsigned min_rtt;                       | True                      | 
+  76 |  unsigned rtt_4;                         | True                      | 
+  77 |  unsigned start, diff;                   | True                      | 
+  78 |                                          | True                      | 
+  79 |  opt = getopt32(argv, "^"                | True                      | 
+  80 |   "cbp:P:t:T:"                           | True                      | 
+  81 |   "\0" "=1", /* exactly one non-option * | True                      | 
+  82 |   &opt_min_port, &opt_max_port, &opt_tim | True                      | 
+  83 |  );                                      | True                      | 
+  84 |  argv += optind;                         | True                      | 
+  85 |  max_port = xatou_range(opt_max_port, 1, | True                      | 
+  86 |  port = xatou_range(opt_min_port, 1, max | True                      | 
+  87 |  nports = max_port - port + 1;           | True                      | 
+  88 |  min_rtt = xatou_range(opt_min_rtt, 1, I | True                      | 
+  89 |  timeout = xatou_range(opt_timeout, 1, I | True                      | 
+  90 |  /* Initial rtt is BIG: */               | True                      | 
+  91 |  rtt_4 = timeout;                        | True                      | 
+  92 |                                          | True                      | 
+  93 |  DMSG("min_rtt %u timeout %u", min_rtt,  | True                      | 
+  94 |                                          | True                      | 
+  95 |  lsap = xhost2sockaddr(*argv, port);     | True                      | 
+  96 |  printf("Scanning %s ports %u to %u\n Po | True                      | 
+  97 |    *argv, port, max_port);               | True                      | 
+  98 |                                          | True                      | 
+  99 |  for (; port <= max_port; port++) {      | True                      | 
+ 100 |   DMSG("rtt %u", rtt_4);                 | True                      | 
+ 101 |                                          | True                      | 
+ 102 |   /* The SOCK_STREAM socket type is impl | True                      | 
+ 103 |   set_nport(&lsap->u.sa, htons(port));   | True                      | 
+ 104 |   s = xsocket(lsap->u.sa.sa_family, SOCK | True                      | 
+ 105 |   /* We need unblocking socket so we don | True                      | 
+ 106 |   /* Nonblocking connect typically "fail | True                      | 
+ 107 |   ndelay_on(s);                          | True                      | 
+ 108 |                                          | True                      | 
+ 109 |   DMSG("connect to port %u", port);      | True                      | 
+ 110 |   result_str = NULL;                     | True                      | 
+ 111 |   start = MONOTONIC_US();                | True                      | 
+ 112 |   if (connect(s, &lsap->u.sa, lsap->len) | True                      | 
+ 113 |    /* Unlikely, for me even localhost fa | True                      | 
+ 114 |    DMSG("connect succeeded");            | True                      | 
+ 115 |    goto open;                            | True                      | 
+ 116 |   }                                      | True                      | 
+ 117 |   /* Check for untypical errors... */    | True                      | 
+ 118 |   if (errno != EAGAIN && errno != EINPRO | True                      | 
+ 119 |    && errno != ECONNREFUSED              | True                      | 
+ 120 |   ) {                                    | True                      | 
+ 121 |    bb_perror_nomsg_and_die();            | True                      | 
+ 122 |   }                                      | True                      | 
+ 123 |                                          | True                      | 
+ 124 |   diff = 0;                              | True                      | 
+ 125 |   while (1) {                            | True                      | 
+ 126 |    if (errno == ECONNREFUSED) {          | True                      | 
+ 127 |     if (opt & 1) /* -c: show closed too  | True                      | 
+ 128 |      result_str = "closed";              | True                      | 
+ 129 |     closed_ports++;                      | True                      | 
+ 130 |     break;                               | True                      | 
+ 131 |    }                                     | True                      | 
+ 132 |    DERR("port %u errno %d @%u", port, er | True                      | 
+ 133 |                                          | True                      | 
+ 134 |    if (diff > rtt_4) {                   | True                      | 
+ 135 |     if (opt & 2) /* -b: show blocked too | True                      | 
+ 136 |      result_str = "blocked";             | True                      | 
+ 137 |     break;                               | True                      | 
+ 138 |    }                                     | True                      | 
+ 139 |    /* Can sleep (much) longer than speci | True                      | 
+ 140 |     * We check rtt BEFORE we usleep, oth | True                      | 
+ 141 |     * on localhost we'll have no writes  | True                      | 
+ 142 |     * before we exceed (rather small) rt | True                      | 
+ 143 |    usleep(rtt_4 / 8);                    | True                      | 
+ 144 |  open:                                   | True                      | 
+ 145 |    diff = MONOTONIC_US() - start;        | True                      | 
+ 146 |    DMSG("write to port %u @%u", port, di | True                      | 
+ 147 |    if (write(s, " ", 1) >= 0) { /* We we | True                      | 
+ 148 |     open_ports++;                        | True                      | 
+ 149 |     result_str = "open";                 | True                      | 
+ 150 |     break;                               | True                      | 
+ 151 |    }                                     | True                      | 
+ 152 |   }                                      | True                      | 
+ 153 |   DMSG("out of loop @%u", diff);         | True                      | 
+ 154 |   if (result_str)                        | True                      | 
+ 155 |    printf("%5u" "\t" "tcp" "\t" "%s" "\t | True                      | 
+ 156 |     port, result_str, port_name(&p_etc_s | True                      | 
+ 157 |    );                                    | True                      | 
+ 158 |                                          | True                      | 
+ 159 |   /* Estimate new rtt - we don't want to | True                      | 
+ 160 |    * for each port. *4 allows for rise i | True                      | 
+ 161 |    * We increase rtt quickly (rtt_4*4),  | True                      | 
+ 162 |    * (diff is at least rtt_4/8, *4 == rt | True                      | 
+ 163 |    * because we don't want to accidental | True                      | 
+ 164 |   rtt_4 = diff * 4;                      | True                      | 
+ 165 |   if (rtt_4 < min_rtt)                   | True                      | 
+ 166 |    rtt_4 = min_rtt;                      | True                      | 
+ 167 |   if (rtt_4 > timeout)                   | True                      | 
+ 168 |    rtt_4 = timeout;                      | True                      | 
+ 169 |   /* Clean up */                         | True                      | 
+ 170 |   close(s);                              | True                      | 
+ 171 |  }                                       | True                      | 
+ 172 |  if (ENABLE_FEATURE_CLEAN_UP) free(lsap) | True                      | 
+ 173 |                                          | True                      | 
+ 174 |  printf("%u closed, %u open, %u timed ou | True                      | 
+ 175 |      closed_ports,                       | True                      | 
+ 176 |      open_ports,                         | True                      | 
+ 177 |      nports - (closed_ports + open_ports | True                      | 
+ 178 |  return EXIT_SUCCESS;                    | True                      | 
+ 179 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +112MB, 273ms             | 

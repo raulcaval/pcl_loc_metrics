@@ -1,0 +1,474 @@
+FILE: data/raw/busybox-1.38.0/init/bootchartd.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                       | 
+-----+------------------------------------------+---------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                        | 
+   2 | /*                                       | True                                        | 
+   3 |  * Licensed under GPLv2 or later, see fi | True                                        | 
+   4 |  */                                      | True                                        | 
+   5 | //config:config BOOTCHARTD               | True                                        | 
+   6 | //config: bool "bootchartd (10 kb)"      | True                                        | 
+   7 | //config: default y                      | True                                        | 
+   8 | //config: help                           | True                                        | 
+   9 | //config: bootchartd is commonly used to | True                                        | 
+  10 | //config: for the purpose of speeding it | True                                        | 
+  11 | //config: by the kernel as the init proc | True                                        | 
+  12 | //config: the init=/sbin/bootchartd opti | True                                        | 
+  13 | //config:                                | True                                        | 
+  14 | //config: It can also be used to monitor | True                                        | 
+  15 | //config: application or the running sys | True                                        | 
+  16 | //config: bootchartd is started interact | True                                        | 
+  17 | //config: and stopped using bootchartd s | True                                        | 
+  18 | //config:                                | True                                        | 
+  19 | //config:config FEATURE_BOOTCHARTD_BLOAT | True                                        | 
+  20 | //config: bool "Compatible, bloated head | True                                        | 
+  21 | //config: default y                      | True                                        | 
+  22 | //config: depends on BOOTCHARTD          | True                                        | 
+  23 | //config: help                           | True                                        | 
+  24 | //config: Create extended header file co | True                                        | 
+  25 | //config: "Big" bootchartd is a shell sc | True                                        | 
+  26 | //config: "convenient" info into the hea | True                                        | 
+  27 | //config:  title = Boot chart for `hostn | True                                        | 
+  28 | //config:  system.uname = `uname -srvm`  | True                                        | 
+  29 | //config:  system.release = `cat /etc/DI | True                                        | 
+  30 | //config:  system.cpu = `grep '^model na | True                                        | 
+  31 | //config:  system.kernel.options = `cat  | True                                        | 
+  32 | //config: This data is not mandatory for | True                                        | 
+  33 | //config: and is considered bloat. Never | True                                        | 
+  34 | //config: makes bootchartd applet to dum | True                                        | 
+  35 | //config:                                | True                                        | 
+  36 | //config:config FEATURE_BOOTCHARTD_CONFI | True                                        | 
+  37 | //config: bool "Support bootchartd.conf" | True                                        | 
+  38 | //config: default y                      | True                                        | 
+  39 | //config: depends on BOOTCHARTD          | True                                        | 
+  40 | //config: help                           | True                                        | 
+  41 | //config: Enable reading and parsing of  | True                                        | 
+  42 | //config: and /etc/bootchartd.conf files | True                                        | 
+  43 |                                          | True                                        | 
+  44 | //applet:IF_BOOTCHARTD(APPLET(bootchartd | True                                        | 
+  45 |                                          | True                                        | 
+  46 | //kbuild:lib-$(CONFIG_BOOTCHARTD) += boo | True                                        | 
+  47 |                                          | True                                        | 
+  48 | #include "libbb.h"                       | True                                        | 
+  49 | #include "common_bufsiz.h"               | True                                        | 
+  50 | /* After libbb.h, since it needs sys/typ | True                                        | 
+  51 | #include <sys/utsname.h>                 | True                                        | 
+  52 |                                          | True                                        | 
+  53 | #ifdef __linux__                         | True                                        | 
+  54 | # include <sys/mount.h>                  | (__linux__)                                 | 
+  55 | # ifndef MS_SILENT                       | (__linux__)                                 | 
+  56 | #  define MS_SILENT      (1 << 15)       | (__linux__)&&!(MS_SILENT)                   | 
+  57 | # endif                                  | (__linux__)                                 | 
+  58 | # ifndef MNT_DETACH                      | (__linux__)                                 | 
+  59 | #  define MNT_DETACH 0x00000002          | (__linux__)&&!(MNT_DETACH)                  | 
+  60 | # endif                                  | (__linux__)                                 | 
+  61 | #endif                                   | True                                        | 
+  62 |                                          | True                                        | 
+  63 | #if !ENABLE_TAR && !ENABLE_WERROR        | True                                        | 
+  64 | # warning Note: bootchartd requires tar  | !ENABLE_TAR&&!ENABLE_WERROR                 | 
+  65 | #elif !ENABLE_FEATURE_SEAMLESS_GZ && !EN | True                                        | 
+  66 | # warning Note: bootchartd requires tar  | !ENABLE_FEATURE_SEAMLESS_GZ&&!ENABLE_WERROR | 
+  67 | #endif                                   | True                                        | 
+  68 |                                          | True                                        | 
+  69 | #define BC_VERSION_STR "0.8"             | True                                        | 
+  70 |                                          | True                                        | 
+  71 | /* For debugging, set to 0:              | True                                        | 
+  72 |  * strace won't work with DO_SIGNAL_SYNC | True                                        | 
+  73 |  */                                      | True                                        | 
+  74 | #define DO_SIGNAL_SYNC 1                 | True                                        | 
+  75 |                                          | True                                        | 
+  76 |                                          | True                                        | 
+  77 | //$PWD/bootchartd.conf and /etc/bootchar | True                                        | 
+  78 | //supported options:                     | True                                        | 
+  79 | //# Sampling period (in seconds)         | True                                        | 
+  80 | //SAMPLE_PERIOD=0.2                      | True                                        | 
+  81 | //                                       | True                                        | 
+  82 | //not yet supported:                     | True                                        | 
+  83 | //# tmpfs size                           | True                                        | 
+  84 | //# (32 MB should suffice for ~20 minute | True                                        | 
+  85 | //TMPFS_SIZE=32m                         | True                                        | 
+  86 | //                                       | True                                        | 
+  87 | //# Whether to enable and store BSD proc | True                                        | 
+  88 | //# kernel needs to be configured to ena | True                                        | 
+  89 | //# (CONFIG_BSD_PROCESS_ACCT_V3). accton | True                                        | 
+  90 | //# is also required.                    | True                                        | 
+  91 | //PROCESS_ACCOUNTING="no"                | True                                        | 
+  92 | //                                       | True                                        | 
+  93 | //# Tarball for the various boot log fil | True                                        | 
+  94 | //BOOTLOG_DEST=/var/log/bootchart.tgz    | True                                        | 
+  95 | //                                       | True                                        | 
+  96 | //# Whether to automatically stop loggin | True                                        | 
+  97 | //# The logger will look for known proce | True                                        | 
+  98 | //# at a specific runlevel (e.g. gdm-bin | True                                        | 
+  99 | //AUTO_STOP_LOGGER="yes"                 | True                                        | 
+ 100 | //                                       | True                                        | 
+ 101 | //# Whether to automatically generate th | True                                        | 
+ 102 | //# completes.  The boot chart will be g | True                                        | 
+ 103 | //# Note that the bootchart package must | True                                        | 
+ 104 | //AUTO_RENDER="no"                       | True                                        | 
+ 105 | //                                       | True                                        | 
+ 106 | //# Image format to use for the auto-gen | True                                        | 
+ 107 | //# (choose between png, svg and eps).   | True                                        | 
+ 108 | //AUTO_RENDER_FORMAT="png"               | True                                        | 
+ 109 | //                                       | True                                        | 
+ 110 | //# Output directory for auto-generated  | True                                        | 
+ 111 | //AUTO_RENDER_DIR="/var/log"             | True                                        | 
+ 112 |                                          | True                                        | 
+ 113 |                                          | True                                        | 
+ 114 | /* Globals */                            | True                                        | 
+ 115 | struct globals {                         | True                                        | 
+ 116 |  char jiffy_line[COMMON_BUFSIZE];        | True                                        | 
+ 117 | } FIX_ALIASING;                          | True                                        | 
+ 118 | #define G (*(struct globals*)bb_common_b | True                                        | 
+ 119 | #define INIT_G() do { setup_common_bufsi | True                                        | 
+ 120 |                                          | True                                        | 
+ 121 | static void dump_file(FILE *fp, const ch | True                                        | 
+ 122 | {                                        | True                                        | 
+ 123 |  int fd = open(filename, O_RDONLY);      | True                                        | 
+ 124 |  if (fd >= 0) {                          | True                                        | 
+ 125 |   fputs(G.jiffy_line, fp);               | True                                        | 
+ 126 |   fflush(fp);                            | True                                        | 
+ 127 |   bb_copyfd_eof(fd, fileno(fp));         | True                                        | 
+ 128 |   close(fd);                             | True                                        | 
+ 129 |   fputc('\n', fp);                       | True                                        | 
+ 130 |  }                                       | True                                        | 
+ 131 | }                                        | True                                        | 
+ 132 |                                          | True                                        | 
+ 133 | static int dump_procs(FILE *fp, int look | True                                        | 
+ 134 | {                                        | True                                        | 
+ 135 |  struct dirent *entry;                   | True                                        | 
+ 136 |  DIR *dir = xopendir("/proc");           | True                                        | 
+ 137 |  int found_login_process = 0;            | True                                        | 
+ 138 |                                          | True                                        | 
+ 139 |  fputs(G.jiffy_line, fp);                | True                                        | 
+ 140 |  while ((entry = readdir(dir)) != NULL)  | True                                        | 
+ 141 |   char name[sizeof("/proc/%u/cmdline") + | True                                        | 
+ 142 |   int stat_fd;                           | True                                        | 
+ 143 |   unsigned pid = bb_strtou(entry->d_name | True                                        | 
+ 144 |   if (errno)                             | True                                        | 
+ 145 |    continue;                             | True                                        | 
+ 146 |                                          | True                                        | 
+ 147 |   /* Android's version reads /proc/PID/c | True                                        | 
+ 148 |    * non-truncated process name. Do we w | True                                        | 
+ 149 |                                          | True                                        | 
+ 150 |   sprintf(name, "/proc/%u/stat", pid);   | True                                        | 
+ 151 |   stat_fd = open(name, O_RDONLY);        | True                                        | 
+ 152 |   if (stat_fd >= 0) {                    | True                                        | 
+ 153 |    char *p;                              | True                                        | 
+ 154 |    char stat_line[4*1024];               | True                                        | 
+ 155 |    int rd = safe_read(stat_fd, stat_line | True                                        | 
+ 156 |                                          | True                                        | 
+ 157 |    close(stat_fd);                       | True                                        | 
+ 158 |    if (rd < 0)                           | True                                        | 
+ 159 |     continue;                            | True                                        | 
+ 160 |    stat_line[rd] = '\0';                 | True                                        | 
+ 161 |    p = strchrnul(stat_line, '\n');       | True                                        | 
+ 162 |    *p++ = '\n';                          | True                                        | 
+ 163 |    *p = '\0';                            | True                                        | 
+ 164 |    fputs(stat_line, fp);                 | True                                        | 
+ 165 |    if (!look_for_login_process)          | True                                        | 
+ 166 |     continue;                            | True                                        | 
+ 167 |    p = strchr(stat_line, '(');           | True                                        | 
+ 168 |    if (!p)                               | True                                        | 
+ 169 |     continue;                            | True                                        | 
+ 170 |    p++;                                  | True                                        | 
+ 171 |    strchrnul(p, ')')[0] = '\0';          | True                                        | 
+ 172 |    /* Is it gdm, kdm or a getty? */      | True                                        | 
+ 173 |    if (((p[0] == 'g' || p[0] == 'k' || p | True                                        | 
+ 174 |         && p[1] == 'd' && p[2] == 'm' && | True                                        | 
+ 175 |        )                                 | True                                        | 
+ 176 |     || strstr(p, "getty")                | True                                        | 
+ 177 |    ) {                                   | True                                        | 
+ 178 |     found_login_process = 1;             | True                                        | 
+ 179 |    }                                     | True                                        | 
+ 180 |   }                                      | True                                        | 
+ 181 |  }                                       | True                                        | 
+ 182 |  closedir(dir);                          | True                                        | 
+ 183 |  fputc('\n', fp);                        | True                                        | 
+ 184 |  return found_login_process;             | True                                        | 
+ 185 | }                                        | True                                        | 
+ 186 |                                          | True                                        | 
+ 187 | static char *make_tempdir(void)          | True                                        | 
+ 188 | {                                        | True                                        | 
+ 189 |  char template[] = "/tmp/bootchart.XXXXX | True                                        | 
+ 190 |  char *tempdir = xstrdup(mkdtemp(templat | True                                        | 
+ 191 |  if (!tempdir) {                         | True                                        | 
+ 192 | #ifdef __linux__                         | True                                        | 
+ 193 |   /* /tmp is not writable (happens when  | (__linux__)                                 | 
+ 194 |    * Try to mount a tmpfs, then cd and l | (__linux__)                                 | 
+ 195 |    * Since we unmount it at once, we can | (__linux__)                                 | 
+ 196 |    * Try a few locations which are likel | (__linux__)                                 | 
+ 197 |    */                                    | (__linux__)                                 | 
+ 198 |   static const char dirs[] ALIGN1 = "/mn | (__linux__)                                 | 
+ 199 |   const char *try_dir = dirs;            | (__linux__)                                 | 
+ 200 |   while (mount("none", try_dir, "tmpfs", | (__linux__)                                 | 
+ 201 |    try_dir += strlen(try_dir) + 1;       | (__linux__)                                 | 
+ 202 |    if (!try_dir[0])                      | (__linux__)                                 | 
+ 203 |     bb_perror_msg_and_die("can't %smount | (__linux__)                                 | 
+ 204 |   }                                      | (__linux__)                                 | 
+ 205 |   //bb_error_msg("mounted tmpfs on %s",  | (__linux__)                                 | 
+ 206 |   xchdir(try_dir);                       | (__linux__)                                 | 
+ 207 |   if (umount2(try_dir, MNT_DETACH) != 0) | (__linux__)                                 | 
+ 208 |    bb_perror_msg_and_die("can't %smount  | (__linux__)                                 | 
+ 209 |   }                                      | (__linux__)                                 | 
+ 210 | #else                                    | True                                        | 
+ 211 |   bb_simple_perror_msg_and_die("can't cr | !(__linux__)                                | 
+ 212 | #endif                                   | True                                        | 
+ 213 |  } else {                                | True                                        | 
+ 214 |   xchdir(tempdir);                       | True                                        | 
+ 215 |  }                                       | True                                        | 
+ 216 |  return tempdir;                         | True                                        | 
+ 217 | }                                        | True                                        | 
+ 218 |                                          | True                                        | 
+ 219 | static void do_logging(unsigned sample_p | True                                        | 
+ 220 | {                                        | True                                        | 
+ 221 |  FILE *proc_stat = xfopen_for_write("pro | True                                        | 
+ 222 |  FILE *proc_diskstats = xfopen_for_write | True                                        | 
+ 223 |  //FILE *proc_netdev = xfopen_for_write( | True                                        | 
+ 224 |  FILE *proc_ps = xfopen_for_write("proc_ | True                                        | 
+ 225 |  int look_for_login_process = (getppid() | True                                        | 
+ 226 |  unsigned count = 60*1000*1000 / sample_ | True                                        | 
+ 227 |                                          | True                                        | 
+ 228 |  if (process_accounting) {               | True                                        | 
+ 229 |   close(xopen("kernel_pacct", O_WRONLY | | True                                        | 
+ 230 |   acct("kernel_pacct");                  | True                                        | 
+ 231 |  }                                       | True                                        | 
+ 232 |                                          | True                                        | 
+ 233 |  while (--count && !bb_got_signal) {     | True                                        | 
+ 234 |   char *p;                               | True                                        | 
+ 235 |   int len = open_read_close("/proc/uptim | True                                        | 
+ 236 |   if (len < 0)                           | True                                        | 
+ 237 |    goto wait_more;                       | True                                        | 
+ 238 |   /* /proc/uptime has format "NNNNNN.MM  | True                                        | 
+ 239 |   /* we convert it to "NNNNNNMM\n" (usin | True                                        | 
+ 240 |   G.jiffy_line[len] = '\0';              | True                                        | 
+ 241 |   p = strchr(G.jiffy_line, '.');         | True                                        | 
+ 242 |   if (!p)                                | True                                        | 
+ 243 |    goto wait_more;                       | True                                        | 
+ 244 |   while (isdigit(*++p))                  | True                                        | 
+ 245 |    p[-1] = *p;                           | True                                        | 
+ 246 |   p[-1] = '\n';                          | True                                        | 
+ 247 |   p[0] = '\0';                           | True                                        | 
+ 248 |                                          | True                                        | 
+ 249 |   dump_file(proc_stat, "/proc/stat");    | True                                        | 
+ 250 |   dump_file(proc_diskstats, "/proc/disks | True                                        | 
+ 251 |   //dump_file(proc_netdev, "/proc/net/de | True                                        | 
+ 252 |   if (dump_procs(proc_ps, look_for_login | True                                        | 
+ 253 |    /* dump_procs saw a getty or {g,k,x}d | True                                        | 
+ 254 |     * stop logging in 2 seconds:         | True                                        | 
+ 255 |     */                                   | True                                        | 
+ 256 |    if (count > 2*1000*1000 / sample_peri | True                                        | 
+ 257 |     count = 2*1000*1000 / sample_period_ | True                                        | 
+ 258 |   }                                      | True                                        | 
+ 259 |   fflush_all();                          | True                                        | 
+ 260 |  wait_more:                              | True                                        | 
+ 261 |   usleep(sample_period_us);              | True                                        | 
+ 262 |  }                                       | True                                        | 
+ 263 | }                                        | True                                        | 
+ 264 |                                          | True                                        | 
+ 265 | static void finalize(char *tempdir, cons | True                                        | 
+ 266 | {                                        | True                                        | 
+ 267 |  //# Stop process accounting if configur | True                                        | 
+ 268 |  //local pacct=                          | True                                        | 
+ 269 |  //[ -e kernel_pacct ] && pacct=kernel_p | True                                        | 
+ 270 |                                          | True                                        | 
+ 271 |  FILE *header_fp = xfopen_for_write("hea | True                                        | 
+ 272 |                                          | True                                        | 
+ 273 |  if (process_accounting)                 | True                                        | 
+ 274 |   acct(NULL);                            | True                                        | 
+ 275 |                                          | True                                        | 
+ 276 |  if (prog)                               | True                                        | 
+ 277 |   fprintf(header_fp, "profile.process =  | True                                        | 
+ 278 |                                          | True                                        | 
+ 279 |  fputs("version = "BC_VERSION_STR"\n", h | True                                        | 
+ 280 |  if (ENABLE_FEATURE_BOOTCHARTD_BLOATED_H | True                                        | 
+ 281 |   char *hostname;                        | True                                        | 
+ 282 |   char *kcmdline;                        | True                                        | 
+ 283 |   time_t t;                              | True                                        | 
+ 284 |   struct tm tm_time;                     | True                                        | 
+ 285 |   /* x2 for possible localized weekday/m | True                                        | 
+ 286 |   char date_buf[sizeof("Mon Jun 21 05:29 | True                                        | 
+ 287 |   struct utsname unamebuf;               | True                                        | 
+ 288 |                                          | True                                        | 
+ 289 |   hostname = safe_gethostname();         | True                                        | 
+ 290 |   time(&t);                              | True                                        | 
+ 291 |   localtime_r(&t, &tm_time);             | True                                        | 
+ 292 |   strftime(date_buf, sizeof(date_buf), " | True                                        | 
+ 293 |   fprintf(header_fp, "title = Boot chart | True                                        | 
+ 294 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                                        | 
+ 295 |    free(hostname);                       | True                                        | 
+ 296 |                                          | True                                        | 
+ 297 |   uname(&unamebuf); /* never fails */    | True                                        | 
+ 298 |   /* same as uname -srvm */              | True                                        | 
+ 299 |   fprintf(header_fp, "system.uname = %s  | True                                        | 
+ 300 |     unamebuf.sysname,                    | True                                        | 
+ 301 |     unamebuf.release,                    | True                                        | 
+ 302 |     unamebuf.version,                    | True                                        | 
+ 303 |     unamebuf.machine                     | True                                        | 
+ 304 |   );                                     | True                                        | 
+ 305 |                                          | True                                        | 
+ 306 |   //system.release = `cat /etc/DISTRO-re | True                                        | 
+ 307 |   //system.cpu = `grep '^model name' /pr | True                                        | 
+ 308 |                                          | True                                        | 
+ 309 |   kcmdline = xmalloc_open_read_close("/p | True                                        | 
+ 310 |   /* kcmdline includes trailing "\n" */  | True                                        | 
+ 311 |   fprintf(header_fp, "system.kernel.opti | True                                        | 
+ 312 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                                        | 
+ 313 |    free(kcmdline);                       | True                                        | 
+ 314 |  }                                       | True                                        | 
+ 315 |  fclose(header_fp);                      | True                                        | 
+ 316 |                                          | True                                        | 
+ 317 |  /* Package log files */                 | True                                        | 
+ 318 |  system(xasprintf("tar -zcf /var/log/boo | True                                        | 
+ 319 |  /* Clean up (if we are not in detached  | True                                        | 
+ 320 |  if (tempdir) {                          | True                                        | 
+ 321 |   unlink("header");                      | True                                        | 
+ 322 |   unlink("proc_stat.log");               | True                                        | 
+ 323 |   unlink("proc_diskstats.log");          | True                                        | 
+ 324 |   //unlink("proc_netdev.log");           | True                                        | 
+ 325 |   unlink("proc_ps.log");                 | True                                        | 
+ 326 |   if (process_accounting)                | True                                        | 
+ 327 |    unlink("kernel_pacct");               | True                                        | 
+ 328 |   rmdir(tempdir);                        | True                                        | 
+ 329 |  }                                       | True                                        | 
+ 330 |                                          | True                                        | 
+ 331 |  /* shell-based bootchartd tries to run  | True                                        | 
+ 332 |   * /usr/bin/bootchart -o "$AUTO_RENDER_ | True                                        | 
+ 333 |   */                                     | True                                        | 
+ 334 | }                                        | True                                        | 
+ 335 |                                          | True                                        | 
+ 336 | //usage:#define bootchartd_trivial_usage | True                                        | 
+ 337 | //usage:       "start [PROG ARGS]|stop|i | True                                        | 
+ 338 | //usage:#define bootchartd_full_usage "\ | True                                        | 
+ 339 | //usage:       "Create /var/log/bootchar | True                                        | 
+ 340 | //usage:     "\nstart: start background  | True                                        | 
+ 341 | //usage:     "\nstop: send USR1 to all b | True                                        | 
+ 342 | //usage:     "\ninit: start background l | True                                        | 
+ 343 | //usage:     "\nUnder PID 1: as init, th | True                                        | 
+ 344 |                                          | True                                        | 
+ 345 | int bootchartd_main(int argc, char **arg | True                                        | 
+ 346 | int bootchartd_main(int argc UNUSED_PARA | True                                        | 
+ 347 | {                                        | True                                        | 
+ 348 |  unsigned sample_period_us;              | True                                        | 
+ 349 |  pid_t parent_pid, logger_pid;           | True                                        | 
+ 350 |  smallint cmd;                           | True                                        | 
+ 351 |  int process_accounting;                 | True                                        | 
+ 352 |  enum {                                  | True                                        | 
+ 353 |   CMD_STOP = 0,                          | True                                        | 
+ 354 |   CMD_START,                             | True                                        | 
+ 355 |   CMD_INIT,                              | True                                        | 
+ 356 |   CMD_PID1, /* used to mark pid 1 case * | True                                        | 
+ 357 |  };                                      | True                                        | 
+ 358 |                                          | True                                        | 
+ 359 |  INIT_G();                               | True                                        | 
+ 360 |                                          | True                                        | 
+ 361 |  parent_pid = getpid();                  | True                                        | 
+ 362 |  if (argv[1]) {                          | True                                        | 
+ 363 |   cmd = index_in_strings("stop\0""start\ | True                                        | 
+ 364 |   if (cmd < 0)                           | True                                        | 
+ 365 |    bb_show_usage();                      | True                                        | 
+ 366 |   if (cmd == CMD_STOP) {                 | True                                        | 
+ 367 |    pid_t *pidList = find_pid_by_name("bo | True                                        | 
+ 368 |    while (*pidList != 0) {               | True                                        | 
+ 369 |     if (*pidList != parent_pid)          | True                                        | 
+ 370 |      kill(*pidList, SIGUSR1);            | True                                        | 
+ 371 |     pidList++;                           | True                                        | 
+ 372 |    }                                     | True                                        | 
+ 373 |    return EXIT_SUCCESS;                  | True                                        | 
+ 374 |   }                                      | True                                        | 
+ 375 |  } else {                                | True                                        | 
+ 376 |   if (parent_pid != 1)                   | True                                        | 
+ 377 |    bb_show_usage();                      | True                                        | 
+ 378 |   cmd = CMD_PID1;                        | True                                        | 
+ 379 |  }                                       | True                                        | 
+ 380 |                                          | True                                        | 
+ 381 |  /* Here we are in START, INIT or CMD_PI | True                                        | 
+ 382 |                                          | True                                        | 
+ 383 |  /* Read config file: */                 | True                                        | 
+ 384 |  sample_period_us = 200 * 1000;          | True                                        | 
+ 385 |  process_accounting = 0;                 | True                                        | 
+ 386 |  if (ENABLE_FEATURE_BOOTCHARTD_CONFIG_FI | True                                        | 
+ 387 |   char* token[2];                        | True                                        | 
+ 388 |   parser_t *parser = config_open2("/etc/ | True                                        | 
+ 389 |   if (!parser)                           | True                                        | 
+ 390 |    parser = config_open2("/etc/bootchart | True                                        | 
+ 391 |   while (config_read(parser, token, 2, 0 | True                                        | 
+ 392 |    if (strcmp(token[0], "SAMPLE_PERIOD") | True                                        | 
+ 393 |     sample_period_us = atof(token[1]) *  | True                                        | 
+ 394 |    if (strcmp(token[0], "PROCESS_ACCOUNT | True                                        | 
+ 395 |     && (strcmp(token[1], "on") == 0 || s | True                                        | 
+ 396 |    ) {                                   | True                                        | 
+ 397 |     process_accounting = 1;              | True                                        | 
+ 398 |    }                                     | True                                        | 
+ 399 |   }                                      | True                                        | 
+ 400 |   config_close(parser);                  | True                                        | 
+ 401 |   if ((int)sample_period_us <= 0)        | True                                        | 
+ 402 |    sample_period_us = 1; /* prevent divi | True                                        | 
+ 403 |  }                                       | True                                        | 
+ 404 |                                          | True                                        | 
+ 405 |  /* Create logger child: */              | True                                        | 
+ 406 |  logger_pid = fork_or_rexec(argv);       | True                                        | 
+ 407 |                                          | True                                        | 
+ 408 |  if (logger_pid == 0) { /* child */      | True                                        | 
+ 409 |   char *tempdir;                         | True                                        | 
+ 410 |                                          | True                                        | 
+ 411 |   bb_signals(0                           | True                                        | 
+ 412 |    + (1 << SIGUSR1)                      | True                                        | 
+ 413 |    + (1 << SIGUSR2)                      | True                                        | 
+ 414 |    + (1 << SIGTERM)                      | True                                        | 
+ 415 |    + (1 << SIGQUIT)                      | True                                        | 
+ 416 |    + (1 << SIGINT)                       | True                                        | 
+ 417 |    + (1 << SIGHUP)                       | True                                        | 
+ 418 |    , record_signo);                      | True                                        | 
+ 419 |                                          | True                                        | 
+ 420 |   if (DO_SIGNAL_SYNC)                    | True                                        | 
+ 421 |    /* Inform parent that we are ready */ | True                                        | 
+ 422 |    raise(SIGSTOP);                       | True                                        | 
+ 423 |                                          | True                                        | 
+ 424 |   /* If we are started by kernel, PATH m | True                                        | 
+ 425 |    * In order to find "tar", let's set s | True                                        | 
+ 426 |    */                                    | True                                        | 
+ 427 |   if (cmd == CMD_PID1 && !getenv("PATH") | True                                        | 
+ 428 |    putenv((char*)bb_PATH_root_path);     | True                                        | 
+ 429 |                                          | True                                        | 
+ 430 |   tempdir = make_tempdir();              | True                                        | 
+ 431 |   do_logging(sample_period_us, process_a | True                                        | 
+ 432 |   finalize(tempdir, cmd == CMD_START ? a | True                                        | 
+ 433 |   return EXIT_SUCCESS;                   | True                                        | 
+ 434 |  }                                       | True                                        | 
+ 435 |                                          | True                                        | 
+ 436 |  /* parent */                            | True                                        | 
+ 437 |                                          | True                                        | 
+ 438 |  if (DO_SIGNAL_SYNC) {                   | True                                        | 
+ 439 |   /* Wait for logger child to set handle | True                                        | 
+ 440 |    * Otherwise with short-lived PROG (e. | True                                        | 
+ 441 |    * we might send SIGUSR1 before logger | True                                        | 
+ 442 |    */                                    | True                                        | 
+ 443 |   waitpid(logger_pid, NULL, WUNTRACED);  | True                                        | 
+ 444 |   kill(logger_pid, SIGCONT);             | True                                        | 
+ 445 |  }                                       | True                                        | 
+ 446 |                                          | True                                        | 
+ 447 |  if (cmd == CMD_PID1) {                  | True                                        | 
+ 448 |   char *bootchart_init = getenv("bootcha | True                                        | 
+ 449 |   if (bootchart_init)                    | True                                        | 
+ 450 |    execl(bootchart_init, bootchart_init, | True                                        | 
+ 451 |   execl("/init", "init", NULL);          | True                                        | 
+ 452 |   execl("/sbin/init", "init", NULL);     | True                                        | 
+ 453 |   bb_perror_msg_and_die("can't execute ' | True                                        | 
+ 454 |  }                                       | True                                        | 
+ 455 |                                          | True                                        | 
+ 456 |  if (cmd == CMD_START && argv[2]) { /* " | True                                        | 
+ 457 |   pid_t pid = xvfork();                  | True                                        | 
+ 458 |   if (pid == 0) { /* child */            | True                                        | 
+ 459 |    argv += 2;                            | True                                        | 
+ 460 |    BB_EXECVP_or_die(argv);               | True                                        | 
+ 461 |   }                                      | True                                        | 
+ 462 |   /* parent */                           | True                                        | 
+ 463 |   waitpid(pid, NULL, 0);                 | True                                        | 
+ 464 |   kill(logger_pid, SIGUSR1);             | True                                        | 
+ 465 |  }                                       | True                                        | 
+ 466 |                                          | True                                        | 
+ 467 |  return EXIT_SUCCESS;                    | True                                        | 
+ 468 | }                                        | True                                        | 
+-----+------------------------------------------+---------------------------------------------+
+     |                                          | +110MB, 281ms                               | 

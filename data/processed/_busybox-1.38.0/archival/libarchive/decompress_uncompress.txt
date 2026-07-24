@@ -1,0 +1,318 @@
+FILE: data/raw/busybox-1.38.0/archival/libarchive/decompress_uncompress.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * uncompress for busybox -- (c) 2002 Ro | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * based on the original compress42.c so | True                      | 
+   6 |  * (see disclaimer below)                | True                      | 
+   7 |  */                                      | True                      | 
+   8 | /* (N)compress42.c - File compression al | True                      | 
+   9 |  *                                       | True                      | 
+  10 |  * Authors:                              | True                      | 
+  11 |  *   Spencer W. Thomas   (decvax!harpo!u | True                      | 
+  12 |  *   Jim McKie           (decvax!mcvax!j | True                      | 
+  13 |  *   Steve Davies        (decvax!vax135! | True                      | 
+  14 |  *   Ken Turkowski       (decvax!decwrl! | True                      | 
+  15 |  *   James A. Woods      (decvax!ihnp4!a | True                      | 
+  16 |  *   Joe Orost           (decvax!vax135! | True                      | 
+  17 |  *   Dave Mack           (csu@alembic.ac | True                      | 
+  18 |  *   Peter Jannesen, Network Communicati | True                      | 
+  19 |  *                       (peter@ncs.nl)  | True                      | 
+  20 |  *                                       | True                      | 
+  21 |  * marc@suse.de : a small security fix f | True                      | 
+  22 |  *                                       | True                      | 
+  23 |  * [... History snipped ...]             | True                      | 
+  24 |  */                                      | True                      | 
+  25 | #include "libbb.h"                       | True                      | 
+  26 | #include "bb_archive.h"                  | True                      | 
+  27 |                                          | True                      | 
+  28 |                                          | True                      | 
+  29 | /* Default input buffer size */          | True                      | 
+  30 | #define IBUFSIZ 2048                     | True                      | 
+  31 |                                          | True                      | 
+  32 | /* Default output buffer size */         | True                      | 
+  33 | #define OBUFSIZ 2048                     | True                      | 
+  34 |                                          | True                      | 
+  35 | /* Defines for third byte of header */   | True                      | 
+  36 | #define BIT_MASK        0x1f    /* Mask  | True                      | 
+  37 |                                 /* Masks | True                      | 
+  38 |                                 /* I thi | True                      | 
+  39 |                                 /* a fou | True                      | 
+  40 | #define BLOCK_MODE      0x80    /* Block | True                      | 
+  41 |                                 /* compr | True                      | 
+  42 |                                 /* the n | True                      | 
+  43 |                                 /* lie w | True                      | 
+  44 | #define FIRST   257     /* first free en | True                      | 
+  45 | #define CLEAR   256     /* table clear o | True                      | 
+  46 |                                          | True                      | 
+  47 | #define INIT_BITS 9     /* initial numbe | True                      | 
+  48 |                                          | True                      | 
+  49 |                                          | True                      | 
+  50 | /* machine variants which require cc -Dm | True                      | 
+  51 | #define HBITS      17   /* 50% occupancy | True                      | 
+  52 | #define HSIZE      (1<<HBITS)            | True                      | 
+  53 | #define HMASK      (HSIZE-1)    /* unuse | True                      | 
+  54 | #define HPRIME     9941         /* unuse | True                      | 
+  55 | #define BITS       16                    | True                      | 
+  56 | #define BITS_STR   "16"                  | True                      | 
+  57 | #undef  MAXSEG_64K              /* unuse | True                      | 
+  58 | #define MAXCODE(n) (1L << (n))           | True                      | 
+  59 |                                          | True                      | 
+  60 | #define htabof(i)               htab[i]  | True                      | 
+  61 | #define codetabof(i)            codetab[ | True                      | 
+  62 | #define tab_prefixof(i)         codetabo | True                      | 
+  63 | #define tab_suffixof(i)         ((unsign | True                      | 
+  64 | #define de_stack                ((unsign | True                      | 
+  65 | #define clear_tab_prefixof()    memset(c | True                      | 
+  66 |                                          | True                      | 
+  67 | /*                                       | True                      | 
+  68 |  * Decompress stdin to stdout.  This rou | True                      | 
+  69 |  * file building the "string" table on-t | True                      | 
+  70 |  * be stored in the compressed file.     | True                      | 
+  71 |  */                                      | True                      | 
+  72 |                                          | True                      | 
+  73 | IF_DESKTOP(long long) int FAST_FUNC      | True                      | 
+  74 | unpack_Z_stream(transformer_state_t *xst | True                      | 
+  75 | {                                        | True                      | 
+  76 |  IF_DESKTOP(long long total_written = 0; | True                      | 
+  77 |  IF_DESKTOP(long long) int retval = -1;  | True                      | 
+  78 |  unsigned char *stackp;                  | True                      | 
+  79 |  int finchar;                            | True                      | 
+  80 |  long oldcode;                           | True                      | 
+  81 |  long incode;                            | True                      | 
+  82 |  int inbits;                             | True                      | 
+  83 |  int posbits;                            | True                      | 
+  84 |  int outpos;                             | True                      | 
+  85 |  int insize;                             | True                      | 
+  86 |  int bitmask;                            | True                      | 
+  87 |  long free_ent;                          | True                      | 
+  88 |  long maxcode;                           | True                      | 
+  89 |  long maxmaxcode;                        | True                      | 
+  90 |  int n_bits;                             | True                      | 
+  91 |  int rsize = 0;                          | True                      | 
+  92 |  unsigned char *inbuf; /* were eating in | True                      | 
+  93 |  unsigned char *outbuf; /* bad for some  | True                      | 
+  94 |  unsigned char *htab;                    | True                      | 
+  95 |  unsigned short *codetab;                | True                      | 
+  96 |                                          | True                      | 
+  97 |  /* Hmm, these were statics - why?! */   | True                      | 
+  98 |  /* user settable max # bits/code */     | True                      | 
+  99 |  int maxbits; /* = BITS; */              | True                      | 
+ 100 |  /* block compress mode -C compatible wi | True                      | 
+ 101 |  int block_mode; /* = BLOCK_MODE; */     | True                      | 
+ 102 |                                          | True                      | 
+ 103 |  if (check_signature16(xstate, COMPRESS_ | True                      | 
+ 104 |   return -1;                             | True                      | 
+ 105 |                                          | True                      | 
+ 106 |  inbuf = xzalloc(IBUFSIZ + 64);          | True                      | 
+ 107 |  outbuf = xzalloc(OBUFSIZ + 2048);       | True                      | 
+ 108 |  htab = xzalloc(HSIZE);  /* wasn't zeroe | True                      | 
+ 109 |  codetab = xzalloc(HSIZE * sizeof(codeta | True                      | 
+ 110 |                                          | True                      | 
+ 111 |  insize = 0;                             | True                      | 
+ 112 |                                          | True                      | 
+ 113 |  /* xread isn't good here, we have to re | True                      | 
+ 114 |   * to do some cleanup (e.g. delete inco | True                      | 
+ 115 |  if (full_read(xstate->src_fd, inbuf, 1) | True                      | 
+ 116 |   bb_simple_error_msg("short read");     | True                      | 
+ 117 |   goto err;                              | True                      | 
+ 118 |  }                                       | True                      | 
+ 119 |                                          | True                      | 
+ 120 |  maxbits = inbuf[0] & BIT_MASK;          | True                      | 
+ 121 |  block_mode = inbuf[0] & BLOCK_MODE;     | True                      | 
+ 122 |  maxmaxcode = MAXCODE(maxbits);          | True                      | 
+ 123 |                                          | True                      | 
+ 124 |  if (maxbits > BITS) {                   | True                      | 
+ 125 |   bb_error_msg("compressed with %d bits, | True                      | 
+ 126 |     BITS_STR" bits", maxbits);           | True                      | 
+ 127 |   goto err;                              | True                      | 
+ 128 |  }                                       | True                      | 
+ 129 |                                          | True                      | 
+ 130 |  n_bits = INIT_BITS;                     | True                      | 
+ 131 |  maxcode = MAXCODE(INIT_BITS) - 1;       | True                      | 
+ 132 |  bitmask = (1 << INIT_BITS) - 1;         | True                      | 
+ 133 |  oldcode = -1;                           | True                      | 
+ 134 |  finchar = 0;                            | True                      | 
+ 135 |  outpos = 0;                             | True                      | 
+ 136 |  posbits = 0 << 3;                       | True                      | 
+ 137 |                                          | True                      | 
+ 138 |  free_ent = ((block_mode) ? FIRST : 256) | True                      | 
+ 139 |                                          | True                      | 
+ 140 |  /* As above, initialize the first 256 e | True                      | 
+ 141 |  /*clear_tab_prefixof(); - done by xzall | True                      | 
+ 142 |                                          | True                      | 
+ 143 |  {                                       | True                      | 
+ 144 |   int i;                                 | True                      | 
+ 145 |   for (i = 255; i >= 0; --i)             | True                      | 
+ 146 |    tab_suffixof(i) = (unsigned char) i;  | True                      | 
+ 147 |  }                                       | True                      | 
+ 148 |                                          | True                      | 
+ 149 |  do {                                    | True                      | 
+ 150 |  resetbuf:                               | True                      | 
+ 151 |   {                                      | True                      | 
+ 152 |    int i;                                | True                      | 
+ 153 |    int e;                                | True                      | 
+ 154 |    int o;                                | True                      | 
+ 155 |                                          | True                      | 
+ 156 |    o = posbits >> 3;                     | True                      | 
+ 157 |    e = insize - o;                       | True                      | 
+ 158 |                                          | True                      | 
+ 159 |    for (i = 0; i < e; ++i)               | True                      | 
+ 160 |     inbuf[i] = inbuf[i + o];             | True                      | 
+ 161 |                                          | True                      | 
+ 162 |    insize = e;                           | True                      | 
+ 163 |    posbits = 0;                          | True                      | 
+ 164 |   }                                      | True                      | 
+ 165 |                                          | True                      | 
+ 166 |   if (insize < (int) (IBUFSIZ + 64) - IB | True                      | 
+ 167 |    rsize = safe_read(xstate->src_fd, inb | True                      | 
+ 168 |    if (rsize < 0)                        | True                      | 
+ 169 |     bb_simple_error_msg_and_die(bb_msg_r | True                      | 
+ 170 |    insize += rsize;                      | True                      | 
+ 171 |   }                                      | True                      | 
+ 172 |                                          | True                      | 
+ 173 |   inbits = ((rsize > 0) ? (insize - insi | True                      | 
+ 174 |       (insize << 3) - (n_bits - 1));     | True                      | 
+ 175 |                                          | True                      | 
+ 176 |   while (inbits > posbits) {             | True                      | 
+ 177 |    long code;                            | True                      | 
+ 178 |                                          | True                      | 
+ 179 |    if (free_ent > maxcode) {             | True                      | 
+ 180 |     posbits =                            | True                      | 
+ 181 |      ((posbits - 1) +                    | True                      | 
+ 182 |       ((n_bits << 3) -                   | True                      | 
+ 183 |        (posbits - 1 + (n_bits << 3)) % ( | True                      | 
+ 184 |     ++n_bits;                            | True                      | 
+ 185 |     if (n_bits == maxbits) {             | True                      | 
+ 186 |      maxcode = maxmaxcode;               | True                      | 
+ 187 |     } else {                             | True                      | 
+ 188 |      maxcode = MAXCODE(n_bits) - 1;      | True                      | 
+ 189 |     }                                    | True                      | 
+ 190 |     bitmask = (1 << n_bits) - 1;         | True                      | 
+ 191 |     goto resetbuf;                       | True                      | 
+ 192 |    }                                     | True                      | 
+ 193 |    {                                     | True                      | 
+ 194 |     unsigned char *p = &inbuf[posbits >> | True                      | 
+ 195 |     code = ((p[0]                        | True                      | 
+ 196 |      | ((long) (p[1]) << 8)              | True                      | 
+ 197 |      | ((long) (p[2]) << 16)) >> (posbit | True                      | 
+ 198 |    }                                     | True                      | 
+ 199 |    posbits += n_bits;                    | True                      | 
+ 200 |                                          | True                      | 
+ 201 |    if (oldcode == -1) {                  | True                      | 
+ 202 |     if (code >= 256)                     | True                      | 
+ 203 |      bb_simple_error_msg_and_die("corrup | True                      | 
+ 204 |     oldcode = code;                      | True                      | 
+ 205 |     finchar = (int) oldcode;             | True                      | 
+ 206 |     outbuf[outpos++] = (unsigned char) f | True                      | 
+ 207 |     continue;                            | True                      | 
+ 208 |    }                                     | True                      | 
+ 209 |                                          | True                      | 
+ 210 |    if (code == CLEAR && block_mode) {    | True                      | 
+ 211 |     clear_tab_prefixof();                | True                      | 
+ 212 |     free_ent = FIRST - 1;                | True                      | 
+ 213 |     posbits =                            | True                      | 
+ 214 |      ((posbits - 1) +                    | True                      | 
+ 215 |       ((n_bits << 3) -                   | True                      | 
+ 216 |        (posbits - 1 + (n_bits << 3)) % ( | True                      | 
+ 217 |     n_bits = INIT_BITS;                  | True                      | 
+ 218 |     maxcode = MAXCODE(INIT_BITS) - 1;    | True                      | 
+ 219 |     bitmask = (1 << INIT_BITS) - 1;      | True                      | 
+ 220 |     goto resetbuf;                       | True                      | 
+ 221 |    }                                     | True                      | 
+ 222 |                                          | True                      | 
+ 223 |    incode = code;                        | True                      | 
+ 224 |    stackp = de_stack;                    | True                      | 
+ 225 |                                          | True                      | 
+ 226 |    /* Special case for KwKwK string. */  | True                      | 
+ 227 |    if (code >= free_ent) {               | True                      | 
+ 228 |     if (code > free_ent) {               | True                      | 
+ 229 | /*                                       | True                      | 
+ 230 |      unsigned char *p;                   | True                      | 
+ 231 |                                          | True                      | 
+ 232 |      posbits -= n_bits;                  | True                      | 
+ 233 |      p = &inbuf[posbits >> 3];           | True                      | 
+ 234 |      bb_error_msg                        | True                      | 
+ 235 |       ("insize:%d posbits:%d inbuf:%02X  | True                      | 
+ 236 |       insize, posbits, p[-1], p[0], p[1] | True                      | 
+ 237 |       (posbits & 07));                   | True                      | 
+ 238 | */                                       | True                      | 
+ 239 |      bb_simple_error_msg("corrupted data | True                      | 
+ 240 |      goto err;                           | True                      | 
+ 241 |     }                                    | True                      | 
+ 242 |                                          | True                      | 
+ 243 |     *--stackp = (unsigned char) finchar; | True                      | 
+ 244 |     code = oldcode;                      | True                      | 
+ 245 |    }                                     | True                      | 
+ 246 |                                          | True                      | 
+ 247 |    /* Generate output characters in reve | True                      | 
+ 248 |    while (code >= 256) {                 | True                      | 
+ 249 |     if (stackp <= &htabof(0))            | True                      | 
+ 250 |      bb_simple_error_msg_and_die("corrup | True                      | 
+ 251 |     *--stackp = tab_suffixof(code);      | True                      | 
+ 252 |     code = tab_prefixof(code);           | True                      | 
+ 253 |    }                                     | True                      | 
+ 254 |                                          | True                      | 
+ 255 |    finchar = tab_suffixof(code);         | True                      | 
+ 256 |    *--stackp = (unsigned char) finchar;  | True                      | 
+ 257 |                                          | True                      | 
+ 258 |    /* And put them out in forward order  | True                      | 
+ 259 |    {                                     | True                      | 
+ 260 |     int i;                               | True                      | 
+ 261 |                                          | True                      | 
+ 262 |     i = de_stack - stackp;               | True                      | 
+ 263 |     if (outpos + i >= OBUFSIZ) {         | True                      | 
+ 264 |      do {                                | True                      | 
+ 265 |       if (i > OBUFSIZ - outpos) {        | True                      | 
+ 266 |        i = OBUFSIZ - outpos;             | True                      | 
+ 267 |       }                                  | True                      | 
+ 268 |                                          | True                      | 
+ 269 |       if (i > 0) {                       | True                      | 
+ 270 |        memcpy(outbuf + outpos, stackp, i | True                      | 
+ 271 |        outpos += i;                      | True                      | 
+ 272 |       }                                  | True                      | 
+ 273 |                                          | True                      | 
+ 274 |       if (outpos >= OBUFSIZ) {           | True                      | 
+ 275 |        xtransformer_write(xstate, outbuf | True                      | 
+ 276 |        IF_DESKTOP(total_written += outpo | True                      | 
+ 277 |        outpos = 0;                       | True                      | 
+ 278 |       }                                  | True                      | 
+ 279 |       stackp += i;                       | True                      | 
+ 280 |       i = de_stack - stackp;             | True                      | 
+ 281 |      } while (i > 0);                    | True                      | 
+ 282 |     } else {                             | True                      | 
+ 283 |      memcpy(outbuf + outpos, stackp, i); | True                      | 
+ 284 |      outpos += i;                        | True                      | 
+ 285 |     }                                    | True                      | 
+ 286 |    }                                     | True                      | 
+ 287 |                                          | True                      | 
+ 288 |    /* Generate the new entry. */         | True                      | 
+ 289 |    if (free_ent < maxmaxcode) {          | True                      | 
+ 290 |     tab_prefixof(free_ent) = (unsigned s | True                      | 
+ 291 |     tab_suffixof(free_ent) = (unsigned c | True                      | 
+ 292 |     free_ent++;                          | True                      | 
+ 293 |    }                                     | True                      | 
+ 294 |                                          | True                      | 
+ 295 |    /* Remember previous code.  */        | True                      | 
+ 296 |    oldcode = incode;                     | True                      | 
+ 297 |   }                                      | True                      | 
+ 298 |  } while (rsize > 0);                    | True                      | 
+ 299 |                                          | True                      | 
+ 300 |  if (outpos > 0) {                       | True                      | 
+ 301 |   xtransformer_write(xstate, outbuf, out | True                      | 
+ 302 |   IF_DESKTOP(total_written += outpos;)   | True                      | 
+ 303 |  }                                       | True                      | 
+ 304 |                                          | True                      | 
+ 305 |  retval = IF_DESKTOP(total_written) + 0; | True                      | 
+ 306 |  err:                                    | True                      | 
+ 307 |  free(inbuf);                            | True                      | 
+ 308 |  free(outbuf);                           | True                      | 
+ 309 |  free(htab);                             | True                      | 
+ 310 |  free(codetab);                          | True                      | 
+ 311 |  return retval;                          | True                      | 
+ 312 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +112MB, 247ms             | 

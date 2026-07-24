@@ -1,0 +1,486 @@
+FILE: data/raw/busybox-1.38.0/networking/ssl_helper-wolfssl/ssl_helper.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * Adapted from:                         | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * client.c                              | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Copyright (C) 2006-2015 wolfSSL Inc.  | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * This file is part of wolfSSL. (former | True                      | 
+   9 |  *                                       | True                      | 
+  10 |  * wolfSSL is free software; you can red | True                      | 
+  11 |  * it under the terms of the GNU General | True                      | 
+  12 |  * the Free Software Foundation; either  | True                      | 
+  13 |  * (at your option) any later version.   | True                      | 
+  14 |  *                                       | True                      | 
+  15 |  * wolfSSL is distributed in the hope th | True                      | 
+  16 |  * but WITHOUT ANY WARRANTY; without eve | True                      | 
+  17 |  * MERCHANTABILITY or FITNESS FOR A PART | True                      | 
+  18 |  * GNU General Public License for more d | True                      | 
+  19 |  *                                       | True                      | 
+  20 |  * You should have received a copy of th | True                      | 
+  21 |  * along with this program; if not, writ | True                      | 
+  22 |  * Foundation, Inc., 51 Franklin Street, | True                      | 
+  23 |  */                                      | True                      | 
+  24 | #include <stdlib.h>                      | True                      | 
+  25 | #include <unistd.h>                      | True                      | 
+  26 | #include <stdarg.h>                      | True                      | 
+  27 | #include <string.h>                      | True                      | 
+  28 | #include <errno.h>                       | True                      | 
+  29 | #include <fcntl.h>                       | True                      | 
+  30 | #include <stdio.h>                       | True                      | 
+  31 | #include <time.h>                        | True                      | 
+  32 | #include <poll.h>                        | True                      | 
+  33 | #include <sys/socket.h>                  | True                      | 
+  34 |                                          | True                      | 
+  35 | #include <wolfssl/wolfcrypt/types.h>     | True                      | 
+  36 | #include <wolfssl/ssl.h>                 | True                      | 
+  37 |                                          | True                      | 
+  38 | #if 0                                    | True                      | 
+  39 | # define dbg(...) say(__VA_ARGS__)       | 0                         | 
+  40 | #else                                    | True                      | 
+  41 | # define dbg(...) ((void)0)              | !0                        | 
+  42 | #endif                                   | True                      | 
+  43 |                                          | True                      | 
+  44 | static ssize_t safe_write(int fd, const  | True                      | 
+  45 | {                                        | True                      | 
+  46 |  ssize_t n;                              | True                      | 
+  47 |                                          | True                      | 
+  48 |  do {                                    | True                      | 
+  49 |   n = write(fd, buf, count);             | True                      | 
+  50 |  } while (n < 0 && errno == EINTR);      | True                      | 
+  51 |                                          | True                      | 
+  52 |  return n;                               | True                      | 
+  53 | }                                        | True                      | 
+  54 |                                          | True                      | 
+  55 | static ssize_t full_write(int fd, const  | True                      | 
+  56 | {                                        | True                      | 
+  57 |  ssize_t cc;                             | True                      | 
+  58 |  ssize_t total;                          | True                      | 
+  59 |                                          | True                      | 
+  60 |  total = 0;                              | True                      | 
+  61 |                                          | True                      | 
+  62 |  while (len) {                           | True                      | 
+  63 |   cc = safe_write(fd, buf, len);         | True                      | 
+  64 |                                          | True                      | 
+  65 |   if (cc < 0) {                          | True                      | 
+  66 |    if (total) {                          | True                      | 
+  67 |     /* we already wrote some! */         | True                      | 
+  68 |     /* user can do another write to know | True                      | 
+  69 |     return total;                        | True                      | 
+  70 |    }                                     | True                      | 
+  71 |    return cc;  /* write() returns -1 on  | True                      | 
+  72 |   }                                      | True                      | 
+  73 |                                          | True                      | 
+  74 |   total += cc;                           | True                      | 
+  75 |   buf = ((const char *)buf) + cc;        | True                      | 
+  76 |   len -= cc;                             | True                      | 
+  77 |  }                                       | True                      | 
+  78 |                                          | True                      | 
+  79 |  return total;                           | True                      | 
+  80 | }                                        | True                      | 
+  81 |                                          | True                      | 
+  82 | static void say(const char *s, ...)      | True                      | 
+  83 | {                                        | True                      | 
+  84 |  char buf[256];                          | True                      | 
+  85 |  va_list p;                              | True                      | 
+  86 |  int sz;                                 | True                      | 
+  87 |                                          | True                      | 
+  88 |  va_start(p, s);                         | True                      | 
+  89 |  sz = vsnprintf(buf, sizeof(buf), s, p); | True                      | 
+  90 |  full_write(STDERR_FILENO, buf, sz >= 0  | True                      | 
+  91 |  va_end(p);                              | True                      | 
+  92 | }                                        | True                      | 
+  93 |                                          | True                      | 
+  94 | static void die(const char *s, ...)      | True                      | 
+  95 | {                                        | True                      | 
+  96 |  char buf[256];                          | True                      | 
+  97 |  va_list p;                              | True                      | 
+  98 |  int sz;                                 | True                      | 
+  99 |                                          | True                      | 
+ 100 |  va_start(p, s);                         | True                      | 
+ 101 |  sz = vsnprintf(buf, sizeof(buf), s, p); | True                      | 
+ 102 |  full_write(STDERR_FILENO, buf, sz >= 0  | True                      | 
+ 103 |  exit(1);                                | True                      | 
+ 104 |  va_end(p);                              | True                      | 
+ 105 | }                                        | True                      | 
+ 106 |                                          | True                      | 
+ 107 | static void err_sys(const char *msg)     | True                      | 
+ 108 | {                                        | True                      | 
+ 109 |  die("%s\n", msg);                       | True                      | 
+ 110 | }                                        | True                      | 
+ 111 |                                          | True                      | 
+ 112 | /* ==== */                               | True                      | 
+ 113 |                                          | True                      | 
+ 114 | #if 0                                    | True                      | 
+ 115 | static void showPeer(WOLFSSL* ssl)       | 0                         | 
+ 116 | {                                        | 0                         | 
+ 117 |  WOLFSSL_CIPHER* cipher;                 | 0                         | 
+ 118 |  WOLFSSL_X509* peer = wolfSSL_get_peer_c | 0                         | 
+ 119 |  if (peer)                               | 0                         | 
+ 120 |   ShowX509(peer, "peer's cert info:");   | 0                         | 
+ 121 |  else                                    | 0                         | 
+ 122 |   say("peer has no cert!\n");            | 0                         | 
+ 123 |  say("SSL version is %s\n", wolfSSL_get_ | 0                         | 
+ 124 |                                          | 0                         | 
+ 125 |  cipher = wolfSSL_get_current_cipher(ssl | 0                         | 
+ 126 |  say("SSL cipher suite is %s\n", wolfSSL | 0                         | 
+ 127 |                                          | 0                         | 
+ 128 |  {                                       | 0                         | 
+ 129 |   WOLFSSL_X509_CHAIN* chain = wolfSSL_ge | 0                         | 
+ 130 |   int count = wolfSSL_get_chain_count(ch | 0                         | 
+ 131 |   int i;                                 | 0                         | 
+ 132 |                                          | 0                         | 
+ 133 |   for (i = 0; i < count; i++) {          | 0                         | 
+ 134 |    int length;                           | 0                         | 
+ 135 |    unsigned char buffer[3072];           | 0                         | 
+ 136 |    WOLFSSL_X509* chainX509;              | 0                         | 
+ 137 |                                          | 0                         | 
+ 138 |    wolfSSL_get_chain_cert_pem(chain, i,  | 0                         | 
+ 139 |    buffer[length] = 0;                   | 0                         | 
+ 140 |    say("cert %d has length %d data = \n% | 0                         | 
+ 141 |                                          | 0                         | 
+ 142 |    chainX509 = wolfSSL_get_chain_X509(ch | 0                         | 
+ 143 |    if (chainX509)                        | 0                         | 
+ 144 |     ShowX509(chainX509, "session cert in | 0                         | 
+ 145 |    else                                  | 0                         | 
+ 146 |     say("get_chain_X509 failed\n");      | 0                         | 
+ 147 |    wolfSSL_FreeX509(chainX509);          | 0                         | 
+ 148 |   }                                      | 0                         | 
+ 149 |  }                                       | 0                         | 
+ 150 | }                                        | 0                         | 
+ 151 | #endif                                   | True                      | 
+ 152 |                                          | True                      | 
+ 153 | WOLFSSL *prepare(int sockfd)             | True                      | 
+ 154 | {                                        | True                      | 
+ 155 |  WOLFSSL_METHOD* method;                 | True                      | 
+ 156 |  WOLFSSL_CTX* ctx;                       | True                      | 
+ 157 |  WOLFSSL* ssl;                           | True                      | 
+ 158 |                                          | True                      | 
+ 159 |  wolfSSL_Init();                         | True                      | 
+ 160 |                                          | True                      | 
+ 161 |  method = wolfTLSv1_1_client_method();   | True                      | 
+ 162 |  if (method == NULL)                     | True                      | 
+ 163 |   err_sys("out of memory");              | True                      | 
+ 164 |  ctx = wolfSSL_CTX_new(method);          | True                      | 
+ 165 |  if (ctx == NULL)                        | True                      | 
+ 166 |   err_sys("out of memory");              | True                      | 
+ 167 | // if (cipherList)                       | True                      | 
+ 168 | //  if (wolfSSL_CTX_set_cipher_list(ctx, | True                      | 
+ 169 | //   err_sys("client can't set cipher li | True                      | 
+ 170 |                                          | True                      | 
+ 171 | // if (fewerPackets)                     | True                      | 
+ 172 | //  wolfSSL_CTX_set_group_messages(ctx); | True                      | 
+ 173 |                                          | True                      | 
+ 174 | //#ifndef NO_DH                          | True                      | 
+ 175 | // wolfSSL_CTX_SetMinDhKey_Sz(ctx, (word | True                      | 
+ 176 | //#endif                                 | True                      | 
+ 177 |                                          | True                      | 
+ 178 | // if (usePsk) {                         | True                      | 
+ 179 | //  wolfSSL_CTX_set_psk_client_callback( | True                      | 
+ 180 | //  if (cipherList == NULL) {            | True                      | 
+ 181 | //   const char *defaultCipherList;      | True                      | 
+ 182 | //#if defined(HAVE_AESGCM) && !defined(N | True                      | 
+ 183 | //   defaultCipherList = "DHE-PSK-AES128 | True                      | 
+ 184 | //#elif defined(HAVE_NULL_CIPHER)        | True                      | 
+ 185 | //   defaultCipherList = "PSK-NULL-SHA25 | True                      | 
+ 186 | //#else                                  | True                      | 
+ 187 | //   defaultCipherList = "PSK-AES128-CBC | True                      | 
+ 188 | //#endif                                 | True                      | 
+ 189 | //   if (wolfSSL_CTX_set_cipher_list(ctx | True                      | 
+ 190 | //    err_sys("client can't set cipher l | True                      | 
+ 191 | //  }                                    | True                      | 
+ 192 | //  useClientCert = 0;                   | True                      | 
+ 193 | // }                                     | True                      | 
+ 194 |                                          | True                      | 
+ 195 | // if (useAnon) {                        | True                      | 
+ 196 | //  if (cipherList == NULL) {            | True                      | 
+ 197 | //   wolfSSL_CTX_allow_anon_cipher(ctx); | True                      | 
+ 198 | //   if (wolfSSL_CTX_set_cipher_list(ctx | True                      | 
+ 199 | //    err_sys("client can't set cipher l | True                      | 
+ 200 | //  }                                    | True                      | 
+ 201 | //  useClientCert = 0;                   | True                      | 
+ 202 | // }                                     | True                      | 
+ 203 |                                          | True                      | 
+ 204 | //#if defined(OPENSSL_EXTRA) || defined( | True                      | 
+ 205 | // wolfSSL_CTX_set_default_passwd_cb(ctx | True                      | 
+ 206 | //#endif                                 | True                      | 
+ 207 |                                          | True                      | 
+ 208 | // if (useOcsp) {                        | True                      | 
+ 209 | //  if (ocspUrl != NULL) {               | True                      | 
+ 210 | //   wolfSSL_CTX_SetOCSP_OverrideURL(ctx | True                      | 
+ 211 | //   wolfSSL_CTX_EnableOCSP(ctx, WOLFSSL | True                      | 
+ 212 | //     | WOLFSSL_OCSP_URL_OVERRIDE);     | True                      | 
+ 213 | //  }                                    | True                      | 
+ 214 | //  else                                 | True                      | 
+ 215 | //   wolfSSL_CTX_EnableOCSP(ctx, WOLFSSL | True                      | 
+ 216 | // }                                     | True                      | 
+ 217 | //                                       | True                      | 
+ 218 | //#ifdef USER_CA_CB                      | True                      | 
+ 219 | // wolfSSL_CTX_SetCACb(ctx, CaCb);       | True                      | 
+ 220 | //#endif                                 | True                      | 
+ 221 | //                                       | True                      | 
+ 222 | //#ifdef VERIFY_CALLBACK                 | True                      | 
+ 223 | // wolfSSL_CTX_set_verify(ctx, SSL_VERIF | True                      | 
+ 224 | //#endif                                 | True                      | 
+ 225 | //#if !defined(NO_FILESYSTEM) && !define | True                      | 
+ 226 | // if (useClientCert) {                  | True                      | 
+ 227 | //  if (wolfSSL_CTX_use_certificate_chai | True                      | 
+ 228 | //   err_sys("can't load client cert fil | True                      | 
+ 229 | //    " wolfSSL home dir");              | True                      | 
+ 230 | //  if (wolfSSL_CTX_use_PrivateKey_file( | True                      | 
+ 231 | //   err_sys("can't load client private  | True                      | 
+ 232 | //    "from wolfSSL home dir");          | True                      | 
+ 233 | // }                                     | True                      | 
+ 234 | //                                       | True                      | 
+ 235 | // if (!usePsk && !useAnon) {            | True                      | 
+ 236 | //  if (wolfSSL_CTX_load_verify_location | True                      | 
+ 237 | //   err_sys("can't load ca file, Please | True                      | 
+ 238 | //#ifdef HAVE_ECC                        | True                      | 
+ 239 | //  /* load ecc verify too, echoserver u | True                      | 
+ 240 | //  if (wolfSSL_CTX_load_verify_location | True                      | 
+ 241 | //   err_sys("can't load ecc ca file, Pl | True                      | 
+ 242 | //#endif                                 | True                      | 
+ 243 | // }                                     | True                      | 
+ 244 | //#endif /* !NO_FILESYSTEM && !NO_CERTS  | True                      | 
+ 245 |                                          | True                      | 
+ 246 | //#if !defined(NO_CERTS)                 | True                      | 
+ 247 | // if (!usePsk && !useAnon && doPeerChec | True                      | 
+ 248 | //  wolfSSL_CTX_set_verify(ctx, SSL_VERI | True                      | 
+ 249 | // if (!usePsk && !useAnon && overrideDa | True                      | 
+ 250 | //  wolfSSL_CTX_set_verify(ctx, SSL_VERI | True                      | 
+ 251 | //#endif                                 | True                      | 
+ 252 |                                          | True                      | 
+ 253 |  wolfSSL_CTX_set_verify(ctx, SSL_VERIFY_ | True                      | 
+ 254 |                                          | True                      | 
+ 255 | //#ifdef HAVE_SNI                        | True                      | 
+ 256 | // if (sniHostName)                      | True                      | 
+ 257 | //  if (wolfSSL_CTX_UseSNI(ctx, 0, sniHo | True                      | 
+ 258 | //   err_sys("UseSNI failed");           | True                      | 
+ 259 | //#endif                                 | True                      | 
+ 260 |                                          | True                      | 
+ 261 | //#ifdef HAVE_MAX_FRAGMENT               | True                      | 
+ 262 | // if (maxFragment)                      | True                      | 
+ 263 | //  if (wolfSSL_CTX_UseMaxFragment(ctx,  | True                      | 
+ 264 | //   err_sys("UseMaxFragment failed");   | True                      | 
+ 265 | //#endif                                 | True                      | 
+ 266 | //#ifdef HAVE_TRUNCATED_HMAC             | True                      | 
+ 267 | // if (truncatedHMAC)                    | True                      | 
+ 268 | //  if (wolfSSL_CTX_UseTruncatedHMAC(ctx | True                      | 
+ 269 | //   err_sys("UseTruncatedHMAC failed"); | True                      | 
+ 270 | //#endif                                 | True                      | 
+ 271 | //#ifdef HAVE_SESSION_TICKET             | True                      | 
+ 272 | // if (wolfSSL_CTX_UseSessionTicket(ctx) | True                      | 
+ 273 | //  err_sys("UseSessionTicket failed");  | True                      | 
+ 274 | //#endif                                 | True                      | 
+ 275 |                                          | True                      | 
+ 276 | //#if defined(WOLFSSL_MDK_ARM)           | True                      | 
+ 277 | // wolfSSL_CTX_set_verify(ctx, SSL_VERIF | True                      | 
+ 278 | //#endif                                 | True                      | 
+ 279 |                                          | True                      | 
+ 280 |  ssl = wolfSSL_new(ctx);                 | True                      | 
+ 281 |  if (ssl == NULL)                        | True                      | 
+ 282 |   err_sys("out of memory");              | True                      | 
+ 283 |                                          | True                      | 
+ 284 | //#ifdef HAVE_SESSION_TICKET             | True                      | 
+ 285 | // wolfSSL_set_SessionTicket_cb(ssl, ses | True                      | 
+ 286 | //#endif                                 | True                      | 
+ 287 |                                          | True                      | 
+ 288 | // if (doDTLS) {                         | True                      | 
+ 289 | //  SOCKADDR_IN_T addr;                  | True                      | 
+ 290 | //  build_addr(&addr, host, port, 1);    | True                      | 
+ 291 | //  wolfSSL_dtls_set_peer(ssl, &addr, si | True                      | 
+ 292 | //  tcp_socket(&sockfd, 1);              | True                      | 
+ 293 | // } wlse {                              | True                      | 
+ 294 | //  tcp_connect(&sockfd, host, port, 0); | True                      | 
+ 295 | // }                                     | True                      | 
+ 296 |                                          | True                      | 
+ 297 | //#ifdef HAVE_POLY1305                   | True                      | 
+ 298 | // /* use old poly to connect with googl | True                      | 
+ 299 | // if (!XSTRNCMP(domain, "www.google.com | True                      | 
+ 300 | //  if (wolfSSL_use_old_poly(ssl, 1) !=  | True                      | 
+ 301 | //   err_sys("unable to set to old poly" | True                      | 
+ 302 | // }                                     | True                      | 
+ 303 | //#endif                                 | True                      | 
+ 304 |                                          | True                      | 
+ 305 |  wolfSSL_set_fd(ssl, sockfd);            | True                      | 
+ 306 |                                          | True                      | 
+ 307 | //#ifdef HAVE_CRL                        | True                      | 
+ 308 | // if (disableCRL == 0) {                | True                      | 
+ 309 | //  if (wolfSSL_EnableCRL(ssl, WOLFSSL_C | True                      | 
+ 310 | //   err_sys("can't enable crl check");  | True                      | 
+ 311 | //  if (wolfSSL_LoadCRL(ssl, crlPemDir,  | True                      | 
+ 312 | //   err_sys("can't load crl, check crlf | True                      | 
+ 313 | //  if (wolfSSL_SetCRL_Cb(ssl, CRL_CallB | True                      | 
+ 314 | //   err_sys("can't set crl callback");  | True                      | 
+ 315 | // }                                     | True                      | 
+ 316 | //#endif                                 | True                      | 
+ 317 | //#ifdef HAVE_SECURE_RENEGOTIATION       | True                      | 
+ 318 | // if (scr) {                            | True                      | 
+ 319 | //  if (wolfSSL_UseSecureRenegotiation(s | True                      | 
+ 320 | //   err_sys("can't enable secure renego | True                      | 
+ 321 | // }                                     | True                      | 
+ 322 | //#endif                                 | True                      | 
+ 323 | //#ifdef ATOMIC_USER                     | True                      | 
+ 324 | // if (atomicUser)                       | True                      | 
+ 325 | //  SetupAtomicUser(ctx, ssl);           | True                      | 
+ 326 | //#endif                                 | True                      | 
+ 327 | //#ifdef HAVE_PK_CALLBACKS               | True                      | 
+ 328 | // if (pkCallbacks)                      | True                      | 
+ 329 | //  SetupPkCallbacks(ctx, ssl);          | True                      | 
+ 330 | //#endif                                 | True                      | 
+ 331 | // if (matchName && doPeerCheck)         | True                      | 
+ 332 | //  wolfSSL_check_domain_name(ssl, domai | True                      | 
+ 333 |                                          | True                      | 
+ 334 |  if (wolfSSL_connect(ssl) != SSL_SUCCESS | True                      | 
+ 335 | //  /* see note at top of README */      | True                      | 
+ 336 | //  int  err = wolfSSL_get_error(ssl, 0) | True                      | 
+ 337 | //  char buffer[WOLFSSL_MAX_ERROR_SZ];   | True                      | 
+ 338 | //  say("err = %d, %s\n", err,           | True                      | 
+ 339 | //   wolfSSL_ERR_error_string(err, buffe | True                      | 
+ 340 |   err_sys("SSL_connect failed");         | True                      | 
+ 341 |  }                                       | True                      | 
+ 342 | // showPeer(ssl);                        | True                      | 
+ 343 |                                          | True                      | 
+ 344 | //#ifdef HAVE_SECURE_RENEGOTIATION       | True                      | 
+ 345 | // if (scr && forceScr) {                | True                      | 
+ 346 | //  if (wolfSSL_Rehandshake(ssl) != SSL_ | True                      | 
+ 347 | //   int err = wolfSSL_get_error(ssl, 0) | True                      | 
+ 348 | //   char buffer[WOLFSSL_MAX_ERROR_SZ];  | True                      | 
+ 349 | //   say("err = %d, %s\n", err,          | True                      | 
+ 350 | //    wolfSSL_ERR_error_string(err, buff | True                      | 
+ 351 | //   err_sys("wolfSSL_Rehandshake failed | True                      | 
+ 352 | //  }                                    | True                      | 
+ 353 | // }                                     | True                      | 
+ 354 | //#endif                                 | True                      | 
+ 355 |                                          | True                      | 
+ 356 |  return ssl;                             | True                      | 
+ 357 | }                                        | True                      | 
+ 358 |                                          | True                      | 
+ 359 | static struct pollfd pfd[2] = {          | True                      | 
+ 360 |  { -1, POLLIN|POLLERR|POLLHUP, 0 },      | True                      | 
+ 361 |  { -1, POLLIN|POLLERR|POLLHUP, 0 },      | True                      | 
+ 362 | };                                       | True                      | 
+ 363 | #define STDIN           pfd[0]           | True                      | 
+ 364 | #define NETWORK         pfd[1]           | True                      | 
+ 365 | #define STDIN_READY()   (pfd[0].revents  | True                      | 
+ 366 | #define NETWORK_READY() (pfd[1].revents  | True                      | 
+ 367 |                                          | True                      | 
+ 368 | static void wait_for_input(void)         | True                      | 
+ 369 | {                                        | True                      | 
+ 370 |  if (STDIN.fd == NETWORK.fd) /* means bo | True                      | 
+ 371 |   exit(0);                               | True                      | 
+ 372 |  dbg("polling\n");                       | True                      | 
+ 373 |  STDIN.revents = NETWORK.revents = 0;    | True                      | 
+ 374 |  while (poll(pfd, 2, -1) < 0 && errno == | True                      | 
+ 375 |   continue;                              | True                      | 
+ 376 | }                                        | True                      | 
+ 377 |                                          | True                      | 
+ 378 | static void do_io_until_eof_and_exit(WOL | True                      | 
+ 379 | {                                        | True                      | 
+ 380 |  int len;                                | True                      | 
+ 381 |  char ibuf[4 * 1024];                    | True                      | 
+ 382 |                                          | True                      | 
+ 383 |  NETWORK.fd = fd;                        | True                      | 
+ 384 |  STDIN.fd = 0;                           | True                      | 
+ 385 |                                          | True                      | 
+ 386 |  len = 0; /* only to suppress compiler w | True                      | 
+ 387 |  for (;;) {                              | True                      | 
+ 388 |   wait_for_input();                      | True                      | 
+ 389 |                                          | True                      | 
+ 390 |   if (STDIN_READY()) {                   | True                      | 
+ 391 |    dbg("reading stdin\n");               | True                      | 
+ 392 |    len = read(STDIN_FILENO, ibuf, sizeof | True                      | 
+ 393 |    if (len < 0)                          | True                      | 
+ 394 |     die("read error on stdin\n");        | True                      | 
+ 395 |    if (len == 0) {                       | True                      | 
+ 396 |     dbg("read len = 0, stdin not polled  | True                      | 
+ 397 |     STDIN.fd = -1;                       | True                      | 
+ 398 |    } else {                              | True                      | 
+ 399 |     int n = wolfSSL_write(ssl, ibuf, len | True                      | 
+ 400 |     if (n != len)                        | True                      | 
+ 401 |      die("SSL_write(%d) failed (returned | True                      | 
+ 402 |    }                                     | True                      | 
+ 403 |   }                                      | True                      | 
+ 404 |                                          | True                      | 
+ 405 |   if (NETWORK_READY()) {                 | True                      | 
+ 406 |    dbg("%s%s%s\n",                       | True                      | 
+ 407 |     (pfd[1].revents & POLLIN)  ? "POLLIN | True                      | 
+ 408 |     (pfd[1].revents & POLLERR) ? "|POLLE | True                      | 
+ 409 |     (pfd[1].revents & POLLHUP) ? "|POLLH | True                      | 
+ 410 |    );                                    | True                      | 
+ 411 | /* We are using blocking socket here.    | True                      | 
+ 412 |  * (Nonblocking socket would complicate  | True                      | 
+ 413 |  * Therefore, SSL_read _can block_ here. | True                      | 
+ 414 |  * This is not what wget expects (it wan | True                      | 
+ 415 |  * Therefore, we use smallish buffer her | True                      | 
+ 416 |  */                                      | True                      | 
+ 417 |    len = wolfSSL_read(ssl, ibuf,         | True                      | 
+ 418 |     sizeof(ibuf) < 1024 ? sizeof(ibuf) : | True                      | 
+ 419 |    );                                    | True                      | 
+ 420 |    if (len < 0)                          | True                      | 
+ 421 |     die("SSL_read error on network (%d)\ | True                      | 
+ 422 |    if (len > 0) {                        | True                      | 
+ 423 |     int n;                               | True                      | 
+ 424 |     n = full_write(STDOUT_FILENO, ibuf,  | True                      | 
+ 425 |     if (n != len)                        | True                      | 
+ 426 |      die("write(%d) to stdout returned % | True                      | 
+ 427 |     continue;                            | True                      | 
+ 428 |    }                                     | True                      | 
+ 429 | /* Blocking reads are easier wtr EOF det | True                      | 
+ 430 |    dbg("read len = 0, network not polled | True                      | 
+ 431 |    NETWORK.fd = -1;                      | True                      | 
+ 432 |    /* saw EOF on network, and we process | True                      | 
+ 433 |     * and wrote out all ssl data. Signal | True                      | 
+ 434 |     */                                   | True                      | 
+ 435 |    close(STDOUT_FILENO);                 | True                      | 
+ 436 |   }                                      | True                      | 
+ 437 |  }                                       | True                      | 
+ 438 | }                                        | True                      | 
+ 439 |                                          | True                      | 
+ 440 | int main(int argc, char **argv)          | True                      | 
+ 441 | {                                        | True                      | 
+ 442 |  WOLFSSL *ssl;                           | True                      | 
+ 443 |  int fd;                                 | True                      | 
+ 444 |  char *fd_str;                           | True                      | 
+ 445 |                                          | True                      | 
+ 446 |  if (!argv[1])                           | True                      | 
+ 447 |   die("Syntax error\n");                 | True                      | 
+ 448 |  if (argv[1][0] != '-')                  | True                      | 
+ 449 |   die("Syntax error\n");                 | True                      | 
+ 450 |  if (argv[1][1] != 'd')                  | True                      | 
+ 451 |   die("Syntax error\n");                 | True                      | 
+ 452 |  fd_str = argv[1] + 2;                   | True                      | 
+ 453 |  if (!fd_str[0])                         | True                      | 
+ 454 |   fd_str = argv[2];                      | True                      | 
+ 455 |  if (!fd_str || fd_str[0] < '0' || fd_st | True                      | 
+ 456 |   die("Syntax error\n");                 | True                      | 
+ 457 |                                          | True                      | 
+ 458 |  fd = atoi(fd_str);                      | True                      | 
+ 459 |  if (fd < 3)                             | True                      | 
+ 460 |   die("Syntax error\n");                 | True                      | 
+ 461 |                                          | True                      | 
+ 462 |  ssl = prepare(fd);                      | True                      | 
+ 463 |  do_io_until_eof_and_exit(ssl, fd);      | True                      | 
+ 464 |  /* does not return */                   | True                      | 
+ 465 |                                          | True                      | 
+ 466 | // if (doDTLS == 0) { /* don't send aler | True                      | 
+ 467 | //  ret = wolfSSL_shutdown(ssl);         | True                      | 
+ 468 | //  if (wc_shutdown && ret == SSL_SHUTDO | True                      | 
+ 469 | //   wolfSSL_shutdown(ssl); /* bidirecti | True                      | 
+ 470 | // }                                     | True                      | 
+ 471 | //#ifdef ATOMIC_USER                     | True                      | 
+ 472 | // if (atomicUser)                       | True                      | 
+ 473 | //  FreeAtomicUser(ssl);                 | True                      | 
+ 474 | //#endif                                 | True                      | 
+ 475 | // wolfSSL_free(ssl);                    | True                      | 
+ 476 | // CloseSocket(sockfd);                  | True                      | 
+ 477 | // wolfSSL_CTX_free(ctx);                | True                      | 
+ 478 |                                          | True                      | 
+ 479 |  return 0;                               | True                      | 
+ 480 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +125MB, 337ms             | 

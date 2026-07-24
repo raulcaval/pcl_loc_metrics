@@ -1,0 +1,275 @@
+FILE: data/raw/busybox-1.38.0/coreutils/id.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                                       | 
+-----+------------------------------------------+-----------------------------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                                        | 
+   2 | /*                                       | True                                                                        | 
+   3 |  * Mini id implementation for busybox    | True                                                                        | 
+   4 |  *                                       | True                                                                        | 
+   5 |  * Copyright (C) 2000 by Randolph Chung  | True                                                                        | 
+   6 |  * Copyright (C) 2008 by Tito Ragusa <fa | True                                                                        | 
+   7 |  *                                       | True                                                                        | 
+   8 |  * Licensed under GPLv2 or later, see fi | True                                                                        | 
+   9 |  */                                      | True                                                                        | 
+  10 | /* Hacked by Tito Ragusa (C) 2004 to han | True                                                                        | 
+  11 |  * length and to be more similar to GNU  | True                                                                        | 
+  12 |  * -Z option support: by Yuichi Nakamura | True                                                                        | 
+  13 |  * Added -G option Tito Ragusa (C) 2008  | True                                                                        | 
+  14 |  */                                      | True                                                                        | 
+  15 | //config:config ID                       | True                                                                        | 
+  16 | //config: bool "id (7.1 kb)"             | True                                                                        | 
+  17 | //config: default y                      | True                                                                        | 
+  18 | //config: help                           | True                                                                        | 
+  19 | //config: id displays the current user a | True                                                                        | 
+  20 | //config:                                | True                                                                        | 
+  21 | //config:config GROUPS                   | True                                                                        | 
+  22 | //config: bool "groups (6.8 kb)"         | True                                                                        | 
+  23 | //config: default y                      | True                                                                        | 
+  24 | //config: help                           | True                                                                        | 
+  25 | //config: Print the group names associat | True                                                                        | 
+  26 |                                          | True                                                                        | 
+  27 | //applet:IF_GROUPS(APPLET_NOEXEC(groups, | True                                                                        | 
+  28 | //applet:IF_ID(    APPLET_NOEXEC(id,     | True                                                                        | 
+  29 |                                          | True                                                                        | 
+  30 | //kbuild:lib-$(CONFIG_GROUPS) += id.o    | True                                                                        | 
+  31 | //kbuild:lib-$(CONFIG_ID)     += id.o    | True                                                                        | 
+  32 |                                          | True                                                                        | 
+  33 | /* BB_AUDIT SUSv3 compliant. */          | True                                                                        | 
+  34 |                                          | True                                                                        | 
+  35 | //usage:#define id_trivial_usage         | True                                                                        | 
+  36 | //usage:       "[-ugGnr"IF_SELINUX("Z")" | True                                                                        | 
+  37 | //usage:#define id_full_usage "\n\n"     | True                                                                        | 
+  38 | //usage:       "Print information about  | True                                                                        | 
+  39 | //usage: IF_SELINUX(                     | True                                                                        | 
+  40 | //usage:     "\n -Z Security context"    | True                                                                        | 
+  41 | //usage: )                               | True                                                                        | 
+  42 | //usage:     "\n -u User ID"             | True                                                                        | 
+  43 | //usage:     "\n -g Group ID"            | True                                                                        | 
+  44 | //usage:     "\n -G Supplementary group  | True                                                                        | 
+  45 | //usage:     "\n -n Print names instead  | True                                                                        | 
+  46 | //usage:     "\n -r Print real ID instea | True                                                                        | 
+  47 | //usage:                                 | True                                                                        | 
+  48 | //usage:#define id_example_usage         | True                                                                        | 
+  49 | //usage:       "$ id\n"                  | True                                                                        | 
+  50 | //usage:       "uid=1000(andersen) gid=1 | True                                                                        | 
+  51 |                                          | True                                                                        | 
+  52 | //usage:#define groups_trivial_usage     | True                                                                        | 
+  53 | //usage:       "[USER]"                  | True                                                                        | 
+  54 | //usage:#define groups_full_usage "\n\n" | True                                                                        | 
+  55 | //usage:       "Print the groups USER is | True                                                                        | 
+  56 | //usage:                                 | True                                                                        | 
+  57 | //usage:#define groups_example_usage     | True                                                                        | 
+  58 | //usage:       "$ groups\n"              | True                                                                        | 
+  59 | //usage:       "andersen lp dialout cdro | True                                                                        | 
+  60 |                                          | True                                                                        | 
+  61 | #include "libbb.h"                       | True                                                                        | 
+  62 |                                          | True                                                                        | 
+  63 | /* This is a NOEXEC applet. Be very care | True                                                                        | 
+  64 |                                          | True                                                                        | 
+  65 | #if !ENABLE_USE_BB_PWD_GRP               | True                                                                        | 
+  66 | #if defined(__UCLIBC__) && UCLIBC_VERSIO | ?                                                                           | 
+  67 | #error "Sorry, you need at least uClibc  | !ENABLE_USE_BB_PWD_GRP&&(__UCLIBC__)&&UCLIBC_VERSION<KERNEL_VERSION(0,9,30) | 
+  68 | #endif                                   | ?                                                                           | 
+  69 | #endif                                   | True                                                                        | 
+  70 |                                          | True                                                                        | 
+  71 | enum {                                   | True                                                                        | 
+  72 |  PRINT_REAL      = (1 << 0),             | True                                                                        | 
+  73 |  NAME_NOT_NUMBER = (1 << 1),             | True                                                                        | 
+  74 |  JUST_USER       = (1 << 2),             | True                                                                        | 
+  75 |  JUST_GROUP      = (1 << 3),             | True                                                                        | 
+  76 |  JUST_ALL_GROUPS = (1 << 4),             | True                                                                        | 
+  77 | #if ENABLE_SELINUX                       | True                                                                        | 
+  78 |  JUST_CONTEXT    = (1 << 5),             | ENABLE_SELINUX                                                              | 
+  79 | #endif                                   | True                                                                        | 
+  80 | };                                       | True                                                                        | 
+  81 |                                          | True                                                                        | 
+  82 | static int print_common(unsigned id, con | True                                                                        | 
+  83 | {                                        | True                                                                        | 
+  84 |  if (prefix) {                           | True                                                                        | 
+  85 |   printf("%s", prefix);                  | True                                                                        | 
+  86 |  }                                       | True                                                                        | 
+  87 |  if (!(option_mask32 & NAME_NOT_NUMBER)  | True                                                                        | 
+  88 |   printf("%u", id);                      | True                                                                        | 
+  89 |  }                                       | True                                                                        | 
+  90 |  if (!option_mask32 || (option_mask32 &  | True                                                                        | 
+  91 |   if (name) {                            | True                                                                        | 
+  92 |    printf(option_mask32 ? "%s" : "(%s)", | True                                                                        | 
+  93 |   } else {                               | True                                                                        | 
+  94 |    /* Don't set error status flag in def | True                                                                        | 
+  95 |    if (option_mask32) {                  | True                                                                        | 
+  96 |     if (ENABLE_DESKTOP)                  | True                                                                        | 
+  97 |      bb_error_msg("unknown ID %u", id);  | True                                                                        | 
+  98 |     return EXIT_FAILURE;                 | True                                                                        | 
+  99 |    }                                     | True                                                                        | 
+ 100 |   }                                      | True                                                                        | 
+ 101 |  }                                       | True                                                                        | 
+ 102 |  return EXIT_SUCCESS;                    | True                                                                        | 
+ 103 | }                                        | True                                                                        | 
+ 104 |                                          | True                                                                        | 
+ 105 | static int print_group(gid_t id, const c | True                                                                        | 
+ 106 | {                                        | True                                                                        | 
+ 107 |  return print_common(id, gid2group(id),  | True                                                                        | 
+ 108 | }                                        | True                                                                        | 
+ 109 |                                          | True                                                                        | 
+ 110 | static int print_user(uid_t id, const ch | True                                                                        | 
+ 111 | {                                        | True                                                                        | 
+ 112 |  return print_common(id, uid2uname(id),  | True                                                                        | 
+ 113 | }                                        | True                                                                        | 
+ 114 |                                          | True                                                                        | 
+ 115 | /* On error set *n < 0 and return >= 0   | True                                                                        | 
+ 116 |  * If *n is too small, update it and ret | True                                                                        | 
+ 117 |  * (ok to trash groups[] in both cases)  | True                                                                        | 
+ 118 |  * Otherwise fill in groups[] and return | True                                                                        | 
+ 119 |  */                                      | True                                                                        | 
+ 120 | static int get_groups(const char *userna | True                                                                        | 
+ 121 | {                                        | True                                                                        | 
+ 122 |  int m;                                  | True                                                                        | 
+ 123 |                                          | True                                                                        | 
+ 124 |  if (username) {                         | True                                                                        | 
+ 125 |   /* If the user is a member of more tha | True                                                                        | 
+ 126 |    * *n groups, then -1 is returned. Oth | True                                                                        | 
+ 127 |    * (and no defined way of detecting er | True                                                                        | 
+ 128 |   m = getgrouplist(username, rgid, group | True                                                                        | 
+ 129 |   /* I guess *n < 0 might indicate error | True                                                                        | 
+ 130 |    * malloc'ing -1 bytes won't be good,  | True                                                                        | 
+ 131 |   if (*n < 0)                            | True                                                                        | 
+ 132 |    return 0;                             | True                                                                        | 
+ 133 |   return m;                              | True                                                                        | 
+ 134 |  }                                       | True                                                                        | 
+ 135 |                                          | True                                                                        | 
+ 136 |  *n = getgroups(*n, groups);             | True                                                                        | 
+ 137 |  if (*n >= 0)                            | True                                                                        | 
+ 138 |   return *n;                             | True                                                                        | 
+ 139 |  /* Error */                             | True                                                                        | 
+ 140 |  if (errno == EINVAL) /* *n is too small | True                                                                        | 
+ 141 |   *n = getgroups(0, groups); /* get need | True                                                                        | 
+ 142 |  /* if *n >= 0, return -1 (got new *n),  | True                                                                        | 
+ 143 |  return -(*n >= 0);                      | True                                                                        | 
+ 144 | }                                        | True                                                                        | 
+ 145 |                                          | True                                                                        | 
+ 146 | int id_main(int argc, char **argv) MAIN_ | True                                                                        | 
+ 147 | int id_main(int argc UNUSED_PARAM, char  | True                                                                        | 
+ 148 | {                                        | True                                                                        | 
+ 149 |  uid_t ruid;                             | True                                                                        | 
+ 150 |  gid_t rgid;                             | True                                                                        | 
+ 151 |  uid_t euid;                             | True                                                                        | 
+ 152 |  gid_t egid;                             | True                                                                        | 
+ 153 |  unsigned opt;                           | True                                                                        | 
+ 154 |  int i;                                  | True                                                                        | 
+ 155 |  int status = EXIT_SUCCESS;              | True                                                                        | 
+ 156 |  const char *prefix;                     | True                                                                        | 
+ 157 |  const char *username;                   | True                                                                        | 
+ 158 | #if ENABLE_SELINUX                       | True                                                                        | 
+ 159 |  security_context_t scontext = NULL;     | ENABLE_SELINUX                                                              | 
+ 160 | #endif                                   | True                                                                        | 
+ 161 |                                          | True                                                                        | 
+ 162 |  if (ENABLE_GROUPS && (!ENABLE_ID || app | True                                                                        | 
+ 163 |   /* TODO: coreutils groups prepend "USE | True                                                                        | 
+ 164 |    * and accept many usernames. Example: | True                                                                        | 
+ 165 |    * # groups root root                  | True                                                                        | 
+ 166 |    * root : root                         | True                                                                        | 
+ 167 |    * root : root                         | True                                                                        | 
+ 168 |    */                                    | True                                                                        | 
+ 169 |   opt = option_mask32 = getopt32(argv, " | True                                                                        | 
+ 170 |  } else {                                | True                                                                        | 
+ 171 |   /* Don't allow -n -r -nr -ug -rug -nug | True                                                                        | 
+ 172 |   /* Don't allow more than one username  | True                                                                        | 
+ 173 |   opt = getopt32(argv, "^"               | True                                                                        | 
+ 174 |    "rnugG" IF_SELINUX("Z")               | True                                                                        | 
+ 175 |    "\0"                                  | True                                                                        | 
+ 176 |    "?1:u--g:g--u:G--u:u--G:g--G:G--g:r?u | True                                                                        | 
+ 177 |    IF_SELINUX(":u--Z:Z--u:g--Z:Z--g:G--Z | True                                                                        | 
+ 178 |   );                                     | True                                                                        | 
+ 179 |  }                                       | True                                                                        | 
+ 180 |                                          | True                                                                        | 
+ 181 |  username = argv[optind];                | True                                                                        | 
+ 182 |  if (username) {                         | True                                                                        | 
+ 183 |   struct passwd *p = xgetpwnam(username) | True                                                                        | 
+ 184 |   euid = ruid = p->pw_uid;               | True                                                                        | 
+ 185 |   egid = rgid = p->pw_gid;               | True                                                                        | 
+ 186 |  } else {                                | True                                                                        | 
+ 187 |   egid = getegid();                      | True                                                                        | 
+ 188 |   rgid = getgid();                       | True                                                                        | 
+ 189 |   euid = geteuid();                      | True                                                                        | 
+ 190 |   ruid = getuid();                       | True                                                                        | 
+ 191 |  }                                       | True                                                                        | 
+ 192 |  /* JUST_ALL_GROUPS ignores -r PRINT_REA | True                                                                        | 
+ 193 |  /* id says: print the real ID instead o | True                                                                        | 
+ 194 |  /* in fact in this case egid is always  | True                                                                        | 
+ 195 |  if (!opt || (opt & JUST_ALL_GROUPS)) {  | True                                                                        | 
+ 196 |   gid_t *groups;                         | True                                                                        | 
+ 197 |   int n;                                 | True                                                                        | 
+ 198 |                                          | True                                                                        | 
+ 199 |   if (!opt) {                            | True                                                                        | 
+ 200 |    /* Default Mode */                    | True                                                                        | 
+ 201 |    status |= print_user(ruid, "uid=");   | True                                                                        | 
+ 202 |    status |= print_group(rgid, " gid="); | True                                                                        | 
+ 203 |    if (euid != ruid)                     | True                                                                        | 
+ 204 |     status |= print_user(euid, " euid=") | True                                                                        | 
+ 205 |    if (egid != rgid)                     | True                                                                        | 
+ 206 |     status |= print_group(egid, " egid=" | True                                                                        | 
+ 207 |   } else {                               | True                                                                        | 
+ 208 |    /* JUST_ALL_GROUPS */                 | True                                                                        | 
+ 209 |    status |= print_group(rgid, NULL);    | True                                                                        | 
+ 210 |    if (egid != rgid)                     | True                                                                        | 
+ 211 |     status |= print_group(egid, " ");    | True                                                                        | 
+ 212 |   }                                      | True                                                                        | 
+ 213 |   /* We are supplying largish buffer, tr | True                                                                        | 
+ 214 |    * to not run get_groups() twice. That | True                                                                        | 
+ 215 |    * ("user database in remote SQL serve | True                                                                        | 
+ 216 |   groups = xmalloc(64 * sizeof(groups[0] | True                                                                        | 
+ 217 |   n = 64;                                | True                                                                        | 
+ 218 |   if (get_groups(username, rgid, groups, | True                                                                        | 
+ 219 |    /* Need bigger buffer after all */    | True                                                                        | 
+ 220 |    groups = xrealloc(groups, n * sizeof( | True                                                                        | 
+ 221 |    get_groups(username, rgid, groups, &n | True                                                                        | 
+ 222 |   }                                      | True                                                                        | 
+ 223 |   if (n > 0) {                           | True                                                                        | 
+ 224 |    /* Print the list */                  | True                                                                        | 
+ 225 |    prefix = " groups=";                  | True                                                                        | 
+ 226 |    for (i = 0; i < n; i++) {             | True                                                                        | 
+ 227 |     if (opt && (groups[i] == rgid || gro | True                                                                        | 
+ 228 |      continue;                           | True                                                                        | 
+ 229 |     status |= print_group(groups[i], opt | True                                                                        | 
+ 230 |     prefix = ",";                        | True                                                                        | 
+ 231 |    }                                     | True                                                                        | 
+ 232 |   } else if (n < 0) { /* error in get_gr | True                                                                        | 
+ 233 |    if (ENABLE_DESKTOP)                   | True                                                                        | 
+ 234 |     bb_simple_error_msg_and_die("can't g | True                                                                        | 
+ 235 |    return EXIT_FAILURE;                  | True                                                                        | 
+ 236 |   }                                      | True                                                                        | 
+ 237 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                                                                        | 
+ 238 |    free(groups);                         | True                                                                        | 
+ 239 | #if ENABLE_SELINUX                       | True                                                                        | 
+ 240 |   if (is_selinux_enabled()) {            | ENABLE_SELINUX                                                              | 
+ 241 |    if (getcon(&scontext) == 0)           | ENABLE_SELINUX                                                              | 
+ 242 |     printf(" context=%s", scontext);     | ENABLE_SELINUX                                                              | 
+ 243 |   }                                      | ENABLE_SELINUX                                                              | 
+ 244 | #endif                                   | True                                                                        | 
+ 245 |  } else if (opt & PRINT_REAL) {          | True                                                                        | 
+ 246 |   euid = ruid;                           | True                                                                        | 
+ 247 |   egid = rgid;                           | True                                                                        | 
+ 248 |  }                                       | True                                                                        | 
+ 249 |                                          | True                                                                        | 
+ 250 |  if (opt & JUST_USER)                    | True                                                                        | 
+ 251 |   status |= print_user(euid, NULL);      | True                                                                        | 
+ 252 |  else if (opt & JUST_GROUP)              | True                                                                        | 
+ 253 |   status |= print_group(egid, NULL);     | True                                                                        | 
+ 254 | #if ENABLE_SELINUX                       | True                                                                        | 
+ 255 |  else if (opt & JUST_CONTEXT) {          | ENABLE_SELINUX                                                              | 
+ 256 |   selinux_or_die();                      | ENABLE_SELINUX                                                              | 
+ 257 |   if (username || getcon(&scontext)) {   | ENABLE_SELINUX                                                              | 
+ 258 |    bb_error_msg_and_die("can't get proce | ENABLE_SELINUX                                                              | 
+ 259 |     username ? " for a different user" : | ENABLE_SELINUX                                                              | 
+ 260 |   }                                      | ENABLE_SELINUX                                                              | 
+ 261 |   fputs_stdout(scontext);                | ENABLE_SELINUX                                                              | 
+ 262 |  }                                       | ENABLE_SELINUX                                                              | 
+ 263 |  /* freecon(NULL) seems to be harmless * | ENABLE_SELINUX                                                              | 
+ 264 |  if (ENABLE_FEATURE_CLEAN_UP)            | ENABLE_SELINUX                                                              | 
+ 265 |   freecon(scontext);                     | ENABLE_SELINUX                                                              | 
+ 266 | #endif                                   | True                                                                        | 
+ 267 |  bb_putchar('\n');                       | True                                                                        | 
+ 268 |  fflush_stdout_and_exit(status);         | True                                                                        | 
+ 269 | }                                        | True                                                                        | 
+-----+------------------------------------------+-----------------------------------------------------------------------------+
+     |                                          | +110MB, 256ms                                                               | 

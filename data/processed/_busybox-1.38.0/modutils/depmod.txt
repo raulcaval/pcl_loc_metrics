@@ -1,0 +1,272 @@
+FILE: data/raw/busybox-1.38.0/modutils/depmod.c
+Resultado PCLocator:
+   # | line of code                             | Merge                           | 
+-----+------------------------------------------+---------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                            | 
+   2 | /*                                       | True                            | 
+   3 |  * depmod - generate modules.dep         | True                            | 
+   4 |  * Copyright (c) 2008 Bernhard Reutner-F | True                            | 
+   5 |  * Copyrihgt (c) 2008 Timo Teras <timo.t | True                            | 
+   6 |  * Copyright (c) 2008 Vladimir Dronnikov | True                            | 
+   7 |  *                                       | True                            | 
+   8 |  * Licensed under GPLv2 or later, see fi | True                            | 
+   9 |  */                                      | True                            | 
+  10 | //config:config DEPMOD                   | True                            | 
+  11 | //config: bool "depmod (27 kb)"          | True                            | 
+  12 | //config: default y                      | True                            | 
+  13 | //config: help                           | True                            | 
+  14 | //config: depmod generates modules.dep ( | True                            | 
+  15 | //config: and modules.symbols) that cont | True                            | 
+  16 | //config: for modprobe.                  | True                            | 
+  17 |                                          | True                            | 
+  18 | //applet:IF_DEPMOD(IF_NOT_MODPROBE_SMALL | True                            | 
+  19 |                                          | True                            | 
+  20 | //kbuild:ifneq ($(CONFIG_MODPROBE_SMALL) | True                            | 
+  21 | //kbuild:lib-$(CONFIG_DEPMOD) += depmod. | True                            | 
+  22 | //kbuild:endif                           | True                            | 
+  23 |                                          | True                            | 
+  24 | #include "libbb.h"                       | True                            | 
+  25 | #include "modutils.h"                    | True                            | 
+  26 | #include <sys/utsname.h> /* uname() */   | True                            | 
+  27 |                                          | True                            | 
+  28 | /*                                       | True                            | 
+  29 |  * Theory of operation:                  | True                            | 
+  30 |  * - iterate over all modules and record | True                            | 
+  31 |  * - iterate over all modules looking fo | True                            | 
+  32 |  *   for each depends, look through our  | True                            | 
+  33 |  */                                      | True                            | 
+  34 |                                          | True                            | 
+  35 | static int FAST_FUNC parse_module(struct | True                            | 
+  36 |   const char *fname,                     | True                            | 
+  37 |   struct stat *sb UNUSED_PARAM)          | True                            | 
+  38 | {                                        | True                            | 
+  39 |  module_db *modules = state->userData;   | True                            | 
+  40 |  char *image, *ptr;                      | True                            | 
+  41 |  module_entry *e;                        | True                            | 
+  42 |                                          | True                            | 
+  43 |  /* Arbitrary. Was sb->st_size, but that | True                            | 
+  44 |  size_t len = (64*1024*1024 - 4096);     | True                            | 
+  45 |                                          | True                            | 
+  46 |  if (strrstr(fname, ".ko") == NULL)      | True                            | 
+  47 |   return TRUE;                           | True                            | 
+  48 |                                          | True                            | 
+  49 |  image = xmalloc_open_zipped_read_close( | True                            | 
+  50 |                                          | True                            | 
+  51 |  e = moddb_get_or_create(modules, bb_get | True                            | 
+  52 |  e->name = xstrdup(fname + 2); /* skip " | True                            | 
+  53 |                                          | True                            | 
+  54 |  for (ptr = image; ptr < image + len - 1 | True                            | 
+  55 |   if (is_prefixed_with(ptr, "depends=")) | True                            | 
+  56 |    char *u;                              | True                            | 
+  57 |                                          | True                            | 
+  58 |    ptr += 8;                             | True                            | 
+  59 |    for (u = ptr; *u; u++)                | True                            | 
+  60 |     if (*u == '-')                       | True                            | 
+  61 |      *u = '_';                           | True                            | 
+  62 |    ptr += string_to_llist(ptr, &e->deps, | True                            | 
+  63 |   } else if (ENABLE_FEATURE_MODUTILS_ALI | True                            | 
+  64 |    && is_prefixed_with(ptr, "alias=")    | True                            | 
+  65 |   ) {                                    | True                            | 
+  66 |    llist_add_to(&e->aliases, xstrdup(ptr | True                            | 
+  67 |    ptr += strlen(ptr);                   | True                            | 
+  68 |   } else if (ENABLE_FEATURE_MODUTILS_SYM | True                            | 
+  69 |    && is_prefixed_with(ptr, "__ksymtab_" | True                            | 
+  70 |   ) {                                    | True                            | 
+  71 |    ptr += 10;                            | True                            | 
+  72 |    if (is_prefixed_with(ptr, "gpl")      | True                            | 
+  73 |     || strcmp(ptr, "strings") == 0       | True                            | 
+  74 |    ) {                                   | True                            | 
+  75 |     continue;                            | True                            | 
+  76 |    }                                     | True                            | 
+  77 |    llist_add_to(&e->symbols, xstrdup(ptr | True                            | 
+  78 |    ptr += strlen(ptr);                   | True                            | 
+  79 |   }                                      | True                            | 
+  80 |  }                                       | True                            | 
+  81 |  free(image);                            | True                            | 
+  82 |                                          | True                            | 
+  83 |  return TRUE;                            | True                            | 
+  84 | }                                        | True                            | 
+  85 |                                          | True                            | 
+  86 | static void order_dep_list(module_db *mo | True                            | 
+  87 | {                                        | True                            | 
+  88 |  module_entry *m;                        | True                            | 
+  89 |  llist_t *n;                             | True                            | 
+  90 |                                          | True                            | 
+  91 |  for (n = add; n != NULL; n = n->link) { | True                            | 
+  92 |   m = moddb_get(modules, n->data);       | True                            | 
+  93 |   if (m == NULL)                         | True                            | 
+  94 |    continue;                             | True                            | 
+  95 |                                          | True                            | 
+  96 |   /* unlink current entry */             | True                            | 
+  97 |   m->dnext->dprev = m->dprev;            | True                            | 
+  98 |   m->dprev->dnext = m->dnext;            | True                            | 
+  99 |                                          | True                            | 
+ 100 |   /* and add it to tail */               | True                            | 
+ 101 |   m->dnext = start;                      | True                            | 
+ 102 |   m->dprev = start->dprev;               | True                            | 
+ 103 |   start->dprev->dnext = m;               | True                            | 
+ 104 |   start->dprev = m;                      | True                            | 
+ 105 |                                          | True                            | 
+ 106 |   /* recurse */                          | True                            | 
+ 107 |   order_dep_list(modules, start, m->deps | True                            | 
+ 108 |  }                                       | True                            | 
+ 109 | }                                        | True                            | 
+ 110 |                                          | True                            | 
+ 111 | static void xfreopen_write(const char *f | True                            | 
+ 112 | {                                        | True                            | 
+ 113 |  if (freopen(file, "w", f) == NULL)      | True                            | 
+ 114 |   bb_perror_msg_and_die("can't open '%s' | True                            | 
+ 115 | }                                        | True                            | 
+ 116 |                                          | True                            | 
+ 117 | //usage:#if !ENABLE_MODPROBE_SMALL       | True                            | 
+ 118 | //usage:#define depmod_trivial_usage "[- | True                            | 
+ 119 | //usage:#define depmod_full_usage "\n\n" | True                            | 
+ 120 | //usage:       "Generate modules.dep, al | True                            | 
+ 121 | //usage:     "\n"                        | True                            | 
+ 122 | //usage:     "\n -b BASE Use BASE/lib/mo | True                            | 
+ 123 | //usage:     "\n -n Dry run: print files | True                            | 
+ 124 | //usage:#endif                           | True                            | 
+ 125 |                                          | True                            | 
+ 126 | /* Upstream usage:                       | True                            | 
+ 127 |  * [-aAenv] [-C FILE or DIR] [-b BASE] [ | True                            | 
+ 128 |  * -a --all                              | True                            | 
+ 129 |  *  Probe all modules. Default if no MOD | True                            | 
+ 130 |  * -A --quick                            | True                            | 
+ 131 |  *  Check modules.dep's mtime against mo | True                            | 
+ 132 |  * -b --basedir BASE                     | True                            | 
+ 133 |  *  Use $BASE/lib/modules/VERSION        | True                            | 
+ 134 |  * -C --config FILE or DIR               | True                            | 
+ 135 |  *  Path to /etc/depmod.conf or /etc/dep | True                            | 
+ 136 |  * -e --errsyms                          | True                            | 
+ 137 |  *  When combined with the -F option, th | True                            | 
+ 138 |  *  which are not supplied by other modu | True                            | 
+ 139 |  * -F --filesyms System.map              | True                            | 
+ 140 |  * -n --dry-run                          | True                            | 
+ 141 |  *  Print modules.dep etc to standard ou | True                            | 
+ 142 |  * -v --verbose                          | True                            | 
+ 143 |  *  Print to stdout all the symbols each | True                            | 
+ 144 |  *  and the module's file name which pro | True                            | 
+ 145 |  * -r No-op                              | True                            | 
+ 146 |  * -u No-op                              | True                            | 
+ 147 |  * -q No-op                              | True                            | 
+ 148 |  *                                       | True                            | 
+ 149 |  * So far we only support: [-n] [-b BASE | True                            | 
+ 150 |  * Accepted but ignored:                 | True                            | 
+ 151 |  * -aAe                                  | True                            | 
+ 152 |  * -F System.map                         | True                            | 
+ 153 |  * -C FILE/DIR                           | True                            | 
+ 154 |  *                                       | True                            | 
+ 155 |  * Not accepted: -v                      | True                            | 
+ 156 |  */                                      | True                            | 
+ 157 | enum {                                   | True                            | 
+ 158 |  //OPT_a = (1 << 0), /* All modules, ign | True                            | 
+ 159 |  //OPT_A = (1 << 1), /* Only emit .ko th | True                            | 
+ 160 |  OPT_b = (1 << 2), /* base directory whe | True                            | 
+ 161 |  //OPT_e = (1 << 3), /* with -F, print u | True                            | 
+ 162 |  //OPT_F = (1 << 4), /* System.map that  | True                            | 
+ 163 |  OPT_n = (1 << 5), /* dry-run, print to  | True                            | 
+ 164 |  OPT_r = (1 << 6), /* Compat dummy. Linu | True                            | 
+ 165 |  OPT_u = (1 << 7), /* -u,--unresolved-er | True                            | 
+ 166 |  OPT_q = (1 << 8), /* -q,--quiet: ignore | True                            | 
+ 167 |  OPT_C = (1 << 9), /* -C,--config etc_mo | True                            | 
+ 168 | };                                       | True                            | 
+ 169 |                                          | True                            | 
+ 170 | int depmod_main(int argc, char **argv) M | True                            | 
+ 171 | int depmod_main(int argc UNUSED_PARAM, c | True                            | 
+ 172 | {                                        | True                            | 
+ 173 |  module_db modules;                      | True                            | 
+ 174 |  module_entry *m, *dep;                  | True                            | 
+ 175 |  const char *moddir_base = "/";          | True                            | 
+ 176 |  char *moddir, *version;                 | True                            | 
+ 177 |  struct utsname uts;                     | True                            | 
+ 178 |  unsigned i;                             | True                            | 
+ 179 |  int tmp;                                | True                            | 
+ 180 |                                          | True                            | 
+ 181 |  getopt32(argv, "aAb:eF:nruqC:", &moddir | True                            | 
+ 182 |  argv += optind;                         | True                            | 
+ 183 |                                          | True                            | 
+ 184 |  /* goto modules location */             | True                            | 
+ 185 |  xchdir(moddir_base);                    | True                            | 
+ 186 |                                          | True                            | 
+ 187 |  /* If a version is provided, then that  | True                            | 
+ 188 |   * is used, rather than the current ker | True                            | 
+ 189 |   * "uname -r").  */                     | True                            | 
+ 190 |  if (*argv && sscanf(*argv, "%u.%u.%u",  | True                            | 
+ 191 |   version = *argv++;                     | True                            | 
+ 192 |  } else {                                | True                            | 
+ 193 |   uname(&uts);                           | True                            | 
+ 194 |   version = uts.release;                 | True                            | 
+ 195 |  }                                       | True                            | 
+ 196 |  moddir = concat_path_file(&CONFIG_DEFAU | True                            | 
+ 197 |  xchdir(moddir);                         | True                            | 
+ 198 |  if (ENABLE_FEATURE_CLEAN_UP)            | True                            | 
+ 199 |   free(moddir);                          | True                            | 
+ 200 |                                          | True                            | 
+ 201 |  /* Scan modules */                      | True                            | 
+ 202 |  memset(&modules, 0, sizeof(modules));   | True                            | 
+ 203 |  if (*argv) {                            | True                            | 
+ 204 |   do {                                   | True                            | 
+ 205 |    recursive_action(*argv, 0 /* no ACTIO | True                            | 
+ 206 |     parse_module, NULL, &modules);       | True                            | 
+ 207 |   } while (*++argv);                     | True                            | 
+ 208 |  } else {                                | True                            | 
+ 209 |   recursive_action(".", ACTION_RECURSE,  | True                            | 
+ 210 |     parse_module, NULL, &modules);       | True                            | 
+ 211 |  }                                       | True                            | 
+ 212 |                                          | True                            | 
+ 213 |  /* Generate dependency and alias files  | True                            | 
+ 214 |  if (!(option_mask32 & OPT_n))           | True                            | 
+ 215 |   xfreopen_write(CONFIG_DEFAULT_DEPMOD_F | True                            | 
+ 216 |                                          | True                            | 
+ 217 |  moddb_foreach_module(&modules, m, i) {  | True                            | 
+ 218 |   printf("%s:", m->name);                | True                            | 
+ 219 |                                          | True                            | 
+ 220 |   order_dep_list(&modules, m, m->deps);  | True                            | 
+ 221 |   while (m->dnext != m) {                | True                            | 
+ 222 |    dep = m->dnext;                       | True                            | 
+ 223 |    printf(" %s", dep->name);             | True                            | 
+ 224 |                                          | True                            | 
+ 225 |    /* unlink current entry */            | True                            | 
+ 226 |    dep->dnext->dprev = dep->dprev;       | True                            | 
+ 227 |    dep->dprev->dnext = dep->dnext;       | True                            | 
+ 228 |    dep->dnext = dep->dprev = dep;        | True                            | 
+ 229 |   }                                      | True                            | 
+ 230 |   bb_putchar('\n');                      | True                            | 
+ 231 |  }                                       | True                            | 
+ 232 |                                          | True                            | 
+ 233 | #if ENABLE_FEATURE_MODUTILS_ALIAS        | True                            | 
+ 234 |  if (!(option_mask32 & OPT_n))           | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 235 |   xfreopen_write("modules.alias", stdout | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 236 |  moddb_foreach_module(&modules, m, i) {  | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 237 |   while (m->aliases) {                   | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 238 |    /*                                    | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 239 |     * Last word used to be a basename    | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 240 |     * (filename with path and .ko.* stri | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 241 |     * at the time of module-init-tools 3 | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 242 |     * kmod v.12 uses module name, i.e.,  | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 243 |     */                                   | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 244 |    printf("alias %s %s\n",               | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 245 |     (char*)llist_pop(&m->aliases),       | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 246 |     m->modname);                         | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 247 |   }                                      | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 248 |  }                                       | ENABLE_FEATURE_MODUTILS_ALIAS   | 
+ 249 | #endif                                   | True                            | 
+ 250 | #if ENABLE_FEATURE_MODUTILS_SYMBOLS      | True                            | 
+ 251 |  if (!(option_mask32 & OPT_n))           | ENABLE_FEATURE_MODUTILS_SYMBOLS | 
+ 252 |   xfreopen_write("modules.symbols", stdo | ENABLE_FEATURE_MODUTILS_SYMBOLS | 
+ 253 |  moddb_foreach_module(&modules, m, i) {  | ENABLE_FEATURE_MODUTILS_SYMBOLS | 
+ 254 |   while (m->symbols) {                   | ENABLE_FEATURE_MODUTILS_SYMBOLS | 
+ 255 |    printf("alias symbol:%s %s\n",        | ENABLE_FEATURE_MODUTILS_SYMBOLS | 
+ 256 |     (char*)llist_pop(&m->symbols),       | ENABLE_FEATURE_MODUTILS_SYMBOLS | 
+ 257 |     m->modname);                         | ENABLE_FEATURE_MODUTILS_SYMBOLS | 
+ 258 |   }                                      | ENABLE_FEATURE_MODUTILS_SYMBOLS | 
+ 259 |  }                                       | ENABLE_FEATURE_MODUTILS_SYMBOLS | 
+ 260 | #endif                                   | True                            | 
+ 261 |                                          | True                            | 
+ 262 |  if (ENABLE_FEATURE_CLEAN_UP)            | True                            | 
+ 263 |   moddb_free(&modules);                  | True                            | 
+ 264 |                                          | True                            | 
+ 265 |  return EXIT_SUCCESS;                    | True                            | 
+ 266 | }                                        | True                            | 
+-----+------------------------------------------+---------------------------------+
+     |                                          | +112MB, 256ms                   | 

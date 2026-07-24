@@ -1,0 +1,344 @@
+FILE: data/raw/busybox-1.38.0/networking/ftpgetput.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                        | 
+-----+------------------------------------------+--------------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                         | 
+   2 | /*                                       | True                                                         | 
+   3 |  * ftpget                                | True                                                         | 
+   4 |  *                                       | True                                                         | 
+   5 |  * Mini implementation of FTP to retriev | True                                                         | 
+   6 |  *                                       | True                                                         | 
+   7 |  * Copyright (C) 2002 Jeff Angielski, Th | True                                                         | 
+   8 |  * Copyright (C) 2002 Glenn McGrath      | True                                                         | 
+   9 |  *                                       | True                                                         | 
+  10 |  * Based on wget.c by Chip Rosenthal Cov | True                                                         | 
+  11 |  * <chip@laserlink.net>                  | True                                                         | 
+  12 |  *                                       | True                                                         | 
+  13 |  * Licensed under GPLv2 or later, see fi | True                                                         | 
+  14 |  */                                      | True                                                         | 
+  15 | //config:config FTPGET                   | True                                                         | 
+  16 | //config: bool "ftpget (7.9 kb)"         | True                                                         | 
+  17 | //config: default y                      | True                                                         | 
+  18 | //config: help                           | True                                                         | 
+  19 | //config: Retrieve a remote file via FTP | True                                                         | 
+  20 | //config:                                | True                                                         | 
+  21 | //config:config FTPPUT                   | True                                                         | 
+  22 | //config: bool "ftpput (7.6 kb)"         | True                                                         | 
+  23 | //config: default y                      | True                                                         | 
+  24 | //config: help                           | True                                                         | 
+  25 | //config: Store a remote file via FTP.   | True                                                         | 
+  26 | //config:                                | True                                                         | 
+  27 | //config:config FEATURE_FTPGETPUT_LONG_O | True                                                         | 
+  28 | //config: bool "Enable long options in f | True                                                         | 
+  29 | //config: default y                      | True                                                         | 
+  30 | //config: depends on LONG_OPTS && (FTPGE | True                                                         | 
+  31 |                                          | True                                                         | 
+  32 | //applet:IF_FTPGET(APPLET_ODDNAME(ftpget | True                                                         | 
+  33 | //applet:IF_FTPPUT(APPLET_ODDNAME(ftpput | True                                                         | 
+  34 |                                          | True                                                         | 
+  35 | //kbuild:lib-$(CONFIG_FTPGET) += ftpgetp | True                                                         | 
+  36 | //kbuild:lib-$(CONFIG_FTPPUT) += ftpgetp | True                                                         | 
+  37 |                                          | True                                                         | 
+  38 | //usage:#define ftpget_trivial_usage     | True                                                         | 
+  39 | //usage:       "[OPTIONS] HOST [LOCAL_FI | True                                                         | 
+  40 | //usage:#define ftpget_full_usage "\n\n" | True                                                         | 
+  41 | //usage:       "Download a file via FTP\ | True                                                         | 
+  42 | //usage:     "\n -c Continue previous tr | True                                                         | 
+  43 | //usage:     "\n -v Verbose"             | True                                                         | 
+  44 | //usage:     "\n -u USER Username"       | True                                                         | 
+  45 | //usage:     "\n -p PASS Password"       | True                                                         | 
+  46 | //usage:     "\n -P PORT"                | True                                                         | 
+  47 | //usage:                                 | True                                                         | 
+  48 | //usage:#define ftpput_trivial_usage     | True                                                         | 
+  49 | //usage:       "[OPTIONS] HOST [REMOTE_F | True                                                         | 
+  50 | //usage:#define ftpput_full_usage "\n\n" | True                                                         | 
+  51 | //usage:       "Upload a file to a FTP s | True                                                         | 
+  52 | //usage:     "\n -v Verbose"             | True                                                         | 
+  53 | //usage:     "\n -u USER Username"       | True                                                         | 
+  54 | //usage:     "\n -p PASS Password"       | True                                                         | 
+  55 | //usage:     "\n -P PORT"                | True                                                         | 
+  56 |                                          | True                                                         | 
+  57 | #include "libbb.h"                       | True                                                         | 
+  58 | #include "common_bufsiz.h"               | True                                                         | 
+  59 |                                          | True                                                         | 
+  60 | struct globals {                         | True                                                         | 
+  61 |  const char *user;                       | True                                                         | 
+  62 |  const char *password;                   | True                                                         | 
+  63 |  struct len_and_sockaddr *lsa;           | True                                                         | 
+  64 |  FILE *control_stream;                   | True                                                         | 
+  65 |  int verbose_flag;                       | True                                                         | 
+  66 |  int do_continue;                        | True                                                         | 
+  67 |  char buf[4]; /* actually [BUFSZ] */     | True                                                         | 
+  68 | } FIX_ALIASING;                          | True                                                         | 
+  69 | #define G (*(struct globals*)bb_common_b | True                                                         | 
+  70 | enum { BUFSZ = COMMON_BUFSIZE - offsetof | True                                                         | 
+  71 | #define user           (G.user           | True                                                         | 
+  72 | #define password       (G.password       | True                                                         | 
+  73 | #define lsa            (G.lsa            | True                                                         | 
+  74 | #define control_stream (G.control_stream | True                                                         | 
+  75 | #define verbose_flag   (G.verbose_flag   | True                                                         | 
+  76 | #define do_continue    (G.do_continue    | True                                                         | 
+  77 | #define buf            (G.buf            | True                                                         | 
+  78 | #define INIT_G() do { \                  | True                                                         | 
+  79 |  setup_common_bufsiz(); \                | True                                                         | 
+  80 |  BUILD_BUG_ON(sizeof(G) > COMMON_BUFSIZE | True                                                         | 
+  81 | } while (0)                              | True                                                         | 
+  82 |                                          | True                                                         | 
+  83 |                                          | True                                                         | 
+  84 | static void ftp_die(const char *msg) NOR | True                                                         | 
+  85 | static void ftp_die(const char *msg)     | True                                                         | 
+  86 | {                                        | True                                                         | 
+  87 |  char *cp = buf; /* buf holds peer's res | True                                                         | 
+  88 |                                          | True                                                         | 
+  89 |  /* Guard against garbage from remote se | True                                                         | 
+  90 |  while (*cp >= ' ' && *cp < '\x7f')      | True                                                         | 
+  91 |   cp++;                                  | True                                                         | 
+  92 |  *cp = '\0';                             | True                                                         | 
+  93 |  bb_error_msg_and_die("unexpected server | True                                                         | 
+  94 |    (msg ? " to " : ""), (msg ? msg : "") | True                                                         | 
+  95 | }                                        | True                                                         | 
+  96 |                                          | True                                                         | 
+  97 | static int ftpcmd(const char *s1, const  | True                                                         | 
+  98 | {                                        | True                                                         | 
+  99 |  unsigned n;                             | True                                                         | 
+ 100 |                                          | True                                                         | 
+ 101 |  if (verbose_flag) {                     | True                                                         | 
+ 102 |   bb_error_msg("cmd %s %s", s1, s2);     | True                                                         | 
+ 103 |  }                                       | True                                                         | 
+ 104 |                                          | True                                                         | 
+ 105 |  if (s1) {                               | True                                                         | 
+ 106 |   fprintf(control_stream, (s2 ? "%s %s\r | True                                                         | 
+ 107 |       s1, s2);                           | True                                                         | 
+ 108 |   fflush(control_stream);                | True                                                         | 
+ 109 |  }                                       | True                                                         | 
+ 110 |                                          | True                                                         | 
+ 111 |  do {                                    | True                                                         | 
+ 112 |   strcpy(buf, "EOF"); /* for ftp_die */  | True                                                         | 
+ 113 |   if (fgets(buf, BUFSZ - 2, control_stre | True                                                         | 
+ 114 |    ftp_die(NULL);                        | True                                                         | 
+ 115 |   }                                      | True                                                         | 
+ 116 |  } while (!isdigit(buf[0]) || buf[3] !=  | True                                                         | 
+ 117 |                                          | True                                                         | 
+ 118 |  buf[3] = '\0';                          | True                                                         | 
+ 119 |  n = xatou(buf);                         | True                                                         | 
+ 120 |  buf[3] = ' ';                           | True                                                         | 
+ 121 |  return n;                               | True                                                         | 
+ 122 | }                                        | True                                                         | 
+ 123 |                                          | True                                                         | 
+ 124 | static void ftp_login(void)              | True                                                         | 
+ 125 | {                                        | True                                                         | 
+ 126 |  /* Connect to the command socket */     | True                                                         | 
+ 127 |  control_stream = fdopen(xconnect_stream | True                                                         | 
+ 128 |  if (control_stream == NULL) {           | True                                                         | 
+ 129 |   /* fdopen failed - extremely unlikely  | True                                                         | 
+ 130 |   bb_perror_nomsg_and_die();             | True                                                         | 
+ 131 |  }                                       | True                                                         | 
+ 132 |                                          | True                                                         | 
+ 133 |  if (ftpcmd(NULL, NULL) != 220) {        | True                                                         | 
+ 134 |   ftp_die(NULL);                         | True                                                         | 
+ 135 |  }                                       | True                                                         | 
+ 136 |                                          | True                                                         | 
+ 137 |  /*  Login to the server */              | True                                                         | 
+ 138 |  switch (ftpcmd("USER", user)) {         | True                                                         | 
+ 139 |  case 230:                               | True                                                         | 
+ 140 |   break;                                 | True                                                         | 
+ 141 |  case 331:                               | True                                                         | 
+ 142 |   if (ftpcmd("PASS", password) != 230) { | True                                                         | 
+ 143 |    ftp_die("PASS");                      | True                                                         | 
+ 144 |   }                                      | True                                                         | 
+ 145 |   break;                                 | True                                                         | 
+ 146 |  default:                                | True                                                         | 
+ 147 |   ftp_die("USER");                       | True                                                         | 
+ 148 |  }                                       | True                                                         | 
+ 149 |                                          | True                                                         | 
+ 150 |  ftpcmd("TYPE I", NULL);                 | True                                                         | 
+ 151 | }                                        | True                                                         | 
+ 152 |                                          | True                                                         | 
+ 153 | static int xconnect_ftpdata(void)        | True                                                         | 
+ 154 | {                                        | True                                                         | 
+ 155 |  int port_num;                           | True                                                         | 
+ 156 |                                          | True                                                         | 
+ 157 |  if (ENABLE_FEATURE_IPV6 && ftpcmd("EPSV | True                                                         | 
+ 158 |   /* good */                             | True                                                         | 
+ 159 |  } else if (ftpcmd("PASV", NULL) != 227) | True                                                         | 
+ 160 |   ftp_die("PASV");                       | True                                                         | 
+ 161 |  }                                       | True                                                         | 
+ 162 |  port_num = parse_pasv_epsv(buf);        | True                                                         | 
+ 163 |  if (port_num < 0)                       | True                                                         | 
+ 164 |   ftp_die("PASV");                       | True                                                         | 
+ 165 |                                          | True                                                         | 
+ 166 |  set_nport(&lsa->u.sa, htons(port_num)); | True                                                         | 
+ 167 |  return xconnect_stream(lsa);            | True                                                         | 
+ 168 | }                                        | True                                                         | 
+ 169 |                                          | True                                                         | 
+ 170 | static int pump_data_and_QUIT(int from,  | True                                                         | 
+ 171 | {                                        | True                                                         | 
+ 172 |  /* copy the file */                     | True                                                         | 
+ 173 |  if (bb_copyfd_eof(from, to) == -1) {    | True                                                         | 
+ 174 |   /* error msg is already printed by bb_ | True                                                         | 
+ 175 |   return EXIT_FAILURE;                   | True                                                         | 
+ 176 |  }                                       | True                                                         | 
+ 177 |                                          | True                                                         | 
+ 178 |  /* close data connection */             | True                                                         | 
+ 179 |  close(from); /* don't know which one is | True                                                         | 
+ 180 |  close(to);                              | True                                                         | 
+ 181 |                                          | True                                                         | 
+ 182 |  /* does server confirm that transfer is | True                                                         | 
+ 183 |  if (ftpcmd(NULL, NULL) != 226) {        | True                                                         | 
+ 184 |   ftp_die(NULL);                         | True                                                         | 
+ 185 |  }                                       | True                                                         | 
+ 186 |  ftpcmd("QUIT", NULL);                   | True                                                         | 
+ 187 |                                          | True                                                         | 
+ 188 |  return EXIT_SUCCESS;                    | True                                                         | 
+ 189 | }                                        | True                                                         | 
+ 190 |                                          | True                                                         | 
+ 191 | #if !ENABLE_FTPGET                       | True                                                         | 
+ 192 | int ftp_receive(const char *local_path,  | !ENABLE_FTPGET                                               | 
+ 193 | #else                                    | True                                                         | 
+ 194 | static                                   | ENABLE_FTPGET                                                | 
+ 195 | int ftp_receive(const char *local_path,  | ENABLE_FTPGET                                                | 
+ 196 | {                                        | ENABLE_FTPGET                                                | 
+ 197 |  int fd_data;                            | ENABLE_FTPGET                                                | 
+ 198 |  int fd_local = -1;                      | ENABLE_FTPGET                                                | 
+ 199 |  off_t beg_range = 0;                    | ENABLE_FTPGET                                                | 
+ 200 |                                          | ENABLE_FTPGET                                                | 
+ 201 |  /* connect to the data socket */        | ENABLE_FTPGET                                                | 
+ 202 |  fd_data = xconnect_ftpdata();           | ENABLE_FTPGET                                                | 
+ 203 |                                          | ENABLE_FTPGET                                                | 
+ 204 |  if (ftpcmd("SIZE", server_path) != 213) | ENABLE_FTPGET                                                | 
+ 205 |   do_continue = 0;                       | ENABLE_FTPGET                                                | 
+ 206 |  }                                       | ENABLE_FTPGET                                                | 
+ 207 |                                          | ENABLE_FTPGET                                                | 
+ 208 |  if (LONE_DASH(local_path)) {            | ENABLE_FTPGET                                                | 
+ 209 |   fd_local = STDOUT_FILENO;              | ENABLE_FTPGET                                                | 
+ 210 |   do_continue = 0;                       | ENABLE_FTPGET                                                | 
+ 211 |  }                                       | ENABLE_FTPGET                                                | 
+ 212 |                                          | ENABLE_FTPGET                                                | 
+ 213 |  if (do_continue) {                      | ENABLE_FTPGET                                                | 
+ 214 |   struct stat sbuf;                      | ENABLE_FTPGET                                                | 
+ 215 |   /* lstat would be wrong here! */       | ENABLE_FTPGET                                                | 
+ 216 |   if (stat(local_path, &sbuf) < 0) {     | ENABLE_FTPGET                                                | 
+ 217 |    bb_simple_perror_msg_and_die("stat"); | ENABLE_FTPGET                                                | 
+ 218 |   }                                      | ENABLE_FTPGET                                                | 
+ 219 |   if (sbuf.st_size > 0) {                | ENABLE_FTPGET                                                | 
+ 220 |    beg_range = sbuf.st_size;             | ENABLE_FTPGET                                                | 
+ 221 |   } else {                               | ENABLE_FTPGET                                                | 
+ 222 |    do_continue = 0;                      | ENABLE_FTPGET                                                | 
+ 223 |   }                                      | ENABLE_FTPGET                                                | 
+ 224 |  }                                       | ENABLE_FTPGET                                                | 
+ 225 |                                          | ENABLE_FTPGET                                                | 
+ 226 |  if (do_continue) {                      | ENABLE_FTPGET                                                | 
+ 227 |   sprintf(buf, "REST %"OFF_FMT"u", beg_r | ENABLE_FTPGET                                                | 
+ 228 |   if (ftpcmd(buf, NULL) != 350) {        | ENABLE_FTPGET                                                | 
+ 229 |    do_continue = 0;                      | ENABLE_FTPGET                                                | 
+ 230 |   }                                      | ENABLE_FTPGET                                                | 
+ 231 |  }                                       | ENABLE_FTPGET                                                | 
+ 232 |                                          | ENABLE_FTPGET                                                | 
+ 233 |  if (ftpcmd("RETR", server_path) > 150)  | ENABLE_FTPGET                                                | 
+ 234 |   ftp_die("RETR");                       | ENABLE_FTPGET                                                | 
+ 235 |  }                                       | ENABLE_FTPGET                                                | 
+ 236 |                                          | ENABLE_FTPGET                                                | 
+ 237 |  /* create local file _after_ we know th | ENABLE_FTPGET                                                | 
+ 238 |  if (fd_local == -1) {                   | ENABLE_FTPGET                                                | 
+ 239 |   fd_local = xopen(local_path,           | ENABLE_FTPGET                                                | 
+ 240 |    do_continue ? (O_APPEND | O_WRONLY)   | ENABLE_FTPGET                                                | 
+ 241 |                : (O_CREAT | O_TRUNC | O_ | ENABLE_FTPGET                                                | 
+ 242 |   );                                     | ENABLE_FTPGET                                                | 
+ 243 |  }                                       | ENABLE_FTPGET                                                | 
+ 244 |                                          | ENABLE_FTPGET                                                | 
+ 245 |  return pump_data_and_QUIT(fd_data, fd_l | ENABLE_FTPGET                                                | 
+ 246 | }                                        | ENABLE_FTPGET                                                | 
+ 247 | #endif                                   | True                                                         | 
+ 248 |                                          | True                                                         | 
+ 249 | #if !ENABLE_FTPPUT                       | True                                                         | 
+ 250 | int ftp_send(const char *server_path, ch | !ENABLE_FTPPUT                                               | 
+ 251 | #else                                    | True                                                         | 
+ 252 | static                                   | ENABLE_FTPPUT                                                | 
+ 253 | int ftp_send(const char *server_path, ch | ENABLE_FTPPUT                                                | 
+ 254 | {                                        | ENABLE_FTPPUT                                                | 
+ 255 |  int fd_data;                            | ENABLE_FTPPUT                                                | 
+ 256 |  int fd_local;                           | ENABLE_FTPPUT                                                | 
+ 257 |  int response;                           | ENABLE_FTPPUT                                                | 
+ 258 |                                          | ENABLE_FTPPUT                                                | 
+ 259 |  /* connect to the data socket */        | ENABLE_FTPPUT                                                | 
+ 260 |  fd_data = xconnect_ftpdata();           | ENABLE_FTPPUT                                                | 
+ 261 |                                          | ENABLE_FTPPUT                                                | 
+ 262 |  /* get the local file */                | ENABLE_FTPPUT                                                | 
+ 263 |  fd_local = STDIN_FILENO;                | ENABLE_FTPPUT                                                | 
+ 264 |  if (NOT_LONE_DASH(local_path))          | ENABLE_FTPPUT                                                | 
+ 265 |   fd_local = xopen(local_path, O_RDONLY) | ENABLE_FTPPUT                                                | 
+ 266 |                                          | ENABLE_FTPPUT                                                | 
+ 267 |  response = ftpcmd("STOR", server_path); | ENABLE_FTPPUT                                                | 
+ 268 |  switch (response) {                     | ENABLE_FTPPUT                                                | 
+ 269 |  case 125:                               | ENABLE_FTPPUT                                                | 
+ 270 |  case 150:                               | ENABLE_FTPPUT                                                | 
+ 271 |   break;                                 | ENABLE_FTPPUT                                                | 
+ 272 |  default:                                | ENABLE_FTPPUT                                                | 
+ 273 |   ftp_die("STOR");                       | ENABLE_FTPPUT                                                | 
+ 274 |  }                                       | ENABLE_FTPPUT                                                | 
+ 275 |                                          | ENABLE_FTPPUT                                                | 
+ 276 |  return pump_data_and_QUIT(fd_local, fd_ | ENABLE_FTPPUT                                                | 
+ 277 | }                                        | ENABLE_FTPPUT                                                | 
+ 278 | #endif                                   | True                                                         | 
+ 279 |                                          | True                                                         | 
+ 280 | #if ENABLE_FEATURE_FTPGETPUT_LONG_OPTION | True                                                         | 
+ 281 | static const char ftpgetput_longopts[] A | ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS                        | 
+ 282 |  "continue\0" Required_argument "c"      | ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS                        | 
+ 283 |  "verbose\0"  No_argument       "v"      | ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS                        | 
+ 284 |  "username\0" Required_argument "u"      | ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS                        | 
+ 285 |  "password\0" Required_argument "p"      | ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS                        | 
+ 286 |  "port\0"     Required_argument "P"      | ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS                        | 
+ 287 |  ;                                       | ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS                        | 
+ 288 | #endif                                   | True                                                         | 
+ 289 |                                          | True                                                         | 
+ 290 | int ftpgetput_main(int argc, char **argv | True                                                         | 
+ 291 | int ftpgetput_main(int argc UNUSED_PARAM | True                                                         | 
+ 292 | {                                        | True                                                         | 
+ 293 |  const char *port = NULL;                | True                                                         | 
+ 294 |                                          | True                                                         | 
+ 295 | #if ENABLE_FTPPUT && !ENABLE_FTPGET      | True                                                         | 
+ 296 | # define ftp_action ftp_send             | ENABLE_FTPPUT&&!ENABLE_FTPGET                                | 
+ 297 | #elif ENABLE_FTPGET && !ENABLE_FTPPUT    | True                                                         | 
+ 298 | # define ftp_action ftp_receive          | ENABLE_FTPGET&&!ENABLE_FTPPUT                                | 
+ 299 | #else                                    | True                                                         | 
+ 300 |  int (*ftp_action)(const char *, char *) | !ENABLE_FTPGET&&!ENABLE_FTPPUT||ENABLE_FTPGET&&ENABLE_FTPPUT | 
+ 301 |                                          | !ENABLE_FTPGET&&!ENABLE_FTPPUT||ENABLE_FTPGET&&ENABLE_FTPPUT | 
+ 302 |  /* Check to see if the command is ftpge | !ENABLE_FTPGET&&!ENABLE_FTPPUT||ENABLE_FTPGET&&ENABLE_FTPPUT | 
+ 303 |  if (applet_name[3] == 'g') {            | !ENABLE_FTPGET&&!ENABLE_FTPPUT||ENABLE_FTPGET&&ENABLE_FTPPUT | 
+ 304 |   ftp_action = ftp_receive;              | !ENABLE_FTPGET&&!ENABLE_FTPPUT||ENABLE_FTPGET&&ENABLE_FTPPUT | 
+ 305 |  }                                       | !ENABLE_FTPGET&&!ENABLE_FTPPUT||ENABLE_FTPGET&&ENABLE_FTPPUT | 
+ 306 | #endif                                   | True                                                         | 
+ 307 |                                          | True                                                         | 
+ 308 |  INIT_G();                               | True                                                         | 
+ 309 |  /* Set default values */                | True                                                         | 
+ 310 |  user = "anonymous";                     | True                                                         | 
+ 311 |  password = "busybox";                   | True                                                         | 
+ 312 |                                          | True                                                         | 
+ 313 |  /*                                      | True                                                         | 
+ 314 |   * Decipher the command line            | True                                                         | 
+ 315 |   */                                     | True                                                         | 
+ 316 |  /* must have 2 to 3 params; -v and -c c | True                                                         | 
+ 317 | #define OPTSTRING "^cvu:p:P:" "\0" "-2:? | True                                                         | 
+ 318 | #if ENABLE_FEATURE_FTPGETPUT_LONG_OPTION | True                                                         | 
+ 319 |  getopt32long(argv, OPTSTRING, ftpgetput | ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS                        | 
+ 320 | #else                                    | True                                                         | 
+ 321 |  getopt32(argv, OPTSTRING,               | !ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS                       | 
+ 322 | #endif                                   | True                                                         | 
+ 323 |    &user, &password, &port, &verbose_fla | True                                                         | 
+ 324 |  );                                      | True                                                         | 
+ 325 |  argv += optind;                         | True                                                         | 
+ 326 |                                          | True                                                         | 
+ 327 |  /* We want to do exactly _one_ DNS look | True                                                         | 
+ 328 |   * sites (i.e. ftp.us.debian.org) use r | True                                                         | 
+ 329 |   * and we want to connect to only one I | True                                                         | 
+ 330 |  lsa = xhost2sockaddr(argv[0], bb_lookup | True                                                         | 
+ 331 |  if (verbose_flag) {                     | True                                                         | 
+ 332 |   printf("Connecting to %s (%s)\n", argv | True                                                         | 
+ 333 |    xmalloc_sockaddr2dotted(&lsa->u.sa)); | True                                                         | 
+ 334 |  }                                       | True                                                         | 
+ 335 |                                          | True                                                         | 
+ 336 |  ftp_login();                            | True                                                         | 
+ 337 |  return ftp_action(argv[1], argv[2] ? ar | True                                                         | 
+ 338 | }                                        | True                                                         | 
+-----+------------------------------------------+--------------------------------------------------------------+
+     |                                          | +113MB, 240ms                                                | 

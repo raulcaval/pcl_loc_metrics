@@ -1,0 +1,1147 @@
+FILE: data/raw/busybox-1.38.0/miscutils/crond.c
+Resultado PCLocator:
+   # | line of code                             | Merge                               | 
+-----+------------------------------------------+-------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                | 
+   2 | /*                                       | True                                | 
+   3 |  * run as root, but NOT setuid root      | True                                | 
+   4 |  *                                       | True                                | 
+   5 |  * Copyright 1994 Matthew Dillon (dillon | True                                | 
+   6 |  * (version 2.3.2)                       | True                                | 
+   7 |  * Vladimir Oleynik <dzo@simtreas.ru> (C | True                                | 
+   8 |  *                                       | True                                | 
+   9 |  * Licensed under GPLv2 or later, see fi | True                                | 
+  10 |  */                                      | True                                | 
+  11 | //config:config CROND                    | True                                | 
+  12 | //config: bool "crond (15 kb)"           | True                                | 
+  13 | //config: default y                      | True                                | 
+  14 | //config: select FEATURE_SYSLOG          | True                                | 
+  15 | //config: help                           | True                                | 
+  16 | //config: Crond is a background daemon t | True                                | 
+  17 | //config: files and executes commands on | True                                | 
+  18 | //config: This is a port of dcron from s | True                                | 
+  19 | //config: format /var/spool/cron/crontab | True                                | 
+  20 | //config:  $ cat /var/spool/cron/crontab | True                                | 
+  21 | //config:  # Run daily cron jobs at 4:40 | True                                | 
+  22 | //config:  40 4 * * * /etc/cron/daily >  | True                                | 
+  23 | //config:                                | True                                | 
+  24 | //config:config FEATURE_CROND_D          | True                                | 
+  25 | //config: bool "Support -d (redirect out | True                                | 
+  26 | //config: depends on CROND               | True                                | 
+  27 | //config: default y                      | True                                | 
+  28 | //config: help                           | True                                | 
+  29 | //config: -d N sets loglevel (0:most ver | True                                | 
+  30 | //config:                                | True                                | 
+  31 | //config:config FEATURE_CROND_CALL_SENDM | True                                | 
+  32 | //config: bool "Report command output vi | True                                | 
+  33 | //config: default y                      | True                                | 
+  34 | //config: depends on CROND               | True                                | 
+  35 | //config: help                           | True                                | 
+  36 | //config: Command output will be sent to | True                                | 
+  37 | //config:                                | True                                | 
+  38 | //config:config FEATURE_CROND_SPECIAL_TI | True                                | 
+  39 | //config: bool "Support special times (@ | True                                | 
+  40 | //config: default y                      | True                                | 
+  41 | //config: depends on CROND               | True                                | 
+  42 | //config: help                           | True                                | 
+  43 | //config: string        meaning          | True                                | 
+  44 | //config: ------        -------          | True                                | 
+  45 | //config: @reboot       Run once, at sta | True                                | 
+  46 | //config: @yearly       Run once a year: | True                                | 
+  47 | //config: @annually     Same as @yearly: | True                                | 
+  48 | //config: @monthly      Run once a month | True                                | 
+  49 | //config: @weekly       Run once a week: | True                                | 
+  50 | //config: @daily        Run once a day:  | True                                | 
+  51 | //config: @midnight     Same as @daily:  | True                                | 
+  52 | //config: @hourly       Run once an hour | True                                | 
+  53 | //config:                                | True                                | 
+  54 | //config:config FEATURE_CROND_DIR        | True                                | 
+  55 | //config: string "crond spool directory" | True                                | 
+  56 | //config: default "/var/spool/cron"      | True                                | 
+  57 | //config: depends on CROND || CRONTAB    | True                                | 
+  58 | //config: help                           | True                                | 
+  59 | //config: Location of crond spool.       | True                                | 
+  60 |                                          | True                                | 
+  61 | //applet:IF_CROND(APPLET(crond, BB_DIR_U | True                                | 
+  62 |                                          | True                                | 
+  63 | //kbuild:lib-$(CONFIG_CROND) += crond.o  | True                                | 
+  64 |                                          | True                                | 
+  65 | //usage:#define crond_trivial_usage      | True                                | 
+  66 | //usage:       "[-fbS] [-l N] " IF_FEATU | True                                | 
+  67 | //usage:#define crond_full_usage "\n\n"  | True                                | 
+  68 | //usage:       " -f Foreground"          | True                                | 
+  69 | //usage:     "\n -b Background (default) | True                                | 
+  70 | //usage:     "\n -S Log to syslog (defau | True                                | 
+  71 | //usage:     "\n -l N Set log level. Mos | True                                | 
+  72 | //usage: IF_FEATURE_CROND_D(             | True                                | 
+  73 | //usage:     "\n -d N Set log level, log | True                                | 
+  74 | //usage: )                               | True                                | 
+  75 | //usage:     "\n -L FILE Log to FILE"    | True                                | 
+  76 | //usage:     "\n -c DIR Cron dir. Defaul | True                                | 
+  77 |                                          | True                                | 
+  78 | #include "libbb.h"                       | True                                | 
+  79 | #include "common_bufsiz.h"               | True                                | 
+  80 | #include <syslog.h>                      | True                                | 
+  81 |                                          | True                                | 
+  82 | #if 0                                    | True                                | 
+  83 | /* If libc tracks and reuses setenv()-al | 0                                   | 
+  84 | /* Neither glibc nor uclibc do that! */  | 0                                   | 
+  85 | # define SETENV_LEAKS 0                  | 0                                   | 
+  86 | #else                                    | True                                | 
+  87 | # define SETENV_LEAKS 1                  | !0                                  | 
+  88 | #endif                                   | True                                | 
+  89 |                                          | True                                | 
+  90 |                                          | True                                | 
+  91 | #define CRON_DIR        CONFIG_FEATURE_C | True                                | 
+  92 | #define CRONTABS        CONFIG_FEATURE_C | True                                | 
+  93 | #define CRON_REBOOT     CONFIG_PID_FILE_ | True                                | 
+  94 | #ifndef SENDMAIL                         | True                                | 
+  95 | # define SENDMAIL       "sendmail"       | !(SENDMAIL)                         | 
+  96 | #endif                                   | True                                | 
+  97 | #ifndef SENDMAIL_ARGS                    | True                                | 
+  98 | # define SENDMAIL_ARGS  "-ti"            | !(SENDMAIL_ARGS)                    | 
+  99 | #endif                                   | True                                | 
+ 100 | #ifndef CRONUPDATE                       | True                                | 
+ 101 | # define CRONUPDATE     "cron.update"    | !(CRONUPDATE)                       | 
+ 102 | #endif                                   | True                                | 
+ 103 | #ifndef MAXLINES                         | True                                | 
+ 104 | # define MAXLINES       256  /* max line | !(MAXLINES)                         | 
+ 105 | #endif                                   | True                                | 
+ 106 |                                          | True                                | 
+ 107 |                                          | True                                | 
+ 108 | typedef struct CronFile {                | True                                | 
+ 109 |  struct CronFile *cf_next;               | True                                | 
+ 110 |  struct CronLine *cf_lines;              | True                                | 
+ 111 |  char *cf_username;                      | True                                | 
+ 112 |  smallint cf_wants_starting;     /* bool | True                                | 
+ 113 |  smallint cf_has_running;        /* bool | True                                | 
+ 114 |  smallint cf_deleted;            /* mark | True                                | 
+ 115 | } CronFile;                              | True                                | 
+ 116 |                                          | True                                | 
+ 117 | typedef struct CronLine {                | True                                | 
+ 118 |  struct CronLine *cl_next;               | True                                | 
+ 119 |  char *cl_cmd;                   /* shel | True                                | 
+ 120 |  pid_t cl_pid;                   /* >0:r | True                                | 
+ 121 | #define START_ME_REBOOT -2               | True                                | 
+ 122 | #define START_ME_NORMAL -1               | True                                | 
+ 123 | #if ENABLE_FEATURE_CROND_CALL_SENDMAIL   | True                                | 
+ 124 |  int cl_empty_mail_size;         /* size | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 125 |  char *cl_mailto;                /* whom | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 126 | #endif                                   | True                                | 
+ 127 |  char *cl_shell;                         | True                                | 
+ 128 |  char *cl_path;                          | True                                | 
+ 129 |  /* ordered by size, not in natural orde | True                                | 
+ 130 |  char cl_Dow[7];                 /* 0-6, | True                                | 
+ 131 |  char cl_Mons[12];               /* 0-11 | True                                | 
+ 132 |  char cl_Hrs[24];                /* 0-23 | True                                | 
+ 133 |  char cl_Days[32];               /* 1-31 | True                                | 
+ 134 |  char cl_Mins[60];               /* 0-59 | True                                | 
+ 135 | } CronLine;                              | True                                | 
+ 136 |                                          | True                                | 
+ 137 |                                          | True                                | 
+ 138 | #define DAEMON_UID 0                     | True                                | 
+ 139 |                                          | True                                | 
+ 140 |                                          | True                                | 
+ 141 | enum {                                   | True                                | 
+ 142 |  OPT_l = (1 << 0),                       | True                                | 
+ 143 |  OPT_L = (1 << 1),                       | True                                | 
+ 144 |  OPT_f = (1 << 2),                       | True                                | 
+ 145 |  OPT_b = (1 << 3),                       | True                                | 
+ 146 |  OPT_S = (1 << 4),                       | True                                | 
+ 147 |  OPT_c = (1 << 5),                       | True                                | 
+ 148 |  OPT_d = (1 << 6) * ENABLE_FEATURE_CROND | True                                | 
+ 149 | };                                       | True                                | 
+ 150 |                                          | True                                | 
+ 151 | struct globals {                         | True                                | 
+ 152 |  unsigned log_level; /* = 8; */          | True                                | 
+ 153 |  time_t crontab_dir_mtime;               | True                                | 
+ 154 |  const char *log_filename;               | True                                | 
+ 155 |  const char *crontab_dir_name; /* = CRON | True                                | 
+ 156 |  CronFile *cron_files;                   | True                                | 
+ 157 |  char *default_shell;                    | True                                | 
+ 158 | #if SETENV_LEAKS                         | True                                | 
+ 159 |  char *env_var_user;                     | True                                | 
+ 160 |  char *env_var_home;                     | True                                | 
+ 161 |  char *env_var_shell;                    | True                                | 
+ 162 |  char *env_var_logname;                  | True                                | 
+ 163 | #endif                                   | True                                | 
+ 164 | } FIX_ALIASING;                          | True                                | 
+ 165 | #define G (*(struct globals*)bb_common_b | True                                | 
+ 166 | #define INIT_G() do { \                  | True                                | 
+ 167 |  setup_common_bufsiz(); \                | True                                | 
+ 168 |  G.log_level = 8; \                      | True                                | 
+ 169 |  G.crontab_dir_name = CRONTABS; \        | True                                | 
+ 170 | } while (0)                              | True                                | 
+ 171 |                                          | True                                | 
+ 172 | /* Log levels:                           | True                                | 
+ 173 |  * 0 is the most verbose, default 8.     | True                                | 
+ 174 |  * For some reason, in fact only 5, 7 an | True                                | 
+ 175 |  */                                      | True                                | 
+ 176 | static void crondlog(unsigned level, con | True                                | 
+ 177 | {                                        | True                                | 
+ 178 |  if (level >= G.log_level) {             | True                                | 
+ 179 |   /*                                     | True                                | 
+ 180 |    * We are called only for info message | True                                | 
+ 181 |    * Warnings/errors use plain bb_[p]err | True                                | 
+ 182 |    * need not touch syslog_level         | True                                | 
+ 183 |    * (they are ok with LOG_ERR default). | True                                | 
+ 184 |    */                                    | True                                | 
+ 185 |   bb_vinfo_msg(msg, va);                 | True                                | 
+ 186 |  }                                       | True                                | 
+ 187 | }                                        | True                                | 
+ 188 |                                          | True                                | 
+ 189 | static void log5(const char *msg, ...)   | True                                | 
+ 190 | {                                        | True                                | 
+ 191 |  va_list va;                             | True                                | 
+ 192 |  va_start(va, msg);                      | True                                | 
+ 193 |  crondlog(5, msg, va);                   | True                                | 
+ 194 |  va_end(va);                             | True                                | 
+ 195 | }                                        | True                                | 
+ 196 |                                          | True                                | 
+ 197 | static void log7(const char *msg, ...)   | True                                | 
+ 198 | {                                        | True                                | 
+ 199 |  va_list va;                             | True                                | 
+ 200 |  va_start(va, msg);                      | True                                | 
+ 201 |  crondlog(7, msg, va);                   | True                                | 
+ 202 |  va_end(va);                             | True                                | 
+ 203 | }                                        | True                                | 
+ 204 |                                          | True                                | 
+ 205 | static void log8(const char *msg, ...)   | True                                | 
+ 206 | {                                        | True                                | 
+ 207 |  va_list va;                             | True                                | 
+ 208 |  va_start(va, msg);                      | True                                | 
+ 209 |  crondlog(8, msg, va);                   | True                                | 
+ 210 |  va_end(va);                             | True                                | 
+ 211 | }                                        | True                                | 
+ 212 |                                          | True                                | 
+ 213 |                                          | True                                | 
+ 214 | static const char DowAry[] ALIGN1 =      | True                                | 
+ 215 |  "sun""mon""tue""wed""thu""fri""sat"     | True                                | 
+ 216 | ;                                        | True                                | 
+ 217 |                                          | True                                | 
+ 218 | static const char MonAry[] ALIGN1 =      | True                                | 
+ 219 |  "jan""feb""mar""apr""may""jun""jul""aug | True                                | 
+ 220 | ;                                        | True                                | 
+ 221 |                                          | True                                | 
+ 222 | static void ParseField(char *user, char  | True                                | 
+ 223 |     const char *names, char *ptr)        | True                                | 
+ 224 | /* 'names' is a pointer to a set of 3-ch | True                                | 
+ 225 | {                                        | True                                | 
+ 226 |  char *base = ptr;                       | True                                | 
+ 227 |  int n1 = -1;                            | True                                | 
+ 228 |  int n2 = -1;                            | True                                | 
+ 229 |                                          | True                                | 
+ 230 |  // this can't happen due to config_read | True                                | 
+ 231 |  /*if (base == NULL)                     | True                                | 
+ 232 |   return;*/                              | True                                | 
+ 233 |                                          | True                                | 
+ 234 |  while (1) {                             | True                                | 
+ 235 |   int skip = 0;                          | True                                | 
+ 236 |                                          | True                                | 
+ 237 |   /* Handle numeric digit or symbol or ' | True                                | 
+ 238 |   if (*ptr == '*') {                     | True                                | 
+ 239 |    n1 = 0;  /* everything will be filled | True                                | 
+ 240 |    n2 = modvalue - 1;                    | True                                | 
+ 241 |    skip = 1;                             | True                                | 
+ 242 |    ++ptr;                                | True                                | 
+ 243 |   } else if (isdigit(*ptr)) {            | True                                | 
+ 244 |    char *endp;                           | True                                | 
+ 245 |    if (n1 < 0) {                         | True                                | 
+ 246 |     n1 = strtol(ptr, &endp, 10) + off;   | True                                | 
+ 247 |    } else {                              | True                                | 
+ 248 |     n2 = strtol(ptr, &endp, 10) + off;   | True                                | 
+ 249 |    }                                     | True                                | 
+ 250 |    ptr = endp; /* gcc likes temp var for | True                                | 
+ 251 |    skip = 1;                             | True                                | 
+ 252 |   } else if (names) {                    | True                                | 
+ 253 |    int i;                                | True                                | 
+ 254 |                                          | True                                | 
+ 255 |    for (i = 0; names[i]; i += 3) {       | True                                | 
+ 256 |     /* was using strncmp before... */    | True                                | 
+ 257 |     if (strncasecmp(ptr, &names[i], 3) = | True                                | 
+ 258 |      ptr += 3;                           | True                                | 
+ 259 |      if (n1 < 0) {                       | True                                | 
+ 260 |       n1 = i / 3;                        | True                                | 
+ 261 |      } else {                            | True                                | 
+ 262 |       n2 = i / 3;                        | True                                | 
+ 263 |      }                                   | True                                | 
+ 264 |      skip = 1;                           | True                                | 
+ 265 |      break;                              | True                                | 
+ 266 |     }                                    | True                                | 
+ 267 |    }                                     | True                                | 
+ 268 |   }                                      | True                                | 
+ 269 |                                          | True                                | 
+ 270 |   /* handle optional range '-' */        | True                                | 
+ 271 |   if (skip == 0) {                       | True                                | 
+ 272 |    goto err;                             | True                                | 
+ 273 |   }                                      | True                                | 
+ 274 |   if (*ptr == '-' && n2 < 0) {           | True                                | 
+ 275 |    ++ptr;                                | True                                | 
+ 276 |    continue;                             | True                                | 
+ 277 |   }                                      | True                                | 
+ 278 |                                          | True                                | 
+ 279 |   /*                                     | True                                | 
+ 280 |    * collapse single-value ranges, handl | True                                | 
+ 281 |    * in the character array appropriatel | True                                | 
+ 282 |    */                                    | True                                | 
+ 283 |   if (n2 < 0) {                          | True                                | 
+ 284 |    n2 = n1;                              | True                                | 
+ 285 |   }                                      | True                                | 
+ 286 |   if (*ptr == '/') {                     | True                                | 
+ 287 |    char *endp;                           | True                                | 
+ 288 |    skip = strtol(ptr + 1, &endp, 10);    | True                                | 
+ 289 |    ptr = endp; /* gcc likes temp var for | True                                | 
+ 290 |   }                                      | True                                | 
+ 291 |                                          | True                                | 
+ 292 |   /*                                     | True                                | 
+ 293 |    * fill array, using a failsafe is the | True                                | 
+ 294 |    * an endless loop                     | True                                | 
+ 295 |    */                                    | True                                | 
+ 296 |   {                                      | True                                | 
+ 297 |    int s0 = 1;                           | True                                | 
+ 298 |    int failsafe = 1024;                  | True                                | 
+ 299 |                                          | True                                | 
+ 300 |    --n1;                                 | True                                | 
+ 301 |    do {                                  | True                                | 
+ 302 |     n1 = (n1 + 1) % modvalue;            | True                                | 
+ 303 |                                          | True                                | 
+ 304 |     if (--s0 == 0) {                     | True                                | 
+ 305 |      ary[n1 % modvalue] = 1;             | True                                | 
+ 306 |      s0 = skip;                          | True                                | 
+ 307 |     }                                    | True                                | 
+ 308 |     if (--failsafe == 0) {               | True                                | 
+ 309 |      goto err;                           | True                                | 
+ 310 |     }                                    | True                                | 
+ 311 |    } while (n1 != n2);                   | True                                | 
+ 312 |   }                                      | True                                | 
+ 313 |   if (*ptr != ',') {                     | True                                | 
+ 314 |    break;                                | True                                | 
+ 315 |   }                                      | True                                | 
+ 316 |   ++ptr;                                 | True                                | 
+ 317 |   n1 = -1;                               | True                                | 
+ 318 |   n2 = -1;                               | True                                | 
+ 319 |  }                                       | True                                | 
+ 320 |                                          | True                                | 
+ 321 |  if (*ptr) {                             | True                                | 
+ 322 |  err:                                    | True                                | 
+ 323 |   bb_error_msg("user %s: parse error at  | True                                | 
+ 324 |   return;                                | True                                | 
+ 325 |  }                                       | True                                | 
+ 326 |                                          | True                                | 
+ 327 |  /* can't use log5 (it inserts newlines) | True                                | 
+ 328 |  if (G.log_level <= 5 && logmode != LOGM | True                                | 
+ 329 |   int i;                                 | True                                | 
+ 330 |   for (i = 0; i < modvalue; ++i)         | True                                | 
+ 331 |    fprintf(stderr, "%d", (unsigned char) | True                                | 
+ 332 |   bb_putchar_stderr('\n');               | True                                | 
+ 333 |  }                                       | True                                | 
+ 334 | }                                        | True                                | 
+ 335 |                                          | True                                | 
+ 336 | static void FixDayDow(CronLine *line)    | True                                | 
+ 337 | {                                        | True                                | 
+ 338 |  unsigned i;                             | True                                | 
+ 339 |  int weekUsed = 0;                       | True                                | 
+ 340 |  int daysUsed = 0;                       | True                                | 
+ 341 |                                          | True                                | 
+ 342 |  for (i = 0; i < ARRAY_SIZE(line->cl_Dow | True                                | 
+ 343 |   if (line->cl_Dow[i] == 0) {            | True                                | 
+ 344 |    weekUsed = 1;                         | True                                | 
+ 345 |    break;                                | True                                | 
+ 346 |   }                                      | True                                | 
+ 347 |  }                                       | True                                | 
+ 348 |  for (i = 0; i < ARRAY_SIZE(line->cl_Day | True                                | 
+ 349 |   if (line->cl_Days[i] == 0) {           | True                                | 
+ 350 |    daysUsed = 1;                         | True                                | 
+ 351 |    break;                                | True                                | 
+ 352 |   }                                      | True                                | 
+ 353 |  }                                       | True                                | 
+ 354 |  if (weekUsed != daysUsed) {             | True                                | 
+ 355 |   if (weekUsed)                          | True                                | 
+ 356 |    memset(line->cl_Days, 0, sizeof(line- | True                                | 
+ 357 |   else /* daysUsed */                    | True                                | 
+ 358 |    memset(line->cl_Dow, 0, sizeof(line-> | True                                | 
+ 359 |  }                                       | True                                | 
+ 360 | }                                        | True                                | 
+ 361 |                                          | True                                | 
+ 362 | /*                                       | True                                | 
+ 363 |  * delete_cronfile() - delete user datab | True                                | 
+ 364 |  *                                       | True                                | 
+ 365 |  * Note: multiple entries for same user  | True                                | 
+ 366 |  * completely delete a database due to r | True                                | 
+ 367 |  */                                      | True                                | 
+ 368 | //FIXME: we will start a new job even if | True                                | 
+ 369 | //if crontab was reloaded: crond thinks  | True                                | 
+ 370 | //even if they are in fact completely th | True                                | 
+ 371 | //Crontab was:                           | True                                | 
+ 372 | // 0-59 * * * * job1                     | True                                | 
+ 373 | // 0-59 * * * * long_running_job2        | True                                | 
+ 374 | //User edits crontab to:                 | True                                | 
+ 375 | // 0-59 * * * * job1_updated             | True                                | 
+ 376 | // 0-59 * * * * long_running_job2        | True                                | 
+ 377 | //Bug: crond can now start another long_ | True                                | 
+ 378 | //is still running.                      | True                                | 
+ 379 | //OTOH most other versions of cron do no | True                                | 
+ 380 | //they end up with multiple copies of jo | True                                | 
+ 381 | static void delete_cronfile(const char * | True                                | 
+ 382 | {                                        | True                                | 
+ 383 |  CronFile **pfile = &G.cron_files;       | True                                | 
+ 384 |  CronFile *file;                         | True                                | 
+ 385 |                                          | True                                | 
+ 386 |  while ((file = *pfile) != NULL) {       | True                                | 
+ 387 |   if (strcmp(userName, file->cf_username | True                                | 
+ 388 |    CronLine **pline = &file->cf_lines;   | True                                | 
+ 389 |    CronLine *line;                       | True                                | 
+ 390 |                                          | True                                | 
+ 391 |    file->cf_has_running = 0;             | True                                | 
+ 392 |    file->cf_deleted = 1;                 | True                                | 
+ 393 |                                          | True                                | 
+ 394 |    while ((line = *pline) != NULL) {     | True                                | 
+ 395 |     if (line->cl_pid > 0) {              | True                                | 
+ 396 |      file->cf_has_running = 1;           | True                                | 
+ 397 |      pline = &line->cl_next;             | True                                | 
+ 398 |     } else {                             | True                                | 
+ 399 |      *pline = line->cl_next;             | True                                | 
+ 400 |      free(line->cl_cmd);                 | True                                | 
+ 401 |      free(line);                         | True                                | 
+ 402 |     }                                    | True                                | 
+ 403 |    }                                     | True                                | 
+ 404 |    if (file->cf_has_running == 0) {      | True                                | 
+ 405 |     *pfile = file->cf_next;              | True                                | 
+ 406 |     free(file->cf_username);             | True                                | 
+ 407 |     free(file);                          | True                                | 
+ 408 |     continue;                            | True                                | 
+ 409 |    }                                     | True                                | 
+ 410 |   }                                      | True                                | 
+ 411 |   pfile = &file->cf_next;                | True                                | 
+ 412 |  }                                       | True                                | 
+ 413 | }                                        | True                                | 
+ 414 |                                          | True                                | 
+ 415 | static void load_crontab(const char *fil | True                                | 
+ 416 | {                                        | True                                | 
+ 417 |  struct parser_t *parser;                | True                                | 
+ 418 |  struct stat sbuf;                       | True                                | 
+ 419 |  int maxLines;                           | True                                | 
+ 420 |  char *tokens[6];                        | True                                | 
+ 421 | #if ENABLE_FEATURE_CROND_CALL_SENDMAIL   | True                                | 
+ 422 |  char *mailTo = NULL;                    | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 423 | #endif                                   | True                                | 
+ 424 |  char *shell = NULL;                     | True                                | 
+ 425 |  char *path = NULL;                      | True                                | 
+ 426 |                                          | True                                | 
+ 427 |  delete_cronfile(fileName);              | True                                | 
+ 428 |                                          | True                                | 
+ 429 |  if (!getpwnam(fileName)) {              | True                                | 
+ 430 |   log7("ignoring file '%s' (no such user | True                                | 
+ 431 |   return;                                | True                                | 
+ 432 |  }                                       | True                                | 
+ 433 |                                          | True                                | 
+ 434 |  parser = config_open(fileName);         | True                                | 
+ 435 |  if (!parser)                            | True                                | 
+ 436 |   return;                                | True                                | 
+ 437 |                                          | True                                | 
+ 438 |  maxLines = (strcmp(fileName, "root") == | True                                | 
+ 439 |                                          | True                                | 
+ 440 |  if (fstat(fileno(parser->fp), &sbuf) == | True                                | 
+ 441 |   CronFile *file = xzalloc(sizeof(CronFi | True                                | 
+ 442 |   CronLine **pline;                      | True                                | 
+ 443 |   int n;                                 | True                                | 
+ 444 |                                          | True                                | 
+ 445 |   file->cf_username = xstrdup(fileName); | True                                | 
+ 446 |   pline = &file->cf_lines;               | True                                | 
+ 447 |                                          | True                                | 
+ 448 |   while (1) {                            | True                                | 
+ 449 |    CronLine *line;                       | True                                | 
+ 450 |                                          | True                                | 
+ 451 |    if (!--maxLines) {                    | True                                | 
+ 452 |     bb_error_msg("user %s: too many line | True                                | 
+ 453 |     break;                               | True                                | 
+ 454 |    }                                     | True                                | 
+ 455 |                                          | True                                | 
+ 456 |    n = config_read(parser, tokens, 6, 1, | True                                | 
+ 457 |    if (!n)                               | True                                | 
+ 458 |     break;                               | True                                | 
+ 459 |                                          | True                                | 
+ 460 |    log5("user:%s entry:%s", fileName, pa | True                                | 
+ 461 |                                          | True                                | 
+ 462 |    /* check if line is setting MAILTO= * | True                                | 
+ 463 |    if (is_prefixed_with(tokens[0], "MAIL | True                                | 
+ 464 | #if ENABLE_FEATURE_CROND_CALL_SENDMAIL   | True                                | 
+ 465 |     free(mailTo);                        | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 466 |     mailTo = (tokens[0][7]) ? xstrdup(&t | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 467 | #endif /* otherwise just ignore such lin | True                                | 
+ 468 |     continue;                            | True                                | 
+ 469 |    }                                     | True                                | 
+ 470 |    if (is_prefixed_with(tokens[0], "SHEL | True                                | 
+ 471 |     free(shell);                         | True                                | 
+ 472 |     shell = xstrdup(&tokens[0][6]);      | True                                | 
+ 473 |     continue;                            | True                                | 
+ 474 |    }                                     | True                                | 
+ 475 |    if (is_prefixed_with(tokens[0], "PATH | True                                | 
+ 476 |     free(path);                          | True                                | 
+ 477 |     path = xstrdup(&tokens[0][5]);       | True                                | 
+ 478 |     continue;                            | True                                | 
+ 479 |    }                                     | True                                | 
+ 480 | //TODO: handle HOME= too? Better yet, ha | True                                | 
+ 481 | //name = value                           | True                                | 
+ 482 | //                                       | True                                | 
+ 483 | //where the spaces around the equal-sign | True                                | 
+ 484 | //non-leading spaces in value will be pa | True                                | 
+ 485 | //The value string may be placed in quot | True                                | 
+ 486 | //to preserve leading or trailing blanks | True                                | 
+ 487 | //                                       | True                                | 
+ 488 | //Several environment variables are set  | True                                | 
+ 489 | //SHELL is set to /bin/sh, and LOGNAME a | True                                | 
+ 490 | //line of the crontab's owner.  HOME, SH | True                                | 
+ 491 | //settings in the crontab; LOGNAME may n | True                                | 
+ 492 |                                          | True                                | 
+ 493 | #if ENABLE_FEATURE_CROND_SPECIAL_TIMES   | True                                | 
+ 494 |    if (tokens[0][0] == '@') {            | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 495 |     /*                                   | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 496 |      * "@daily /a/script/to/run PARAM1 P | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 497 |      */                                  | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 498 |     typedef struct SpecialEntry {        | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 499 |      const char *name;                   | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 500 |      const char tokens[8];               | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 501 |     } SpecialEntry;                      | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 502 |     static const SpecialEntry SpecAry[]  | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 503 |      /*              hour  day   month w | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 504 |      { "yearly",     "0\0" "1\0" "1\0" " | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 505 |      { "annually",   "0\0" "1\0" "1\0" " | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 506 |      { "monthly",    "0\0" "1\0" "*\0" " | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 507 |      { "weekly",     "0\0" "*\0" "*\0" " | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 508 |      { "daily",      "0\0" "*\0" "*\0" " | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 509 |      { "midnight",   "0\0" "*\0" "*\0" " | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 510 |      { "hourly",     "*\0" "*\0" "*\0" " | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 511 |      { "reboot",     ""                  | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 512 |     };                                   | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 513 |     const SpecialEntry *e = SpecAry;     | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 514 |                                          | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 515 |     if (n < 2)                           | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 516 |      continue;                           | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 517 |     for (;;) {                           | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 518 |      if (strcmp(e->name, tokens[0] + 1)  | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 519 |       /*                                 | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 520 |        * tokens[1] is only the first wor | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 521 |        * can'r use it.                   | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 522 |        * find the entire command in unmo | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 523 |        */                                | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 524 |       tokens[5] = skip_whitespace(       | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 525 |        skip_non_whitespace(              | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 526 |        skip_whitespace(parser->data)));  | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 527 |       if (e->tokens[0]) {                | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 528 |        char *et = (char*)e->tokens;      | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 529 |        /* minute is "0" for all specials | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 530 |        tokens[0] = (char*)"0";           | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 531 |        tokens[1] = et;                   | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 532 |        tokens[2] = et + 2;               | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 533 |        tokens[3] = et + 4;               | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 534 |        tokens[4] = et + 6;               | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 535 |       }                                  | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 536 |       goto got_it;                       | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 537 |      }                                   | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 538 |      if (!e->tokens[0])                  | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 539 |       break;                             | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 540 |      e++;                                | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 541 |     }                                    | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 542 |     continue; /* bad line (unrecognized  | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 543 |    }                                     | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 544 | #endif                                   | True                                | 
+ 545 |    /* check if a minimum of tokens is sp | True                                | 
+ 546 |    if (n < 6)                            | True                                | 
+ 547 |     continue;                            | True                                | 
+ 548 |  IF_FEATURE_CROND_SPECIAL_TIMES(         | True                                | 
+ 549 |   got_it:                                | True                                | 
+ 550 |  )                                       | True                                | 
+ 551 |    *pline = line = xzalloc(sizeof(*line) | True                                | 
+ 552 | #if ENABLE_FEATURE_CROND_SPECIAL_TIMES   | True                                | 
+ 553 |    if (tokens[0][0] == '@') { /* "@reboo | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 554 |     file->cf_wants_starting = 1;         | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 555 |     line->cl_pid = START_ME_REBOOT; /* w | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 556 |     /* line->cl_Mins/Hrs/etc stay zero:  | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 557 |    } else                                | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 558 | #endif                                   | True                                | 
+ 559 |    {                                     | True                                | 
+ 560 |     /* parse date ranges */              | True                                | 
+ 561 |     ParseField(file->cf_username, line-> | True                                | 
+ 562 |     ParseField(file->cf_username, line-> | True                                | 
+ 563 |     ParseField(file->cf_username, line-> | True                                | 
+ 564 |     ParseField(file->cf_username, line-> | True                                | 
+ 565 |     ParseField(file->cf_username, line-> | True                                | 
+ 566 |     /*                                   | True                                | 
+ 567 |      * fix days and dow - if one is not  | True                                | 
+ 568 |      * is "*", the other is set to 0, an | True                                | 
+ 569 |      */                                  | True                                | 
+ 570 |     FixDayDow(line);                     | True                                | 
+ 571 |    }                                     | True                                | 
+ 572 | #if ENABLE_FEATURE_CROND_CALL_SENDMAIL   | True                                | 
+ 573 |    /* copy mailto (can be NULL) */       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 574 |    line->cl_mailto = xstrdup(mailTo);    | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 575 | #endif                                   | True                                | 
+ 576 |    line->cl_shell = xstrdup(shell);      | True                                | 
+ 577 |    line->cl_path = xstrdup(path);        | True                                | 
+ 578 |    /* copy command */                    | True                                | 
+ 579 |    line->cl_cmd = xstrdup(tokens[5]);    | True                                | 
+ 580 |    pline = &line->cl_next;               | True                                | 
+ 581 | //bb_error_msg("M[%s]F[%s][%s][%s][%s][% | True                                | 
+ 582 |   }                                      | True                                | 
+ 583 |   *pline = NULL;                         | True                                | 
+ 584 |                                          | True                                | 
+ 585 |   file->cf_next = G.cron_files;          | True                                | 
+ 586 |   G.cron_files = file;                   | True                                | 
+ 587 |  }                                       | True                                | 
+ 588 |  config_close(parser);                   | True                                | 
+ 589 | #if ENABLE_FEATURE_CROND_CALL_SENDMAIL   | True                                | 
+ 590 |  free(mailTo);                           | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 591 | #endif                                   | True                                | 
+ 592 |  free(shell);                            | True                                | 
+ 593 | }                                        | True                                | 
+ 594 |                                          | True                                | 
+ 595 | static void process_cron_update_file(voi | True                                | 
+ 596 | {                                        | True                                | 
+ 597 |  FILE *fi;                               | True                                | 
+ 598 |  char buf[256];                          | True                                | 
+ 599 |                                          | True                                | 
+ 600 |  fi = fopen_for_read(CRONUPDATE);        | True                                | 
+ 601 |  if (fi != NULL) {                       | True                                | 
+ 602 |   unlink(CRONUPDATE);                    | True                                | 
+ 603 |   while (fgets(buf, sizeof(buf), fi) !=  | True                                | 
+ 604 |    /* use first word only */             | True                                | 
+ 605 |    skip_non_whitespace(buf)[0] = '\0';   | True                                | 
+ 606 |    load_crontab(buf);                    | True                                | 
+ 607 |   }                                      | True                                | 
+ 608 |   fclose(fi);                            | True                                | 
+ 609 |  }                                       | True                                | 
+ 610 | }                                        | True                                | 
+ 611 |                                          | True                                | 
+ 612 | static void rescan_crontab_dir(void)     | True                                | 
+ 613 | {                                        | True                                | 
+ 614 |  CronFile *file;                         | True                                | 
+ 615 |                                          | True                                | 
+ 616 |  /* Delete all files until we only have  | True                                | 
+ 617 |  again:                                  | True                                | 
+ 618 |  for (file = G.cron_files; file; file =  | True                                | 
+ 619 |   if (!file->cf_deleted) {               | True                                | 
+ 620 |    delete_cronfile(file->cf_username);   | True                                | 
+ 621 |    goto again;                           | True                                | 
+ 622 |   }                                      | True                                | 
+ 623 |  }                                       | True                                | 
+ 624 |                                          | True                                | 
+ 625 |  /* Remove cron update file */           | True                                | 
+ 626 |  unlink(CRONUPDATE);                     | True                                | 
+ 627 |  /* Re-chdir, in case directory was rena | True                                | 
+ 628 |  xchdir(G.crontab_dir_name);             | True                                | 
+ 629 |                                          | True                                | 
+ 630 |  /* Scan directory and add associated us | True                                | 
+ 631 |  {                                       | True                                | 
+ 632 |   DIR *dir = opendir(".");               | True                                | 
+ 633 |   struct dirent *den;                    | True                                | 
+ 634 |                                          | True                                | 
+ 635 |   /* xopendir exists, but "can't open '. | True                                | 
+ 636 |   if (!dir)                              | True                                | 
+ 637 |    bb_error_msg_and_die("can't open '%s' | True                                | 
+ 638 |   while ((den = readdir(dir)) != NULL) { | True                                | 
+ 639 |    if (strchr(den->d_name, '.') != NULL) | True                                | 
+ 640 |     continue;                            | True                                | 
+ 641 |    }                                     | True                                | 
+ 642 |    load_crontab(den->d_name);            | True                                | 
+ 643 |   }                                      | True                                | 
+ 644 |   closedir(dir);                         | True                                | 
+ 645 |  }                                       | True                                | 
+ 646 | }                                        | True                                | 
+ 647 |                                          | True                                | 
+ 648 | #if SETENV_LEAKS                         | True                                | 
+ 649 | /* We set environment *before* vfork (be | True                                | 
+ 650 |  * so we cannot use setenv() - repeated  | True                                | 
+ 651 |  * Using putenv(), and freeing memory af | True                                | 
+ 652 | static void safe_setenv(char **pvar_val, | True                                | 
+ 653 | {                                        | True                                | 
+ 654 |  char *var_val = *pvar_val;              | True                                | 
+ 655 |                                          | True                                | 
+ 656 |  if (var_val) {                          | True                                | 
+ 657 |   bb_unsetenv_and_free(var_val);         | True                                | 
+ 658 |  }                                       | True                                | 
+ 659 |  *pvar_val = xasprintf("%s=%s", var, val | True                                | 
+ 660 |  putenv(*pvar_val);                      | True                                | 
+ 661 | }                                        | True                                | 
+ 662 | #endif                                   | True                                | 
+ 663 |                                          | True                                | 
+ 664 | static void set_env_vars(struct passwd * | True                                | 
+ 665 | {                                        | True                                | 
+ 666 |  /* POSIX requires crond to set up at le | True                                | 
+ 667 |   */                                     | True                                | 
+ 668 | #if SETENV_LEAKS                         | True                                | 
+ 669 |  safe_setenv(&G.env_var_logname, "LOGNAM | True                                | 
+ 670 |  safe_setenv(&G.env_var_user, "USER", pa | True                                | 
+ 671 |  safe_setenv(&G.env_var_home, "HOME", pa | True                                | 
+ 672 |  safe_setenv(&G.env_var_shell, "SHELL",  | True                                | 
+ 673 |  if (path) safe_setenv(&G.env_var_shell, | True                                | 
+ 674 | #else                                    | True                                | 
+ 675 |  xsetenv("LOGNAME", pas->pw_name);       | !SETENV_LEAKS                       | 
+ 676 |  xsetenv("USER", pas->pw_name);          | !SETENV_LEAKS                       | 
+ 677 |  xsetenv("HOME", pas->pw_dir);           | !SETENV_LEAKS                       | 
+ 678 |  xsetenv("SHELL", shell);                | !SETENV_LEAKS                       | 
+ 679 |  if (path) xsetenv("PATH", path);        | !SETENV_LEAKS                       | 
+ 680 | #endif                                   | True                                | 
+ 681 | }                                        | True                                | 
+ 682 |                                          | True                                | 
+ 683 | static void change_user(struct passwd *p | True                                | 
+ 684 | {                                        | True                                | 
+ 685 |  /* careful: we're after vfork! */       | True                                | 
+ 686 |  change_identity(pas); /* - initgroups,  | True                                | 
+ 687 |  if (chdir_or_warn(pas->pw_dir) != 0) {  | True                                | 
+ 688 |   xchdir(CRON_DIR);                      | True                                | 
+ 689 |  }                                       | True                                | 
+ 690 | }                                        | True                                | 
+ 691 |                                          | True                                | 
+ 692 | // TODO: sendmail should be _run-time_ o | True                                | 
+ 693 | #if ENABLE_FEATURE_CROND_CALL_SENDMAIL   | True                                | 
+ 694 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 695 | static pid_t                             | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 696 | fork_job(const char *user, int mailFd, C | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 697 | {                                        | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 698 |  struct passwd *pas;                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 699 |  const char *shell, *prog;               | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 700 |  smallint sv_logmode;                    | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 701 |  pid_t pid;                              | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 702 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 703 |  /* prepare things before vfork */       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 704 |  pas = getpwnam(user);                   | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 705 |  if (!pas) {                             | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 706 |   bb_error_msg("can't get uid for %s", u | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 707 |   goto err;                              | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 708 |  }                                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 709 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 710 |  shell = line->cl_shell ? line->cl_shell | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 711 |  prog = run_sendmail ? SENDMAIL : shell; | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 712 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 713 |  set_env_vars(pas, shell, NULL); /* don' | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 714 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 715 |  sv_logmode = logmode;                   | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 716 |  pid = vfork();                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 717 |  if (pid == 0) {                         | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 718 |   /* CHILD */                            | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 719 |   /* initgroups, setgid, setuid, and chd | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 720 |   change_user(pas);                      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 721 |   log5("child running %s", prog);        | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 722 |   if (mailFd >= 0) {                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 723 |    xmove_fd(mailFd, run_sendmail ? 0 : 1 | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 724 |    dup2(1, 2);                           | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 725 |   }                                      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 726 |   /* crond 3.0pl1-100 puts tasks in sepa | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 727 |   bb_setpgrp();                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 728 |   if (!run_sendmail)                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 729 |    execlp(prog, prog, "-c", line->cl_cmd | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 730 |   else                                   | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 731 |    execlp(prog, prog, SENDMAIL_ARGS, (ch | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 732 |   /*                                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 733 |    * I want this error message on stderr | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 734 |    * even if other messages go only to s | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 735 |    */                                    | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 736 |   logmode |= LOGMODE_STDIO;              | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 737 |   bb_error_msg_and_die("can't execute '% | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 738 |  }                                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 739 |  logmode = sv_logmode;                   | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 740 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 741 |  if (pid < 0) {                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 742 |   bb_simple_perror_msg("vfork");         | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 743 |  err:                                    | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 744 |   pid = 0;                               | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 745 |  } /* else: PARENT, FORK SUCCESS */      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 746 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 747 |  /*                                      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 748 |   * Close the mail file descriptor.. we  | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 749 |   * a structure, closing it later, becau | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 750 |   */                                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 751 |  if (mailFd >= 0) {                      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 752 |   close(mailFd);                         | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 753 |  }                                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 754 |  return pid;                             | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 755 | }                                        | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 756 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 757 | static pid_t start_one_job(const char *u | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 758 | {                                        | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 759 |  char mailFile[128];                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 760 |  int mailFd = -1;                        | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 761 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 762 |  line->cl_pid = 0;                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 763 |  line->cl_empty_mail_size = 0;           | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 764 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 765 |  if (line->cl_mailto) {                  | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 766 |   /* Open mail file (owner is root so no | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 767 |   snprintf(mailFile, sizeof(mailFile), " | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 768 |   mailFd = open(mailFile, O_CREAT | O_TR | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 769 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 770 |   if (mailFd >= 0) {                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 771 |    fdprintf(mailFd, "To: %s\nSubject: cr | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 772 |     line->cl_cmd);                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 773 |    line->cl_empty_mail_size = lseek(mail | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 774 |   } else {                               | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 775 |    bb_error_msg("can't create mail file  | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 776 |      "discarding output", mailFile, user | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 777 |   }                                      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 778 |  }                                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 779 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 780 |  line->cl_pid = fork_job(user, mailFd, l | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 781 |  if (mailFd >= 0) {                      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 782 |   if (line->cl_pid <= 0) {               | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 783 |    unlink(mailFile);                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 784 |   } else {                               | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 785 |    /* rename mail-file based on pid of p | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 786 |    char *mailFile2 = xasprintf("%s/cron. | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 787 |    rename(mailFile, mailFile2); // TODO: | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 788 |    free(mailFile2);                      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 789 |   }                                      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 790 |  }                                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 791 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 792 |  return line->cl_pid;                    | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 793 | }                                        | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 794 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 795 | /*                                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 796 |  * process_finished_job - called when jo | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 797 |  */                                      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 798 | static void process_finished_job(const c | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 799 | {                                        | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 800 |  pid_t pid;                              | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 801 |  int mailFd;                             | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 802 |  char mailFile[128];                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 803 |  struct stat sbuf;                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 804 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 805 |  pid = line->cl_pid;                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 806 |  line->cl_pid = 0;                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 807 |  if (pid <= 0) {                         | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 808 |   /* No job */                           | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 809 |   return;                                | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 810 |  }                                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 811 |  if (line->cl_empty_mail_size <= 0) {    | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 812 |   /* End of job and no mail file, or end | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 813 |   return;                                | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 814 |  }                                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 815 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 816 |  /*                                      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 817 |   * End of primary job - check for mail  | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 818 |   * If size has changed and the file is  | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 819 |   */                                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 820 |  snprintf(mailFile, sizeof(mailFile), "% | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 821 |  mailFd = open(mailFile, O_RDONLY);      | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 822 |  unlink(mailFile);                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 823 |  if (mailFd < 0) {                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 824 |   return;                                | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 825 |  }                                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 826 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 827 |  if (fstat(mailFd, &sbuf) < 0            | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 828 |   || sbuf.st_uid != DAEMON_UID           | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 829 |   || sbuf.st_nlink != 0                  | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 830 |   || sbuf.st_size == line->cl_empty_mail | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 831 |   || !S_ISREG(sbuf.st_mode)              | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 832 |  ) {                                     | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 833 |   close(mailFd);                         | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 834 |   return;                                | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 835 |  }                                       | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 836 |  line->cl_empty_mail_size = 0;           | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 837 |  /* if (line->cl_mailto) - always true i | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 838 |   line->cl_pid = fork_job(user, mailFd,  | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 839 | }                                        | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 840 |                                          | ENABLE_FEATURE_CROND_CALL_SENDMAIL  | 
+ 841 | #else /* !ENABLE_FEATURE_CROND_CALL_SEND | True                                | 
+ 842 |                                          | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 843 | static pid_t start_one_job(const char *u | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 844 | {                                        | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 845 |  const char *shell;                      | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 846 |  struct passwd *pas;                     | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 847 |  pid_t pid;                              | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 848 |                                          | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 849 |  pas = getpwnam(user);                   | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 850 |  if (!pas) {                             | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 851 |   bb_error_msg("can't get uid for %s", u | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 852 |   goto err;                              | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 853 |  }                                       | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 854 |                                          | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 855 |  /* Prepare things before vfork */       | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 856 |  shell = line->cl_shell ? line->cl_shell | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 857 |  set_env_vars(pas, shell, line->cl_path) | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 858 |                                          | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 859 |  /* Fork as the user in question and run | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 860 |  pid = vfork();                          | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 861 |  if (pid == 0) {                         | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 862 |   /* CHILD */                            | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 863 |   /* initgroups, setgid, setuid, and chd | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 864 |   change_user(pas);                      | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 865 |   log5("child running %s", shell);       | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 866 |   /* crond 3.0pl1-100 puts tasks in sepa | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 867 |   bb_setpgrp();                          | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 868 |   execl(shell, shell, "-c", line->cl_cmd | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 869 |   bb_error_msg_and_die("can't execute '% | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 870 |  }                                       | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 871 |  if (pid < 0) {                          | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 872 |   bb_simple_perror_msg("vfork");         | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 873 |  err:                                    | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 874 |   pid = 0;                               | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 875 |  }                                       | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 876 |  line->cl_pid = pid;                     | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 877 |  return pid;                             | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 878 | }                                        | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 879 |                                          | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 880 | #define process_finished_job(user, line) | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 881 |                                          | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 882 | #endif /* !ENABLE_FEATURE_CROND_CALL_SEN | True                                | 
+ 883 |                                          | True                                | 
+ 884 | /*                                       | True                                | 
+ 885 |  * Determine which jobs need to be run.  | True                                | 
+ 886 |  * period is about a minute (one scan).  | True                                | 
+ 887 |  * hour (60 scans).                      | True                                | 
+ 888 |  */                                      | True                                | 
+ 889 | static void flag_starting_jobs(time_t t1 | True                                | 
+ 890 | {                                        | True                                | 
+ 891 |  time_t t;                               | True                                | 
+ 892 |                                          | True                                | 
+ 893 |  /* Find jobs > t1 and <= t2 */          | True                                | 
+ 894 |                                          | True                                | 
+ 895 |  for (t = t1 - t1 % 60; t <= t2; t += 60 | True                                | 
+ 896 |   struct tm *ptm;                        | True                                | 
+ 897 |   CronFile *file;                        | True                                | 
+ 898 |   CronLine *line;                        | True                                | 
+ 899 |                                          | True                                | 
+ 900 |   if (t <= t1)                           | True                                | 
+ 901 |    continue;                             | True                                | 
+ 902 |                                          | True                                | 
+ 903 |   ptm = localtime(&t);                   | True                                | 
+ 904 |   for (file = G.cron_files; file; file = | True                                | 
+ 905 |    log5("file %s:", file->cf_username);  | True                                | 
+ 906 |    if (file->cf_deleted)                 | True                                | 
+ 907 |     continue;                            | True                                | 
+ 908 |    for (line = file->cf_lines; line; lin | True                                | 
+ 909 |     log5(" line %s", line->cl_cmd);      | True                                | 
+ 910 |     if (line->cl_Mins[ptm->tm_min]       | True                                | 
+ 911 |      && line->cl_Hrs[ptm->tm_hour]       | True                                | 
+ 912 |      && (line->cl_Days[ptm->tm_mday] ||  | True                                | 
+ 913 |      && line->cl_Mons[ptm->tm_mon]       | True                                | 
+ 914 |     ) {                                  | True                                | 
+ 915 |      log5(" job: %d %s",                 | True                                | 
+ 916 |        (int)line->cl_pid, line->cl_cmd); | True                                | 
+ 917 |      if (line->cl_pid > 0) {             | True                                | 
+ 918 |       log8("user %s: process already run | True                                | 
+ 919 |        file->cf_username, line->cl_cmd); | True                                | 
+ 920 |      } else if (line->cl_pid == 0) {     | True                                | 
+ 921 |       line->cl_pid = START_ME_NORMAL;    | True                                | 
+ 922 |       file->cf_wants_starting = 1;       | True                                | 
+ 923 |      }                                   | True                                | 
+ 924 |     }                                    | True                                | 
+ 925 |    }                                     | True                                | 
+ 926 |   }                                      | True                                | 
+ 927 |  }                                       | True                                | 
+ 928 | }                                        | True                                | 
+ 929 |                                          | True                                | 
+ 930 | #if ENABLE_FEATURE_CROND_SPECIAL_TIMES   | True                                | 
+ 931 | static int touch_reboot_file(void)       | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 932 | {                                        | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 933 |  int fd = open(CRON_REBOOT, O_WRONLY | O | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 934 |  if (fd >= 0) {                          | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 935 |   close(fd);                             | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 936 |   return 1;                              | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 937 |  }                                       | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 938 |  /* File (presumably) exists - this is n | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 939 |  return 0;                               | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 940 | }                                        | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+ 941 | #endif                                   | True                                | 
+ 942 |                                          | True                                | 
+ 943 | static void start_jobs(int wants_start)  | True                                | 
+ 944 | {                                        | True                                | 
+ 945 |  CronFile *file;                         | True                                | 
+ 946 |  CronLine *line;                         | True                                | 
+ 947 |                                          | True                                | 
+ 948 |  for (file = G.cron_files; file; file =  | True                                | 
+ 949 |   if (!file->cf_wants_starting)          | True                                | 
+ 950 |    continue;                             | True                                | 
+ 951 |                                          | True                                | 
+ 952 |   file->cf_wants_starting = 0;           | True                                | 
+ 953 |   for (line = file->cf_lines; line; line | True                                | 
+ 954 |    pid_t pid;                            | True                                | 
+ 955 |    if (line->cl_pid != wants_start)      | True                                | 
+ 956 |     continue;                            | True                                | 
+ 957 |                                          | True                                | 
+ 958 |    pid = start_one_job(file->cf_username | True                                | 
+ 959 |    log8("USER %s pid %3d cmd %s",        | True                                | 
+ 960 |     file->cf_username, (int)pid, line->c | True                                | 
+ 961 |    if (pid < 0) {                        | True                                | 
+ 962 |     file->cf_wants_starting = 1;         | True                                | 
+ 963 |    }                                     | True                                | 
+ 964 |    if (pid > 0) {                        | True                                | 
+ 965 |     file->cf_has_running = 1;            | True                                | 
+ 966 |    }                                     | True                                | 
+ 967 |   }                                      | True                                | 
+ 968 |  }                                       | True                                | 
+ 969 | }                                        | True                                | 
+ 970 |                                          | True                                | 
+ 971 | /*                                       | True                                | 
+ 972 |  * Check for job completion, return numb | True                                | 
+ 973 |  * all done.                             | True                                | 
+ 974 |  */                                      | True                                | 
+ 975 | static int check_completions(void)       | True                                | 
+ 976 | {                                        | True                                | 
+ 977 |  CronFile *file;                         | True                                | 
+ 978 |  CronLine *line;                         | True                                | 
+ 979 |  int num_still_running = 0;              | True                                | 
+ 980 |                                          | True                                | 
+ 981 |  for (file = G.cron_files; file; file =  | True                                | 
+ 982 |   if (!file->cf_has_running)             | True                                | 
+ 983 |    continue;                             | True                                | 
+ 984 |                                          | True                                | 
+ 985 |   file->cf_has_running = 0;              | True                                | 
+ 986 |   for (line = file->cf_lines; line; line | True                                | 
+ 987 |    int r;                                | True                                | 
+ 988 |                                          | True                                | 
+ 989 |    if (line->cl_pid <= 0)                | True                                | 
+ 990 |     continue;                            | True                                | 
+ 991 |                                          | True                                | 
+ 992 |    r = safe_waitpid(line->cl_pid, NULL,  | True                                | 
+ 993 |    if (r < 0 || r == line->cl_pid) {     | True                                | 
+ 994 |     process_finished_job(file->cf_userna | !ENABLE_FEATURE_CROND_CALL_SENDMAIL | 
+ 995 |     if (line->cl_pid == 0) {             | True                                | 
+ 996 |      /* sendmail was not started for it  | True                                | 
+ 997 |      continue;                           | True                                | 
+ 998 |     }                                    | True                                | 
+ 999 |     /* else: sendmail was started, job i | True                                | 
+1000 |    }                                     | True                                | 
+1001 |    /* else: r == 0: "process is still ru | True                                | 
+1002 |    file->cf_has_running = 1;             | True                                | 
+1003 |   }                                      | True                                | 
+1004 |                                          | True                                | 
+1005 |   /* Reap any other children we don't ac | True                                | 
+1006 |    * Reportedly, some people run crond a | True                                | 
+1007 |    * Thus, we need to reap orphans, like | True                                | 
+1008 |    */                                    | True                                | 
+1009 |   while (wait_any_nohang(NULL) > 0)      | True                                | 
+1010 |    continue;                             | True                                | 
+1011 |                                          | True                                | 
+1012 | //FIXME: if !file->cf_has_running && fil | True                                | 
+1013 | //otherwise deleted entries will stay fo | True                                | 
+1014 |   num_still_running += file->cf_has_runn | True                                | 
+1015 |  }                                       | True                                | 
+1016 |  return num_still_running;               | True                                | 
+1017 | }                                        | True                                | 
+1018 |                                          | True                                | 
+1019 | static void reopen_logfile_to_stderr(voi | True                                | 
+1020 | {                                        | True                                | 
+1021 |  if (G.log_filename) {                   | True                                | 
+1022 |   int logfd = open_or_warn(G.log_filenam | True                                | 
+1023 |   if (logfd >= 0)                        | True                                | 
+1024 |    xmove_fd(logfd, STDERR_FILENO);       | True                                | 
+1025 |  }                                       | True                                | 
+1026 | }                                        | True                                | 
+1027 |                                          | True                                | 
+1028 | int crond_main(int argc, char **argv) MA | True                                | 
+1029 | int crond_main(int argc UNUSED_PARAM, ch | True                                | 
+1030 | {                                        | True                                | 
+1031 |  time_t t2;                              | True                                | 
+1032 |  unsigned rescan;                        | True                                | 
+1033 |  unsigned sleep_time;                    | True                                | 
+1034 |  unsigned opts;                          | True                                | 
+1035 |                                          | True                                | 
+1036 |  INIT_G();                               | True                                | 
+1037 |                                          | True                                | 
+1038 |  opts = getopt32(argv, "^"               | True                                | 
+1039 |    "l:L:fbSc:" IF_FEATURE_CROND_D("d:")  | True                                | 
+1040 |    "\0"                                  | True                                | 
+1041 |    /* "-b after -f is ignored", and so o | True                                | 
+1042 |    "f-b:b-f:S-L:L-S" IF_FEATURE_CROND_D( | True                                | 
+1043 |    /* -l and -d have numeric param */    | True                                | 
+1044 |    ":l+" IF_FEATURE_CROND_D(":d+")       | True                                | 
+1045 |    ,                                     | True                                | 
+1046 |    &G.log_level, &G.log_filename, &G.cro | True                                | 
+1047 |    IF_FEATURE_CROND_D(,&G.log_level)     | True                                | 
+1048 |  );                                      | True                                | 
+1049 |  /* both -d N and -l N set the same vari | True                                | 
+1050 |                                          | True                                | 
+1051 |  if (!(opts & OPT_f)) {                  | True                                | 
+1052 |   /* close stdin, stdout, stderr.        | True                                | 
+1053 |    * close unused descriptors - don't ne | True                                | 
+1054 |   bb_daemonize_or_rexec(DAEMON_CLOSE_EXT | True                                | 
+1055 |  }                                       | True                                | 
+1056 |                                          | True                                | 
+1057 |  if (!(opts & OPT_d) && G.log_filename = | True                                | 
+1058 |   /* logging to syslog */                | True                                | 
+1059 |   openlog(applet_name, LOG_CONS | LOG_PI | True                                | 
+1060 |   logmode = LOGMODE_SYSLOG;              | True                                | 
+1061 |  }                                       | True                                | 
+1062 |                                          | True                                | 
+1063 |  //signal(SIGHUP, SIG_IGN); /* ? origina | True                                | 
+1064 |                                          | True                                | 
+1065 |  reopen_logfile_to_stderr();             | True                                | 
+1066 |  xchdir(G.crontab_dir_name);             | True                                | 
+1067 |  /* $SHELL, or current UID's shell, or D | True                                | 
+1068 |  /* Useful on Android where DEFAULT_SHEL | True                                | 
+1069 |  G.default_shell = xstrdup(get_shell_nam | True                                | 
+1070 |                                          | True                                | 
+1071 |  log8("crond (busybox "BB_VER") started, | True                                | 
+1072 |  rescan_crontab_dir();                   | True                                | 
+1073 |  write_pidfile_std_path_and_ext("crond") | True                                | 
+1074 | #if ENABLE_FEATURE_CROND_SPECIAL_TIMES   | True                                | 
+1075 |  if (touch_reboot_file())                | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+1076 |   start_jobs(START_ME_REBOOT); /* start  | ENABLE_FEATURE_CROND_SPECIAL_TIMES  | 
+1077 | #endif                                   | True                                | 
+1078 |                                          | True                                | 
+1079 |  /* Main loop */                         | True                                | 
+1080 |  t2 = time(NULL);                        | True                                | 
+1081 |  rescan = 60;                            | True                                | 
+1082 |  sleep_time = 60;                        | True                                | 
+1083 |  for (;;) {                              | True                                | 
+1084 |   struct stat sbuf;                      | True                                | 
+1085 |   time_t t1;                             | True                                | 
+1086 |   long dt;                               | True                                | 
+1087 |                                          | True                                | 
+1088 |   /* Synchronize to 1 minute, minimum 1  | True                                | 
+1089 |   t1 = t2;                               | True                                | 
+1090 |   sleep(sleep_time - (time(NULL) % sleep | True                                | 
+1091 |   t2 = time(NULL);                       | True                                | 
+1092 |   dt = (long)t2 - (long)t1;              | True                                | 
+1093 |                                          | True                                | 
+1094 |   reopen_logfile_to_stderr();            | True                                | 
+1095 |                                          | True                                | 
+1096 |   /*                                     | True                                | 
+1097 |    * The file 'cron.update' is checked t | True                                | 
+1098 |    * jobs.  The directory is rescanned o | True                                | 
+1099 |    * with any screwups.                  | True                                | 
+1100 |    *                                     | True                                | 
+1101 |    * Check for time jump.  Disparities o | True                                | 
+1102 |    * result in resynchronization.  A neg | True                                | 
+1103 |    * less than an hour causes us to effe | True                                | 
+1104 |    * match the original time (i.e. no re | True                                | 
+1105 |    * have just been run).  A positive di | True                                | 
+1106 |    * an hour causes intermediate jobs to | True                                | 
+1107 |    * in the worst case.                  | True                                | 
+1108 |    *                                     | True                                | 
+1109 |    * When running jobs, the inequality u | True                                | 
+1110 |    * equal to t1, and less then or equal | True                                | 
+1111 |    */                                    | True                                | 
+1112 |   if (stat(G.crontab_dir_name, &sbuf) != | True                                | 
+1113 |    sbuf.st_mtime = 0; /* force update (o | True                                | 
+1114 |   if (G.crontab_dir_mtime != sbuf.st_mti | True                                | 
+1115 |    G.crontab_dir_mtime = sbuf.st_mtime;  | True                                | 
+1116 |    rescan = 1;                           | True                                | 
+1117 |   }                                      | True                                | 
+1118 |   if (--rescan == 0) {                   | True                                | 
+1119 |    rescan = 60;                          | True                                | 
+1120 |    rescan_crontab_dir();                 | True                                | 
+1121 |   }                                      | True                                | 
+1122 |   process_cron_update_file();            | True                                | 
+1123 |   log5("wakeup dt=%ld", dt);             | True                                | 
+1124 |   if (dt < -60 * 60 || dt > 60 * 60) {   | True                                | 
+1125 |    bb_info_msg("time disparity of %ld mi | True                                | 
+1126 |    /* and we do not run any jobs in this | True                                | 
+1127 |   } else if (dt > 0) {                   | True                                | 
+1128 |    /* Usual case: time advances forward, | True                                | 
+1129 |    flag_starting_jobs(t1, t2);           | True                                | 
+1130 |    start_jobs(START_ME_NORMAL);          | True                                | 
+1131 |    sleep_time = 60;                      | True                                | 
+1132 |    if (check_completions() > 0) {        | True                                | 
+1133 |     /* some jobs are still running */    | True                                | 
+1134 |     sleep_time = 10;                     | True                                | 
+1135 |    }                                     | True                                | 
+1136 |   }                                      | True                                | 
+1137 |   /* else: time jumped back, do not run  | True                                | 
+1138 |  } /* for (;;) */                        | True                                | 
+1139 |                                          | True                                | 
+1140 |  return 0; /* not reached */             | True                                | 
+1141 | }                                        | True                                | 
+-----+------------------------------------------+-------------------------------------+
+     |                                          | +145MB, 300ms                       | 

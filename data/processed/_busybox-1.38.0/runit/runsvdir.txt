@@ -1,0 +1,432 @@
+FILE: data/raw/busybox-1.38.0/runit/runsvdir.c
+Resultado PCLocator:
+   # | line of code                             | Merge                       | 
+-----+------------------------------------------+-----------------------------+
+   1 | /*                                       | True                        | 
+   2 | Copyright (c) 2001-2006, Gerrit Pape     | True                        | 
+   3 | All rights reserved.                     | True                        | 
+   4 |                                          | True                        | 
+   5 | Redistribution and use in source and bin | True                        | 
+   6 | modification, are permitted provided tha | True                        | 
+   7 |                                          | True                        | 
+   8 |    1. Redistributions of source code mus | True                        | 
+   9 |       this list of conditions and the fo | True                        | 
+  10 |    2. Redistributions in binary form mus | True                        | 
+  11 |       notice, this list of conditions an | True                        | 
+  12 |       documentation and/or other materia | True                        | 
+  13 |    3. The name of the author may not be  | True                        | 
+  14 |       derived from this software without | True                        | 
+  15 |                                          | True                        | 
+  16 | THIS SOFTWARE IS PROVIDED BY THE AUTHOR  | True                        | 
+  17 | WARRANTIES, INCLUDING, BUT NOT LIMITED T | True                        | 
+  18 | MERCHANTABILITY AND FITNESS FOR A PARTIC | True                        | 
+  19 | EVENT SHALL THE AUTHOR BE LIABLE FOR ANY | True                        | 
+  20 | SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAM | True                        | 
+  21 | PROCUREMENT OF SUBSTITUTE GOODS OR SERVI | True                        | 
+  22 | OR BUSINESS INTERRUPTION) HOWEVER CAUSED | True                        | 
+  23 | WHETHER IN CONTRACT, STRICT LIABILITY, O | True                        | 
+  24 | OTHERWISE) ARISING IN ANY WAY OUT OF THE | True                        | 
+  25 | ADVISED OF THE POSSIBILITY OF SUCH DAMAG | True                        | 
+  26 | */                                       | True                        | 
+  27 |                                          | True                        | 
+  28 | /* Busyboxed by Denys Vlasenko <vda.linu | True                        | 
+  29 |                                          | True                        | 
+  30 | //config:config RUNSVDIR                 | True                        | 
+  31 | //config: bool "runsvdir (6.6 kb)"       | True                        | 
+  32 | //config: default y                      | True                        | 
+  33 | //config: help                           | True                        | 
+  34 | //config: runsvdir starts a runsv proces | True                        | 
+  35 | //config: a directory, in the services d | True                        | 
+  36 | //config: subdirectories, and restarts a | True                        | 
+  37 | //config:                                | True                        | 
+  38 | //config:config FEATURE_RUNSVDIR_LOG     | True                        | 
+  39 | //config: bool "Enable scrolling argumen | True                        | 
+  40 | //config: depends on RUNSVDIR            | True                        | 
+  41 | //config: default n                      | True                        | 
+  42 | //config: help                           | True                        | 
+  43 | //config: Enable feature where second pa | True                        | 
+  44 | //config: message (viewable via top/ps). | True                        | 
+  45 | //config: or no parameter), error messag | True                        | 
+  46 |                                          | True                        | 
+  47 | //applet:IF_RUNSVDIR(APPLET(runsvdir, BB | True                        | 
+  48 |                                          | True                        | 
+  49 | //kbuild:lib-$(CONFIG_RUNSVDIR) += runsv | True                        | 
+  50 |                                          | True                        | 
+  51 | //usage:#define runsvdir_trivial_usage   | True                        | 
+  52 | //usage:       "[-P] [-s SCRIPT] DIR"    | True                        | 
+  53 | //usage:#define runsvdir_full_usage "\n\ | True                        | 
+  54 | //usage:       "Start a runsv process fo | True                        | 
+  55 | //usage:     "\n -P  Put each runsv in a | True                        | 
+  56 | //usage:     "\n -s SCRIPT Run SCRIPT <s | True                        | 
+  57 |                                          | True                        | 
+  58 | #include <sys/file.h>                    | True                        | 
+  59 | #include "libbb.h"                       | True                        | 
+  60 | #include "common_bufsiz.h"               | True                        | 
+  61 | #include "runit_lib.h"                   | True                        | 
+  62 |                                          | True                        | 
+  63 | #define MAXSERVICES 1000                 | True                        | 
+  64 |                                          | True                        | 
+  65 | /* Should be not needed - all dirs are o | True                        | 
+  66 | #define CHECK_DEVNO_TOO 0                | True                        | 
+  67 |                                          | True                        | 
+  68 | struct service {                         | True                        | 
+  69 | #if CHECK_DEVNO_TOO                      | True                        | 
+  70 |  dev_t dev;                              | CHECK_DEVNO_TOO             | 
+  71 | #endif                                   | True                        | 
+  72 |  ino_t ino;                              | True                        | 
+  73 |  pid_t pid;                              | True                        | 
+  74 |  smallint isgone;                        | True                        | 
+  75 | };                                       | True                        | 
+  76 |                                          | True                        | 
+  77 | struct globals {                         | True                        | 
+  78 |  struct service *sv;                     | True                        | 
+  79 |  char *svdir;                            | True                        | 
+  80 |  int svnum;                              | True                        | 
+  81 | #if ENABLE_FEATURE_RUNSVDIR_LOG          | True                        | 
+  82 |  char *rplog;                            | ENABLE_FEATURE_RUNSVDIR_LOG | 
+  83 |  struct fd_pair logpipe;                 | ENABLE_FEATURE_RUNSVDIR_LOG | 
+  84 |  struct pollfd pfd[1];                   | ENABLE_FEATURE_RUNSVDIR_LOG | 
+  85 |  unsigned stamplog;                      | ENABLE_FEATURE_RUNSVDIR_LOG | 
+  86 | #endif                                   | True                        | 
+  87 | } FIX_ALIASING;                          | True                        | 
+  88 | #define G (*(struct globals*)bb_common_b | True                        | 
+  89 | #define sv          (G.sv          )     | True                        | 
+  90 | #define svdir       (G.svdir       )     | True                        | 
+  91 | #define svnum       (G.svnum       )     | True                        | 
+  92 | #define rplog       (G.rplog       )     | True                        | 
+  93 | #define logpipe     (G.logpipe     )     | True                        | 
+  94 | #define pfd         (G.pfd         )     | True                        | 
+  95 | #define stamplog    (G.stamplog    )     | True                        | 
+  96 | #define INIT_G() do { setup_common_bufsi | True                        | 
+  97 |                                          | True                        | 
+  98 | static void fatal2_cannot(const char *m1 | True                        | 
+  99 | {                                        | True                        | 
+ 100 |  bb_perror_msg_and_die("%s: fatal: can't | True                        | 
+ 101 |  /* was exiting 100 */                   | True                        | 
+ 102 | }                                        | True                        | 
+ 103 | static void warn3x(const char *m1, const | True                        | 
+ 104 | {                                        | True                        | 
+ 105 |  bb_error_msg("%s: warning: %s%s%s", svd | True                        | 
+ 106 | }                                        | True                        | 
+ 107 | static void warn2_cannot(const char *m1, | True                        | 
+ 108 | {                                        | True                        | 
+ 109 |  warn3x("can't ", m1, m2);               | True                        | 
+ 110 | }                                        | True                        | 
+ 111 | #if ENABLE_FEATURE_RUNSVDIR_LOG          | True                        | 
+ 112 | static void warnx(const char *m1)        | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 113 | {                                        | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 114 |  warn3x(m1, "", "");                     | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 115 | }                                        | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 116 | #endif                                   | True                        | 
+ 117 |                                          | True                        | 
+ 118 | /* inlining + vfork -> bigger code */    | True                        | 
+ 119 | static NOINLINE pid_t runsv(const char * | True                        | 
+ 120 | {                                        | True                        | 
+ 121 |  pid_t pid;                              | True                        | 
+ 122 |                                          | True                        | 
+ 123 |  /* If we got signaled, stop spawning ch | True                        | 
+ 124 |  if (bb_got_signal)                      | True                        | 
+ 125 |   return 0;                              | True                        | 
+ 126 |                                          | True                        | 
+ 127 |  pid = vfork();                          | True                        | 
+ 128 |  if (pid == -1) {                        | True                        | 
+ 129 |   warn2_cannot("vfork", "");             | True                        | 
+ 130 |   return 0;                              | True                        | 
+ 131 |  }                                       | True                        | 
+ 132 |  if (pid == 0) {                         | True                        | 
+ 133 |   /* child */                            | True                        | 
+ 134 |   if (option_mask32 & 1) /* -P option? * | True                        | 
+ 135 |    setsid();                             | True                        | 
+ 136 | /* man execv:                            | True                        | 
+ 137 |  * "Signals set to be caught by the call | True                        | 
+ 138 |  *  shall be set to the default action i | True                        | 
+ 139 |  * Therefore, we do not need this: */    | True                        | 
+ 140 | #if 0                                    | True                        | 
+ 141 |   bb_signals(0                           | 0                           | 
+ 142 |    | (1 << SIGHUP)                       | 0                           | 
+ 143 |    | (1 << SIGTERM)                      | 0                           | 
+ 144 |    , SIG_DFL);                           | 0                           | 
+ 145 | #endif                                   | True                        | 
+ 146 |   execlp("runsv", "runsv", name, (char * | True                        | 
+ 147 |   fatal2_cannot("start runsv ", name);   | True                        | 
+ 148 |  }                                       | True                        | 
+ 149 |  return pid;                             | True                        | 
+ 150 | }                                        | True                        | 
+ 151 |                                          | True                        | 
+ 152 | /* gcc 4.3.0 does better with NOINLINE * | True                        | 
+ 153 | static NOINLINE int do_rescan(void)      | True                        | 
+ 154 | {                                        | True                        | 
+ 155 |  DIR *dir;                               | True                        | 
+ 156 |  struct dirent *d;                       | True                        | 
+ 157 |  int i;                                  | True                        | 
+ 158 |  struct stat s;                          | True                        | 
+ 159 |  int need_rescan = 0;                    | True                        | 
+ 160 |                                          | True                        | 
+ 161 |  dir = opendir(".");                     | True                        | 
+ 162 |  if (!dir) {                             | True                        | 
+ 163 |   warn2_cannot("open directory ", svdir) | True                        | 
+ 164 |   return 1; /* need to rescan again soon | True                        | 
+ 165 |  }                                       | True                        | 
+ 166 |  for (i = 0; i < svnum; i++)             | True                        | 
+ 167 |   sv[i].isgone = 1;                      | True                        | 
+ 168 |                                          | True                        | 
+ 169 |  while (1) {                             | True                        | 
+ 170 |   errno = 0;                             | True                        | 
+ 171 |   d = readdir(dir);                      | True                        | 
+ 172 |   if (!d)                                | True                        | 
+ 173 |    break;                                | True                        | 
+ 174 |   if (d->d_name[0] == '.')               | True                        | 
+ 175 |    continue;                             | True                        | 
+ 176 |   if (stat(d->d_name, &s) == -1) {       | True                        | 
+ 177 |    warn2_cannot("stat ", d->d_name);     | True                        | 
+ 178 |    continue;                             | True                        | 
+ 179 |   }                                      | True                        | 
+ 180 |   if (!S_ISDIR(s.st_mode))               | True                        | 
+ 181 |    continue;                             | True                        | 
+ 182 |   /* Do we have this service listed alre | True                        | 
+ 183 |   for (i = 0; i < svnum; i++) {          | True                        | 
+ 184 |    if (sv[i].ino == s.st_ino             | True                        | 
+ 185 | #if CHECK_DEVNO_TOO                      | True                        | 
+ 186 |     && sv[i].dev == s.st_dev             | CHECK_DEVNO_TOO             | 
+ 187 | #endif                                   | True                        | 
+ 188 |    ) {                                   | True                        | 
+ 189 |     if (sv[i].pid == 0) /* restart if it | True                        | 
+ 190 |      goto run_ith_sv;                    | True                        | 
+ 191 |     sv[i].isgone = 0; /* "we still see y | True                        | 
+ 192 |     goto next_dentry;                    | True                        | 
+ 193 |    }                                     | True                        | 
+ 194 |   }                                      | True                        | 
+ 195 |   { /* Not found, make new service */    | True                        | 
+ 196 |    struct service *svnew = realloc(sv, ( | True                        | 
+ 197 |    if (!svnew) {                         | True                        | 
+ 198 |     warn2_cannot("start runsv ", d->d_na | True                        | 
+ 199 |     need_rescan = 1;                     | True                        | 
+ 200 |     continue;                            | True                        | 
+ 201 |    }                                     | True                        | 
+ 202 |    sv = svnew;                           | True                        | 
+ 203 |    svnum++;                              | True                        | 
+ 204 | #if CHECK_DEVNO_TOO                      | True                        | 
+ 205 |    sv[i].dev = s.st_dev;                 | CHECK_DEVNO_TOO             | 
+ 206 | #endif                                   | True                        | 
+ 207 |    sv[i].ino = s.st_ino;                 | True                        | 
+ 208 |  run_ith_sv:                             | True                        | 
+ 209 |    sv[i].pid = runsv(d->d_name);         | True                        | 
+ 210 |    sv[i].isgone = 0;                     | True                        | 
+ 211 |   }                                      | True                        | 
+ 212 |  next_dentry: ;                          | True                        | 
+ 213 |  }                                       | True                        | 
+ 214 |  i = errno;                              | True                        | 
+ 215 |  closedir(dir);                          | True                        | 
+ 216 |  if (i) { /* readdir failed */           | True                        | 
+ 217 |   warn2_cannot("read directory ", svdir) | True                        | 
+ 218 |   return 1; /* need to rescan again soon | True                        | 
+ 219 |  }                                       | True                        | 
+ 220 |                                          | True                        | 
+ 221 |  /* Send SIGTERM to runsv whose director | True                        | 
+ 222 |   * were no longer found (-> must have b | True                        | 
+ 223 |  for (i = 0; i < svnum; i++) {           | True                        | 
+ 224 |   if (!sv[i].isgone)                     | True                        | 
+ 225 |    continue;                             | True                        | 
+ 226 |   if (sv[i].pid)                         | True                        | 
+ 227 |    kill(sv[i].pid, SIGTERM);             | True                        | 
+ 228 |   svnum--;                               | True                        | 
+ 229 |   sv[i] = sv[svnum];                     | True                        | 
+ 230 |   i--; /* so that we don't skip new sv[i | True                        | 
+ 231 |  }                                       | True                        | 
+ 232 |  return need_rescan;                     | True                        | 
+ 233 | }                                        | True                        | 
+ 234 |                                          | True                        | 
+ 235 | int runsvdir_main(int argc, char **argv) | True                        | 
+ 236 | int runsvdir_main(int argc UNUSED_PARAM, | True                        | 
+ 237 | {                                        | True                        | 
+ 238 |  struct stat s;                          | True                        | 
+ 239 |  dev_t last_dev = last_dev; /* for gcc * | True                        | 
+ 240 |  ino_t last_ino = last_ino; /* for gcc * | True                        | 
+ 241 |  time_t last_mtime;                      | True                        | 
+ 242 |  int curdir;                             | True                        | 
+ 243 |  unsigned stampcheck;                    | True                        | 
+ 244 |  int i;                                  | True                        | 
+ 245 |  int need_rescan;                        | True                        | 
+ 246 |  bool i_am_init;                         | True                        | 
+ 247 |  char *opt_s_argv[3];                    | True                        | 
+ 248 |                                          | True                        | 
+ 249 |  INIT_G();                               | True                        | 
+ 250 |                                          | True                        | 
+ 251 |  opt_s_argv[0] = NULL;                   | True                        | 
+ 252 |  opt_s_argv[2] = NULL;                   | True                        | 
+ 253 |  getopt32(argv, "^" "Ps:" "\0" "-1", &op | True                        | 
+ 254 |  argv += optind;                         | True                        | 
+ 255 |                                          | True                        | 
+ 256 |  i_am_init = (getpid() == 1);            | True                        | 
+ 257 |  bb_signals(0                            | True                        | 
+ 258 |   | (1 << SIGTERM)                       | True                        | 
+ 259 |   | (1 << SIGHUP)                        | True                        | 
+ 260 |   /* For busybox's init, SIGTERM == rebo | True                        | 
+ 261 |    * SIGUSR1 == halt,                    | True                        | 
+ 262 |    * SIGUSR2 == poweroff,                | True                        | 
+ 263 |    * Ctlr-ALt-Del sends SIGINT to init,  | True                        | 
+ 264 |    * so we need to intercept SIGUSRn and | True                        | 
+ 265 |    * Note that we do not implement actua | True                        | 
+ 266 |    * (killall(TERM) + umount, etc), we j | True                        | 
+ 267 |    * respawing and avoid exiting (-> mak | True                        | 
+ 268 |    * The user is responsible for the res | True                        | 
+ 269 |    */                                    | True                        | 
+ 270 |   | (i_am_init ? ((1 << SIGUSR1) | (1 << | True                        | 
+ 271 |   , record_signo);                       | True                        | 
+ 272 |  svdir = *argv++;                        | True                        | 
+ 273 |                                          | True                        | 
+ 274 | #if ENABLE_FEATURE_RUNSVDIR_LOG          | True                        | 
+ 275 |  /* setup log */                         | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 276 |  if (*argv) {                            | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 277 |   rplog = *argv;                         | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 278 |   if (strlen(rplog) < 7) {               | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 279 |    warnx("log must have at least seven c | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 280 |   } else if (piped_pair(logpipe)) {      | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 281 |    warnx("can't create pipe for log");   | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 282 |   } else {                               | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 283 |    close_on_exec_on(logpipe.rd);         | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 284 |    close_on_exec_on(logpipe.wr);         | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 285 |    ndelay_on(logpipe.rd);                | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 286 |    ndelay_on(logpipe.wr);                | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 287 |    if (dup2(logpipe.wr, 2) == -1) {      | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 288 |     warnx("can't set filedescriptor for  | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 289 |    } else {                              | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 290 |     pfd[0].fd = logpipe.rd;              | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 291 |     pfd[0].events = POLLIN;              | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 292 |     stamplog = monotonic_sec();          | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 293 |     goto run;                            | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 294 |    }                                     | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 295 |   }                                      | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 296 |   rplog = NULL;                          | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 297 |   warnx("log service disabled");         | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 298 |  }                                       | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 299 |  run:                                    | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 300 | #endif                                   | True                        | 
+ 301 |  curdir = open(".", O_RDONLY|O_NDELAY);  | True                        | 
+ 302 |  if (curdir == -1)                       | True                        | 
+ 303 |   fatal2_cannot("open current directory" | True                        | 
+ 304 |  close_on_exec_on(curdir);               | True                        | 
+ 305 |                                          | True                        | 
+ 306 |  stampcheck = monotonic_sec();           | True                        | 
+ 307 |  need_rescan = 1;                        | True                        | 
+ 308 |  last_mtime = 0;                         | True                        | 
+ 309 |                                          | True                        | 
+ 310 |  for (;;) {                              | True                        | 
+ 311 |   unsigned now;                          | True                        | 
+ 312 |   unsigned sig;                          | True                        | 
+ 313 |                                          | True                        | 
+ 314 |   /* collect children */                 | True                        | 
+ 315 |   for (;;) {                             | True                        | 
+ 316 |    pid_t pid = wait_any_nohang(NULL);    | True                        | 
+ 317 |    if (pid <= 0)                         | True                        | 
+ 318 |     break;                               | True                        | 
+ 319 |    for (i = 0; i < svnum; i++) {         | True                        | 
+ 320 |     if (pid == sv[i].pid) {              | True                        | 
+ 321 |      /* runsv has died */                | True                        | 
+ 322 |      sv[i].pid = 0;                      | True                        | 
+ 323 |      need_rescan = 1;                    | True                        | 
+ 324 |     }                                    | True                        | 
+ 325 |    }                                     | True                        | 
+ 326 |   }                                      | True                        | 
+ 327 |                                          | True                        | 
+ 328 |   now = monotonic_sec();                 | True                        | 
+ 329 |   if ((int)(now - stampcheck) >= 0) {    | True                        | 
+ 330 |    /* wait at least a second */          | True                        | 
+ 331 |    stampcheck = now + 1;                 | True                        | 
+ 332 |                                          | True                        | 
+ 333 |    if (stat(svdir, &s) != -1) {          | True                        | 
+ 334 |     if (need_rescan || s.st_mtime != las | True                        | 
+ 335 |      || s.st_ino != last_ino || s.st_dev | True                        | 
+ 336 |     ) {                                  | True                        | 
+ 337 |      /* svdir modified */                | True                        | 
+ 338 |      if (chdir(svdir) != -1) {           | True                        | 
+ 339 |       last_mtime = s.st_mtime;           | True                        | 
+ 340 |       last_dev = s.st_dev;               | True                        | 
+ 341 |       last_ino = s.st_ino;               | True                        | 
+ 342 |       /* if the svdir changed this very  | True                        | 
+ 343 |        * next second, because we won't b | True                        | 
+ 344 |        * changes within this second */   | True                        | 
+ 345 |       while (time(NULL) == last_mtime)   | True                        | 
+ 346 |        usleep(100000);                   | True                        | 
+ 347 |       need_rescan = do_rescan();         | True                        | 
+ 348 |       while (fchdir(curdir) == -1) {     | True                        | 
+ 349 |        warn2_cannot("change directory, p | True                        | 
+ 350 |        sleep(5);                         | True                        | 
+ 351 |       }                                  | True                        | 
+ 352 |      } else {                            | True                        | 
+ 353 |       warn2_cannot("change directory to  | True                        | 
+ 354 |      }                                   | True                        | 
+ 355 |     }                                    | True                        | 
+ 356 |    } else {                              | True                        | 
+ 357 |     warn2_cannot("stat ", svdir);        | True                        | 
+ 358 |    }                                     | True                        | 
+ 359 |   }                                      | True                        | 
+ 360 |                                          | True                        | 
+ 361 | #if ENABLE_FEATURE_RUNSVDIR_LOG          | True                        | 
+ 362 |   if (rplog) {                           | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 363 |    if ((int)(now - stamplog) >= 0) {     | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 364 |     write(logpipe.wr, ".", 1);           | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 365 |     stamplog = now + 900;                | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 366 |    }                                     | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 367 |   }                                      | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 368 |   pfd[0].revents = 0;                    | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 369 | #endif                                   | True                        | 
+ 370 |   {                                      | True                        | 
+ 371 |    unsigned deadline = (need_rescan ? 1  | True                        | 
+ 372 | #if ENABLE_FEATURE_RUNSVDIR_LOG          | True                        | 
+ 373 |    if (rplog)                            | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 374 |     poll(pfd, 1, deadline*1000);         | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 375 |    else                                  | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 376 | #endif                                   | True                        | 
+ 377 |     sleep(deadline);                     | True                        | 
+ 378 |   }                                      | True                        | 
+ 379 |                                          | True                        | 
+ 380 | #if ENABLE_FEATURE_RUNSVDIR_LOG          | True                        | 
+ 381 |   if (pfd[0].revents & POLLIN) {         | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 382 |    char ch;                              | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 383 |    while (read(logpipe.rd, &ch, 1) > 0)  | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 384 |     if (ch < ' ')                        | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 385 |      ch = ' ';                           | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 386 |     for (i = 6; rplog[i] != '\0'; i++)   | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 387 |      rplog[i-1] = rplog[i];              | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 388 |     rplog[i-1] = ch;                     | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 389 |    }                                     | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 390 |   }                                      | ENABLE_FEATURE_RUNSVDIR_LOG | 
+ 391 | #endif                                   | True                        | 
+ 392 |   sig = bb_got_signal;                   | True                        | 
+ 393 |   if (!sig)                              | True                        | 
+ 394 |    continue;                             | True                        | 
+ 395 |   bb_got_signal = 0;                     | True                        | 
+ 396 |                                          | True                        | 
+ 397 |   /* -s SCRIPT: useful if we are init.   | True                        | 
+ 398 |    * In this case typically script never | True                        | 
+ 399 |    * it halts/powers off/reboots the sys | True                        | 
+ 400 |   if (opt_s_argv[0]) {                   | True                        | 
+ 401 |    pid_t pid;                            | True                        | 
+ 402 |                                          | True                        | 
+ 403 |    /* Single parameter: signal# */       | True                        | 
+ 404 |    opt_s_argv[1] = utoa(sig);            | True                        | 
+ 405 |    pid = spawn(opt_s_argv);              | True                        | 
+ 406 |    if (pid > 0) {                        | True                        | 
+ 407 |     /* Remembering to wait for _any_ chi | True                        | 
+ 408 |      * not just pid */                   | True                        | 
+ 409 |     while (wait(NULL) != pid)            | True                        | 
+ 410 |      continue;                           | True                        | 
+ 411 |    }                                     | True                        | 
+ 412 |   }                                      | True                        | 
+ 413 |                                          | True                        | 
+ 414 |   if (sig == SIGHUP) {                   | True                        | 
+ 415 |    for (i = 0; i < svnum; i++)           | True                        | 
+ 416 |     if (sv[i].pid)                       | True                        | 
+ 417 |      kill(sv[i].pid, SIGTERM);           | True                        | 
+ 418 |   }                                      | True                        | 
+ 419 |   /* SIGHUP or SIGTERM (or SIGUSRn if we | True                        | 
+ 420 |   /* Exit unless we are init */          | True                        | 
+ 421 |   if (!i_am_init)                        | True                        | 
+ 422 |    return (SIGHUP == sig) ? 111 : EXIT_S | True                        | 
+ 423 |                                          | True                        | 
+ 424 |   /* init continues to monitor services  | True                        | 
+ 425 |  } /* for (;;) */                        | True                        | 
+ 426 | }                                        | True                        | 
+-----+------------------------------------------+-----------------------------+
+     |                                          | +113MB, 273ms               | 

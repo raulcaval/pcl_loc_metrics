@@ -1,0 +1,855 @@
+FILE: data/raw/busybox-1.38.0/procps/powertop.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                          | 
+-----+------------------------------------------+----------------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                           | 
+   2 | /*                                       | True                                                           | 
+   3 |  * A mini 'powertop' utility:            | True                                                           | 
+   4 |  *   Analyze power consumption on Intel- | True                                                           | 
+   5 |  * Based on powertop 1.11.               | True                                                           | 
+   6 |  *                                       | True                                                           | 
+   7 |  * Copyright (C) 2010 Marek Polacek <mmp | True                                                           | 
+   8 |  *                                       | True                                                           | 
+   9 |  * Licensed under GPLv2, see file LICENS | True                                                           | 
+  10 |  */                                      | True                                                           | 
+  11 | //config:config POWERTOP                 | True                                                           | 
+  12 | //config: bool "powertop (9.9 kb)"       | True                                                           | 
+  13 | //config: default y                      | True                                                           | 
+  14 | //config: help                           | True                                                           | 
+  15 | //config: Analyze power consumption on I | True                                                           | 
+  16 | //config:                                | True                                                           | 
+  17 | //config:config FEATURE_POWERTOP_INTERAC | True                                                           | 
+  18 | //config: bool "Accept keyboard commands | True                                                           | 
+  19 | //config: default y                      | True                                                           | 
+  20 | //config: depends on POWERTOP            | True                                                           | 
+  21 | //config: help                           | True                                                           | 
+  22 | //config: Without this, powertop will on | True                                                           | 
+  23 | //config: No keyboard commands will work | True                                                           | 
+  24 |                                          | True                                                           | 
+  25 | //applet:IF_POWERTOP(APPLET(powertop, BB | True                                                           | 
+  26 |                                          | True                                                           | 
+  27 | //kbuild:lib-$(CONFIG_POWERTOP) += power | True                                                           | 
+  28 |                                          | True                                                           | 
+  29 | // XXX This should be configurable       | True                                                           | 
+  30 | #define ENABLE_FEATURE_POWERTOP_PROCIRQ  | True                                                           | 
+  31 |                                          | True                                                           | 
+  32 | #include "libbb.h"                       | True                                                           | 
+  33 |                                          | True                                                           | 
+  34 |                                          | True                                                           | 
+  35 | //#define debug(fmt, ...) fprintf(stderr | True                                                           | 
+  36 | #define debug(fmt, ...) ((void)0)        | True                                                           | 
+  37 |                                          | True                                                           | 
+  38 |                                          | True                                                           | 
+  39 | #define BLOATY_HPET_IRQ_NUM_DETECTION 0  | True                                                           | 
+  40 | #define MAX_CSTATE_COUNT   8             | True                                                           | 
+  41 | #define IRQCOUNT           40            | True                                                           | 
+  42 |                                          | True                                                           | 
+  43 |                                          | True                                                           | 
+  44 | #define DEFAULT_SLEEP      10            | True                                                           | 
+  45 | #define DEFAULT_SLEEP_STR "10"           | True                                                           | 
+  46 |                                          | True                                                           | 
+  47 | /* Frequency of the ACPI timer */        | True                                                           | 
+  48 | #define FREQ_ACPI          3579.545      | True                                                           | 
+  49 | #define FREQ_ACPI_1000     3579545       | True                                                           | 
+  50 |                                          | True                                                           | 
+  51 | /* Max filename length of entry in /sys/ | True                                                           | 
+  52 | #define BIG_SYSNAME_LEN    16            | True                                                           | 
+  53 |                                          | True                                                           | 
+  54 | #define ESC "\033"                       | True                                                           | 
+  55 |                                          | True                                                           | 
+  56 | typedef unsigned long long ullong;       | True                                                           | 
+  57 |                                          | True                                                           | 
+  58 | struct line {                            | True                                                           | 
+  59 |  char *string;                           | True                                                           | 
+  60 |  int count;                              | True                                                           | 
+  61 |  /*int disk_count;*/                     | True                                                           | 
+  62 | };                                       | True                                                           | 
+  63 |                                          | True                                                           | 
+  64 | #if ENABLE_FEATURE_POWERTOP_PROCIRQ      | True                                                           | 
+  65 | struct irqdata {                         | True                                                           | 
+  66 |  smallint active;                        | True                                                           | 
+  67 |  int number;                             | True                                                           | 
+  68 |  ullong count;                           | True                                                           | 
+  69 |  char irq_desc[32];                      | True                                                           | 
+  70 | };                                       | True                                                           | 
+  71 | #endif                                   | True                                                           | 
+  72 |                                          | True                                                           | 
+  73 | struct globals {                         | True                                                           | 
+  74 |  struct line *lines; /* the most often u | True                                                           | 
+  75 |  int lines_cnt;                          | True                                                           | 
+  76 |  int lines_cumulative_count;             | True                                                           | 
+  77 |  int maxcstate;                          | True                                                           | 
+  78 |  unsigned total_cpus;                    | True                                                           | 
+  79 |  smallint cant_enable_timer_stats;       | True                                                           | 
+  80 | #if ENABLE_FEATURE_POWERTOP_PROCIRQ      | True                                                           | 
+  81 | # if BLOATY_HPET_IRQ_NUM_DETECTION       | True                                                           | 
+  82 |  smallint scanned_timer_list;            | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+  83 |  int percpu_hpet_start;                  | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+  84 |  int percpu_hpet_end;                    | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+  85 | # endif                                  | True                                                           | 
+  86 |  int interrupt_0;                        | True                                                           | 
+  87 |  int total_interrupt;                    | True                                                           | 
+  88 |  struct irqdata interrupts[IRQCOUNT];    | True                                                           | 
+  89 | #endif                                   | True                                                           | 
+  90 |  ullong start_usage[MAX_CSTATE_COUNT];   | True                                                           | 
+  91 |  ullong last_usage[MAX_CSTATE_COUNT];    | True                                                           | 
+  92 |  ullong start_duration[MAX_CSTATE_COUNT] | True                                                           | 
+  93 |  ullong last_duration[MAX_CSTATE_COUNT]; | True                                                           | 
+  94 | #if ENABLE_FEATURE_POWERTOP_INTERACTIVE  | True                                                           | 
+  95 |  struct termios init_settings;           | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+  96 | #endif                                   | True                                                           | 
+  97 | };                                       | True                                                           | 
+  98 | #define G (*ptr_to_globals)              | True                                                           | 
+  99 | #define INIT_G() do { \                  | True                                                           | 
+ 100 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                                                           | 
+ 101 | } while (0)                              | True                                                           | 
+ 102 |                                          | True                                                           | 
+ 103 | #if ENABLE_FEATURE_POWERTOP_INTERACTIVE  | True                                                           | 
+ 104 | static void reset_term(void)             | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 105 | {                                        | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 106 |  tcsetattr_stdin_TCSANOW(&G.init_setting | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 107 | }                                        | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 108 |                                          | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 109 | static void sig_handler(int signo UNUSED | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 110 | {                                        | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 111 |  reset_term();                           | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 112 |  _exit_FAILURE();                        | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 113 | }                                        | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 114 | #endif                                   | True                                                           | 
+ 115 |                                          | True                                                           | 
+ 116 | static int write_str_to_file(const char  | True                                                           | 
+ 117 | {                                        | True                                                           | 
+ 118 |  FILE *fp = fopen_for_write(fname);      | True                                                           | 
+ 119 |  if (!fp)                                | True                                                           | 
+ 120 |   return 1;                              | True                                                           | 
+ 121 |  fputs(str, fp);                         | True                                                           | 
+ 122 |  fclose(fp);                             | True                                                           | 
+ 123 |  return 0;                               | True                                                           | 
+ 124 | }                                        | True                                                           | 
+ 125 |                                          | True                                                           | 
+ 126 | /* Make it more readable */              | True                                                           | 
+ 127 | #define start_timer() write_str_to_file( | True                                                           | 
+ 128 | #define stop_timer()  write_str_to_file( | True                                                           | 
+ 129 |                                          | True                                                           | 
+ 130 | static NOINLINE void clear_lines(void)   | True                                                           | 
+ 131 | {                                        | True                                                           | 
+ 132 |  int i;                                  | True                                                           | 
+ 133 |  if (G.lines) {                          | True                                                           | 
+ 134 |   for (i = 0; i < G.lines_cnt; i++)      | True                                                           | 
+ 135 |    free(G.lines[i].string);              | True                                                           | 
+ 136 |   free(G.lines);                         | True                                                           | 
+ 137 |   G.lines_cnt = 0;                       | True                                                           | 
+ 138 |   G.lines = NULL;                        | True                                                           | 
+ 139 |  }                                       | True                                                           | 
+ 140 | }                                        | True                                                           | 
+ 141 |                                          | True                                                           | 
+ 142 | static void update_lines_cumulative_coun | True                                                           | 
+ 143 | {                                        | True                                                           | 
+ 144 |  int i;                                  | True                                                           | 
+ 145 |  for (i = 0; i < G.lines_cnt; i++)       | True                                                           | 
+ 146 |   G.lines_cumulative_count += G.lines[i] | True                                                           | 
+ 147 | }                                        | True                                                           | 
+ 148 |                                          | True                                                           | 
+ 149 | static int line_compare(const void *p1,  | True                                                           | 
+ 150 | {                                        | True                                                           | 
+ 151 |  const struct line *a = p1;              | True                                                           | 
+ 152 |  const struct line *b = p2;              | True                                                           | 
+ 153 |  return (b->count /*+ 50 * b->disk_count | True                                                           | 
+ 154 | }                                        | True                                                           | 
+ 155 |                                          | True                                                           | 
+ 156 | static void sort_lines(void)             | True                                                           | 
+ 157 | {                                        | True                                                           | 
+ 158 |  qsort(G.lines, G.lines_cnt, sizeof(G.li | True                                                           | 
+ 159 | }                                        | True                                                           | 
+ 160 |                                          | True                                                           | 
+ 161 | /* Save C-state usage and duration. Also | True                                                           | 
+ 162 | static void read_cstate_counts(ullong *u | True                                                           | 
+ 163 | {                                        | True                                                           | 
+ 164 |  DIR *dir;                               | True                                                           | 
+ 165 |  struct dirent *d;                       | True                                                           | 
+ 166 |                                          | True                                                           | 
+ 167 |  dir = opendir("/proc/acpi/processor");  | True                                                           | 
+ 168 |  if (!dir)                               | True                                                           | 
+ 169 |   return;                                | True                                                           | 
+ 170 |                                          | True                                                           | 
+ 171 |  while ((d = readdir(dir)) != NULL) {    | True                                                           | 
+ 172 |   FILE *fp;                              | True                                                           | 
+ 173 |   char buf[192];                         | True                                                           | 
+ 174 |   int level;                             | True                                                           | 
+ 175 |   int len;                               | True                                                           | 
+ 176 |                                          | True                                                           | 
+ 177 |   len = strlen(d->d_name); /* "CPUnn" */ | True                                                           | 
+ 178 |   if (len < 3 || len > BIG_SYSNAME_LEN)  | True                                                           | 
+ 179 |    continue;                             | True                                                           | 
+ 180 |                                          | True                                                           | 
+ 181 |   sprintf(buf, "%s/%s/power", "/proc/acp | True                                                           | 
+ 182 |   fp = fopen_for_read(buf);              | True                                                           | 
+ 183 |   if (!fp)                               | True                                                           | 
+ 184 |    continue;                             | True                                                           | 
+ 185 |                                          | True                                                           | 
+ 186 | // Example file contents:                | True                                                           | 
+ 187 | // active state:            C0           | True                                                           | 
+ 188 | // max_cstate:              C8           | True                                                           | 
+ 189 | // maximum allowed latency: 2000000000 u | True                                                           | 
+ 190 | // states:                               | True                                                           | 
+ 191 | //     C1:                  type[C1] pro | True                                                           | 
+ 192 | //     C2:                  type[C2] pro | True                                                           | 
+ 193 | //     C3:                  type[C3] pro | True                                                           | 
+ 194 |   level = 0;                             | True                                                           | 
+ 195 |   while (fgets(buf, sizeof(buf), fp)) {  | True                                                           | 
+ 196 |    char *p = strstr(buf, "age[");        | True                                                           | 
+ 197 |    if (!p)                               | True                                                           | 
+ 198 |     continue;                            | True                                                           | 
+ 199 |    p += 4;                               | True                                                           | 
+ 200 |    usage[level] += bb_strtoull(p, NULL,  | True                                                           | 
+ 201 |    p = strstr(buf, "ation[");            | True                                                           | 
+ 202 |    if (!p)                               | True                                                           | 
+ 203 |     continue;                            | True                                                           | 
+ 204 |    p += 6;                               | True                                                           | 
+ 205 |    duration[level] += bb_strtoull(p, NUL | True                                                           | 
+ 206 |                                          | True                                                           | 
+ 207 |    if (level >= MAX_CSTATE_COUNT-1)      | True                                                           | 
+ 208 |     break;                               | True                                                           | 
+ 209 |    level++;                              | True                                                           | 
+ 210 |    if (level > G.maxcstate)  /* update m | True                                                           | 
+ 211 |     G.maxcstate = level;                 | True                                                           | 
+ 212 |   }                                      | True                                                           | 
+ 213 |   fclose(fp);                            | True                                                           | 
+ 214 |  }                                       | True                                                           | 
+ 215 |  closedir(dir);                          | True                                                           | 
+ 216 | }                                        | True                                                           | 
+ 217 |                                          | True                                                           | 
+ 218 | /* Add line and/or update count */       | True                                                           | 
+ 219 | static void save_line(const char *string | True                                                           | 
+ 220 | {                                        | True                                                           | 
+ 221 |  int i;                                  | True                                                           | 
+ 222 |  for (i = 0; i < G.lines_cnt; i++) {     | True                                                           | 
+ 223 |   if (strcmp(string, G.lines[i].string)  | True                                                           | 
+ 224 |    /* It's already there, only update co | True                                                           | 
+ 225 |    G.lines[i].count += count;            | True                                                           | 
+ 226 |    return;                               | True                                                           | 
+ 227 |   }                                      | True                                                           | 
+ 228 |  }                                       | True                                                           | 
+ 229 |                                          | True                                                           | 
+ 230 |  /* Add new line */                      | True                                                           | 
+ 231 |  G.lines = xrealloc_vector(G.lines, 4, G | True                                                           | 
+ 232 |  G.lines[G.lines_cnt].string = xstrdup(s | True                                                           | 
+ 233 |  G.lines[G.lines_cnt].count = count;     | True                                                           | 
+ 234 |  /*G.lines[G.lines_cnt].disk_count = 0;* | True                                                           | 
+ 235 |  G.lines_cnt++;                          | True                                                           | 
+ 236 | }                                        | True                                                           | 
+ 237 |                                          | True                                                           | 
+ 238 | #if ENABLE_FEATURE_POWERTOP_PROCIRQ      | True                                                           | 
+ 239 | static int is_hpet_irq(const char *name) | True                                                           | 
+ 240 | {                                        | True                                                           | 
+ 241 |  const char *p;                          | True                                                           | 
+ 242 | # if BLOATY_HPET_IRQ_NUM_DETECTION       | True                                                           | 
+ 243 |  long hpet_chan;                         | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 244 |                                          | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 245 |  /* Learn the range of existing hpet tim | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 246 |  if (!G.scanned_timer_list) {            | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 247 |   FILE *fp;                              | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 248 |   char buf[80];                          | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 249 |                                          | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 250 |   G.scanned_timer_list = true;           | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 251 |   fp = fopen_for_read("/proc/timer_list" | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 252 |   if (!fp)                               | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 253 |    return 0;                             | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 254 |                                          | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 255 |   while (fgets(buf, sizeof(buf), fp)) {  | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 256 |    p = strstr(buf, "Clock Event Device:  | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 257 |    if (!p)                               | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 258 |     continue;                            | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 259 |    p += sizeof("Clock Event Device: hpet | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 260 |    if (!isdigit(*p))                     | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 261 |     continue;                            | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 262 |    hpet_chan = xatoi_positive(p);        | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 263 |    if (hpet_chan < G.percpu_hpet_start)  | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 264 |     G.percpu_hpet_start = hpet_chan;     | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 265 |    if (hpet_chan > G.percpu_hpet_end)    | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 266 |     G.percpu_hpet_end = hpet_chan;       | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 267 |   }                                      | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 268 |   fclose(fp);                            | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 269 |  }                                       | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 270 | # endif                                  | True                                                           | 
+ 271 | //TODO: optimize                         | True                                                           | 
+ 272 |  p = strstr(name, "hpet");               | True                                                           | 
+ 273 |  if (!p)                                 | True                                                           | 
+ 274 |   return 0;                              | True                                                           | 
+ 275 |  p += 4;                                 | True                                                           | 
+ 276 |  if (!isdigit(*p))                       | True                                                           | 
+ 277 |   return 0;                              | True                                                           | 
+ 278 | # if BLOATY_HPET_IRQ_NUM_DETECTION       | True                                                           | 
+ 279 |  hpet_chan = xatoi_positive(p);          | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 280 |  if (hpet_chan < G.percpu_hpet_start ||  | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 281 |   return 0;                              | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 282 | # endif                                  | True                                                           | 
+ 283 |  return 1;                               | True                                                           | 
+ 284 | }                                        | True                                                           | 
+ 285 |                                          | True                                                           | 
+ 286 | /* Save new IRQ count, return delta from | True                                                           | 
+ 287 | static int save_irq_count(int irq, ullon | True                                                           | 
+ 288 | {                                        | True                                                           | 
+ 289 |  int unused = IRQCOUNT;                  | True                                                           | 
+ 290 |  int i;                                  | True                                                           | 
+ 291 |  for (i = 0; i < IRQCOUNT; i++) {        | True                                                           | 
+ 292 |   if (G.interrupts[i].active && G.interr | True                                                           | 
+ 293 |    ullong old = G.interrupts[i].count;   | True                                                           | 
+ 294 |    G.interrupts[i].count = count;        | True                                                           | 
+ 295 |    return count - old;                   | True                                                           | 
+ 296 |   }                                      | True                                                           | 
+ 297 |   if (!G.interrupts[i].active && unused  | True                                                           | 
+ 298 |    unused = i;                           | True                                                           | 
+ 299 |  }                                       | True                                                           | 
+ 300 |  if (unused < IRQCOUNT) {                | True                                                           | 
+ 301 |   G.interrupts[unused].active = 1;       | True                                                           | 
+ 302 |   G.interrupts[unused].count = count;    | True                                                           | 
+ 303 |   G.interrupts[unused].number = irq;     | True                                                           | 
+ 304 |  }                                       | True                                                           | 
+ 305 |  return count;                           | True                                                           | 
+ 306 | }                                        | True                                                           | 
+ 307 |                                          | True                                                           | 
+ 308 | /* Read /proc/interrupts, save IRQ count | True                                                           | 
+ 309 | static void process_irq_counts(void)     | True                                                           | 
+ 310 | {                                        | True                                                           | 
+ 311 |  FILE *fp;                               | True                                                           | 
+ 312 |  char buf[128];                          | True                                                           | 
+ 313 |                                          | True                                                           | 
+ 314 |  /* Reset values */                      | True                                                           | 
+ 315 |  G.interrupt_0 = 0;                      | True                                                           | 
+ 316 |  G.total_interrupt = 0;                  | True                                                           | 
+ 317 |                                          | True                                                           | 
+ 318 |  fp = xfopen_for_read("/proc/interrupts" | True                                                           | 
+ 319 |  while (fgets(buf, sizeof(buf), fp)) {   | True                                                           | 
+ 320 |   char irq_desc[sizeof("   <kernel IPI>  | True                                                           | 
+ 321 |   char *p;                               | True                                                           | 
+ 322 |   const char *name;                      | True                                                           | 
+ 323 |   int nr;                                | True                                                           | 
+ 324 |   ullong count;                          | True                                                           | 
+ 325 |   ullong delta;                          | True                                                           | 
+ 326 |                                          | True                                                           | 
+ 327 |   p = strchr(buf, ':');                  | True                                                           | 
+ 328 |   if (!p)                                | True                                                           | 
+ 329 |    continue;                             | True                                                           | 
+ 330 |   /*  0:  143646045  153901007   IO-APIC | True                                                           | 
+ 331 |    *   ^                                 | True                                                           | 
+ 332 |    */                                    | True                                                           | 
+ 333 |   *p = '\0';                             | True                                                           | 
+ 334 |   /* Deal with non-maskable interrupts - | True                                                           | 
+ 335 |   nr = index_in_strings("NMI\0RES\0CAL\0 | True                                                           | 
+ 336 |   if (nr >= 0) {                         | True                                                           | 
+ 337 |    nr += 20000;                          | True                                                           | 
+ 338 |   } else {                               | True                                                           | 
+ 339 |    /* bb_strtou doesn't eat leading spac | True                                                           | 
+ 340 |    errno = 0;                            | True                                                           | 
+ 341 |    nr = strtoul(buf, NULL, 10);          | True                                                           | 
+ 342 |    if (errno)                            | True                                                           | 
+ 343 |     continue;                            | True                                                           | 
+ 344 |   }                                      | True                                                           | 
+ 345 |   p++;                                   | True                                                           | 
+ 346 |   /*  0:  143646045  153901007   IO-APIC | True                                                           | 
+ 347 |    *    ^                                | True                                                           | 
+ 348 |    */                                    | True                                                           | 
+ 349 |   /* Sum counts for this IRQ */          | True                                                           | 
+ 350 |   count = 0;                             | True                                                           | 
+ 351 |   while (1) {                            | True                                                           | 
+ 352 |    char *tmp;                            | True                                                           | 
+ 353 |    p = skip_whitespace(p);               | True                                                           | 
+ 354 |    if (!isdigit(*p))                     | True                                                           | 
+ 355 |     break;                               | True                                                           | 
+ 356 |    count += bb_strtoull(p, &tmp, 10);    | True                                                           | 
+ 357 |    p = tmp;                              | True                                                           | 
+ 358 |   }                                      | True                                                           | 
+ 359 |   /*   0:  143646045  153901007   IO-API | True                                                           | 
+ 360 |    * NMI:          1          2   Non-ma | True                                                           | 
+ 361 |    *                              ^      | True                                                           | 
+ 362 |    */                                    | True                                                           | 
+ 363 |   if (nr < 20000) {                      | True                                                           | 
+ 364 |    /* Skip to the interrupt name, e.g. ' | True                                                           | 
+ 365 |    p = strchr(p, ' ');                   | True                                                           | 
+ 366 |    if (!p)                               | True                                                           | 
+ 367 |     continue;                            | True                                                           | 
+ 368 |    p = skip_whitespace(p);               | True                                                           | 
+ 369 |   }                                      | True                                                           | 
+ 370 |                                          | True                                                           | 
+ 371 |   name = p;                              | True                                                           | 
+ 372 |   chomp(p);                              | True                                                           | 
+ 373 |   /* Save description of the interrupt * | True                                                           | 
+ 374 |   if (nr >= 20000)                       | True                                                           | 
+ 375 |    sprintf(irq_desc, "   <kernel IPI> :  | True                                                           | 
+ 376 |   else                                   | True                                                           | 
+ 377 |    sprintf(irq_desc, "    <interrupt> :  | True                                                           | 
+ 378 |                                          | True                                                           | 
+ 379 |   delta = save_irq_count(nr, count);     | True                                                           | 
+ 380 |                                          | True                                                           | 
+ 381 |   /* Skip per CPU timer interrupts */    | True                                                           | 
+ 382 |   if (is_hpet_irq(name))                 | True                                                           | 
+ 383 |    continue;                             | True                                                           | 
+ 384 |                                          | True                                                           | 
+ 385 |   if (nr != 0 && delta != 0)             | True                                                           | 
+ 386 |    save_line(irq_desc, delta);           | True                                                           | 
+ 387 |                                          | True                                                           | 
+ 388 |   if (nr == 0)                           | True                                                           | 
+ 389 |    G.interrupt_0 = delta;                | True                                                           | 
+ 390 |   else                                   | True                                                           | 
+ 391 |    G.total_interrupt += delta;           | True                                                           | 
+ 392 |  }                                       | True                                                           | 
+ 393 |                                          | True                                                           | 
+ 394 |  fclose(fp);                             | True                                                           | 
+ 395 | }                                        | True                                                           | 
+ 396 | #else /* !ENABLE_FEATURE_POWERTOP_PROCIR | True                                                           | 
+ 397 | # define process_irq_counts()  ((void)0) | !ENABLE_FEATURE_POWERTOP_PROCIRQ                               | 
+ 398 | #endif                                   | True                                                           | 
+ 399 |                                          | True                                                           | 
+ 400 | static NOINLINE int process_timer_stats( | True                                                           | 
+ 401 | {                                        | True                                                           | 
+ 402 |  char buf[128];                          | True                                                           | 
+ 403 |  char line[15 + 3 + 128];                | True                                                           | 
+ 404 |  int n;                                  | True                                                           | 
+ 405 |  FILE *fp;                               | True                                                           | 
+ 406 |                                          | True                                                           | 
+ 407 |  buf[0] = '\0';                          | True                                                           | 
+ 408 |                                          | True                                                           | 
+ 409 |  n = 0;                                  | True                                                           | 
+ 410 |  fp = NULL;                              | True                                                           | 
+ 411 |  if (!G.cant_enable_timer_stats)         | True                                                           | 
+ 412 |   fp = fopen_for_read("/proc/timer_stats | True                                                           | 
+ 413 |  if (fp) {                               | True                                                           | 
+ 414 | // Example file contents:                | True                                                           | 
+ 415 | // Timer Stats Version: v0.2             | True                                                           | 
+ 416 | // Sample period: 1.329 s                | True                                                           | 
+ 417 | //    76,     0 swapper          hrtimer | True                                                           | 
+ 418 | //    88,     0 swapper          hrtimer | True                                                           | 
+ 419 | //    24,  3787 firefox          hrtimer | True                                                           | 
+ 420 | //   46D,  1136 kondemand/1      do_dbs_ | True                                                           | 
+ 421 | // ...                                   | True                                                           | 
+ 422 | //     1,  1656 Xorg             hrtimer | True                                                           | 
+ 423 | //     1,  2159 udisks-daemon    hrtimer | True                                                           | 
+ 424 | // 331 total events, 249.059 events/sec  | True                                                           | 
+ 425 |   while (fgets(buf, sizeof(buf), fp)) {  | True                                                           | 
+ 426 |    const char *process, *func;           | True                                                           | 
+ 427 |    char *count;                          | True                                                           | 
+ 428 |    char *p;                              | True                                                           | 
+ 429 |    int idx;                              | True                                                           | 
+ 430 |    unsigned cnt;                         | True                                                           | 
+ 431 |                                          | True                                                           | 
+ 432 |    count = skip_whitespace(buf);         | True                                                           | 
+ 433 |    p = strchr(count, ',');               | True                                                           | 
+ 434 |    if (!p)                               | True                                                           | 
+ 435 |     continue;                            | True                                                           | 
+ 436 |    *p++ = '\0';                          | True                                                           | 
+ 437 |    cnt = bb_strtou(count, NULL, 10);     | True                                                           | 
+ 438 |    if (strcmp(skip_non_whitespace(count) | True                                                           | 
+ 439 | #if ENABLE_FEATURE_POWERTOP_PROCIRQ      | True                                                           | 
+ 440 |     n = cnt / G.total_cpus;              | True                                                           | 
+ 441 |     if (n > 0 && n < G.interrupt_0) {    | True                                                           | 
+ 442 |      sprintf(line, "    <interrupt> : %s | True                                                           | 
+ 443 |      save_line(line, G.interrupt_0 - n); | True                                                           | 
+ 444 |     }                                    | True                                                           | 
+ 445 | #endif                                   | True                                                           | 
+ 446 |     break;                               | True                                                           | 
+ 447 |    }                                     | True                                                           | 
+ 448 |    if (strchr(count, 'D'))               | True                                                           | 
+ 449 |     continue; /* deferred */             | True                                                           | 
+ 450 |    p = skip_whitespace(p); /* points to  | True                                                           | 
+ 451 |    process = NULL;                       | True                                                           | 
+ 452 |  get_func_name:                          | True                                                           | 
+ 453 |    p = strchr(p, ' ');                   | True                                                           | 
+ 454 |    if (!p)                               | True                                                           | 
+ 455 |     continue;                            | True                                                           | 
+ 456 |    *p++ = '\0';                          | True                                                           | 
+ 457 |    p = skip_whitespace(p);               | True                                                           | 
+ 458 |    if (process == NULL) {                | True                                                           | 
+ 459 |     process = p;                         | True                                                           | 
+ 460 |     goto get_func_name;                  | True                                                           | 
+ 461 |    }                                     | True                                                           | 
+ 462 |    func = p;                             | True                                                           | 
+ 463 |                                          | True                                                           | 
+ 464 |    //if (strcmp(process, "swapper") == 0 | True                                                           | 
+ 465 |    // && strcmp(func, "hrtimer_start_ran | True                                                           | 
+ 466 |    //) {                                 | True                                                           | 
+ 467 |    // process = "[kernel scheduler]";    | True                                                           | 
+ 468 |    // func = "Load balancing tick";      | True                                                           | 
+ 469 |    //}                                   | True                                                           | 
+ 470 |                                          | True                                                           | 
+ 471 |    if (is_prefixed_with(func, "tick_nohz | True                                                           | 
+ 472 |     continue;                            | True                                                           | 
+ 473 |    if (is_prefixed_with(func, "tick_setu | True                                                           | 
+ 474 |     continue;                            | True                                                           | 
+ 475 |    //if (strcmp(process, "powertop") ==  | True                                                           | 
+ 476 |    // continue;                          | True                                                           | 
+ 477 |                                          | True                                                           | 
+ 478 |    idx = index_in_strings("insmod\0modpr | True                                                           | 
+ 479 |    if (idx != -1) {                      | True                                                           | 
+ 480 |     process = idx < 2 ? "[kernel module] | True                                                           | 
+ 481 |    }                                     | True                                                           | 
+ 482 |                                          | True                                                           | 
+ 483 |    chomp(p);                             | True                                                           | 
+ 484 |                                          | True                                                           | 
+ 485 |    // 46D\01136\0kondemand/1\0do_dbs_tim | True                                                           | 
+ 486 |    // ^          ^            ^          | True                                                           | 
+ 487 |    // count      process      func       | True                                                           | 
+ 488 |                                          | True                                                           | 
+ 489 |    //if (strchr(process, '['))           | True                                                           | 
+ 490 |     sprintf(line, "%15.15s : %s", proces | True                                                           | 
+ 491 |    //else                                | True                                                           | 
+ 492 |    // sprintf(line, "%s", process);      | True                                                           | 
+ 493 |    save_line(line, cnt);                 | True                                                           | 
+ 494 |   }                                      | True                                                           | 
+ 495 |   fclose(fp);                            | True                                                           | 
+ 496 |  }                                       | True                                                           | 
+ 497 |                                          | True                                                           | 
+ 498 |  return n;                               | True                                                           | 
+ 499 | }                                        | True                                                           | 
+ 500 |                                          | True                                                           | 
+ 501 | #ifdef __i386__                          | True                                                           | 
+ 502 | static void cpuid_eax_ecx_edx(unsigned * | (__i386__)                                                     | 
+ 503 | {                                        | (__i386__)                                                     | 
+ 504 |  asm ("cpuid"                            | (__i386__)                                                     | 
+ 505 |   : "=a"(*eax), "=b"(*ebx), "=c"(*ecx),  | (__i386__)                                                     | 
+ 506 |   : "0" (*eax),             "2" (*ecx),  | (__i386__)                                                     | 
+ 507 |  );                                      | (__i386__)                                                     | 
+ 508 | }                                        | (__i386__)                                                     | 
+ 509 | #endif                                   | True                                                           | 
+ 510 |                                          | True                                                           | 
+ 511 | #ifdef __i386__                          | True                                                           | 
+ 512 | static NOINLINE void print_intel_cstates | (__i386__)                                                     | 
+ 513 | {                                        | (__i386__)                                                     | 
+ 514 |  int bios_table[8] = { 0 };              | (__i386__)                                                     | 
+ 515 |  int nbios = 0;                          | (__i386__)                                                     | 
+ 516 |  DIR *cpudir;                            | (__i386__)                                                     | 
+ 517 |  struct dirent *d;                       | (__i386__)                                                     | 
+ 518 |  int i;                                  | (__i386__)                                                     | 
+ 519 |  unsigned eax, ebx, ecx, edx;            | (__i386__)                                                     | 
+ 520 |                                          | (__i386__)                                                     | 
+ 521 |  cpudir = opendir("/sys/devices/system/c | (__i386__)                                                     | 
+ 522 |  if (!cpudir)                            | (__i386__)                                                     | 
+ 523 |   return;                                | (__i386__)                                                     | 
+ 524 |                                          | (__i386__)                                                     | 
+ 525 |  /* Loop over cpuN entries */            | (__i386__)                                                     | 
+ 526 |  while ((d = readdir(cpudir)) != NULL) { | (__i386__)                                                     | 
+ 527 |   DIR *dir;                              | (__i386__)                                                     | 
+ 528 |   int len;                               | (__i386__)                                                     | 
+ 529 |   char fname[sizeof("/sys/devices/system | (__i386__)                                                     | 
+ 530 |                                          | (__i386__)                                                     | 
+ 531 |   len = strlen(d->d_name);               | (__i386__)                                                     | 
+ 532 |   if (len < 3 || len > BIG_SYSNAME_LEN)  | (__i386__)                                                     | 
+ 533 |    continue;                             | (__i386__)                                                     | 
+ 534 |                                          | (__i386__)                                                     | 
+ 535 |   if (!isdigit(d->d_name[3]))            | (__i386__)                                                     | 
+ 536 |    continue;                             | (__i386__)                                                     | 
+ 537 |                                          | (__i386__)                                                     | 
+ 538 |   len = sprintf(fname, "%s/%s/cpuidle",  | (__i386__)                                                     | 
+ 539 |   dir = opendir(fname);                  | (__i386__)                                                     | 
+ 540 |   if (!dir)                              | (__i386__)                                                     | 
+ 541 |    continue;                             | (__i386__)                                                     | 
+ 542 |                                          | (__i386__)                                                     | 
+ 543 |   /*                                     | (__i386__)                                                     | 
+ 544 |    * Every C-state has its own stateN di | (__i386__)                                                     | 
+ 545 |    * contains a 'time' and a 'usage' fil | (__i386__)                                                     | 
+ 546 |    */                                    | (__i386__)                                                     | 
+ 547 |   while ((d = readdir(dir)) != NULL) {   | (__i386__)                                                     | 
+ 548 |    FILE *fp;                             | (__i386__)                                                     | 
+ 549 |    char buf[64];                         | (__i386__)                                                     | 
+ 550 |    int n;                                | (__i386__)                                                     | 
+ 551 |                                          | (__i386__)                                                     | 
+ 552 |    n = strlen(d->d_name);                | (__i386__)                                                     | 
+ 553 |    if (n < 3 || n > BIG_SYSNAME_LEN)     | (__i386__)                                                     | 
+ 554 |     continue;                            | (__i386__)                                                     | 
+ 555 |                                          | (__i386__)                                                     | 
+ 556 |    sprintf(fname + len, "/%s/desc", d->d | (__i386__)                                                     | 
+ 557 |    fp = fopen_for_read(fname);           | (__i386__)                                                     | 
+ 558 |    if (fp) {                             | (__i386__)                                                     | 
+ 559 |     char *p = fgets(buf, sizeof(buf), fp | (__i386__)                                                     | 
+ 560 |     fclose(fp);                          | (__i386__)                                                     | 
+ 561 |     if (!p)                              | (__i386__)                                                     | 
+ 562 |      break;                              | (__i386__)                                                     | 
+ 563 |     p = strstr(p, "MWAIT ");             | (__i386__)                                                     | 
+ 564 |     if (p) {                             | (__i386__)                                                     | 
+ 565 |      int pos;                            | (__i386__)                                                     | 
+ 566 |      p += sizeof("MWAIT ") - 1;          | (__i386__)                                                     | 
+ 567 |      pos = (bb_strtoull(p, NULL, 16) >>  | (__i386__)                                                     | 
+ 568 |      if (pos >= ARRAY_SIZE(bios_table))  | (__i386__)                                                     | 
+ 569 |       continue;                          | (__i386__)                                                     | 
+ 570 |      bios_table[pos]++;                  | (__i386__)                                                     | 
+ 571 |      nbios++;                            | (__i386__)                                                     | 
+ 572 |     }                                    | (__i386__)                                                     | 
+ 573 |    }                                     | (__i386__)                                                     | 
+ 574 |   }                                      | (__i386__)                                                     | 
+ 575 |   closedir(dir);                         | (__i386__)                                                     | 
+ 576 |  }                                       | (__i386__)                                                     | 
+ 577 |  closedir(cpudir);                       | (__i386__)                                                     | 
+ 578 |                                          | (__i386__)                                                     | 
+ 579 |  if (!nbios)                             | (__i386__)                                                     | 
+ 580 |   return;                                | (__i386__)                                                     | 
+ 581 |                                          | (__i386__)                                                     | 
+ 582 |  eax = 5;                                | (__i386__)                                                     | 
+ 583 |  ecx = edx = 0; /* paranoia, should not  | (__i386__)                                                     | 
+ 584 |  cpuid_eax_ecx_edx(&eax, /*unused:*/&ebx | (__i386__)                                                     | 
+ 585 |  if (!edx || !(ecx & 1))                 | (__i386__)                                                     | 
+ 586 |   return;                                | (__i386__)                                                     | 
+ 587 |                                          | (__i386__)                                                     | 
+ 588 |  printf("Your %s the following C-states: | (__i386__)                                                     | 
+ 589 |  i = 0;                                  | (__i386__)                                                     | 
+ 590 |  while (edx) {                           | (__i386__)                                                     | 
+ 591 |   if (edx & 7)                           | (__i386__)                                                     | 
+ 592 |    printf("C%u ", i);                    | (__i386__)                                                     | 
+ 593 |   edx >>= 4;                             | (__i386__)                                                     | 
+ 594 |   i++;                                   | (__i386__)                                                     | 
+ 595 |  }                                       | (__i386__)                                                     | 
+ 596 |  bb_putchar('\n');                       | (__i386__)                                                     | 
+ 597 |                                          | (__i386__)                                                     | 
+ 598 |  /* Print BIOS C-States */               | (__i386__)                                                     | 
+ 599 |  printf("Your %s the following C-states: | (__i386__)                                                     | 
+ 600 |  for (i = 0; i < ARRAY_SIZE(bios_table); | (__i386__)                                                     | 
+ 601 |   if (bios_table[i])                     | (__i386__)                                                     | 
+ 602 |    printf("C%u ", i);                    | (__i386__)                                                     | 
+ 603 |                                          | (__i386__)                                                     | 
+ 604 |  bb_putchar('\n');                       | (__i386__)                                                     | 
+ 605 | }                                        | (__i386__)                                                     | 
+ 606 | #else                                    | True                                                           | 
+ 607 | # define print_intel_cstates() ((void)0) | !(__i386__)                                                    | 
+ 608 | #endif                                   | True                                                           | 
+ 609 |                                          | True                                                           | 
+ 610 | static void show_timerstats(void)        | True                                                           | 
+ 611 | {                                        | True                                                           | 
+ 612 |  unsigned lines;                         | True                                                           | 
+ 613 |                                          | True                                                           | 
+ 614 |  /* Get terminal height */               | True                                                           | 
+ 615 |  get_terminal_width_height(STDOUT_FILENO | True                                                           | 
+ 616 |                                          | True                                                           | 
+ 617 |  /* We don't have whole terminal just fo | True                                                           | 
+ 618 |  lines -= 12;                            | True                                                           | 
+ 619 |                                          | True                                                           | 
+ 620 |  if (!G.cant_enable_timer_stats) {       | True                                                           | 
+ 621 |   int i, n = 0;                          | True                                                           | 
+ 622 |   char strbuf6[6];                       | True                                                           | 
+ 623 |                                          | True                                                           | 
+ 624 |   puts("\nTop causes for wakeups:");     | True                                                           | 
+ 625 |   for (i = 0; i < G.lines_cnt; i++) {    | True                                                           | 
+ 626 |    if ((G.lines[i].count > 0 /*|| G.line | True                                                           | 
+ 627 |     && n++ < lines                       | True                                                           | 
+ 628 |    ) {                                   | True                                                           | 
+ 629 |     /* NB: upstream powertop prints "(wa | True                                                           | 
+ 630 |      * we print just "(wakeup counts)".  | True                                                           | 
+ 631 |      */                                  | True                                                           | 
+ 632 |     /*char c = ' ';                      | True                                                           | 
+ 633 |     if (G.lines[i].disk_count)           | True                                                           | 
+ 634 |      c = 'D';*/                          | True                                                           | 
+ 635 |     smart_ulltoa5(G.lines[i].count, strb | True                                                           | 
+ 636 |     printf(/*" %5.1f%% (%s)%c  %s\n"*/   | True                                                           | 
+ 637 |      " %5.1f%% (%s)   %s\n",             | True                                                           | 
+ 638 |      G.lines[i].count * 100.0 / G.lines_ | True                                                           | 
+ 639 |      strbuf6, /*c,*/                     | True                                                           | 
+ 640 |      G.lines[i].string);                 | True                                                           | 
+ 641 |    }                                     | True                                                           | 
+ 642 |   }                                      | True                                                           | 
+ 643 |  } else {                                | True                                                           | 
+ 644 |   bb_putchar('\n');                      | True                                                           | 
+ 645 |   bb_simple_error_msg("no stats availabl | True                                                           | 
+ 646 |     " enable the timer_stats module");   | True                                                           | 
+ 647 |  }                                       | True                                                           | 
+ 648 | }                                        | True                                                           | 
+ 649 |                                          | True                                                           | 
+ 650 | // Example display from powertop version | True                                                           | 
+ 651 | // Cn                Avg residency       | True                                                           | 
+ 652 | // C0 (cpu running)        ( 0.5%)       | True                                                           | 
+ 653 | // polling           0.0ms ( 0.0%)       | True                                                           | 
+ 654 | // C1 mwait          0.0ms ( 0.0%)       | True                                                           | 
+ 655 | // C2 mwait          0.1ms ( 0.1%)       | True                                                           | 
+ 656 | // C3 mwait         12.1ms (99.4%)       | True                                                           | 
+ 657 | //                                       | True                                                           | 
+ 658 | // Wakeups-from-idle per second : 93.6   | True                                                           | 
+ 659 | // no ACPI power usage estimate availabl | True                                                           | 
+ 660 | //                                       | True                                                           | 
+ 661 | // Top causes for wakeups:               | True                                                           | 
+ 662 | //   32.4% ( 26.7)       <interrupt> : e | True                                                           | 
+ 663 | //   29.0% ( 23.9)     <kernel core> : h | True                                                           | 
+ 664 | //    9.0% (  7.5)     <kernel core> : h | True                                                           | 
+ 665 | //    6.5% (  5.3)       <interrupt> : a | True                                                           | 
+ 666 | //    5.0% (  4.1)             inetd : h | True                                                           | 
+ 667 |                                          | True                                                           | 
+ 668 | //usage:#define powertop_trivial_usage   | True                                                           | 
+ 669 | //usage:       ""                        | True                                                           | 
+ 670 | //usage:#define powertop_full_usage "\n\ | True                                                           | 
+ 671 | //usage:       "Analyze power consumptio | True                                                           | 
+ 672 |                                          | True                                                           | 
+ 673 | int powertop_main(int argc, char **argv) | True                                                           | 
+ 674 | int powertop_main(int argc UNUSED_PARAM, | True                                                           | 
+ 675 | {                                        | True                                                           | 
+ 676 |  ullong cur_usage[MAX_CSTATE_COUNT];     | True                                                           | 
+ 677 |  ullong cur_duration[MAX_CSTATE_COUNT];  | True                                                           | 
+ 678 |  char cstate_lines[MAX_CSTATE_COUNT + 2] | True                                                           | 
+ 679 | #if ENABLE_FEATURE_POWERTOP_INTERACTIVE  | True                                                           | 
+ 680 |  struct pollfd pfd[1];                   | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 681 |                                          | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 682 |  pfd[0].fd = 0;                          | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 683 |  pfd[0].events = POLLIN;                 | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 684 | #endif                                   | True                                                           | 
+ 685 |                                          | True                                                           | 
+ 686 |  INIT_G();                               | True                                                           | 
+ 687 |                                          | True                                                           | 
+ 688 | #if ENABLE_FEATURE_POWERTOP_PROCIRQ && B | True                                                           | 
+ 689 |  G.percpu_hpet_start = INT_MAX;          | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 690 |  G.percpu_hpet_end = INT_MIN;            | ENABLE_FEATURE_POWERTOP_PROCIRQ&&BLOATY_HPET_IRQ_NUM_DETECTION | 
+ 691 | #endif                                   | True                                                           | 
+ 692 |                                          | True                                                           | 
+ 693 |  /* Print warning when we don't have sup | True                                                           | 
+ 694 |  if (geteuid() != 0)                     | True                                                           | 
+ 695 |   bb_simple_error_msg("run as root to co | True                                                           | 
+ 696 |                                          | True                                                           | 
+ 697 |  /* Get number of CPUs */                | True                                                           | 
+ 698 |  G.total_cpus = get_cpu_count();         | True                                                           | 
+ 699 |                                          | True                                                           | 
+ 700 |  puts("Collecting data for "DEFAULT_SLEE | True                                                           | 
+ 701 |                                          | True                                                           | 
+ 702 | #if ENABLE_FEATURE_POWERTOP_INTERACTIVE  | True                                                           | 
+ 703 |  /* Turn on unbuffered input; turn off e | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 704 |  set_termios_to_raw(STDIN_FILENO, &G.ini | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 705 |  bb_signals(BB_FATAL_SIGS, sig_handler); | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 706 |  /* So we don't forget to reset term set | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 707 |  die_func = reset_term;                  | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 708 | #endif                                   | True                                                           | 
+ 709 |                                          | True                                                           | 
+ 710 |  /* Collect initial data */              | True                                                           | 
+ 711 |  process_irq_counts();                   | True                                                           | 
+ 712 |                                          | True                                                           | 
+ 713 |  /* Read initial usage and duration */   | True                                                           | 
+ 714 |  read_cstate_counts(G.start_usage, G.sta | True                                                           | 
+ 715 |                                          | True                                                           | 
+ 716 |  /* Copy them to "last" */               | True                                                           | 
+ 717 |  memcpy(G.last_usage, G.start_usage, siz | True                                                           | 
+ 718 |  memcpy(G.last_duration, G.start_duratio | True                                                           | 
+ 719 |                                          | True                                                           | 
+ 720 |  /* Display C-states */                  | True                                                           | 
+ 721 |  print_intel_cstates();                  | True                                                           | 
+ 722 |                                          | True                                                           | 
+ 723 |  G.cant_enable_timer_stats |= stop_timer | True                                                           | 
+ 724 |                                          | True                                                           | 
+ 725 |  /* The main loop */                     | True                                                           | 
+ 726 |  for (;;) {                              | True                                                           | 
+ 727 |   //double maxsleep = 0.0;               | True                                                           | 
+ 728 |   ullong totalticks, totalevents;        | True                                                           | 
+ 729 |   int i;                                 | True                                                           | 
+ 730 |                                          | True                                                           | 
+ 731 |   G.cant_enable_timer_stats |= start_tim | True                                                           | 
+ 732 | #if !ENABLE_FEATURE_POWERTOP_INTERACTIVE | True                                                           | 
+ 733 |   sleep(DEFAULT_SLEEP);                  | !ENABLE_FEATURE_POWERTOP_INTERACTIVE                           | 
+ 734 | #else                                    | True                                                           | 
+ 735 |   if (safe_poll(pfd, 1, DEFAULT_SLEEP *  | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 736 |    unsigned char c;                      | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 737 |    if (safe_read(STDIN_FILENO, &c, 1) != | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 738 |     break; /* EOF/error */               | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 739 |    if (c == G.init_settings.c_cc[VINTR]) | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 740 |     break; /* ^C */                      | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 741 |    if ((c | 0x20) == 'q')                | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 742 |     break;                               | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 743 |   }                                      | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 744 | #endif                                   | True                                                           | 
+ 745 |   G.cant_enable_timer_stats |= stop_time | True                                                           | 
+ 746 |                                          | True                                                           | 
+ 747 |   clear_lines();                         | True                                                           | 
+ 748 |   process_irq_counts();                  | True                                                           | 
+ 749 |                                          | True                                                           | 
+ 750 |   /* Clear the stats */                  | True                                                           | 
+ 751 |   memset(cur_duration, 0, sizeof(cur_dur | True                                                           | 
+ 752 |   memset(cur_usage, 0, sizeof(cur_usage) | True                                                           | 
+ 753 |                                          | True                                                           | 
+ 754 |   /* Read them */                        | True                                                           | 
+ 755 |   read_cstate_counts(cur_usage, cur_dura | True                                                           | 
+ 756 |                                          | True                                                           | 
+ 757 |   /* Count totalticks and totalevents */ | True                                                           | 
+ 758 |   totalticks = totalevents = 0;          | True                                                           | 
+ 759 |   for (i = 0; i < MAX_CSTATE_COUNT; i++) | True                                                           | 
+ 760 |    if (cur_usage[i] != 0) {              | True                                                           | 
+ 761 |     totalticks += cur_duration[i] - G.la | True                                                           | 
+ 762 |     totalevents += cur_usage[i] - G.last | True                                                           | 
+ 763 |    }                                     | True                                                           | 
+ 764 |   }                                      | True                                                           | 
+ 765 |                                          | True                                                           | 
+ 766 |   /* Home; clear screen */               | True                                                           | 
+ 767 |   printf(ESC"[H" ESC"[J");               | True                                                           | 
+ 768 |                                          | True                                                           | 
+ 769 |   /* Clear C-state lines */              | True                                                           | 
+ 770 |   memset(&cstate_lines, 0, sizeof(cstate | True                                                           | 
+ 771 |                                          | True                                                           | 
+ 772 |   if (totalevents == 0 && G.maxcstate <= | True                                                           | 
+ 773 |    /* This should not happen */          | True                                                           | 
+ 774 |    strcpy(cstate_lines[0], "C-state info | True                                                           | 
+ 775 |   } else {                               | True                                                           | 
+ 776 |    double percentage;                    | True                                                           | 
+ 777 |    unsigned newticks;                    | True                                                           | 
+ 778 |                                          | True                                                           | 
+ 779 |    newticks = G.total_cpus * DEFAULT_SLE | True                                                           | 
+ 780 |    /* Handle rounding errors: do not dis | True                                                           | 
+ 781 |    if ((int)newticks < 0)                | True                                                           | 
+ 782 |     newticks = 0;                        | True                                                           | 
+ 783 |                                          | True                                                           | 
+ 784 |    sprintf(cstate_lines[0], "Cn\t\t  Avg | True                                                           | 
+ 785 |    percentage = newticks * 100.0 / (G.to | True                                                           | 
+ 786 |    sprintf(cstate_lines[1], "C0 (cpu run | True                                                           | 
+ 787 |                                          | True                                                           | 
+ 788 |    /* Compute values for individual C-st | True                                                           | 
+ 789 |    for (i = 0; i < MAX_CSTATE_COUNT; i++ | True                                                           | 
+ 790 |     if (cur_usage[i] != 0) {             | True                                                           | 
+ 791 |      double slept;                       | True                                                           | 
+ 792 |      slept = (cur_duration[i] - G.last_d | True                                                           | 
+ 793 |       / (cur_usage[i] - G.last_usage[i]  | True                                                           | 
+ 794 |      percentage = (cur_duration[i] - G.l | True                                                           | 
+ 795 |       / (G.total_cpus * DEFAULT_SLEEP *  | True                                                           | 
+ 796 |      sprintf(cstate_lines[i + 2], "C%u\t | True                                                           | 
+ 797 |       i + 1, slept, percentage);         | True                                                           | 
+ 798 |      //if (maxsleep < slept)             | True                                                           | 
+ 799 |      // maxsleep = slept;                | True                                                           | 
+ 800 |     }                                    | True                                                           | 
+ 801 |    }                                     | True                                                           | 
+ 802 |   }                                      | True                                                           | 
+ 803 |                                          | True                                                           | 
+ 804 |   for (i = 0; i < MAX_CSTATE_COUNT + 2;  | True                                                           | 
+ 805 |    if (cstate_lines[i][0])               | True                                                           | 
+ 806 |     fputs_stdout(cstate_lines[i]);       | True                                                           | 
+ 807 |                                          | True                                                           | 
+ 808 |   i = process_timer_stats();             | True                                                           | 
+ 809 | #if ENABLE_FEATURE_POWERTOP_PROCIRQ      | True                                                           | 
+ 810 |   if (totalevents == 0) {                | True                                                           | 
+ 811 |    /* No C-state info available, use tim | True                                                           | 
+ 812 |    totalevents = i * G.total_cpus + G.to | True                                                           | 
+ 813 |    if (i < 0)                            | True                                                           | 
+ 814 |     totalevents += G.interrupt_0 - i;    | True                                                           | 
+ 815 |   }                                      | True                                                           | 
+ 816 | #endif                                   | True                                                           | 
+ 817 |   /* Upstream powertop prints wakeups pe | True                                                           | 
+ 818 |    * we print just raw wakeup counts.    | True                                                           | 
+ 819 |    */                                    | True                                                           | 
+ 820 | //TODO: show real seconds (think about m | True                                                           | 
+ 821 |   printf("\nWakeups-from-idle in %u seco | True                                                           | 
+ 822 |    DEFAULT_SLEEP,                        | True                                                           | 
+ 823 |    totalevents                           | True                                                           | 
+ 824 |   );                                     | True                                                           | 
+ 825 |                                          | True                                                           | 
+ 826 |   update_lines_cumulative_count();       | True                                                           | 
+ 827 |   sort_lines();                          | True                                                           | 
+ 828 |   show_timerstats();                     | True                                                           | 
+ 829 |   fflush(stdout);                        | True                                                           | 
+ 830 |                                          | True                                                           | 
+ 831 |   /* Clear the stats */                  | True                                                           | 
+ 832 |   memset(cur_duration, 0, sizeof(cur_dur | True                                                           | 
+ 833 |   memset(cur_usage, 0, sizeof(cur_usage) | True                                                           | 
+ 834 |                                          | True                                                           | 
+ 835 |   /* Get new values */                   | True                                                           | 
+ 836 |   read_cstate_counts(cur_usage, cur_dura | True                                                           | 
+ 837 |                                          | True                                                           | 
+ 838 |   /* Save them */                        | True                                                           | 
+ 839 |   memcpy(G.last_usage, cur_usage, sizeof | True                                                           | 
+ 840 |   memcpy(G.last_duration, cur_duration,  | True                                                           | 
+ 841 |  } /* for (;;) */                        | True                                                           | 
+ 842 |                                          | True                                                           | 
+ 843 |  bb_putchar('\n');                       | True                                                           | 
+ 844 | #if ENABLE_FEATURE_POWERTOP_INTERACTIVE  | True                                                           | 
+ 845 |  reset_term();                           | ENABLE_FEATURE_POWERTOP_INTERACTIVE                            | 
+ 846 | #endif                                   | True                                                           | 
+ 847 |                                          | True                                                           | 
+ 848 |  return EXIT_SUCCESS;                    | True                                                           | 
+ 849 | }                                        | True                                                           | 
+-----+------------------------------------------+----------------------------------------------------------------+
+     |                                          | +128MB, 262ms                                                  | 

@@ -1,0 +1,366 @@
+FILE: data/raw/busybox-1.38.0/coreutils/tr.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Mini tr implementation for busybox    | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (c) 1987,1997, Prentice Hal | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * The name of Prentice Hall may not be  | True                      | 
+   8 |  * products derived from this software w | True                      | 
+   9 |  * written permission.                   | True                      | 
+  10 |  *                                       | True                      | 
+  11 |  * Copyright (c) Michiel Huisjes         | True                      | 
+  12 |  *                                       | True                      | 
+  13 |  * This version of tr is adapted from Mi | True                      | 
+  14 |  * by Erik Andersen <andersen@codepoet.o | True                      | 
+  15 |  *                                       | True                      | 
+  16 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  17 |  */                                      | True                      | 
+  18 | /* http://www.opengroup.org/onlinepubs/0 | True                      | 
+  19 |  * TODO: graph, print                    | True                      | 
+  20 |  */                                      | True                      | 
+  21 | //config:config TR                       | True                      | 
+  22 | //config: bool "tr (5.3 kb)"             | True                      | 
+  23 | //config: default y                      | True                      | 
+  24 | //config: help                           | True                      | 
+  25 | //config: tr is used to squeeze, and/or  | True                      | 
+  26 | //config: input, writing to standard out | True                      | 
+  27 | //config:                                | True                      | 
+  28 | //config:config FEATURE_TR_CLASSES       | True                      | 
+  29 | //config: bool "Enable character classes | True                      | 
+  30 | //config: default y                      | True                      | 
+  31 | //config: depends on TR                  | True                      | 
+  32 | //config: help                           | True                      | 
+  33 | //config: Enable character classes, enab | True                      | 
+  34 | //config: tr [:upper:] [:lower:] to conv | True                      | 
+  35 | //config:                                | True                      | 
+  36 | //config:config FEATURE_TR_EQUIV         | True                      | 
+  37 | //config: bool "Enable equivalence class | True                      | 
+  38 | //config: default y                      | True                      | 
+  39 | //config: depends on TR                  | True                      | 
+  40 | //config: help                           | True                      | 
+  41 | //config: Enable equivalence classes, wh | True                      | 
+  42 | //config: character to the current set.  | True                      | 
+  43 | //config: replace all instances of 'a' w | True                      | 
+  44 | //config: useful for cases when no other | True                      | 
+  45 | //config: is possible.                   | True                      | 
+  46 |                                          | True                      | 
+  47 | //applet:IF_TR(APPLET(tr, BB_DIR_USR_BIN | True                      | 
+  48 |                                          | True                      | 
+  49 | //kbuild:lib-$(CONFIG_TR) += tr.o        | True                      | 
+  50 |                                          | True                      | 
+  51 | //usage:#define tr_trivial_usage         | True                      | 
+  52 | //usage:       "[-cds] STRING1 [STRING2] | True                      | 
+  53 | //usage:#define tr_full_usage "\n\n"     | True                      | 
+  54 | //usage:       "Translate, squeeze, or d | True                      | 
+  55 | //usage:     "\n -c Take complement of S | True                      | 
+  56 | //usage:     "\n -d Delete input charact | True                      | 
+  57 | //usage:     "\n -s Squeeze multiple out | True                      | 
+  58 | //usage:                                 | True                      | 
+  59 | //usage:#define tr_example_usage         | True                      | 
+  60 | //usage:       "$ echo \"gdkkn vnqkc\" | | True                      | 
+  61 | //usage:       "hello world\n"           | True                      | 
+  62 |                                          | True                      | 
+  63 | #include "libbb.h"                       | True                      | 
+  64 |                                          | True                      | 
+  65 | enum {                                   | True                      | 
+  66 |  ASCII = 256,                            | True                      | 
+  67 |  /* string buffer needs to be at least a | True                      | 
+  68 |   * BUFSIZ == ASCII is ok, but we will r | True                      | 
+  69 |   * even for smallest patterns, let's av | True                      | 
+  70 |   */                                     | True                      | 
+  71 |  TR_BUFSIZ = (BUFSIZ > ASCII*2) ? BUFSIZ | True                      | 
+  72 | };                                       | True                      | 
+  73 |                                          | True                      | 
+  74 | static void map(char *pvector,           | True                      | 
+  75 |   char *string1, unsigned string1_len,   | True                      | 
+  76 |   char *string2, unsigned string2_len)   | True                      | 
+  77 | {                                        | True                      | 
+  78 |  char last = '0';                        | True                      | 
+  79 |  unsigned i, j;                          | True                      | 
+  80 |                                          | True                      | 
+  81 |  for (j = 0, i = 0; i < string1_len; i++ | True                      | 
+  82 |   if (string2_len <= j)                  | True                      | 
+  83 |    pvector[(unsigned char)(string1[i])]  | True                      | 
+  84 |   else                                   | True                      | 
+  85 |    pvector[(unsigned char)(string1[i])]  | True                      | 
+  86 |  }                                       | True                      | 
+  87 | }                                        | True                      | 
+  88 |                                          | True                      | 
+  89 | /* supported constructs:                 | True                      | 
+  90 |  *   Ranges,  e.g.,  0-9   ==>  01234567 | True                      | 
+  91 |  *   Escapes, e.g.,  \a    ==>  Control- | True                      | 
+  92 |  *   Character classes, e.g. [:upper:] = | True                      | 
+  93 |  *   Equiv classess, e.g. [=A=] ==> A    | True                      | 
+  94 |  * not supported:                        | True                      | 
+  95 |  *   [x*N] - repeat char x N times       | True                      | 
+  96 |  *   [x*] - repeat char x until it fills | True                      | 
+  97 |  * # echo qwe123 | /usr/bin/tr 123456789 | True                      | 
+  98 |  * qwe[d]                                | True                      | 
+  99 |  * # echo qwe123 | /usr/bin/tr 123456789 | True                      | 
+ 100 |  * qweddd                                | True                      | 
+ 101 |  */                                      | True                      | 
+ 102 | static unsigned expand(char *arg, char * | True                      | 
+ 103 | {                                        | True                      | 
+ 104 |  char *buffer = *buffer_p;               | True                      | 
+ 105 |  unsigned pos = 0;                       | True                      | 
+ 106 |  unsigned size = TR_BUFSIZ;              | True                      | 
+ 107 |  unsigned i; /* can't be unsigned char:  | True                      | 
+ 108 |  unsigned char ac;                       | True                      | 
+ 109 |                                          | True                      | 
+ 110 |  while (*arg) {                          | True                      | 
+ 111 |   if (pos + ASCII > size) {              | True                      | 
+ 112 |    size += ASCII;                        | True                      | 
+ 113 |    *buffer_p = buffer = xrealloc(buffer, | True                      | 
+ 114 |   }                                      | True                      | 
+ 115 |   if (*arg == '\\') {                    | True                      | 
+ 116 |    const char *z;                        | True                      | 
+ 117 |    arg++;                                | True                      | 
+ 118 |    z = arg;                              | True                      | 
+ 119 |    ac = bb_process_escape_sequence(&z);  | True                      | 
+ 120 |    arg = (char *)z;                      | True                      | 
+ 121 |    arg--;                                | True                      | 
+ 122 |    *arg = ac;                            | True                      | 
+ 123 |    /*                                    | True                      | 
+ 124 |     * fall through, there may be a range | True                      | 
+ 125 |     * If not, current char will be treat | True                      | 
+ 126 |     */                                   | True                      | 
+ 127 |   }                                      | True                      | 
+ 128 |   if (arg[1] == '-') { /* "0-9..." */    | True                      | 
+ 129 |    ac = arg[2];                          | True                      | 
+ 130 |    if (ac == '\0') { /* "0-": copy verba | True                      | 
+ 131 |     buffer[pos++] = *arg++; /* copy '0'  | True                      | 
+ 132 |     continue; /* next iter will copy '-' | True                      | 
+ 133 |    }                                     | True                      | 
+ 134 |    i = (unsigned char) *arg;             | True                      | 
+ 135 |    arg += 3; /* skip 0-9 or 0-\ */       | True                      | 
+ 136 |    if (ac == '\\') {                     | True                      | 
+ 137 |     const char *z;                       | True                      | 
+ 138 |     z = arg;                             | True                      | 
+ 139 |     ac = bb_process_escape_sequence(&z); | True                      | 
+ 140 |     arg = (char *)z;                     | True                      | 
+ 141 |    }                                     | True                      | 
+ 142 |    while (i <= ac) /* ok: i is unsigned  | True                      | 
+ 143 |     buffer[pos++] = i++;                 | True                      | 
+ 144 |    continue;                             | True                      | 
+ 145 |   }                                      | True                      | 
+ 146 |   if ((ENABLE_FEATURE_TR_CLASSES || ENAB | True                      | 
+ 147 |    && *arg == '['                        | True                      | 
+ 148 |   ) {                                    | True                      | 
+ 149 |    arg++;                                | True                      | 
+ 150 |    i = (unsigned char) *arg++;           | True                      | 
+ 151 |    /* "[xyz...". i=x, arg points to y */ | True                      | 
+ 152 |    if (ENABLE_FEATURE_TR_CLASSES && i == | True                      | 
+ 153 | #define CLO ":]\0"                       | True                      | 
+ 154 |     static const char classes[] ALIGN1 = | True                      | 
+ 155 |      "alpha"CLO "alnum"CLO "digit"CLO    | True                      | 
+ 156 |      "lower"CLO "upper"CLO "space"CLO    | True                      | 
+ 157 |      "blank"CLO "punct"CLO "cntrl"CLO    | True                      | 
+ 158 |      "xdigit"CLO;                        | True                      | 
+ 159 |     enum {                               | True                      | 
+ 160 |      CLASS_invalid = 0, /* we increment  | True                      | 
+ 161 |      CLASS_alpha = 1,                    | True                      | 
+ 162 |      CLASS_alnum = 2,                    | True                      | 
+ 163 |      CLASS_digit = 3,                    | True                      | 
+ 164 |      CLASS_lower = 4,                    | True                      | 
+ 165 |      CLASS_upper = 5,                    | True                      | 
+ 166 |      CLASS_space = 6,                    | True                      | 
+ 167 |      CLASS_blank = 7,                    | True                      | 
+ 168 |      CLASS_punct = 8,                    | True                      | 
+ 169 |      CLASS_cntrl = 9,                    | True                      | 
+ 170 |      CLASS_xdigit = 10,                  | True                      | 
+ 171 |      //CLASS_graph = 11,                 | True                      | 
+ 172 |      //CLASS_print = 12,                 | True                      | 
+ 173 |     };                                   | True                      | 
+ 174 |     smalluint j;                         | True                      | 
+ 175 |     char *tmp;                           | True                      | 
+ 176 |                                          | True                      | 
+ 177 |     /* xdigit needs 8, not 7 */          | True                      | 
+ 178 |     i = 7 + (arg[0] == 'x');             | True                      | 
+ 179 |     tmp = xstrndup(arg, i);              | True                      | 
+ 180 |     j = index_in_strings(classes, tmp) + | True                      | 
+ 181 |     free(tmp);                           | True                      | 
+ 182 |                                          | True                      | 
+ 183 |     if (j == CLASS_invalid)              | True                      | 
+ 184 |      goto skip_bracket;                  | True                      | 
+ 185 |                                          | True                      | 
+ 186 |     arg += i;                            | True                      | 
+ 187 |     if (j == CLASS_alnum || j == CLASS_d | True                      | 
+ 188 |      for (i = '0'; i <= '9'; i++)        | True                      | 
+ 189 |       buffer[pos++] = i;                 | True                      | 
+ 190 |     }                                    | True                      | 
+ 191 |     if (j == CLASS_alpha || j == CLASS_a | True                      | 
+ 192 |      for (i = 'A'; i <= 'Z'; i++)        | True                      | 
+ 193 |       buffer[pos++] = i;                 | True                      | 
+ 194 |     }                                    | True                      | 
+ 195 |     if (j == CLASS_alpha || j == CLASS_a | True                      | 
+ 196 |      for (i = 'a'; i <= 'z'; i++)        | True                      | 
+ 197 |       buffer[pos++] = i;                 | True                      | 
+ 198 |     }                                    | True                      | 
+ 199 |     if (j == CLASS_space || j == CLASS_b | True                      | 
+ 200 |      buffer[pos++] = '\t';               | True                      | 
+ 201 |      if (j == CLASS_space) {             | True                      | 
+ 202 |       buffer[pos++] = '\n';              | True                      | 
+ 203 |       buffer[pos++] = '\v';              | True                      | 
+ 204 |       buffer[pos++] = '\f';              | True                      | 
+ 205 |       buffer[pos++] = '\r';              | True                      | 
+ 206 |      }                                   | True                      | 
+ 207 |      buffer[pos++] = ' ';                | True                      | 
+ 208 |     }                                    | True                      | 
+ 209 |     if (j == CLASS_punct || j == CLASS_c | True                      | 
+ 210 |      for (i = '\0'; i < ASCII; i++) {    | True                      | 
+ 211 |       if ((j == CLASS_punct && isprint_a | True                      | 
+ 212 |        || (j == CLASS_cntrl && iscntrl(i | True                      | 
+ 213 |       ) {                                | True                      | 
+ 214 |        buffer[pos++] = i;                | True                      | 
+ 215 |       }                                  | True                      | 
+ 216 |      }                                   | True                      | 
+ 217 |     }                                    | True                      | 
+ 218 |     if (j == CLASS_xdigit) {             | True                      | 
+ 219 |      for (i = 'A'; i <= 'F'; i++) {      | True                      | 
+ 220 |       buffer[pos + 6] = i | 0x20;        | True                      | 
+ 221 |       buffer[pos++] = i;                 | True                      | 
+ 222 |      }                                   | True                      | 
+ 223 |      pos += 6;                           | True                      | 
+ 224 |     }                                    | True                      | 
+ 225 |     continue;                            | True                      | 
+ 226 |    }                                     | True                      | 
+ 227 |    /* "[xyz...", i=x, arg points to y */ | True                      | 
+ 228 |    if (ENABLE_FEATURE_TR_EQUIV && i == ' | True                      | 
+ 229 |     buffer[pos++] = *arg; /* copy CHAR * | True                      | 
+ 230 |     if (!arg[0] || arg[1] != '=' || arg[ | True                      | 
+ 231 |      bb_show_usage();                    | True                      | 
+ 232 |     arg += 3;  /* skip CHAR=] */         | True                      | 
+ 233 |     continue;                            | True                      | 
+ 234 |    }                                     | True                      | 
+ 235 |    /* The rest of "[xyz..." cases is tre | True                      | 
+ 236 |     * string, "[" has no special meaning | True                      | 
+ 237 |     * tr "[a-z]" "[A-Z]" can be written  | True                      | 
+ 238 |     * also try tr "[a-z]" "_A-Z+" and yo | True                      | 
+ 239 |     * [] is not special here.            | True                      | 
+ 240 |     */                                   | True                      | 
+ 241 |  skip_bracket:                           | True                      | 
+ 242 |    arg -= 2; /* points to "[" in "[xyz.. | True                      | 
+ 243 |   }                                      | True                      | 
+ 244 |   buffer[pos++] = *arg++;                | True                      | 
+ 245 |  }                                       | True                      | 
+ 246 |  return pos;                             | True                      | 
+ 247 | }                                        | True                      | 
+ 248 |                                          | True                      | 
+ 249 | /* NB: buffer is guaranteed to be at lea | True                      | 
+ 250 |  * (which is >= ASCII) big.              | True                      | 
+ 251 |  */                                      | True                      | 
+ 252 | static int complement(char *buffer, int  | True                      | 
+ 253 | {                                        | True                      | 
+ 254 |  int len;                                | True                      | 
+ 255 |  char conv[ASCII];                       | True                      | 
+ 256 |  unsigned char ch;                       | True                      | 
+ 257 |                                          | True                      | 
+ 258 |  len = 0;                                | True                      | 
+ 259 |  ch = '\0';                              | True                      | 
+ 260 |  while (1) {                             | True                      | 
+ 261 |   if (memchr(buffer, ch, buffer_len) ==  | True                      | 
+ 262 |    conv[len++] = ch;                     | True                      | 
+ 263 |   if (++ch == '\0')                      | True                      | 
+ 264 |    break;                                | True                      | 
+ 265 |  }                                       | True                      | 
+ 266 |  memcpy(buffer, conv, len);              | True                      | 
+ 267 |  return len;                             | True                      | 
+ 268 | }                                        | True                      | 
+ 269 |                                          | True                      | 
+ 270 | int tr_main(int argc, char **argv) MAIN_ | True                      | 
+ 271 | int tr_main(int argc UNUSED_PARAM, char  | True                      | 
+ 272 | {                                        | True                      | 
+ 273 |  int i;                                  | True                      | 
+ 274 |  smalluint opts;                         | True                      | 
+ 275 |  ssize_t read_chars;                     | True                      | 
+ 276 |  size_t in_index, out_index;             | True                      | 
+ 277 |  unsigned last = UCHAR_MAX + 1; /* not e | True                      | 
+ 278 |  unsigned char coded, c;                 | True                      | 
+ 279 |  char *str1 = xmalloc(TR_BUFSIZ);        | True                      | 
+ 280 |  char *str2 = xmalloc(TR_BUFSIZ);        | True                      | 
+ 281 |  int str2_length;                        | True                      | 
+ 282 |  int str1_length;                        | True                      | 
+ 283 |  char *vector = xzalloc(ASCII * 3);      | True                      | 
+ 284 |  char *invec  = vector + ASCII;          | True                      | 
+ 285 |  char *outvec = vector + ASCII * 2;      | True                      | 
+ 286 |                                          | True                      | 
+ 287 | #define TR_OPT_complement   (3 << 0)     | True                      | 
+ 288 | #define TR_OPT_delete       (1 << 2)     | True                      | 
+ 289 | #define TR_OPT_squeeze_reps (1 << 3)     | True                      | 
+ 290 |                                          | True                      | 
+ 291 |  for (i = 0; i < ASCII; i++) {           | True                      | 
+ 292 |   vector[i] = i;                         | True                      | 
+ 293 |   /*invec[i] = outvec[i] = FALSE; - done | True                      | 
+ 294 |  }                                       | True                      | 
+ 295 |                                          | True                      | 
+ 296 |  /* -C/-c difference is that -C compleme | True                      | 
+ 297 |   * and -c complements "values" (binary  | True                      | 
+ 298 |   * In POSIX locale, these are the same. | True                      | 
+ 299 |   */                                     | True                      | 
+ 300 |                                          | True                      | 
+ 301 |  /* '+': stop at first non-option */     | True                      | 
+ 302 |  opts = getopt32(argv, "^+" "Ccds" "\0"  | True                      | 
+ 303 |  argv += optind;                         | True                      | 
+ 304 |                                          | True                      | 
+ 305 |  str1_length = expand(*argv++, &str1);   | True                      | 
+ 306 |  str2_length = 0;                        | True                      | 
+ 307 |  if (opts & TR_OPT_complement)           | True                      | 
+ 308 |   str1_length = complement(str1, str1_le | True                      | 
+ 309 |  if (*argv) {                            | True                      | 
+ 310 |   if (argv[0][0] == '\0')                | True                      | 
+ 311 |    bb_simple_error_msg_and_die("STRING2  | True                      | 
+ 312 |   str2_length = expand(*argv, &str2);    | True                      | 
+ 313 |   map(vector, str1, str1_length,         | True                      | 
+ 314 |     str2, str2_length);                  | True                      | 
+ 315 |  }                                       | True                      | 
+ 316 |  for (i = 0; i < str1_length; i++)       | True                      | 
+ 317 |   invec[(unsigned char)(str1[i])] = TRUE | True                      | 
+ 318 |  for (i = 0; i < str2_length; i++)       | True                      | 
+ 319 |   outvec[(unsigned char)(str2[i])] = TRU | True                      | 
+ 320 |                                          | True                      | 
+ 321 |  goto start_from;                        | True                      | 
+ 322 |                                          | True                      | 
+ 323 |  /* In this loop, str1 space is reused a | True                      | 
+ 324 |   * str2 - as output one. */             | True                      | 
+ 325 |  for (;;) {                              | True                      | 
+ 326 |   /* If we're out of input, flush output | True                      | 
+ 327 |   if ((ssize_t)in_index == read_chars) { | True                      | 
+ 328 |    if (out_index) {                      | True                      | 
+ 329 |     xwrite(STDOUT_FILENO, str2, out_inde | True                      | 
+ 330 |  start_from:                             | True                      | 
+ 331 |     out_index = 0;                       | True                      | 
+ 332 |    }                                     | True                      | 
+ 333 |    read_chars = safe_read(STDIN_FILENO,  | True                      | 
+ 334 |    if (read_chars <= 0) {                | True                      | 
+ 335 |     if (read_chars < 0)                  | True                      | 
+ 336 |      bb_simple_perror_msg_and_die(bb_msg | True                      | 
+ 337 |     break;                               | True                      | 
+ 338 |    }                                     | True                      | 
+ 339 |    in_index = 0;                         | True                      | 
+ 340 |   }                                      | True                      | 
+ 341 |   c = str1[in_index++];                  | True                      | 
+ 342 |   if ((opts & TR_OPT_delete) && invec[c] | True                      | 
+ 343 |    continue;                             | True                      | 
+ 344 |   coded = vector[c];                     | True                      | 
+ 345 |   if ((opts & TR_OPT_squeeze_reps) && la | True                      | 
+ 346 |    && (invec[c] || outvec[coded])        | True                      | 
+ 347 |   ) {                                    | True                      | 
+ 348 |    continue;                             | True                      | 
+ 349 |   }                                      | True                      | 
+ 350 |   str2[out_index++] = last = coded;      | True                      | 
+ 351 |  }                                       | True                      | 
+ 352 |                                          | True                      | 
+ 353 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 354 |   free(vector);                          | True                      | 
+ 355 |   free(str2);                            | True                      | 
+ 356 |   free(str1);                            | True                      | 
+ 357 |  }                                       | True                      | 
+ 358 |                                          | True                      | 
+ 359 |  return EXIT_SUCCESS;                    | True                      | 
+ 360 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +109MB, 244ms             | 

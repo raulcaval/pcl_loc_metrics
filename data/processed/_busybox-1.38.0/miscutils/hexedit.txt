@@ -1,0 +1,466 @@
+FILE: data/raw/busybox-1.38.0/miscutils/hexedit.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * Copyright (C) 2017 Denys Vlasenko <vd | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   5 |  */                                      | True                      | 
+   6 | //config:config HEXEDIT                  | True                      | 
+   7 | //config: bool "hexedit (15 kb)"         | True                      | 
+   8 | //config: default y                      | True                      | 
+   9 | //config: help                           | True                      | 
+  10 | //config: Edit file in hexadecimal.      | True                      | 
+  11 |                                          | True                      | 
+  12 | //applet:IF_HEXEDIT(APPLET(hexedit, BB_D | True                      | 
+  13 |                                          | True                      | 
+  14 | //kbuild:lib-$(CONFIG_HEXEDIT) += hexedi | True                      | 
+  15 |                                          | True                      | 
+  16 | #include "libbb.h"                       | True                      | 
+  17 |                                          | True                      | 
+  18 | #define ESC  "\033"                      | True                      | 
+  19 | #define HOME  ESC"[H"                    | True                      | 
+  20 | #define CLEAR  ESC"[J"                   | True                      | 
+  21 | #define CLEAR_TILL_EOL ESC"[K"           | True                      | 
+  22 | #define SET_ALT_SCR ESC"[?1049h"         | True                      | 
+  23 | #define POP_ALT_SCR ESC"[?1049l"         | True                      | 
+  24 |                                          | True                      | 
+  25 | #undef CTRL                              | True                      | 
+  26 | #define CTRL(c)  ((c) & (uint8_t)~0x60)  | True                      | 
+  27 |                                          | True                      | 
+  28 | struct globals {                         | True                      | 
+  29 |  smallint half;                          | True                      | 
+  30 |  smallint in_read_key;                   | True                      | 
+  31 |  int fd;                                 | True                      | 
+  32 |  unsigned height;                        | True                      | 
+  33 |  unsigned row;                           | True                      | 
+  34 |  IF_VARIABLE_ARCH_PAGESIZE(unsigned page | True                      | 
+  35 | #define G_pagesize cached_pagesize(G.pag | True                      | 
+  36 |  uint8_t *baseaddr;                      | True                      | 
+  37 |  uint8_t *current_byte;                  | True                      | 
+  38 |  uint8_t *eof_byte;                      | True                      | 
+  39 |  off_t size;                             | True                      | 
+  40 |  off_t offset;                           | True                      | 
+  41 |  /* needs to be zero-inited, thus keepin | True                      | 
+  42 |  char read_key_buffer[KEYCODE_BUFFER_SIZ | True                      | 
+  43 |  struct termios orig_termios;            | True                      | 
+  44 | };                                       | True                      | 
+  45 | #define G (*ptr_to_globals)              | True                      | 
+  46 | #define INIT_G() do { \                  | True                      | 
+  47 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+  48 | } while (0)                              | True                      | 
+  49 |                                          | True                      | 
+  50 | /* hopefully there aren't arches with PA | True                      | 
+  51 | #define G_mapsize  (64*1024)             | True                      | 
+  52 |                                          | True                      | 
+  53 | /* "12ef5670 (xx )*16 _1_3_5_7_9abcdef\n | True                      | 
+  54 | #define LINEBUF_SIZE (8 + 1 + 3*16 + 16  | True                      | 
+  55 |                                          | True                      | 
+  56 | static void restore_term(void)           | True                      | 
+  57 | {                                        | True                      | 
+  58 |  tcsetattr_stdin_TCSANOW(&G.orig_termios | True                      | 
+  59 |  printf(POP_ALT_SCR);                    | True                      | 
+  60 |  fflush_all();                           | True                      | 
+  61 | }                                        | True                      | 
+  62 |                                          | True                      | 
+  63 | static void sig_catcher(int sig)         | True                      | 
+  64 | {                                        | True                      | 
+  65 |  if (!G.in_read_key) {                   | True                      | 
+  66 |   /* now it's not safe to do I/O, just i | True                      | 
+  67 |   bb_got_signal = sig;                   | True                      | 
+  68 |   return;                                | True                      | 
+  69 |  }                                       | True                      | 
+  70 |  restore_term();                         | True                      | 
+  71 |  kill_myself_with_sig(sig);              | True                      | 
+  72 | }                                        | True                      | 
+  73 |                                          | True                      | 
+  74 | static int format_line(char *hex, uint8_ | True                      | 
+  75 | {                                        | True                      | 
+  76 |  int ofs_pos;                            | True                      | 
+  77 |  char *text;                             | True                      | 
+  78 |  uint8_t *end, *end1;                    | True                      | 
+  79 |                                          | True                      | 
+  80 | #if 1                                    | True                      | 
+  81 |  /* Can be more than 4Gb, thus >8 chars, | True                      | 
+  82 |  ofs_pos = sprintf(hex, "%08"OFF_FMT"x " | True                      | 
+  83 | #else                                    | True                      | 
+  84 |  if (offset <= 0xffff)                   | !1                        | 
+  85 |   ofs_pos = sprintf(hex, "%04"OFF_FMT"x  | !1                        | 
+  86 |  else                                    | !1                        | 
+  87 |   ofs_pos = sprintf(hex, "%08"OFF_FMT"x  | !1                        | 
+  88 | #endif                                   | True                      | 
+  89 |  hex += ofs_pos;                         | True                      | 
+  90 |                                          | True                      | 
+  91 |  text = hex + 16 * 3;                    | True                      | 
+  92 |  end1 = data + 15;                       | True                      | 
+  93 |  if ((G.size - offset) > 0) {            | True                      | 
+  94 |   end = end1;                            | True                      | 
+  95 |   if ((G.size - offset) <= 15)           | True                      | 
+  96 |    end = data + (G.size - offset) - 1;   | True                      | 
+  97 |   while (data <= end) {                  | True                      | 
+  98 |    uint8_t c = *data++;                  | True                      | 
+  99 |    *hex++ = bb_hexdigits_upcase[c >> 4]; | True                      | 
+ 100 |    *hex++ = bb_hexdigits_upcase[c & 0xf] | True                      | 
+ 101 |    *hex++ = ' ';                         | True                      | 
+ 102 |    if (c < ' ' || c > 0x7e)              | True                      | 
+ 103 |     c = '.';                             | True                      | 
+ 104 |    *text++ = c;                          | True                      | 
+ 105 |   }                                      | True                      | 
+ 106 |  }                                       | True                      | 
+ 107 |  while (data <= end1) {                  | True                      | 
+ 108 |   *hex++ = ' ';                          | True                      | 
+ 109 |   *hex++ = ' ';                          | True                      | 
+ 110 |   *hex++ = ' ';                          | True                      | 
+ 111 |   *text++ = ' ';                         | True                      | 
+ 112 |   data++;                                | True                      | 
+ 113 |  }                                       | True                      | 
+ 114 |  *text = '\0';                           | True                      | 
+ 115 |                                          | True                      | 
+ 116 |  return ofs_pos;                         | True                      | 
+ 117 | }                                        | True                      | 
+ 118 |                                          | True                      | 
+ 119 | static void redraw(unsigned cursor)      | True                      | 
+ 120 | {                                        | True                      | 
+ 121 |  uint8_t *data;                          | True                      | 
+ 122 |  off_t offset;                           | True                      | 
+ 123 |  unsigned i, pos;                        | True                      | 
+ 124 |                                          | True                      | 
+ 125 |  printf(HOME CLEAR);                     | True                      | 
+ 126 |                                          | True                      | 
+ 127 |  /* if cursor is past end of screen, how | True                      | 
+ 128 |  i = (cursor / 16) - G.height + 1;       | True                      | 
+ 129 |  if ((int)i < 0)                         | True                      | 
+ 130 |   i = 0;                                 | True                      | 
+ 131 |                                          | True                      | 
+ 132 |  data = G.baseaddr + i * 16;             | True                      | 
+ 133 |  offset = G.offset + i * 16;             | True                      | 
+ 134 |  cursor -= i * 16;                       | True                      | 
+ 135 |  pos = i = 0;                            | True                      | 
+ 136 |  while (i < G.height) {                  | True                      | 
+ 137 |   char buf[LINEBUF_SIZE];                | True                      | 
+ 138 |   pos = format_line(buf, data, offset);  | True                      | 
+ 139 |   printf(                                | True                      | 
+ 140 |    "\r\n%s" + (!i) * 2, /* print \r\n on | True                      | 
+ 141 |    buf                                   | True                      | 
+ 142 |   );                                     | True                      | 
+ 143 |   data += 16;                            | True                      | 
+ 144 |   offset += 16;                          | True                      | 
+ 145 |   i++;                                   | True                      | 
+ 146 |  }                                       | True                      | 
+ 147 |                                          | True                      | 
+ 148 |  G.row = cursor / 16;                    | True                      | 
+ 149 |  printf(ESC"[%u;%uH", 1 + G.row, 1 + pos | True                      | 
+ 150 | }                                        | True                      | 
+ 151 |                                          | True                      | 
+ 152 | static void redraw_cur_line(void)        | True                      | 
+ 153 | {                                        | True                      | 
+ 154 |  char buf[LINEBUF_SIZE];                 | True                      | 
+ 155 |  uint8_t *data;                          | True                      | 
+ 156 |  off_t offset;                           | True                      | 
+ 157 |  int column;                             | True                      | 
+ 158 |                                          | True                      | 
+ 159 |  column = (0xf & (uintptr_t)G.current_by | True                      | 
+ 160 |  data = G.current_byte - column;         | True                      | 
+ 161 |  offset = G.offset + (data - G.baseaddr) | True                      | 
+ 162 |                                          | True                      | 
+ 163 |  column = column*3 + G.half;             | True                      | 
+ 164 |  column += format_line(buf, data, offset | True                      | 
+ 165 |  printf("%s"                             | True                      | 
+ 166 |   "\r"                                   | True                      | 
+ 167 |   "%.*s",                                | True                      | 
+ 168 |   buf + column,                          | True                      | 
+ 169 |   column, buf                            | True                      | 
+ 170 |  );                                      | True                      | 
+ 171 | }                                        | True                      | 
+ 172 |                                          | True                      | 
+ 173 | /* if remappers return 0, no change was  | True                      | 
+ 174 | static int remap(unsigned cur_pos)       | True                      | 
+ 175 | {                                        | True                      | 
+ 176 |  if (G.baseaddr)                         | True                      | 
+ 177 |   munmap(G.baseaddr, G_mapsize);         | True                      | 
+ 178 |                                          | True                      | 
+ 179 |  G.baseaddr = mmap(NULL,                 | True                      | 
+ 180 |   G_mapsize,                             | True                      | 
+ 181 |   PROT_READ | PROT_WRITE,                | True                      | 
+ 182 |   MAP_SHARED,                            | True                      | 
+ 183 |   G.fd,                                  | True                      | 
+ 184 |   G.offset                               | True                      | 
+ 185 |  );                                      | True                      | 
+ 186 |  if (G.baseaddr == MAP_FAILED) {         | True                      | 
+ 187 |   restore_term();                        | True                      | 
+ 188 |   bb_simple_perror_msg_and_die("mmap");  | True                      | 
+ 189 |  }                                       | True                      | 
+ 190 |                                          | True                      | 
+ 191 |  G.current_byte = G.baseaddr + cur_pos;  | True                      | 
+ 192 |                                          | True                      | 
+ 193 |  G.eof_byte = G.baseaddr + G_mapsize;    | True                      | 
+ 194 |  if ((G.size - G.offset) < G_mapsize) {  | True                      | 
+ 195 |   /* mapping covers tail of the file */  | True                      | 
+ 196 |   /* we do have a mapped byte which is p | True                      | 
+ 197 |   G.eof_byte = G.baseaddr + (G.size - G. | True                      | 
+ 198 |  }                                       | True                      | 
+ 199 |  return 1;                               | True                      | 
+ 200 | }                                        | True                      | 
+ 201 | static int move_mapping_further(void)    | True                      | 
+ 202 | {                                        | True                      | 
+ 203 |  unsigned pos;                           | True                      | 
+ 204 |  unsigned pagesize;                      | True                      | 
+ 205 |                                          | True                      | 
+ 206 |  if ((G.size - G.offset) < G_mapsize)    | True                      | 
+ 207 |   return 0; /* can't move mapping even f | True                      | 
+ 208 |                                          | True                      | 
+ 209 |  pagesize = G_pagesize; /* constant on m | True                      | 
+ 210 |  pos = G.current_byte - G.baseaddr;      | True                      | 
+ 211 |  if (pos >= pagesize) {                  | True                      | 
+ 212 |   /* move offset up until current positi | True                      | 
+ 213 |   do {                                   | True                      | 
+ 214 |    G.offset += pagesize;                 | True                      | 
+ 215 |    if (G.offset == 0) { /* whoops */     | True                      | 
+ 216 |     G.offset -= pagesize;                | True                      | 
+ 217 |     break;                               | True                      | 
+ 218 |    }                                     | True                      | 
+ 219 |    pos -= pagesize;                      | True                      | 
+ 220 |   } while (pos >= pagesize);             | True                      | 
+ 221 |   return remap(pos);                     | True                      | 
+ 222 |  }                                       | True                      | 
+ 223 |  return 0;                               | True                      | 
+ 224 | }                                        | True                      | 
+ 225 | static int move_mapping_lower(void)      | True                      | 
+ 226 | {                                        | True                      | 
+ 227 |  unsigned pos;                           | True                      | 
+ 228 |  unsigned pagesize;                      | True                      | 
+ 229 |                                          | True                      | 
+ 230 |  if (G.offset == 0)                      | True                      | 
+ 231 |   return 0; /* we are at 0 already */    | True                      | 
+ 232 |                                          | True                      | 
+ 233 |  pagesize = G_pagesize; /* constant on m | True                      | 
+ 234 |  pos = G.current_byte - G.baseaddr;      | True                      | 
+ 235 |                                          | True                      | 
+ 236 |  /* move offset down until current posit | True                      | 
+ 237 |  pos += pagesize;                        | True                      | 
+ 238 |  while (pos < G_mapsize) {               | True                      | 
+ 239 |   pos += pagesize;                       | True                      | 
+ 240 |   G.offset -= pagesize;                  | True                      | 
+ 241 |   if (G.offset == 0)                     | True                      | 
+ 242 |    break;                                | True                      | 
+ 243 |  }                                       | True                      | 
+ 244 |  pos -= pagesize;                        | True                      | 
+ 245 |                                          | True                      | 
+ 246 |  return remap(pos);                      | True                      | 
+ 247 | }                                        | True                      | 
+ 248 |                                          | True                      | 
+ 249 | //usage:#define hexedit_trivial_usage    | True                      | 
+ 250 | //usage: "FILE"                          | True                      | 
+ 251 | //usage:#define hexedit_full_usage "\n\n | True                      | 
+ 252 | //usage: "Edit FILE in hexadecimal"      | True                      | 
+ 253 | int hexedit_main(int argc, char **argv)  | True                      | 
+ 254 | int hexedit_main(int argc UNUSED_PARAM,  | True                      | 
+ 255 | {                                        | True                      | 
+ 256 |  INIT_G();                               | True                      | 
+ 257 |  INIT_PAGESIZE(G.pagesize);              | True                      | 
+ 258 |                                          | True                      | 
+ 259 |  get_terminal_width_height(-1, NULL, &G. | True                      | 
+ 260 |  if (1) {                                | True                      | 
+ 261 |   /* reduce number of write() syscalls w | True                      | 
+ 262 |   unsigned sz = (G.height | 0xf) * LINEB | True                      | 
+ 263 |   setvbuf(stdout, xmalloc(sz), _IOFBF, s | True                      | 
+ 264 |  }                                       | True                      | 
+ 265 |                                          | True                      | 
+ 266 |  getopt32(argv, "^" "" "\0" "=1"/*one ar | True                      | 
+ 267 |  argv += optind;                         | True                      | 
+ 268 |                                          | True                      | 
+ 269 |  G.fd = xopen(*argv, O_RDWR);            | True                      | 
+ 270 |  G.size = xlseek(G.fd, 0, SEEK_END);     | True                      | 
+ 271 |                                          | True                      | 
+ 272 |  /* TERMIOS_RAW_CRNL suppresses \n -> \r | True                      | 
+ 273 |  printf(SET_ALT_SCR);                    | True                      | 
+ 274 |  set_termios_to_raw(STDIN_FILENO, &G.ori | True                      | 
+ 275 |  bb_signals(BB_FATAL_SIGS, sig_catcher); | True                      | 
+ 276 |                                          | True                      | 
+ 277 |  remap(0);                               | True                      | 
+ 278 |  redraw(0);                              | True                      | 
+ 279 |                                          | True                      | 
+ 280 | //TODO: //Home/End: start/end of line; ' | True                      | 
+ 281 |  //Backspace: undo                       | True                      | 
+ 282 |  //Ctrl-L: redraw                        | True                      | 
+ 283 |  //Ctrl-Z: suspend                       | True                      | 
+ 284 |  //'/', Ctrl-S: search                   | True                      | 
+ 285 | //TODO: detect window resize             | True                      | 
+ 286 |                                          | True                      | 
+ 287 |  for (;;) {                              | True                      | 
+ 288 |   unsigned cnt;                          | True                      | 
+ 289 |   int32_t key = key; /* for compiler */  | True                      | 
+ 290 |   uint8_t byte;                          | True                      | 
+ 291 |                                          | True                      | 
+ 292 |   fflush_all();                          | True                      | 
+ 293 |   G.in_read_key = 1;                     | True                      | 
+ 294 |   if (!bb_got_signal)                    | True                      | 
+ 295 |    key = safe_read_key(STDIN_FILENO, G.r | True                      | 
+ 296 |   G.in_read_key = 0;                     | True                      | 
+ 297 |   if (bb_got_signal)                     | True                      | 
+ 298 |    key = CTRL('X');                      | True                      | 
+ 299 |                                          | True                      | 
+ 300 |   cnt = 1;                               | True                      | 
+ 301 |   if ((unsigned)(key - 'A') <= 'Z' - 'A' | True                      | 
+ 302 |    key |= 0x20; /* convert A-Z to a-z */ | True                      | 
+ 303 |   switch (key) {                         | True                      | 
+ 304 |   case 'a': case 'b': case 'c': case 'd' | True                      | 
+ 305 |    /* convert to '0'+10...15 */          | True                      | 
+ 306 |    key = key - ('a' - '0' - 10);         | True                      | 
+ 307 |    /* fall through */                    | True                      | 
+ 308 |   case '0': case '1': case '2': case '3' | True                      | 
+ 309 |   case '5': case '6': case '7': case '8' | True                      | 
+ 310 |    if (G.current_byte == G.eof_byte) {   | True                      | 
+ 311 |     if (!move_mapping_further()) {       | True                      | 
+ 312 |      /* already at EOF; extend the file  | True                      | 
+ 313 |      if (++G.size <= 0 /* overflow? */   | True                      | 
+ 314 |       || ftruncate(G.fd, G.size) != 0 /* | True                      | 
+ 315 |      ) {                                 | True                      | 
+ 316 |       G.size--;                          | True                      | 
+ 317 |       break;                             | True                      | 
+ 318 |      }                                   | True                      | 
+ 319 |      G.eof_byte++;                       | True                      | 
+ 320 |     }                                    | True                      | 
+ 321 |    }                                     | True                      | 
+ 322 |    key -= '0';                           | True                      | 
+ 323 |    byte = *G.current_byte & 0xf0;        | True                      | 
+ 324 |    if (!G.half) {                        | True                      | 
+ 325 |     byte = *G.current_byte & 0x0f;       | True                      | 
+ 326 |     key <<= 4;                           | True                      | 
+ 327 |    }                                     | True                      | 
+ 328 |    *G.current_byte = byte + key;         | True                      | 
+ 329 |    /* can't just print one updated hex c | True                      | 
+ 330 |    redraw_cur_line();                    | True                      | 
+ 331 |    /* fall through */                    | True                      | 
+ 332 |   case KEYCODE_RIGHT:                    | True                      | 
+ 333 |    if (G.current_byte == G.eof_byte)     | True                      | 
+ 334 |     break; /* eof - don't allow going pa | True                      | 
+ 335 |    byte = *G.current_byte;               | True                      | 
+ 336 |    if (!G.half) {                        | True                      | 
+ 337 |     G.half = 1;                          | True                      | 
+ 338 |     putchar(bb_hexdigits_upcase[byte >>  | True                      | 
+ 339 |    } else {                              | True                      | 
+ 340 |     G.half = 0;                          | True                      | 
+ 341 |     G.current_byte++;                    | True                      | 
+ 342 |     if ((0xf & (uintptr_t)G.current_byte | True                      | 
+ 343 |      /* rightmost pos, wrap to next line | True                      | 
+ 344 |      if (G.current_byte == G.eof_byte)   | True                      | 
+ 345 |       move_mapping_further();            | True                      | 
+ 346 |      printf(ESC"[46D"); /* cursor left 3 | True                      | 
+ 347 |      goto down;                          | True                      | 
+ 348 |     }                                    | True                      | 
+ 349 |     putchar(bb_hexdigits_upcase[byte & 0 | True                      | 
+ 350 |     putchar(' ');                        | True                      | 
+ 351 |    }                                     | True                      | 
+ 352 |    break;                                | True                      | 
+ 353 |   case KEYCODE_PAGEDOWN:                 | True                      | 
+ 354 |    cnt = G.height;                       | True                      | 
+ 355 |   case KEYCODE_DOWN:                     | True                      | 
+ 356 |  k_down:                                 | True                      | 
+ 357 |    G.current_byte += 16;                 | True                      | 
+ 358 |    if (G.current_byte >= G.eof_byte) {   | True                      | 
+ 359 |     move_mapping_further();              | True                      | 
+ 360 |     if (G.current_byte > G.eof_byte) {   | True                      | 
+ 361 |      /* _after_ eof - don't allow this * | True                      | 
+ 362 |      G.current_byte -= 16;               | True                      | 
+ 363 |      if (G.current_byte < G.baseaddr)    | True                      | 
+ 364 |       move_mapping_lower();              | True                      | 
+ 365 |      break;                              | True                      | 
+ 366 |     }                                    | True                      | 
+ 367 |    }                                     | True                      | 
+ 368 |  down:                                   | True                      | 
+ 369 |    putchar('\n'); /* down one line, poss | True                      | 
+ 370 |    G.row++;                              | True                      | 
+ 371 |    if (G.row >= G.height) {              | True                      | 
+ 372 |     G.row--;                             | True                      | 
+ 373 |     redraw_cur_line();                   | True                      | 
+ 374 |    }                                     | True                      | 
+ 375 |    if (--cnt)                            | True                      | 
+ 376 |     goto k_down;                         | True                      | 
+ 377 |    break;                                | True                      | 
+ 378 |                                          | True                      | 
+ 379 |   case KEYCODE_LEFT:                     | True                      | 
+ 380 |    if (G.half) {                         | True                      | 
+ 381 |     G.half = 0;                          | True                      | 
+ 382 |     printf(ESC"[D");                     | True                      | 
+ 383 |     break;                               | True                      | 
+ 384 |    }                                     | True                      | 
+ 385 |    if ((0xf & (uintptr_t)G.current_byte) | True                      | 
+ 386 |     /* leftmost pos, wrap to prev line * | True                      | 
+ 387 |     if (G.current_byte == G.baseaddr) {  | True                      | 
+ 388 |      if (!move_mapping_lower())          | True                      | 
+ 389 |       break; /* first line, don't do any | True                      | 
+ 390 |     }                                    | True                      | 
+ 391 |     G.half = 1;                          | True                      | 
+ 392 |     G.current_byte--;                    | True                      | 
+ 393 |     printf(ESC"[46C"); /* cursor right 3 | True                      | 
+ 394 |     goto up;                             | True                      | 
+ 395 |    }                                     | True                      | 
+ 396 |    G.half = 1;                           | True                      | 
+ 397 |    G.current_byte--;                     | True                      | 
+ 398 |    printf(ESC"[2D");                     | True                      | 
+ 399 |    break;                                | True                      | 
+ 400 |   case KEYCODE_PAGEUP:                   | True                      | 
+ 401 |    cnt = G.height;                       | True                      | 
+ 402 |   case KEYCODE_UP:                       | True                      | 
+ 403 |  k_up:                                   | True                      | 
+ 404 |    if ((G.current_byte - G.baseaddr) < 1 | True                      | 
+ 405 |     if (!move_mapping_lower())           | True                      | 
+ 406 |      break; /* already at 0, stop */     | True                      | 
+ 407 |    }                                     | True                      | 
+ 408 |    G.current_byte -= 16;                 | True                      | 
+ 409 |  up:                                     | True                      | 
+ 410 |    if (G.row != 0) {                     | True                      | 
+ 411 |     G.row--;                             | True                      | 
+ 412 |     printf(ESC"[A"); /* up (won't scroll | True                      | 
+ 413 |    } else {                              | True                      | 
+ 414 |     //printf(ESC"[T"); /* scroll up */ - | True                      | 
+ 415 |     printf(ESC"M"); /* scroll up */      | True                      | 
+ 416 |     redraw_cur_line();                   | True                      | 
+ 417 |    }                                     | True                      | 
+ 418 |    if (--cnt)                            | True                      | 
+ 419 |     goto k_up;                           | True                      | 
+ 420 |    break;                                | True                      | 
+ 421 |                                          | True                      | 
+ 422 |   case '\n':                             | True                      | 
+ 423 |   case '\r':                             | True                      | 
+ 424 |    /* [Enter]: goto specified position * | True                      | 
+ 425 |    {                                     | True                      | 
+ 426 |     char buf[sizeof(G.offset)*3 + 4];    | True                      | 
+ 427 |     printf(ESC"[999;1H" CLEAR_TILL_EOL); | True                      | 
+ 428 |     if (read_line_input(NULL, "Go to (de | True                      | 
+ 429 |      off_t t;                            | True                      | 
+ 430 |      unsigned cursor;                    | True                      | 
+ 431 |                                          | True                      | 
+ 432 |      t = bb_strtoull(buf, NULL, 0);      | True                      | 
+ 433 |      if (t >= G.size)                    | True                      | 
+ 434 |       t = G.size - 1;                    | True                      | 
+ 435 |      cursor = t & (G_pagesize - 1);      | True                      | 
+ 436 |      t -= cursor;                        | True                      | 
+ 437 |      if (t < 0)                          | True                      | 
+ 438 |       cursor = t = 0;                    | True                      | 
+ 439 |      if (t != 0 && cursor < 0x1ff) {     | True                      | 
+ 440 |       /* very close to end of page, poss | True                      | 
+ 441 |       /* move one page lower */          | True                      | 
+ 442 |       t -= G_pagesize;                   | True                      | 
+ 443 |       cursor += G_pagesize;              | True                      | 
+ 444 |      }                                   | True                      | 
+ 445 |      G.offset = t;                       | True                      | 
+ 446 |      remap(cursor);                      | True                      | 
+ 447 |      redraw(cursor);                     | True                      | 
+ 448 |      break;                              | True                      | 
+ 449 |     }                                    | True                      | 
+ 450 |     /* ^C/EOF/error: fall through to exi | True                      | 
+ 451 |    }                                     | True                      | 
+ 452 |   case CTRL('X'):                        | True                      | 
+ 453 |    restore_term();                       | True                      | 
+ 454 |    return EXIT_SUCCESS;                  | True                      | 
+ 455 |   } /* switch */                         | True                      | 
+ 456 |  } /* for (;;) */                        | True                      | 
+ 457 |                                          | True                      | 
+ 458 |  /* not reached */                       | True                      | 
+ 459 |  return EXIT_SUCCESS;                    | True                      | 
+ 460 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +114MB, 273ms             | 

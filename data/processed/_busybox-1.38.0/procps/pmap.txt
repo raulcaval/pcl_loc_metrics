@@ -1,0 +1,232 @@
+FILE: data/raw/busybox-1.38.0/procps/pmap.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * pmap implementation for busybox       | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * Copyright (C) 2010 Nokia Corporation. | True                      | 
+   5 |  * Written by Alexander Shishkin <virtuo | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see th | True                      | 
+   8 |  * for details.                          | True                      | 
+   9 |  */                                      | True                      | 
+  10 | //config:config PMAP                     | True                      | 
+  11 | //config: bool "pmap (6.2 kb)"           | True                      | 
+  12 | //config: default y                      | True                      | 
+  13 | //config: help                           | True                      | 
+  14 | //config: Display processes' memory mapp | True                      | 
+  15 |                                          | True                      | 
+  16 | //applet:IF_PMAP(APPLET(pmap, BB_DIR_USR | True                      | 
+  17 |                                          | True                      | 
+  18 | //kbuild:lib-$(CONFIG_PMAP) += pmap.o    | True                      | 
+  19 |                                          | True                      | 
+  20 | //usage:#define pmap_trivial_usage       | True                      | 
+  21 | //usage:       "[-xq] PID..."            | True                      | 
+  22 | //usage:#define pmap_full_usage "\n\n"   | True                      | 
+  23 | //usage:       "Display process memory u | True                      | 
+  24 | //usage:     "\n"                        | True                      | 
+  25 | //usage:     "\n -x Show details"        | True                      | 
+  26 | //usage:     "\n -q Quiet"               | True                      | 
+  27 |                                          | True                      | 
+  28 | #include "libbb.h"                       | True                      | 
+  29 |                                          | True                      | 
+  30 | #if ULLONG_MAX == 0xffffffff             | True                      | 
+  31 | # define TABS "\t"                       | ULLONG_MAX==0xffffffff    | 
+  32 | # define SIZEWIDTHx "7"                  | ULLONG_MAX==0xffffffff    | 
+  33 | # define SIZEWIDTH  "9"                  | ULLONG_MAX==0xffffffff    | 
+  34 | # define AFMTLL "8"                      | ULLONG_MAX==0xffffffff    | 
+  35 | # define DASHES ""                       | ULLONG_MAX==0xffffffff    | 
+  36 | #else                                    | True                      | 
+  37 | # define TABS "\t\t"                     | !(ULLONG_MAX==0xffffffff) | 
+  38 | # define SIZEWIDTHx "15"                 | !(ULLONG_MAX==0xffffffff) | 
+  39 | # define SIZEWIDTH  "17"                 | !(ULLONG_MAX==0xffffffff) | 
+  40 | # define AFMTLL "16"                     | !(ULLONG_MAX==0xffffffff) | 
+  41 | # define DASHES "--------"               | !(ULLONG_MAX==0xffffffff) | 
+  42 | #endif                                   | True                      | 
+  43 |                                          | True                      | 
+  44 | enum {                                   | True                      | 
+  45 |  OPT_x = 1 << 0,                         | True                      | 
+  46 |  OPT_q = 1 << 1,                         | True                      | 
+  47 | };                                       | True                      | 
+  48 |                                          | True                      | 
+  49 | struct smaprec {                         | True                      | 
+  50 |  // For mixed 32/64 userspace, 32-bit pm | True                      | 
+  51 |  // 64-bit field here to correctly show  | True                      | 
+  52 |  unsigned long long smap_start;          | True                      | 
+  53 |  // Make size wider too:                 | True                      | 
+  54 |  // I've seen 1203765248 kb large "---p" | True                      | 
+  55 |  // this cuts close to 4 terabytes.      | True                      | 
+  56 |  unsigned long long smap_size;           | True                      | 
+  57 |  // (strictly speaking, other fields nee | True                      | 
+  58 |  // but they are in kbytes, not bytes, a | True                      | 
+  59 |  // not start addresses, sizes tend to b | True                      | 
+  60 |  unsigned long private_dirty;            | True                      | 
+  61 |  unsigned long smap_pss, smap_swap;      | True                      | 
+  62 |  char smap_mode[5];                      | True                      | 
+  63 |  char *smap_name;                        | True                      | 
+  64 | };                                       | True                      | 
+  65 |                                          | True                      | 
+  66 | // How long the filenames and command li | True                      | 
+  67 | #define PMAP_BUFSZ 4096                  | True                      | 
+  68 |                                          | True                      | 
+  69 | static void print_smaprec(struct smaprec | True                      | 
+  70 | {                                        | True                      | 
+  71 |  printf("%0" AFMTLL "llx ", currec->smap | True                      | 
+  72 |                                          | True                      | 
+  73 |  if (option_mask32 & OPT_x)              | True                      | 
+  74 |   printf("%7llu %7lu %7lu %7lu ",        | True                      | 
+  75 |    currec->smap_size,                    | True                      | 
+  76 |    currec->smap_pss,                     | True                      | 
+  77 |    currec->private_dirty,                | True                      | 
+  78 |    currec->smap_swap);                   | True                      | 
+  79 |  else                                    | True                      | 
+  80 |   printf("%7lluK", currec->smap_size);   | True                      | 
+  81 |                                          | True                      | 
+  82 |  printf(" %.4s  %s\n", currec->smap_mode | True                      | 
+  83 | }                                        | True                      | 
+  84 |                                          | True                      | 
+  85 | /* libbb's procps_read_smaps() looks som | True                      | 
+  86 |  * but the collected information is suff | True                      | 
+  87 |  * that merging them into one function i | True                      | 
+  88 |  * (unless you feel masochistic today).  | True                      | 
+  89 |  */                                      | True                      | 
+  90 | static int read_smaps(pid_t pid, char bu | True                      | 
+  91 | {                                        | True                      | 
+  92 |  FILE *file;                             | True                      | 
+  93 |  struct smaprec currec;                  | True                      | 
+  94 |  char filename[sizeof("/proc/%u/smaps")  | True                      | 
+  95 |                                          | True                      | 
+  96 |  sprintf(filename, "/proc/%u/smaps", (in | True                      | 
+  97 |                                          | True                      | 
+  98 |  file = fopen_for_read(filename);        | True                      | 
+  99 |  if (!file)                              | True                      | 
+ 100 |   return 1;                              | True                      | 
+ 101 |                                          | True                      | 
+ 102 |  memset(&currec, 0, sizeof(currec));     | True                      | 
+ 103 |  while (fgets(buf, PMAP_BUFSZ, file)) {  | True                      | 
+ 104 |   // Each mapping datum has this form:   | True                      | 
+ 105 |   // f7d29000-f7d39000 rw-s FILEOFS M:m  | True                      | 
+ 106 |   // Size:                nnn kB         | True                      | 
+ 107 |   // Rss:                 nnn kB         | True                      | 
+ 108 |   // .....                               | True                      | 
+ 109 |                                          | True                      | 
+ 110 |   char *tp, *p;                          | True                      | 
+ 111 |                                          | True                      | 
+ 112 | #define bytes4 *(uint32_t*)buf           | True                      | 
+ 113 | #define Pss_   PACK32_BYTES('P','s','s', | True                      | 
+ 114 | #define Swap   PACK32_BYTES('S','w','a', | True                      | 
+ 115 | #define Priv   PACK32_BYTES('P','r','i', | True                      | 
+ 116 | #define FETCH(X, N) \                    | True                      | 
+ 117 |  tp = skip_whitespace(buf+4 + (N)); \    | True                      | 
+ 118 |  total->X += currec.X = fast_strtoul_10( | True                      | 
+ 119 |  continue                                | True                      | 
+ 120 | #define SCAN(S, X) \                     | True                      | 
+ 121 | if (memcmp(buf+4, S, sizeof(S)-1) == 0)  | True                      | 
+ 122 |  FETCH(X, sizeof(S)-1); \                | True                      | 
+ 123 | }                                        | True                      | 
+ 124 |   if (bytes4 == Pss_) {                  | True                      | 
+ 125 |    FETCH(smap_pss, 0);                   | True                      | 
+ 126 |   }                                      | True                      | 
+ 127 |   if (bytes4 == Swap && buf[4] == ':') { | True                      | 
+ 128 |    FETCH(smap_swap, 1);                  | True                      | 
+ 129 |   }                                      | True                      | 
+ 130 |   if (bytes4 == Priv) {                  | True                      | 
+ 131 |    SCAN("ate_Dirty:", private_dirty);    | True                      | 
+ 132 |   }                                      | True                      | 
+ 133 | #undef bytes4                            | True                      | 
+ 134 | #undef Pss_                              | True                      | 
+ 135 | #undef Swap                              | True                      | 
+ 136 | #undef Priv                              | True                      | 
+ 137 | #undef FETCH                             | True                      | 
+ 138 | #undef SCAN                              | True                      | 
+ 139 |   tp = strchr(buf, '-');                 | True                      | 
+ 140 |   if (tp) {                              | True                      | 
+ 141 |    // We reached next mapping - the line | True                      | 
+ 142 |    // f7d29000-f7d39000 rw-s FILEOFS M:m | True                      | 
+ 143 |                                          | True                      | 
+ 144 |    // If we have a previous record, ther | True                      | 
+ 145 |    // for it, print and clear currec     | True                      | 
+ 146 |    if (currec.smap_size)                 | True                      | 
+ 147 |     print_smaprec(&currec);              | True                      | 
+ 148 |    free(currec.smap_name);               | True                      | 
+ 149 |    memset(&currec, 0, sizeof(currec));   | True                      | 
+ 150 |                                          | True                      | 
+ 151 |    *tp = ' ';                            | True                      | 
+ 152 |    tp = buf;                             | True                      | 
+ 153 |    currec.smap_start = fast_strtoull_16( | True                      | 
+ 154 |    currec.smap_size = (fast_strtoull_16( | True                      | 
+ 155 |    strncpy(currec.smap_mode, tp, sizeof( | True                      | 
+ 156 |                                          | True                      | 
+ 157 |    // skipping "rw-s FILEOFS M:m INODE " | True                      | 
+ 158 |    tp = skip_fields(tp, 4);              | True                      | 
+ 159 |    tp = skip_whitespace(tp); // there ma | True                      | 
+ 160 |    p = strchrnul(tp, '\n');              | True                      | 
+ 161 |    if (p != tp) {                        | True                      | 
+ 162 |     currec.smap_name = xstrndup(tp, p -  | True                      | 
+ 163 |    }                                     | True                      | 
+ 164 |    total->smap_size += currec.smap_size; | True                      | 
+ 165 |   }                                      | True                      | 
+ 166 |  } // while (got line)                   | True                      | 
+ 167 |  fclose(file);                           | True                      | 
+ 168 |                                          | True                      | 
+ 169 |  if (currec.smap_size)                   | True                      | 
+ 170 |   print_smaprec(&currec);                | True                      | 
+ 171 |  free(currec.smap_name);                 | True                      | 
+ 172 |                                          | True                      | 
+ 173 |  return 0;                               | True                      | 
+ 174 | }                                        | True                      | 
+ 175 |                                          | True                      | 
+ 176 | static int procps_get_maps(pid_t pid, un | True                      | 
+ 177 | {                                        | True                      | 
+ 178 |  struct smaprec total;                   | True                      | 
+ 179 |  int ret;                                | True                      | 
+ 180 |  char buf[PMAP_BUFSZ] ALIGN4;            | True                      | 
+ 181 |                                          | True                      | 
+ 182 |  ret = read_cmdline(buf, sizeof(buf), pi | True                      | 
+ 183 |  if (ret < 0)                            | True                      | 
+ 184 |   return ret;                            | True                      | 
+ 185 |                                          | True                      | 
+ 186 |  printf("%u: %s\n", (int)pid, buf);      | True                      | 
+ 187 |                                          | True                      | 
+ 188 |  if (!(opt & OPT_q) && (opt & OPT_x))    | True                      | 
+ 189 |   puts("Address" TABS "  Kbytes     PSS  | True                      | 
+ 190 |                                          | True                      | 
+ 191 |  memset(&total, 0, sizeof(total));       | True                      | 
+ 192 |  ret = read_smaps(pid, buf, &total);     | True                      | 
+ 193 |  if (ret)                                | True                      | 
+ 194 |   return ret;                            | True                      | 
+ 195 |                                          | True                      | 
+ 196 |  if (!(opt & OPT_q)) {                   | True                      | 
+ 197 |   if (opt & OPT_x)                       | True                      | 
+ 198 |    printf("--------" DASHES "  ------  - | True                      | 
+ 199 |     "total kB %"SIZEWIDTHx"llu %7lu %7lu | True                      | 
+ 200 |     total.smap_size, total.smap_pss, tot | True                      | 
+ 201 |   else                                   | True                      | 
+ 202 |    printf(" total %"SIZEWIDTH"lluK\n", t | True                      | 
+ 203 |  }                                       | True                      | 
+ 204 |                                          | True                      | 
+ 205 |  return 0;                               | True                      | 
+ 206 | }                                        | True                      | 
+ 207 |                                          | True                      | 
+ 208 | int pmap_main(int argc, char **argv) MAI | True                      | 
+ 209 | int pmap_main(int argc UNUSED_PARAM, cha | True                      | 
+ 210 | {                                        | True                      | 
+ 211 |  unsigned opts;                          | True                      | 
+ 212 |  int ret;                                | True                      | 
+ 213 |                                          | True                      | 
+ 214 |  opts = getopt32(argv, "^" "xq" "\0" "-1 | True                      | 
+ 215 |  argv += optind;                         | True                      | 
+ 216 |                                          | True                      | 
+ 217 |  ret = 0;                                | True                      | 
+ 218 |  while (*argv) {                         | True                      | 
+ 219 |   pid_t pid = xatoi_positive(*argv++);   | True                      | 
+ 220 |   /* GNU pmap returns 42 if any of the p | True                      | 
+ 221 |   if (procps_get_maps(pid, opts) != 0)   | True                      | 
+ 222 |    ret = 42;                             | True                      | 
+ 223 |  }                                       | True                      | 
+ 224 |                                          | True                      | 
+ 225 |  return ret;                             | True                      | 
+ 226 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +108MB, 265ms             | 

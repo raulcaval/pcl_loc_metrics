@@ -1,0 +1,1331 @@
+FILE: data/raw/busybox-1.38.0/networking/udhcp/dhcpd.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                                      | 
+-----+------------------------------------------+----------------------------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                                       | 
+   2 | /*                                       | True                                                                       | 
+   3 |  * udhcp server                          | True                                                                       | 
+   4 |  * Copyright (C) 1999 Matthew Ramsay <ma | True                                                                       | 
+   5 |  *   Chris Trew <ctrew@moreton.com.au>   | True                                                                       | 
+   6 |  *                                       | True                                                                       | 
+   7 |  * Rewrite by Russ Dill <Russ.Dill@asu.e | True                                                                       | 
+   8 |  *                                       | True                                                                       | 
+   9 |  * This program is free software; you ca | True                                                                       | 
+  10 |  * it under the terms of the GNU General | True                                                                       | 
+  11 |  * the Free Software Foundation; either  | True                                                                       | 
+  12 |  * (at your option) any later version.   | True                                                                       | 
+  13 |  *                                       | True                                                                       | 
+  14 |  * This program is distributed in the ho | True                                                                       | 
+  15 |  * but WITHOUT ANY WARRANTY; without eve | True                                                                       | 
+  16 |  * MERCHANTABILITY or FITNESS FOR A PART | True                                                                       | 
+  17 |  * GNU General Public License for more d | True                                                                       | 
+  18 |  *                                       | True                                                                       | 
+  19 |  * You should have received a copy of th | True                                                                       | 
+  20 |  * along with this program; if not, writ | True                                                                       | 
+  21 |  * Foundation, Inc., 675 Mass Ave, Cambr | True                                                                       | 
+  22 |  */                                      | True                                                                       | 
+  23 | //applet:IF_UDHCPD(APPLET(udhcpd, BB_DIR | True                                                                       | 
+  24 |                                          | True                                                                       | 
+  25 | //kbuild:lib-$(CONFIG_UDHCPD) += common. | True                                                                       | 
+  26 | //kbuild:lib-$(CONFIG_UDHCPD) += dhcpd.o | True                                                                       | 
+  27 | //kbuild:lib-$(CONFIG_FEATURE_UDHCP_RFC3 | True                                                                       | 
+  28 |                                          | True                                                                       | 
+  29 | //usage:#define udhcpd_trivial_usage     | True                                                                       | 
+  30 | //usage:       "[-fS] [-I ADDR] [-a MSEC | True                                                                       | 
+  31 | //usage:#define udhcpd_full_usage "\n\n" | True                                                                       | 
+  32 | //usage:       "DHCP server\n"           | True                                                                       | 
+  33 | //usage:     "\n -f Run in foreground"   | True                                                                       | 
+  34 | //usage:     "\n -S Log to syslog too"   | True                                                                       | 
+  35 | //usage:     "\n -I ADDR Local address"  | True                                                                       | 
+  36 | //usage:     "\n -a MSEC Timeout for ARP | True                                                                       | 
+  37 | //usage: IF_FEATURE_UDHCP_PORT(          | True                                                                       | 
+  38 | //usage:     "\n -P PORT Use PORT (defau | True                                                                       | 
+  39 | //usage: )                               | True                                                                       | 
+  40 | //usage:     "\nSignals:"                | True                                                                       | 
+  41 | //usage:     "\n USR1 Update lease file" | True                                                                       | 
+  42 |                                          | True                                                                       | 
+  43 | #include <netinet/ether.h>               | True                                                                       | 
+  44 | #include <syslog.h>                      | True                                                                       | 
+  45 | #include "common.h"                      | True                                                                       | 
+  46 | #include "dhcpc.h"                       | True                                                                       | 
+  47 | #include "dhcpd.h"                       | True                                                                       | 
+  48 |                                          | True                                                                       | 
+  49 | #if ENABLE_PID_FILE_PATH                 | True                                                                       | 
+  50 | #define PID_FILE_PATH CONFIG_PID_FILE_PA | ENABLE_PID_FILE_PATH                                                       | 
+  51 | #else                                    | True                                                                       | 
+  52 | #define PID_FILE_PATH "/var/run"         | !ENABLE_PID_FILE_PATH                                                      | 
+  53 | #endif                                   | True                                                                       | 
+  54 |                                          | True                                                                       | 
+  55 | /* globals */                            | True                                                                       | 
+  56 | #define g_leases ((struct dyn_lease*)ptr | True                                                                       | 
+  57 | /* struct server_data_t server_data is i | True                                                                       | 
+  58 |                                          | True                                                                       | 
+  59 | struct static_lease {                    | True                                                                       | 
+  60 |  struct static_lease *next;              | True                                                                       | 
+  61 |  uint32_t nip;                           | True                                                                       | 
+  62 |  uint8_t mac[6];                         | True                                                                       | 
+  63 |  uint8_t opt[1];                         | True                                                                       | 
+  64 | };                                       | True                                                                       | 
+  65 |                                          | True                                                                       | 
+  66 | /* Takes the address of the pointer to t | True                                                                       | 
+  67 |  * address to a 6 byte mac address,      | True                                                                       | 
+  68 |  * 4 byte IP address */                  | True                                                                       | 
+  69 | static void add_static_lease(struct stat | True                                                                       | 
+  70 |   uint8_t *mac,                          | True                                                                       | 
+  71 |   uint32_t nip,                          | True                                                                       | 
+  72 |   const char *opts)                      | True                                                                       | 
+  73 | {                                        | True                                                                       | 
+  74 |  struct static_lease *st_lease;          | True                                                                       | 
+  75 |  unsigned optlen;                        | True                                                                       | 
+  76 |                                          | True                                                                       | 
+  77 |  optlen = (opts ? 1+1+strnlen(opts, 120) | True                                                                       | 
+  78 |                                          | True                                                                       | 
+  79 |  /* Find the tail of the list */         | True                                                                       | 
+  80 |  while ((st_lease = *st_lease_pp) != NUL | True                                                                       | 
+  81 |   st_lease_pp = &st_lease->next;         | True                                                                       | 
+  82 |  }                                       | True                                                                       | 
+  83 |                                          | True                                                                       | 
+  84 |  /* Add new node */                      | True                                                                       | 
+  85 |  *st_lease_pp = st_lease = xzalloc(sizeo | True                                                                       | 
+  86 |  memcpy(st_lease->mac, mac, 6);          | True                                                                       | 
+  87 |  st_lease->nip = nip;                    | True                                                                       | 
+  88 |  /*st_lease->next = NULL;*/              | True                                                                       | 
+  89 |  if (optlen) {                           | True                                                                       | 
+  90 |   st_lease->opt[OPT_CODE] = DHCP_HOST_NA | True                                                                       | 
+  91 |   optlen -= 2;                           | True                                                                       | 
+  92 |   st_lease->opt[OPT_LEN] = optlen;       | True                                                                       | 
+  93 |   memcpy(&st_lease->opt[OPT_DATA], opts, | True                                                                       | 
+  94 |  }                                       | True                                                                       | 
+  95 |                                          | True                                                                       | 
+  96 | #if defined CONFIG_UDHCP_DEBUG && CONFIG | True                                                                       | 
+  97 |  /* Print out static leases just to chec | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=2)                              | 
+  98 |  if (dhcp_verbose >= 2) {                | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=2)                              | 
+  99 |   bb_info_msg("static lease: mac:%02x:%0 | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=2)                              | 
+ 100 |    st_lease->mac[0], st_lease->mac[1], s | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=2)                              | 
+ 101 |    st_lease->mac[3], st_lease->mac[4], s | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=2)                              | 
+ 102 |    st_lease->nip                         | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=2)                              | 
+ 103 |   );                                     | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=2)                              | 
+ 104 |  }                                       | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=2)                              | 
+ 105 | #endif                                   | True                                                                       | 
+ 106 | }                                        | True                                                                       | 
+ 107 |                                          | True                                                                       | 
+ 108 | /* Find static lease IP by mac */        | True                                                                       | 
+ 109 | static uint32_t get_static_nip_by_mac(vo | True                                                                       | 
+ 110 | {                                        | True                                                                       | 
+ 111 |  struct static_lease *st_lease = server_ | True                                                                       | 
+ 112 |                                          | True                                                                       | 
+ 113 |  while (st_lease) {                      | True                                                                       | 
+ 114 |   if (memcmp(st_lease->mac, mac, 6) == 0 | True                                                                       | 
+ 115 |    return st_lease->nip;                 | True                                                                       | 
+ 116 |   st_lease = st_lease->next;             | True                                                                       | 
+ 117 |  }                                       | True                                                                       | 
+ 118 |                                          | True                                                                       | 
+ 119 |  return 0;                               | True                                                                       | 
+ 120 | }                                        | True                                                                       | 
+ 121 |                                          | True                                                                       | 
+ 122 | static int is_nip_reserved_as_static(uin | True                                                                       | 
+ 123 | {                                        | True                                                                       | 
+ 124 |  struct static_lease *st_lease = server_ | True                                                                       | 
+ 125 |                                          | True                                                                       | 
+ 126 |  while (st_lease) {                      | True                                                                       | 
+ 127 |   if (st_lease->nip == nip)              | True                                                                       | 
+ 128 |    return 1;                             | True                                                                       | 
+ 129 |   st_lease = st_lease->next;             | True                                                                       | 
+ 130 |  }                                       | True                                                                       | 
+ 131 |                                          | True                                                                       | 
+ 132 |  return 0;                               | True                                                                       | 
+ 133 | }                                        | True                                                                       | 
+ 134 |                                          | True                                                                       | 
+ 135 | /* Find the oldest expired lease, NULL i | True                                                                       | 
+ 136 | static struct dyn_lease *oldest_expired_ | True                                                                       | 
+ 137 | {                                        | True                                                                       | 
+ 138 |  struct dyn_lease *oldest_lease = NULL;  | True                                                                       | 
+ 139 |  leasetime_t oldest_time = time(NULL);   | True                                                                       | 
+ 140 |  unsigned i;                             | True                                                                       | 
+ 141 |                                          | True                                                                       | 
+ 142 |  /* Unexpired leases have g_leases[i].ex | True                                                                       | 
+ 143 |   * and therefore can't ever match */    | True                                                                       | 
+ 144 |  for (i = 0; i < server_data.max_leases; | True                                                                       | 
+ 145 |   if (g_leases[i].expires == 0 /* empty  | True                                                                       | 
+ 146 |    || g_leases[i].expires < oldest_time  | True                                                                       | 
+ 147 |   ) {                                    | True                                                                       | 
+ 148 |    oldest_time = g_leases[i].expires;    | True                                                                       | 
+ 149 |    oldest_lease = &g_leases[i];          | True                                                                       | 
+ 150 |   }                                      | True                                                                       | 
+ 151 |  }                                       | True                                                                       | 
+ 152 |  return oldest_lease;                    | True                                                                       | 
+ 153 | }                                        | True                                                                       | 
+ 154 |                                          | True                                                                       | 
+ 155 | /* Clear out all leases with matching no | True                                                                       | 
+ 156 |  * If chaddr == NULL, this is a conflict | True                                                                       | 
+ 157 |  */                                      | True                                                                       | 
+ 158 | static void clear_leases(const uint8_t * | True                                                                       | 
+ 159 | {                                        | True                                                                       | 
+ 160 |  unsigned i;                             | True                                                                       | 
+ 161 |                                          | True                                                                       | 
+ 162 |  for (i = 0; i < server_data.max_leases; | True                                                                       | 
+ 163 |   if ((chaddr && memcmp(g_leases[i].leas | True                                                                       | 
+ 164 |    || (yiaddr && g_leases[i].lease_nip = | True                                                                       | 
+ 165 |   ) {                                    | True                                                                       | 
+ 166 |    memset(&g_leases[i], 0, sizeof(g_leas | True                                                                       | 
+ 167 |   }                                      | True                                                                       | 
+ 168 |  }                                       | True                                                                       | 
+ 169 | }                                        | True                                                                       | 
+ 170 |                                          | True                                                                       | 
+ 171 | /* Add a lease into the table, clearing  | True                                                                       | 
+ 172 |  * If chaddr == NULL, this is a conflict | True                                                                       | 
+ 173 |  */                                      | True                                                                       | 
+ 174 | static struct dyn_lease *add_lease(      | True                                                                       | 
+ 175 |   const uint8_t *chaddr, uint32_t yiaddr | True                                                                       | 
+ 176 |   leasetime_t leasetime,                 | True                                                                       | 
+ 177 |   const char *hostname, int hostname_len | True                                                                       | 
+ 178 | {                                        | True                                                                       | 
+ 179 |  struct dyn_lease *oldest;               | True                                                                       | 
+ 180 |                                          | True                                                                       | 
+ 181 |  /* clean out any old ones */            | True                                                                       | 
+ 182 |  clear_leases(chaddr, yiaddr);           | True                                                                       | 
+ 183 |                                          | True                                                                       | 
+ 184 |  oldest = oldest_expired_lease();        | True                                                                       | 
+ 185 |                                          | True                                                                       | 
+ 186 |  if (oldest) {                           | True                                                                       | 
+ 187 |   memset(oldest, 0, sizeof(*oldest));    | True                                                                       | 
+ 188 |   if (hostname) {                        | True                                                                       | 
+ 189 |    char *p;                              | True                                                                       | 
+ 190 |                                          | True                                                                       | 
+ 191 |    hostname_len++; /* include NUL */     | True                                                                       | 
+ 192 |    if (hostname_len > sizeof(oldest->hos | True                                                                       | 
+ 193 |     hostname_len = sizeof(oldest->hostna | True                                                                       | 
+ 194 |    p = safe_strncpy(oldest->hostname, ho | True                                                                       | 
+ 195 |    /*                                    | True                                                                       | 
+ 196 |     * Sanitization (s/bad_char/./g).     | True                                                                       | 
+ 197 |     * The intent is not to allow only "D | True                                                                       | 
+ 198 |     * but merely make dumpleases output  | True                                                                       | 
+ 199 |     * We accept "0-9A-Za-z._-", all othe | True                                                                       | 
+ 200 |     */                                   | True                                                                       | 
+ 201 |    if (*p == '-')                        | True                                                                       | 
+ 202 |     *p = '.'; /* defeat "-option" attack | True                                                                       | 
+ 203 |    while (*p) {                          | True                                                                       | 
+ 204 |     if (!isalnum(*p) && *p != '-' && *p  | True                                                                       | 
+ 205 |      *p = '.';                           | True                                                                       | 
+ 206 |     p++;                                 | True                                                                       | 
+ 207 |    }                                     | True                                                                       | 
+ 208 |   }                                      | True                                                                       | 
+ 209 |   if (chaddr)                            | True                                                                       | 
+ 210 |    memcpy(oldest->lease_mac, chaddr, 6); | True                                                                       | 
+ 211 |   oldest->lease_nip = yiaddr;            | True                                                                       | 
+ 212 |   oldest->expires = time(NULL) + leaseti | True                                                                       | 
+ 213 |  }                                       | True                                                                       | 
+ 214 |                                          | True                                                                       | 
+ 215 |  return oldest;                          | True                                                                       | 
+ 216 | }                                        | True                                                                       | 
+ 217 |                                          | True                                                                       | 
+ 218 | /* True if a lease has expired */        | True                                                                       | 
+ 219 | static int is_expired_lease(struct dyn_l | True                                                                       | 
+ 220 | {                                        | True                                                                       | 
+ 221 |  return (lease->expires < (leasetime_t)  | True                                                                       | 
+ 222 | }                                        | True                                                                       | 
+ 223 |                                          | True                                                                       | 
+ 224 | /* Find the first lease that matches MAC | True                                                                       | 
+ 225 | static struct dyn_lease *find_lease_by_m | True                                                                       | 
+ 226 | {                                        | True                                                                       | 
+ 227 |  unsigned i;                             | True                                                                       | 
+ 228 |                                          | True                                                                       | 
+ 229 |  for (i = 0; i < server_data.max_leases; | True                                                                       | 
+ 230 |   if (memcmp(g_leases[i].lease_mac, mac, | True                                                                       | 
+ 231 |    return &g_leases[i];                  | True                                                                       | 
+ 232 |                                          | True                                                                       | 
+ 233 |  return NULL;                            | True                                                                       | 
+ 234 | }                                        | True                                                                       | 
+ 235 |                                          | True                                                                       | 
+ 236 | /* Find the first lease that matches IP, | True                                                                       | 
+ 237 | static struct dyn_lease *find_lease_by_n | True                                                                       | 
+ 238 | {                                        | True                                                                       | 
+ 239 |  unsigned i;                             | True                                                                       | 
+ 240 |                                          | True                                                                       | 
+ 241 |  for (i = 0; i < server_data.max_leases; | True                                                                       | 
+ 242 |   if (g_leases[i].lease_nip == nip)      | True                                                                       | 
+ 243 |    return &g_leases[i];                  | True                                                                       | 
+ 244 |                                          | True                                                                       | 
+ 245 |  return NULL;                            | True                                                                       | 
+ 246 | }                                        | True                                                                       | 
+ 247 |                                          | True                                                                       | 
+ 248 | /* Check if the IP is taken; if it is, a | True                                                                       | 
+ 249 | static int nobody_responds_to_arp(uint32 | True                                                                       | 
+ 250 | {                                        | True                                                                       | 
+ 251 |  struct in_addr temp;                    | True                                                                       | 
+ 252 |  int r;                                  | True                                                                       | 
+ 253 |                                          | True                                                                       | 
+ 254 |  r = arpping(nip, safe_mac,              | True                                                                       | 
+ 255 |    server_data.server_nip,               | True                                                                       | 
+ 256 |    server_data.server_mac,               | True                                                                       | 
+ 257 |    server_data.interface,                | True                                                                       | 
+ 258 |    arpping_ms);                          | True                                                                       | 
+ 259 |  if (r)                                  | True                                                                       | 
+ 260 |   return r;                              | True                                                                       | 
+ 261 |                                          | True                                                                       | 
+ 262 |  temp.s_addr = nip;                      | True                                                                       | 
+ 263 |  bb_info_msg("%s belongs to someone, res | True                                                                       | 
+ 264 |   inet_ntoa(temp), (unsigned)server_data | True                                                                       | 
+ 265 |  add_lease(NULL, nip, server_data.confli | True                                                                       | 
+ 266 |  return 0;                               | True                                                                       | 
+ 267 | }                                        | True                                                                       | 
+ 268 |                                          | True                                                                       | 
+ 269 | /* Find a new usable (we think) address  | True                                                                       | 
+ 270 | static uint32_t find_free_or_expired_nip | True                                                                       | 
+ 271 | {                                        | True                                                                       | 
+ 272 |  uint32_t addr;                          | True                                                                       | 
+ 273 |  struct dyn_lease *oldest_lease = NULL;  | True                                                                       | 
+ 274 |                                          | True                                                                       | 
+ 275 | #if ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC | True                                                                       | 
+ 276 |  uint32_t stop;                          | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 277 |  unsigned i, hash;                       | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 278 |                                          | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 279 |  /* hash hwaddr: use the SDBM hashing al | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 280 |   * dispersal even with similarly-valued | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 281 |   */                                     | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 282 |  hash = 0;                               | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 283 |  for (i = 0; i < 6; i++)                 | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 284 |   hash += safe_mac[i] + (hash << 6) + (h | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 285 |                                          | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 286 |  /* pick a seed based on hwaddr then ite | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 287 |  addr = server_data.start_ip             | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 288 |   + (hash % (1 + server_data.end_ip - se | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 289 |  stop = addr;                            | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 290 | #else                                    | True                                                                       | 
+ 291 |  addr = server_data.start_ip;            | !ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                      | 
+ 292 | #define stop (server_data.end_ip + 1)    | !ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                      | 
+ 293 | #endif                                   | True                                                                       | 
+ 294 |  do {                                    | True                                                                       | 
+ 295 |   uint32_t nip;                          | True                                                                       | 
+ 296 |   struct dyn_lease *lease;               | True                                                                       | 
+ 297 |                                          | True                                                                       | 
+ 298 |   /* (Addresses ending in .0 or .255 can | True                                                                       | 
+ 299 |    * in various situations, so _don't_ s | True                                                                       | 
+ 300 |    * to choose start_ip and end_ip corre | True                                                                       | 
+ 301 |    * network environment.) */            | True                                                                       | 
+ 302 |                                          | True                                                                       | 
+ 303 |   nip = htonl(addr);                     | True                                                                       | 
+ 304 |   /* skip our own address */             | True                                                                       | 
+ 305 |   if (nip == server_data.server_nip)     | True                                                                       | 
+ 306 |    goto next_addr;                       | True                                                                       | 
+ 307 |   /* is this a static lease addr? */     | True                                                                       | 
+ 308 |   if (is_nip_reserved_as_static(nip))    | True                                                                       | 
+ 309 |    goto next_addr;                       | True                                                                       | 
+ 310 |                                          | True                                                                       | 
+ 311 |   lease = find_lease_by_nip(nip);        | True                                                                       | 
+ 312 |   if (!lease) {                          | True                                                                       | 
+ 313 | //TODO: DHCP servers do not always sit o | True                                                                       | 
+ 314 |    if (nobody_responds_to_arp(nip, safe_ | True                                                                       | 
+ 315 |     return nip;                          | True                                                                       | 
+ 316 |   } else {                               | True                                                                       | 
+ 317 |    if (!oldest_lease || lease->expires < | True                                                                       | 
+ 318 |     oldest_lease = lease;                | True                                                                       | 
+ 319 |   }                                      | True                                                                       | 
+ 320 |                                          | True                                                                       | 
+ 321 |  next_addr:                              | True                                                                       | 
+ 322 |   addr++;                                | True                                                                       | 
+ 323 | #if ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC | True                                                                       | 
+ 324 |   if (addr > server_data.end_ip)         | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 325 |    addr = server_data.start_ip;          | ENABLE_FEATURE_UDHCPD_BASE_IP_ON_MAC                                       | 
+ 326 | #endif                                   | True                                                                       | 
+ 327 |  } while (addr != stop);                 | True                                                                       | 
+ 328 |                                          | True                                                                       | 
+ 329 |  if (oldest_lease                        | True                                                                       | 
+ 330 |   && is_expired_lease(oldest_lease)      | True                                                                       | 
+ 331 |   && nobody_responds_to_arp(oldest_lease | True                                                                       | 
+ 332 |  ) {                                     | True                                                                       | 
+ 333 |   return oldest_lease->lease_nip;        | True                                                                       | 
+ 334 |  }                                       | True                                                                       | 
+ 335 |                                          | True                                                                       | 
+ 336 |  return 0;                               | True                                                                       | 
+ 337 | }                                        | True                                                                       | 
+ 338 |                                          | True                                                                       | 
+ 339 | /* On these functions, make sure your da | True                                                                       | 
+ 340 | static int FAST_FUNC read_str(const char | True                                                                       | 
+ 341 | {                                        | True                                                                       | 
+ 342 |  char **dest = arg;                      | True                                                                       | 
+ 343 |                                          | True                                                                       | 
+ 344 |  free(*dest);                            | True                                                                       | 
+ 345 |  *dest = xstrdup(line);                  | True                                                                       | 
+ 346 |  return 1;                               | True                                                                       | 
+ 347 | }                                        | True                                                                       | 
+ 348 |                                          | True                                                                       | 
+ 349 | static int FAST_FUNC read_u32(const char | True                                                                       | 
+ 350 | {                                        | True                                                                       | 
+ 351 |  *(uint32_t*)arg = bb_strtou32(line, NUL | True                                                                       | 
+ 352 |  return errno == 0;                      | True                                                                       | 
+ 353 | }                                        | True                                                                       | 
+ 354 |                                          | True                                                                       | 
+ 355 | static int FAST_FUNC read_staticlease(co | True                                                                       | 
+ 356 | {                                        | True                                                                       | 
+ 357 |  char *line;                             | True                                                                       | 
+ 358 |  char *mac_string;                       | True                                                                       | 
+ 359 |  char *ip_string;                        | True                                                                       | 
+ 360 |  char *opts;                             | True                                                                       | 
+ 361 |  struct ether_addr mac_bytes; /* it's "s | True                                                                       | 
+ 362 |  uint32_t nip;                           | True                                                                       | 
+ 363 |                                          | True                                                                       | 
+ 364 |  /* Read mac */                          | True                                                                       | 
+ 365 |  line = (char *) const_line;             | True                                                                       | 
+ 366 |  mac_string = strtok_r(line, " \t", &lin | True                                                                       | 
+ 367 |  if (!mac_string || !ether_aton_r(mac_st | True                                                                       | 
+ 368 |   return 0;                              | True                                                                       | 
+ 369 |                                          | True                                                                       | 
+ 370 |  /* Read ip */                           | True                                                                       | 
+ 371 |  ip_string = strtok_r(NULL, " \t", &line | True                                                                       | 
+ 372 |  if (!ip_string || !udhcp_str2nip(ip_str | True                                                                       | 
+ 373 |   return 0;                              | True                                                                       | 
+ 374 |                                          | True                                                                       | 
+ 375 |  opts = strtok_r(NULL, " \t", &line);    | True                                                                       | 
+ 376 |  /* opts might be NULL, that's not an er | True                                                                       | 
+ 377 |                                          | True                                                                       | 
+ 378 |  add_static_lease(arg, (uint8_t*) &mac_b | True                                                                       | 
+ 379 |                                          | True                                                                       | 
+ 380 |  return 1;                               | True                                                                       | 
+ 381 | }                                        | True                                                                       | 
+ 382 |                                          | True                                                                       | 
+ 383 | static int FAST_FUNC read_optset(const c | True                                                                       | 
+ 384 | {                                        | True                                                                       | 
+ 385 |  return udhcp_str2optset(line, arg,      | True                                                                       | 
+ 386 |    dhcp_optflags, dhcp_option_strings,   | !ENABLE_UDHCPC6                                                            | 
+ 387 |    /*dhcpv6:*/ 0                         | ENABLE_UDHCPC6                                                             | 
+ 388 |  );                                      | ENABLE_UDHCPC6                                                             | 
+ 389 | }                                        | True                                                                       | 
+ 390 |                                          | True                                                                       | 
+ 391 | struct config_keyword {                  | True                                                                       | 
+ 392 |  const char *keyword;                    | True                                                                       | 
+ 393 |  int (*handler)(const char *line, void * | True                                                                       | 
+ 394 |  unsigned ofs;                           | True                                                                       | 
+ 395 |  const char *def;                        | True                                                                       | 
+ 396 | };                                       | True                                                                       | 
+ 397 |                                          | True                                                                       | 
+ 398 | #define OFS(field) offsetof(struct serve | True                                                                       | 
+ 399 |                                          | True                                                                       | 
+ 400 | static const struct config_keyword keywo | True                                                                       | 
+ 401 |  /* keyword        handler           var | True                                                                       | 
+ 402 |  {"start"        , udhcp_str2nip   , OFS | True                                                                       | 
+ 403 |  {"end"          , udhcp_str2nip   , OFS | True                                                                       | 
+ 404 |  {"interface"    , read_str        , OFS | True                                                                       | 
+ 405 |  /* Avoid "max_leases value not sane" wa | True                                                                       | 
+ 406 |   * to default_end_ip - default_start_ip | True                                                                       | 
+ 407 |  {"max_leases"   , read_u32        , OFS | True                                                                       | 
+ 408 |  {"auto_time"    , read_u32        , OFS | True                                                                       | 
+ 409 |  {"decline_time" , read_u32        , OFS | True                                                                       | 
+ 410 |  {"conflict_time", read_u32        , OFS | True                                                                       | 
+ 411 |  {"offer_time"   , read_u32        , OFS | True                                                                       | 
+ 412 |  {"min_lease"    , read_u32        , OFS | True                                                                       | 
+ 413 |  {"lease_file"   , read_str        , OFS | True                                                                       | 
+ 414 |  {"pidfile"      , read_str        , OFS | True                                                                       | 
+ 415 |  {"siaddr"       , udhcp_str2nip   , OFS | True                                                                       | 
+ 416 |  /* keywords with no defaults must be la | True                                                                       | 
+ 417 |  {"option"       , read_optset     , OFS | True                                                                       | 
+ 418 |  {"opt"          , read_optset     , OFS | True                                                                       | 
+ 419 |  {"notify_file"  , read_str        , OFS | True                                                                       | 
+ 420 |  {"sname"        , read_str        , OFS | True                                                                       | 
+ 421 |  {"boot_file"    , read_str        , OFS | True                                                                       | 
+ 422 |  {"static_lease" , read_staticlease, OFS | True                                                                       | 
+ 423 | };                                       | True                                                                       | 
+ 424 | enum { KWS_WITH_DEFAULTS = ARRAY_SIZE(ke | True                                                                       | 
+ 425 |                                          | True                                                                       | 
+ 426 | static NOINLINE void read_config(const c | True                                                                       | 
+ 427 | {                                        | True                                                                       | 
+ 428 |  parser_t *parser;                       | True                                                                       | 
+ 429 |  const struct config_keyword *k;         | True                                                                       | 
+ 430 |  unsigned i;                             | True                                                                       | 
+ 431 |  char *token[2];                         | True                                                                       | 
+ 432 |                                          | True                                                                       | 
+ 433 |  for (i = 0; i < KWS_WITH_DEFAULTS; i++) | True                                                                       | 
+ 434 |   keywords[i].handler(keywords[i].def, ( | True                                                                       | 
+ 435 |                                          | True                                                                       | 
+ 436 |  parser = config_open(file);             | True                                                                       | 
+ 437 |  while (config_read(parser, token, 2, 2, | True                                                                       | 
+ 438 |   for (k = keywords, i = 0; i < ARRAY_SI | True                                                                       | 
+ 439 |    if (strcasecmp(token[0], k->keyword)  | True                                                                       | 
+ 440 |     if (!k->handler(token[1], (char*)&se | True                                                                       | 
+ 441 |      bb_error_msg("can't parse line %u i | True                                                                       | 
+ 442 |        parser->lineno, file);            | True                                                                       | 
+ 443 |      /* reset back to the default value  | True                                                                       | 
+ 444 |      k->handler(k->def, (char*)&server_d | True                                                                       | 
+ 445 |     }                                    | True                                                                       | 
+ 446 |     break;                               | True                                                                       | 
+ 447 |    }                                     | True                                                                       | 
+ 448 |   }                                      | True                                                                       | 
+ 449 |  }                                       | True                                                                       | 
+ 450 |  config_close(parser);                   | True                                                                       | 
+ 451 |                                          | True                                                                       | 
+ 452 |  server_data.start_ip = ntohl(server_dat | True                                                                       | 
+ 453 |  server_data.end_ip = ntohl(server_data. | True                                                                       | 
+ 454 |  if (server_data.start_ip > server_data. | True                                                                       | 
+ 455 |   bb_error_msg_and_die("bad start/end IP | True                                                                       | 
+ 456 | }                                        | True                                                                       | 
+ 457 |                                          | True                                                                       | 
+ 458 | static void write_leases(void)           | True                                                                       | 
+ 459 | {                                        | True                                                                       | 
+ 460 |  int fd;                                 | True                                                                       | 
+ 461 |  unsigned i;                             | True                                                                       | 
+ 462 |  leasetime_t curr;                       | True                                                                       | 
+ 463 |  int64_t written_at;                     | True                                                                       | 
+ 464 |                                          | True                                                                       | 
+ 465 |  fd = open_or_warn(server_data.lease_fil | True                                                                       | 
+ 466 |  if (fd < 0)                             | True                                                                       | 
+ 467 |   return;                                | True                                                                       | 
+ 468 |                                          | True                                                                       | 
+ 469 |  curr = written_at = time(NULL);         | True                                                                       | 
+ 470 |                                          | True                                                                       | 
+ 471 |  written_at = SWAP_BE64(written_at);     | True                                                                       | 
+ 472 |  full_write(fd, &written_at, sizeof(writ | True                                                                       | 
+ 473 |                                          | True                                                                       | 
+ 474 |  for (i = 0; i < server_data.max_leases; | True                                                                       | 
+ 475 |   leasetime_t tmp_time;                  | True                                                                       | 
+ 476 |                                          | True                                                                       | 
+ 477 |   if (g_leases[i].lease_nip == 0)        | True                                                                       | 
+ 478 |    continue;                             | True                                                                       | 
+ 479 |                                          | True                                                                       | 
+ 480 |   /* Screw with the time in the struct,  | True                                                                       | 
+ 481 |   tmp_time = g_leases[i].expires;        | True                                                                       | 
+ 482 |                                          | True                                                                       | 
+ 483 |   g_leases[i].expires -= curr;           | True                                                                       | 
+ 484 |   if ((signed_leasetime_t) g_leases[i].e | True                                                                       | 
+ 485 |    g_leases[i].expires = 0;              | True                                                                       | 
+ 486 |   g_leases[i].expires = htonl(g_leases[i | True                                                                       | 
+ 487 |                                          | True                                                                       | 
+ 488 |   /* No error check. If the file gets tr | True                                                                       | 
+ 489 |    * we lose some leases on restart. Oh  | True                                                                       | 
+ 490 |   full_write(fd, &g_leases[i], sizeof(g_ | True                                                                       | 
+ 491 |                                          | True                                                                       | 
+ 492 |   /* Then restore it when done */        | True                                                                       | 
+ 493 |   g_leases[i].expires = tmp_time;        | True                                                                       | 
+ 494 |  }                                       | True                                                                       | 
+ 495 |  close(fd);                              | True                                                                       | 
+ 496 |                                          | True                                                                       | 
+ 497 |  if (server_data.notify_file) {          | True                                                                       | 
+ 498 |   char *argv[3];                         | True                                                                       | 
+ 499 |   argv[0] = server_data.notify_file;     | True                                                                       | 
+ 500 |   argv[1] = server_data.lease_file;      | True                                                                       | 
+ 501 |   argv[2] = NULL;                        | True                                                                       | 
+ 502 |   spawn_and_wait(argv);                  | True                                                                       | 
+ 503 |  }                                       | True                                                                       | 
+ 504 | }                                        | True                                                                       | 
+ 505 |                                          | True                                                                       | 
+ 506 | static NOINLINE void read_leases(const c | True                                                                       | 
+ 507 | {                                        | True                                                                       | 
+ 508 |  struct dyn_lease lease;                 | True                                                                       | 
+ 509 |  int64_t written_at, time_passed;        | True                                                                       | 
+ 510 |  int fd;                                 | True                                                                       | 
+ 511 | #if defined CONFIG_UDHCP_DEBUG && CONFIG | True                                                                       | 
+ 512 |  unsigned i = 0;                         | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=1)                              | 
+ 513 | #endif                                   | True                                                                       | 
+ 514 |                                          | True                                                                       | 
+ 515 |  fd = open_or_warn(file, O_RDONLY);      | True                                                                       | 
+ 516 |  if (fd < 0)                             | True                                                                       | 
+ 517 |   return;                                | True                                                                       | 
+ 518 |                                          | True                                                                       | 
+ 519 |  if (full_read(fd, &written_at, sizeof(w | True                                                                       | 
+ 520 |   goto ret;                              | True                                                                       | 
+ 521 |  written_at = SWAP_BE64(written_at);     | True                                                                       | 
+ 522 |                                          | True                                                                       | 
+ 523 |  time_passed = time(NULL) - written_at;  | True                                                                       | 
+ 524 |  /* Strange written_at, or lease file fr | True                                                                       | 
+ 525 |   * which had no "written_at" field? */  | True                                                                       | 
+ 526 |  if ((uint64_t)time_passed > 12 * 60 * 6 | True                                                                       | 
+ 527 |   goto ret;                              | True                                                                       | 
+ 528 |                                          | True                                                                       | 
+ 529 |  while (full_read(fd, &lease, sizeof(lea | True                                                                       | 
+ 530 |   uint32_t y = ntohl(lease.lease_nip);   | True                                                                       | 
+ 531 |   if (y >= server_data.start_ip && y <=  | True                                                                       | 
+ 532 |    signed_leasetime_t expires = ntohl(le | True                                                                       | 
+ 533 |    uint32_t static_nip;                  | True                                                                       | 
+ 534 |                                          | True                                                                       | 
+ 535 |    if (expires <= 0)                     | True                                                                       | 
+ 536 |     /* We keep expired leases: add_lease | True                                                                       | 
+ 537 |      * a lease with 0 seconds remaining. | True                                                                       | 
+ 538 |      * Fewer IP address changes this way | True                                                                       | 
+ 539 |      */                                  | True                                                                       | 
+ 540 |     expires = 0;                         | True                                                                       | 
+ 541 |                                          | True                                                                       | 
+ 542 |    /* Check if there is a different stat | True                                                                       | 
+ 543 |    static_nip = get_static_nip_by_mac(le | True                                                                       | 
+ 544 |    if (static_nip) {                     | True                                                                       | 
+ 545 |     /* NB: we do not add lease even if s | True                                                                       | 
+ 546 |      */                                  | True                                                                       | 
+ 547 |     continue;                            | True                                                                       | 
+ 548 |    }                                     | True                                                                       | 
+ 549 |    if (is_nip_reserved_as_static(lease.l | True                                                                       | 
+ 550 |     continue;                            | True                                                                       | 
+ 551 |                                          | True                                                                       | 
+ 552 |    /* NB: add_lease takes "relative time | True                                                                       | 
+ 553 |     * lease duration, not lease deadline | True                                                                       | 
+ 554 |    if (add_lease(lease.lease_mac, lease. | True                                                                       | 
+ 555 |      expires,                            | True                                                                       | 
+ 556 |      lease.hostname, sizeof(lease.hostna | True                                                                       | 
+ 557 |     ) == 0                               | True                                                                       | 
+ 558 |    ) {                                   | True                                                                       | 
+ 559 |     bb_error_msg("too many leases while  | True                                                                       | 
+ 560 |     break;                               | True                                                                       | 
+ 561 |    }                                     | True                                                                       | 
+ 562 | #if defined CONFIG_UDHCP_DEBUG && CONFIG | True                                                                       | 
+ 563 |    i++;                                  | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=1)                              | 
+ 564 | #endif                                   | True                                                                       | 
+ 565 |   }                                      | True                                                                       | 
+ 566 |  }                                       | True                                                                       | 
+ 567 |  log1("read %d leases", i);              | 1                                                                          | 
+ 568 |  ret:                                    | True                                                                       | 
+ 569 |  close(fd);                              | True                                                                       | 
+ 570 | }                                        | True                                                                       | 
+ 571 |                                          | True                                                                       | 
+ 572 | /* Send a packet to a specific mac addre | True                                                                       | 
+ 573 | static void send_packet_to_client(struct | True                                                                       | 
+ 574 | {                                        | True                                                                       | 
+ 575 |  const uint8_t *chaddr;                  | True                                                                       | 
+ 576 |  uint32_t ciaddr;                        | True                                                                       | 
+ 577 |                                          | True                                                                       | 
+ 578 |  // Logic:                               | True                                                                       | 
+ 579 |  //if (force_broadcast) { /* broadcast * | True                                                                       | 
+ 580 |  //else if (dhcp_pkt->ciaddr) { /* unica | True                                                                       | 
+ 581 |  // ^^^ dhcp_pkt->ciaddr comes from clie | True                                                                       | 
+ 582 |  // We expect such clients to have an UD | True                                                                       | 
+ 583 |  //else if (dhcp_pkt->flags & htons(BROA | True                                                                       | 
+ 584 |  //else { /* unicast to dhcp_pkt->yiaddr | True                                                                       | 
+ 585 |  // ^^^ The last case is confusing, but  | True                                                                       | 
+ 586 |  // It's a case where client have sent a | True                                                                       | 
+ 587 |  // and does not have a kernel UDP socke | True                                                                       | 
+ 588 |  // we are offering in yiaddr (it does n | True                                                                       | 
+ 589 |  // This *should* work because client *s | True                                                                       | 
+ 590 |  // instead at this time (IOW: it should | True                                                                       | 
+ 591 |  // "by hand", not relying on kernel's U | True                                                                       | 
+ 592 |                                          | True                                                                       | 
+ 593 |  chaddr = dhcp_pkt->chaddr;              | True                                                                       | 
+ 594 |                                          | True                                                                       | 
+ 595 |  if (dhcp_pkt->ciaddr == 0               | True                                                                       | 
+ 596 |   || force_broadcast /* sending DHCPNAK  | True                                                                       | 
+ 597 |  ) {                                     | True                                                                       | 
+ 598 |   if (dhcp_pkt->flags & htons(BROADCAST_ | True                                                                       | 
+ 599 |    || force_broadcast /* sending DHCPNAK | True                                                                       | 
+ 600 |   ) {                                    | True                                                                       | 
+ 601 | // RFC 2131:                             | True                                                                       | 
+ 602 | // If 'giaddr' is zero and 'ciaddr' is z | True                                                                       | 
+ 603 | // set, then the server broadcasts DHCPO | True                                                                       | 
+ 604 | // 0xffffffff. ...                       | True                                                                       | 
+ 605 | // In all cases, when 'giaddr' is zero,  | True                                                                       | 
+ 606 | // messages to 0xffffffff.               | True                                                                       | 
+ 607 |    ciaddr = INADDR_BROADCAST;            | True                                                                       | 
+ 608 |    chaddr = MAC_BCAST_ADDR;              | True                                                                       | 
+ 609 |    log1s("broadcasting packet to client" | 1                                                                          | 
+ 610 |   } else {                               | True                                                                       | 
+ 611 | // If the broadcast bit is not set and ' | True                                                                       | 
+ 612 | // 'ciaddr' is zero, then the server uni | True                                                                       | 
+ 613 | // messages to the client's hardware add | True                                                                       | 
+ 614 |    ciaddr = dhcp_pkt->yiaddr;            | True                                                                       | 
+ 615 |    log1("unicasting packet to client %ci | 1                                                                          | 
+ 616 |   }                                      | True                                                                       | 
+ 617 |  } else {                                | True                                                                       | 
+ 618 | // If the 'giaddr'                       | True                                                                       | 
+ 619 | // field is zero and the 'ciaddr' field  | True                                                                       | 
+ 620 | // unicasts DHCPOFFER and DHCPACK messag | True                                                                       | 
+ 621 |   ciaddr = dhcp_pkt->ciaddr;             | True                                                                       | 
+ 622 |   log1("unicasting packet to client %cia | 1                                                                          | 
+ 623 |  }                                       | True                                                                       | 
+ 624 |                                          | True                                                                       | 
+ 625 |  udhcp_send_raw_packet(dhcp_pkt,         | True                                                                       | 
+ 626 |   /*src*/ server_data.server_nip, SERVER | True                                                                       | 
+ 627 |   /*dst*/ ciaddr, CLIENT_PORT, chaddr,   | True                                                                       | 
+ 628 |   server_data.ifindex);                  | True                                                                       | 
+ 629 | }                                        | True                                                                       | 
+ 630 |                                          | True                                                                       | 
+ 631 | /* Send a packet to gateway_nip using th | True                                                                       | 
+ 632 | static void send_packet_to_relay(struct  | True                                                                       | 
+ 633 | {                                        | True                                                                       | 
+ 634 |  log1s("forwarding packet to relay");    | 1                                                                          | 
+ 635 |                                          | True                                                                       | 
+ 636 |  udhcp_send_kernel_packet(dhcp_pkt,      | True                                                                       | 
+ 637 |    server_data.server_nip, SERVER_PORT,  | True                                                                       | 
+ 638 |    dhcp_pkt->gateway_nip, SERVER_PORT,   | True                                                                       | 
+ 639 |  /* Yes, relay agents receive (and send) | True                                                                       | 
+ 640 |   * even those which are clients' reques | True                                                                       | 
+ 641 |   * (i.e. without relay) use CLIENT_PORT | True                                                                       | 
+ 642 |   */                                     | True                                                                       | 
+ 643 |    server_data.interface);               | True                                                                       | 
+ 644 | }                                        | True                                                                       | 
+ 645 |                                          | True                                                                       | 
+ 646 | static void send_packet(struct dhcp_pack | True                                                                       | 
+ 647 | {                                        | True                                                                       | 
+ 648 |  if (dhcp_pkt->gateway_nip)              | True                                                                       | 
+ 649 | // RFC 2131:                             | True                                                                       | 
+ 650 | // If the 'giaddr' field in a DHCP messa | True                                                                       | 
+ 651 | // the server sends any return messages  | True                                                                       | 
+ 652 | // BOOTP relay agent whose address appea | True                                                                       | 
+ 653 |   send_packet_to_relay(dhcp_pkt);        | True                                                                       | 
+ 654 |  else                                    | True                                                                       | 
+ 655 |   send_packet_to_client(dhcp_pkt, force_ | True                                                                       | 
+ 656 | }                                        | True                                                                       | 
+ 657 |                                          | True                                                                       | 
+ 658 | static void send_packet_verbose(struct d | True                                                                       | 
+ 659 | {                                        | True                                                                       | 
+ 660 |  struct in_addr addr;                    | True                                                                       | 
+ 661 |  addr.s_addr = dhcp_pkt->yiaddr;         | True                                                                       | 
+ 662 |  bb_info_msg(fmt, inet_ntoa(addr));      | True                                                                       | 
+ 663 |  /* send_packet emits error message itse | True                                                                       | 
+ 664 |  send_packet(dhcp_pkt, /*force_bcast:*/  | True                                                                       | 
+ 665 | }                                        | True                                                                       | 
+ 666 |                                          | True                                                                       | 
+ 667 | static void init_packet(struct dhcp_pack | True                                                                       | 
+ 668 | {                                        | True                                                                       | 
+ 669 |  /* Sets op, htype, hlen, cookie fields  | True                                                                       | 
+ 670 |   * and adds DHCP_MESSAGE_TYPE option */ | True                                                                       | 
+ 671 |  udhcp_init_header(packet, type);        | True                                                                       | 
+ 672 |                                          | True                                                                       | 
+ 673 |  packet->xid = oldpacket->xid;           | True                                                                       | 
+ 674 |  memcpy(packet->chaddr, oldpacket->chadd | True                                                                       | 
+ 675 |  packet->flags = oldpacket->flags;       | True                                                                       | 
+ 676 |  packet->gateway_nip = oldpacket->gatewa | True                                                                       | 
+ 677 |  packet->ciaddr = oldpacket->ciaddr;     | True                                                                       | 
+ 678 |  IF_FEATURE_UDHCPD_BOOTP(if (type != MSG | True                                                                       | 
+ 679 |   udhcp_add_simple_option(packet, DHCP_S | True                                                                       | 
+ 680 | }                                        | True                                                                       | 
+ 681 |                                          | True                                                                       | 
+ 682 | /* Fill options field, siaddr_nip, and s | True                                                                       | 
+ 683 |  * TODO: teach this code to use overload | True                                                                       | 
+ 684 |  */                                      | True                                                                       | 
+ 685 | static void add_server_options(struct dh | True                                                                       | 
+ 686 | {                                        | True                                                                       | 
+ 687 |  struct option_set *config_opts;         | True                                                                       | 
+ 688 |  uint8_t *client_hostname_opt;           | True                                                                       | 
+ 689 |                                          | True                                                                       | 
+ 690 |  client_hostname_opt = NULL;             | True                                                                       | 
+ 691 |  if (packet->yiaddr) { /* if we aren't f | True                                                                       | 
+ 692 |   struct static_lease *st_lease = server | True                                                                       | 
+ 693 |   while (st_lease) {                     | True                                                                       | 
+ 694 |    if (st_lease->nip == packet->yiaddr)  | True                                                                       | 
+ 695 |     if (st_lease->opt[0] != 0)           | True                                                                       | 
+ 696 |      client_hostname_opt = st_lease->opt | True                                                                       | 
+ 697 |     break;                               | True                                                                       | 
+ 698 |    }                                     | True                                                                       | 
+ 699 |    st_lease = st_lease->next;            | True                                                                       | 
+ 700 |   }                                      | True                                                                       | 
+ 701 |  }                                       | True                                                                       | 
+ 702 |                                          | True                                                                       | 
+ 703 |  config_opts = server_data.options;      | True                                                                       | 
+ 704 |  while (config_opts) {                   | True                                                                       | 
+ 705 |   if (config_opts->data[OPT_CODE] != DHC | True                                                                       | 
+ 706 |    /* ^^^^                               | True                                                                       | 
+ 707 |     * DHCP_LEASE_TIME is already filled, | True                                                                       | 
+ 708 |     * send_inform(), should not be fille | True                                                                       | 
+ 709 |     */                                   | True                                                                       | 
+ 710 |    if (config_opts->data[OPT_CODE] != DH | True                                                                       | 
+ 711 |     || !client_hostname_opt              | True                                                                       | 
+ 712 |    ) {                                   | True                                                                       | 
+ 713 |     /* Why "!client_hostname_opt":       | True                                                                       | 
+ 714 |      * add hostname only if client has n | True                                                                       | 
+ 715 |      * on its static lease line.         | True                                                                       | 
+ 716 |      * (Not that "opt hostname HOST"     | True                                                                       | 
+ 717 |      * makes much sense in udhcpd.conf,  | True                                                                       | 
+ 718 |      * that'd give all clients the same  | True                                                                       | 
+ 719 |      * but it's a valid configuration).  | True                                                                       | 
+ 720 |      */                                  | True                                                                       | 
+ 721 |     udhcp_add_binary_option(packet, conf | True                                                                       | 
+ 722 |    }                                     | True                                                                       | 
+ 723 |   }                                      | True                                                                       | 
+ 724 |   config_opts = config_opts->next;       | True                                                                       | 
+ 725 |  }                                       | True                                                                       | 
+ 726 |                                          | True                                                                       | 
+ 727 |  if (client_hostname_opt)                | True                                                                       | 
+ 728 |   udhcp_add_binary_option(packet, client | True                                                                       | 
+ 729 |                                          | True                                                                       | 
+ 730 |  packet->siaddr_nip = server_data.siaddr | True                                                                       | 
+ 731 |                                          | True                                                                       | 
+ 732 |  if (server_data.sname)                  | True                                                                       | 
+ 733 |   strncpy((char*)packet->sname, server_d | True                                                                       | 
+ 734 |  if (server_data.boot_file)              | True                                                                       | 
+ 735 |   strncpy((char*)packet->file, server_da | True                                                                       | 
+ 736 | }                                        | True                                                                       | 
+ 737 |                                          | True                                                                       | 
+ 738 | static uint32_t select_lease_time(struct | True                                                                       | 
+ 739 | {                                        | True                                                                       | 
+ 740 |  uint32_t lease_time_sec = server_data.m | True                                                                       | 
+ 741 |  uint8_t *lease_time_opt = udhcp_get_opt | True                                                                       | 
+ 742 |  if (lease_time_opt) {                   | True                                                                       | 
+ 743 |   move_from_unaligned32(lease_time_sec,  | True                                                                       | 
+ 744 |   lease_time_sec = ntohl(lease_time_sec) | True                                                                       | 
+ 745 |   if (lease_time_sec > server_data.max_l | True                                                                       | 
+ 746 |    lease_time_sec = server_data.max_leas | True                                                                       | 
+ 747 |   if (lease_time_sec < server_data.min_l | True                                                                       | 
+ 748 |    lease_time_sec = server_data.min_leas | True                                                                       | 
+ 749 |  }                                       | True                                                                       | 
+ 750 |  return lease_time_sec;                  | True                                                                       | 
+ 751 | }                                        | True                                                                       | 
+ 752 |                                          | True                                                                       | 
+ 753 | /* We got a DHCP DISCOVER. Send an OFFER | True                                                                       | 
+ 754 | /* NOINLINE: limit stack usage in caller | True                                                                       | 
+ 755 | #if !ENABLE_FEATURE_UDHCPD_BOOTP         | True                                                                       | 
+ 756 | #define send_offer(is_dhcp_client, ...)  | !ENABLE_FEATURE_UDHCPD_BOOTP                                               | 
+ 757 |  send_offer(__VA_ARGS__)                 | !ENABLE_FEATURE_UDHCPD_BOOTP                                               | 
+ 758 | #endif                                   | True                                                                       | 
+ 759 | static NOINLINE void send_offer(void *is | True                                                                       | 
+ 760 |   struct dhcp_packet *oldpacket,         | !ENABLE_FEATURE_UDHCPD_BOOTP                                               | 
+ 761 |   uint32_t static_lease_nip,             | !ENABLE_FEATURE_UDHCPD_BOOTP                                               | 
+ 762 |   struct dyn_lease *lease,               | !ENABLE_FEATURE_UDHCPD_BOOTP                                               | 
+ 763 |   uint32_t requested_nip,                | !ENABLE_FEATURE_UDHCPD_BOOTP                                               | 
+ 764 |   unsigned arpping_ms)                   | !ENABLE_FEATURE_UDHCPD_BOOTP                                               | 
+ 765 | {                                        | True                                                                       | 
+ 766 |  struct dhcp_packet packet;              | True                                                                       | 
+ 767 |  uint32_t lease_time_sec;                | True                                                                       | 
+ 768 |                                          | True                                                                       | 
+ 769 | #if ENABLE_FEATURE_UDHCPD_BOOTP          | True                                                                       | 
+ 770 |  init_packet(&packet, oldpacket, is_dhcp | ENABLE_FEATURE_UDHCPD_BOOTP                                                | 
+ 771 | #else                                    | True                                                                       | 
+ 772 |  enum { is_dhcp_client = 1 };            | !ENABLE_FEATURE_UDHCPD_BOOTP                                               | 
+ 773 |  init_packet(&packet, oldpacket, DHCPOFF | !ENABLE_FEATURE_UDHCPD_BOOTP                                               | 
+ 774 | #endif                                   | True                                                                       | 
+ 775 |                                          | True                                                                       | 
+ 776 |  /* If it is a static lease, use its IP  | True                                                                       | 
+ 777 |  packet.yiaddr = static_lease_nip;       | True                                                                       | 
+ 778 |  /* Else: */                             | True                                                                       | 
+ 779 |  if (!static_lease_nip) {                | True                                                                       | 
+ 780 |   /* We have no static lease for client' | True                                                                       | 
+ 781 |   const char *p_host_name;               | True                                                                       | 
+ 782 |                                          | True                                                                       | 
+ 783 |   if (lease) {                           | True                                                                       | 
+ 784 |    /* We have a dynamic lease for client | True                                                                       | 
+ 785 |     * Reuse its IP (even if lease is exp | True                                                                       | 
+ 786 |     * Note that we ignore requested IP i | True                                                                       | 
+ 787 |     */                                   | True                                                                       | 
+ 788 |    packet.yiaddr = lease->lease_nip;     | True                                                                       | 
+ 789 |   }                                      | True                                                                       | 
+ 790 |   /* Or: if client has requested an IP * | True                                                                       | 
+ 791 |   else if (requested_nip != 0            | True                                                                       | 
+ 792 |    /* and the IP is in the lease range * | True                                                                       | 
+ 793 |    && ntohl(requested_nip) >= server_dat | True                                                                       | 
+ 794 |    && ntohl(requested_nip) <= server_dat | True                                                                       | 
+ 795 |    /* and */                             | True                                                                       | 
+ 796 |    && (  !(lease = find_lease_by_nip(req | True                                                                       | 
+ 797 |       || is_expired_lease(lease) /* or i | True                                                                       | 
+ 798 |       )                                  | True                                                                       | 
+ 799 |   ) {                                    | True                                                                       | 
+ 800 |    packet.yiaddr = requested_nip;        | True                                                                       | 
+ 801 |   }                                      | True                                                                       | 
+ 802 |   else {                                 | True                                                                       | 
+ 803 |    /* Otherwise, find a free IP */       | True                                                                       | 
+ 804 |    packet.yiaddr = find_free_or_expired_ | True                                                                       | 
+ 805 |   }                                      | True                                                                       | 
+ 806 |                                          | True                                                                       | 
+ 807 |   if (!packet.yiaddr) {                  | True                                                                       | 
+ 808 |    bb_simple_error_msg("no free IP addre | True                                                                       | 
+ 809 |    return;                               | True                                                                       | 
+ 810 |   }                                      | True                                                                       | 
+ 811 |   /* Reserve the IP for a short time hop | True                                                                       | 
+ 812 |   p_host_name = (const char*) udhcp_get_ | True                                                                       | 
+ 813 |   lease = add_lease(packet.chaddr, packe | True                                                                       | 
+ 814 |     server_data.offer_time,              | True                                                                       | 
+ 815 |     p_host_name,                         | True                                                                       | 
+ 816 |     p_host_name ? (unsigned char)p_host_ | True                                                                       | 
+ 817 |   );                                     | True                                                                       | 
+ 818 |   if (!lease) {                          | True                                                                       | 
+ 819 |    bb_simple_error_msg("no free IP addre | True                                                                       | 
+ 820 |    return;                               | True                                                                       | 
+ 821 |   }                                      | True                                                                       | 
+ 822 |  }                                       | True                                                                       | 
+ 823 |                                          | True                                                                       | 
+ 824 |  if (is_dhcp_client) {                   | True                                                                       | 
+ 825 |   lease_time_sec = select_lease_time(old | True                                                                       | 
+ 826 |   udhcp_add_simple_option(&packet, DHCP_ | True                                                                       | 
+ 827 |  }                                       | True                                                                       | 
+ 828 | /* TODO: pass "is_dhcp_client" to add_se | True                                                                       | 
+ 829 |  add_server_options(&packet);            | True                                                                       | 
+ 830 |  if (!is_dhcp_client && udhcp_end_option | True                                                                       | 
+ 831 |   bb_simple_error_msg("BOOTP reply too l | True                                                                       | 
+ 832 |   return;                                | True                                                                       | 
+ 833 |  }                                       | True                                                                       | 
+ 834 |                                          | True                                                                       | 
+ 835 |  /* send_packet emits error message itse | True                                                                       | 
+ 836 |  send_packet_verbose(&packet, "sending O | True                                                                       | 
+ 837 | }                                        | True                                                                       | 
+ 838 |                                          | True                                                                       | 
+ 839 | /* NOINLINE: limit stack usage in caller | True                                                                       | 
+ 840 | static NOINLINE void send_NAK(struct dhc | True                                                                       | 
+ 841 | {                                        | True                                                                       | 
+ 842 |  struct dhcp_packet packet;              | True                                                                       | 
+ 843 |                                          | True                                                                       | 
+ 844 |  init_packet(&packet, oldpacket, DHCPNAK | True                                                                       | 
+ 845 |                                          | True                                                                       | 
+ 846 |  log1("sending %s", "NAK");              | 1                                                                          | 
+ 847 |  send_packet(&packet, /*force_bcast:*/ 1 | True                                                                       | 
+ 848 | }                                        | True                                                                       | 
+ 849 |                                          | True                                                                       | 
+ 850 | /* NOINLINE: limit stack usage in caller | True                                                                       | 
+ 851 | static NOINLINE void send_ACK(struct dhc | True                                                                       | 
+ 852 | {                                        | True                                                                       | 
+ 853 |  struct dhcp_packet packet;              | True                                                                       | 
+ 854 |  uint32_t lease_time_sec;                | True                                                                       | 
+ 855 |  const char *p_host_name;                | True                                                                       | 
+ 856 |                                          | True                                                                       | 
+ 857 |  init_packet(&packet, oldpacket, DHCPACK | True                                                                       | 
+ 858 |  packet.yiaddr = yiaddr;                 | True                                                                       | 
+ 859 |                                          | True                                                                       | 
+ 860 |  lease_time_sec = select_lease_time(oldp | True                                                                       | 
+ 861 |  udhcp_add_simple_option(&packet, DHCP_L | True                                                                       | 
+ 862 |  add_server_options(&packet);            | True                                                                       | 
+ 863 |                                          | True                                                                       | 
+ 864 |  send_packet_verbose(&packet, "sending A | True                                                                       | 
+ 865 |                                          | True                                                                       | 
+ 866 |  p_host_name = (const char*) udhcp_get_o | True                                                                       | 
+ 867 |  add_lease(packet.chaddr, packet.yiaddr, | True                                                                       | 
+ 868 |   lease_time_sec,                        | True                                                                       | 
+ 869 |   p_host_name,                           | True                                                                       | 
+ 870 |   p_host_name ? (unsigned char)p_host_na | True                                                                       | 
+ 871 |  );                                      | True                                                                       | 
+ 872 |  if (ENABLE_FEATURE_UDHCPD_WRITE_LEASES_ | True                                                                       | 
+ 873 |   /* rewrite the file with leases at eve | True                                                                       | 
+ 874 |   write_leases();                        | True                                                                       | 
+ 875 |  }                                       | True                                                                       | 
+ 876 | }                                        | True                                                                       | 
+ 877 |                                          | True                                                                       | 
+ 878 | /* NOINLINE: limit stack usage in caller | True                                                                       | 
+ 879 | static NOINLINE void send_inform(struct  | True                                                                       | 
+ 880 | {                                        | True                                                                       | 
+ 881 |  struct dhcp_packet packet;              | True                                                                       | 
+ 882 |                                          | True                                                                       | 
+ 883 |  /* "If a client has obtained a network  | True                                                                       | 
+ 884 |   * (e.g., manual configuration), it may | True                                                                       | 
+ 885 |   * to obtain other local configuration  | True                                                                       | 
+ 886 |   * DHCPINFORM message construct a DHCPA | True                                                                       | 
+ 887 |   * configuration parameters appropriate | True                                                                       | 
+ 888 |   * allocating a new address, checking f | True                                                                       | 
+ 889 |   * in 'yiaddr' or including lease time  | True                                                                       | 
+ 890 |   * unicast the DHCPACK reply to the add | True                                                                       | 
+ 891 |   * of the DHCPINFORM message.           | True                                                                       | 
+ 892 |   * ...                                  | True                                                                       | 
+ 893 |   * The server responds to a DHCPINFORM  | True                                                                       | 
+ 894 |   * message directly to the address give | True                                                                       | 
+ 895 |   * of the DHCPINFORM message.  The serv | True                                                                       | 
+ 896 |   * expiration time to the client and SH | True                                                                       | 
+ 897 |   */                                     | True                                                                       | 
+ 898 | //TODO: do a few sanity checks: is ciadd | True                                                                       | 
+ 899 | //Better yet: is ciaddr == IP source add | True                                                                       | 
+ 900 |  init_packet(&packet, oldpacket, DHCPACK | True                                                                       | 
+ 901 |  add_server_options(&packet);            | True                                                                       | 
+ 902 |                                          | True                                                                       | 
+ 903 |  send_packet(&packet, /*force_bcast:*/ 0 | True                                                                       | 
+ 904 |  // or maybe? send_packet_verbose(&packe | True                                                                       | 
+ 905 | }                                        | True                                                                       | 
+ 906 |                                          | True                                                                       | 
+ 907 | int udhcpd_main(int argc, char **argv) M | True                                                                       | 
+ 908 | int udhcpd_main(int argc UNUSED_PARAM, c | True                                                                       | 
+ 909 | {                                        | True                                                                       | 
+ 910 |  int server_socket = -1, retval;         | True                                                                       | 
+ 911 |  unsigned timeout_end;                   | True                                                                       | 
+ 912 |  unsigned num_ips;                       | True                                                                       | 
+ 913 |  unsigned opt;                           | True                                                                       | 
+ 914 |  struct option_set *option;              | True                                                                       | 
+ 915 |  char *str_I = str_I;                    | True                                                                       | 
+ 916 |  const char *str_a = "2000";             | True                                                                       | 
+ 917 |  unsigned arpping_ms;                    | True                                                                       | 
+ 918 |  IF_FEATURE_UDHCP_PORT(char *str_P;)     | True                                                                       | 
+ 919 |                                          | True                                                                       | 
+ 920 |  setup_common_bufsiz();                  | True                                                                       | 
+ 921 |                                          | True                                                                       | 
+ 922 |  IF_FEATURE_UDHCP_PORT(SERVER_PORT = 67; | True                                                                       | 
+ 923 |  IF_FEATURE_UDHCP_PORT(CLIENT_PORT = 68; | True                                                                       | 
+ 924 |                                          | True                                                                       | 
+ 925 |  /* Make sure fd 0,1,2 are open */       | True                                                                       | 
+ 926 |  /* Setup the signal pipe on fds 3,4 - m | True                                                                       | 
+ 927 |  udhcp_sp_setup();                       | True                                                                       | 
+ 928 |                                          | True                                                                       | 
+ 929 | #define OPT_f (1 << 0)                   | True                                                                       | 
+ 930 | #define OPT_S (1 << 1)                   | True                                                                       | 
+ 931 | #define OPT_I (1 << 2)                   | True                                                                       | 
+ 932 | #define OPT_v (1 << 3)                   | True                                                                       | 
+ 933 | #define OPT_a (1 << 4)                   | True                                                                       | 
+ 934 | #define OPT_P (1 << 5)                   | True                                                                       | 
+ 935 |  opt = getopt32(argv, "^"                | True                                                                       | 
+ 936 |   "fSI:va:"IF_FEATURE_UDHCP_PORT("P:")   | True                                                                       | 
+ 937 |   "\0"                                   | True                                                                       | 
+ 938 | #if defined CONFIG_UDHCP_DEBUG && CONFIG | True                                                                       | 
+ 939 |   "vv"                                   | (CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=1)                              | 
+ 940 | #endif                                   | True                                                                       | 
+ 941 |   , &str_I                               | True                                                                       | 
+ 942 |   , &str_a                               | True                                                                       | 
+ 943 |   IF_FEATURE_UDHCP_PORT(, &str_P)        | True                                                                       | 
+ 944 |   IF_UDHCP_VERBOSE(, &dhcp_verbose)      | 1                                                                          | 
+ 945 |  );                                      | True                                                                       | 
+ 946 |  if (!(opt & OPT_f)) { /* no -f */       | True                                                                       | 
+ 947 |   bb_daemonize_or_rexec(0, argv);        | True                                                                       | 
+ 948 |   logmode = LOGMODE_NONE;                | True                                                                       | 
+ 949 |  }                                       | True                                                                       | 
+ 950 |  /* update argv after the possible vfork | True                                                                       | 
+ 951 |  argv += optind;                         | True                                                                       | 
+ 952 |  if (opt & OPT_S) {                      | True                                                                       | 
+ 953 |   openlog(applet_name, LOG_PID, LOG_DAEM | True                                                                       | 
+ 954 |   logmode |= LOGMODE_SYSLOG;             | True                                                                       | 
+ 955 |  }                                       | True                                                                       | 
+ 956 |  if (opt & OPT_I) {                      | True                                                                       | 
+ 957 |   len_and_sockaddr *lsa = xhost_and_af2s | True                                                                       | 
+ 958 |   server_data.server_nip = lsa->u.sin.si | True                                                                       | 
+ 959 |   free(lsa);                             | True                                                                       | 
+ 960 |  }                                       | True                                                                       | 
+ 961 | #if ENABLE_FEATURE_UDHCP_PORT            | True                                                                       | 
+ 962 |  if (opt & OPT_P) {                      | ENABLE_FEATURE_UDHCP_PORT                                                  | 
+ 963 |   SERVER_PORT = xatou16(str_P);          | ENABLE_FEATURE_UDHCP_PORT                                                  | 
+ 964 |   CLIENT_PORT = SERVER_PORT + 1;         | ENABLE_FEATURE_UDHCP_PORT                                                  | 
+ 965 |  }                                       | ENABLE_FEATURE_UDHCP_PORT                                                  | 
+ 966 | #endif                                   | True                                                                       | 
+ 967 |  arpping_ms = xatou(str_a);              | True                                                                       | 
+ 968 |                                          | True                                                                       | 
+ 969 |  /* Would rather not do read_config befo | True                                                                       | 
+ 970 |   * otherwise NOMMU machines will parse  | True                                                                       | 
+ 971 |  read_config(argv[0] ? argv[0] : DHCPD_C | True                                                                       | 
+ 972 |  /* prevent poll timeout overflow */     | True                                                                       | 
+ 973 |  if (server_data.auto_time > INT_MAX / 1 | True                                                                       | 
+ 974 |   server_data.auto_time = INT_MAX / 1000 | True                                                                       | 
+ 975 |                                          | True                                                                       | 
+ 976 |  /* Create pidfile */                    | True                                                                       | 
+ 977 |  write_pidfile(server_data.pidfile);     | True                                                                       | 
+ 978 |  /* if (!..) bb_perror_msg("can't create | True                                                                       | 
+ 979 |                                          | True                                                                       | 
+ 980 |  bb_simple_info_msg("started, v"BB_VER); | True                                                                       | 
+ 981 |                                          | True                                                                       | 
+ 982 |  option = udhcp_find_option(server_data. | True                                                                       | 
+ 983 |  server_data.max_lease_sec = DEFAULT_LEA | True                                                                       | 
+ 984 |  if (option) {                           | True                                                                       | 
+ 985 |   move_from_unaligned32(server_data.max_ | True                                                                       | 
+ 986 |   server_data.max_lease_sec = ntohl(serv | True                                                                       | 
+ 987 |  }                                       | True                                                                       | 
+ 988 |                                          | True                                                                       | 
+ 989 |  /* Sanity check */                      | True                                                                       | 
+ 990 |  num_ips = server_data.end_ip - server_d | True                                                                       | 
+ 991 |  if (server_data.max_leases > num_ips) { | True                                                                       | 
+ 992 |   bb_error_msg("max_leases=%u is too big | True                                                                       | 
+ 993 |    (unsigned)server_data.max_leases, num | True                                                                       | 
+ 994 |   server_data.max_leases = num_ips;      | True                                                                       | 
+ 995 |  }                                       | True                                                                       | 
+ 996 |                                          | True                                                                       | 
+ 997 |  /* this sets g_leases */                | True                                                                       | 
+ 998 |  SET_PTR_TO_GLOBALS(xzalloc(server_data. | True                                                                       | 
+ 999 |                                          | True                                                                       | 
+1000 |  read_leases(server_data.lease_file);    | True                                                                       | 
+1001 |                                          | True                                                                       | 
+1002 |  if (udhcp_read_interface(server_data.in | True                                                                       | 
+1003 |    &server_data.ifindex,                 | True                                                                       | 
+1004 |    (server_data.server_nip == 0 ? &serve | True                                                                       | 
+1005 |    server_data.server_mac)               | True                                                                       | 
+1006 |  ) {                                     | True                                                                       | 
+1007 |   retval = 1;                            | True                                                                       | 
+1008 |   goto ret;                              | True                                                                       | 
+1009 |  }                                       | True                                                                       | 
+1010 |                                          | True                                                                       | 
+1011 |  continue_with_autotime:                 | True                                                                       | 
+1012 |  timeout_end = monotonic_sec() + server_ | True                                                                       | 
+1013 |  while (1) { /* loop until universe coll | True                                                                       | 
+1014 |   struct pollfd pfds[2];                 | True                                                                       | 
+1015 |   struct dhcp_packet packet;             | True                                                                       | 
+1016 |   int bytes;                             | True                                                                       | 
+1017 |   int tv;                                | True                                                                       | 
+1018 |   uint8_t *msg_type;                     | True                                                                       | 
+1019 |   uint8_t *server_id_opt;                | True                                                                       | 
+1020 |   uint8_t *requested_ip_opt;             | True                                                                       | 
+1021 |   uint32_t requested_nip;                | True                                                                       | 
+1022 |   uint32_t static_lease_nip;             | True                                                                       | 
+1023 |   struct dyn_lease *lease, fake_lease;   | True                                                                       | 
+1024 |                                          | True                                                                       | 
+1025 |   if (server_socket < 0) {               | True                                                                       | 
+1026 |    server_socket = udhcp_listen_socket(/ | True                                                                       | 
+1027 |      server_data.interface);             | True                                                                       | 
+1028 |   }                                      | True                                                                       | 
+1029 |                                          | True                                                                       | 
+1030 |   udhcp_sp_fd_set(pfds, server_socket);  | True                                                                       | 
+1031 |                                          | True                                                                       | 
+1032 |  new_tv:                                 | True                                                                       | 
+1033 |   tv = -1;                               | True                                                                       | 
+1034 |   if (server_data.auto_time) {           | True                                                                       | 
+1035 |    tv = timeout_end - monotonic_sec();   | True                                                                       | 
+1036 |    if (tv <= 0) {                        | True                                                                       | 
+1037 |  write_leases:                           | True                                                                       | 
+1038 |     write_leases();                      | True                                                                       | 
+1039 |     goto continue_with_autotime;         | True                                                                       | 
+1040 |    }                                     | True                                                                       | 
+1041 |    tv *= 1000;                           | True                                                                       | 
+1042 |   }                                      | True                                                                       | 
+1043 |                                          | True                                                                       | 
+1044 |   /* Block here waiting for either signa | True                                                                       | 
+1045 |   retval = poll(pfds, 2, tv);            | True                                                                       | 
+1046 |   if (retval <= 0) {                     | True                                                                       | 
+1047 |    if (retval == 0)                      | True                                                                       | 
+1048 |     goto write_leases;                   | True                                                                       | 
+1049 |    if (errno == EINTR)                   | True                                                                       | 
+1050 |     goto new_tv;                         | True                                                                       | 
+1051 |    /* < 0 and not EINTR: should not happ | True                                                                       | 
+1052 |    bb_simple_perror_msg_and_die("poll"); | True                                                                       | 
+1053 |   }                                      | True                                                                       | 
+1054 |                                          | True                                                                       | 
+1055 |   if (pfds[0].revents) switch (udhcp_sp_ | True                                                                       | 
+1056 |   case SIGUSR1:                          | True                                                                       | 
+1057 |    bb_info_msg("received %s", "SIGUSR1") | True                                                                       | 
+1058 |    write_leases();                       | True                                                                       | 
+1059 |    /* why not just reset the timeout, eh | True                                                                       | 
+1060 |    goto continue_with_autotime;          | True                                                                       | 
+1061 |   case SIGTERM:                          | True                                                                       | 
+1062 |    bb_info_msg("received %s", "SIGTERM") | True                                                                       | 
+1063 |    write_leases();                       | True                                                                       | 
+1064 |    goto ret0;                            | True                                                                       | 
+1065 |   }                                      | True                                                                       | 
+1066 |                                          | True                                                                       | 
+1067 |   /* Is it a packet? */                  | True                                                                       | 
+1068 |   if (!pfds[1].revents)                  | True                                                                       | 
+1069 |    continue; /* no */                    | True                                                                       | 
+1070 |                                          | True                                                                       | 
+1071 |   /* Note: we do not block here, we bloc | True                                                                       | 
+1072 |    * Blocking here would prevent SIGTERM | True                                                                       | 
+1073 |    * socket read inside this call is res | True                                                                       | 
+1074 |    */                                    | True                                                                       | 
+1075 |   bytes = udhcp_recv_kernel_packet(&pack | True                                                                       | 
+1076 | //NB: we do not check source port here.  | True                                                                       | 
+1077 | //It should be CLIENT_PORT for clients,  | True                                                                       | 
+1078 | //or SERVER_PORT for relay agents (in wh | True                                                                       | 
+1079 |   if (bytes < 0) {                       | True                                                                       | 
+1080 |    /* bytes can also be -2 ("bad packet  | True                                                                       | 
+1081 |    if (bytes == -1 && errno != EINTR) {  | True                                                                       | 
+1082 |     log1("read error: "STRERROR_FMT", re | 1                                                                          | 
+1083 |     close(server_socket);                | True                                                                       | 
+1084 |     server_socket = -1;                  | True                                                                       | 
+1085 |    }                                     | True                                                                       | 
+1086 |    continue;                             | True                                                                       | 
+1087 |   }                                      | True                                                                       | 
+1088 |   if (packet.hlen != 6) {                | True                                                                       | 
+1089 |    bb_info_msg("MAC length != 6%s", ", i | True                                                                       | 
+1090 |    continue;                             | True                                                                       | 
+1091 |   }                                      | True                                                                       | 
+1092 |   if (packet.op != BOOTREQUEST) {        | True                                                                       | 
+1093 |    bb_info_msg("not a REQUEST%s", ", ign | True                                                                       | 
+1094 |    continue;                             | True                                                                       | 
+1095 |   }                                      | True                                                                       | 
+1096 |   msg_type = udhcp_get_option(&packet, D | True                                                                       | 
+1097 |   if (                                   | True                                                                       | 
+1098 |    IF_FEATURE_UDHCPD_BOOTP( msg_type &&  | True                                                                       | 
+1099 |    IF_NOT_FEATURE_UDHCPD_BOOTP( !msg_typ | True                                                                       | 
+1100 |    (msg_type[0] < DHCP_MINTYPE || msg_ty | True                                                                       | 
+1101 |   ) {                                    | True                                                                       | 
+1102 |    bb_info_msg("bad message type option% | True                                                                       | 
+1103 |    continue;                             | True                                                                       | 
+1104 |   }                                      | True                                                                       | 
+1105 |                                          | True                                                                       | 
+1106 |   /* Get SERVER_ID if present */         | True                                                                       | 
+1107 |   server_id_opt = udhcp_get_option32(&pa | True                                                                       | 
+1108 |   if (server_id_opt) {                   | True                                                                       | 
+1109 |    uint32_t server_id_network_order;     | True                                                                       | 
+1110 |    move_from_unaligned32(server_id_netwo | True                                                                       | 
+1111 |    if (server_id_network_order != server | True                                                                       | 
+1112 |     /* client talks to somebody else */  | True                                                                       | 
+1113 |     log1("server ID doesn't match%s", ", | 1                                                                          | 
+1114 |     continue;                            | True                                                                       | 
+1115 |    }                                     | True                                                                       | 
+1116 |   }                                      | True                                                                       | 
+1117 |                                          | True                                                                       | 
+1118 |   /* Look for a static/dynamic lease */  | True                                                                       | 
+1119 |   static_lease_nip = get_static_nip_by_m | True                                                                       | 
+1120 |   if (static_lease_nip) {                | True                                                                       | 
+1121 |    bb_info_msg("found static lease: %x", | True                                                                       | 
+1122 |    memcpy(&fake_lease.lease_mac, &packet | True                                                                       | 
+1123 |    fake_lease.lease_nip = static_lease_n | True                                                                       | 
+1124 |    fake_lease.expires = 0;               | True                                                                       | 
+1125 |    lease = &fake_lease;                  | True                                                                       | 
+1126 |   } else {                               | True                                                                       | 
+1127 |    lease = find_lease_by_mac(packet.chad | True                                                                       | 
+1128 |   }                                      | True                                                                       | 
+1129 |                                          | True                                                                       | 
+1130 |   /* Get REQUESTED_IP if present */      | True                                                                       | 
+1131 |   requested_nip = 0;                     | True                                                                       | 
+1132 |   requested_ip_opt = udhcp_get_option32( | True                                                                       | 
+1133 |   if (requested_ip_opt) {                | True                                                                       | 
+1134 |    move_from_unaligned32(requested_nip,  | True                                                                       | 
+1135 |   }                                      | True                                                                       | 
+1136 |                                          | True                                                                       | 
+1137 | #if ENABLE_FEATURE_UDHCPD_BOOTP          | True                                                                       | 
+1138 |   /* Handle old BOOTP clients */         | ENABLE_FEATURE_UDHCPD_BOOTP                                                | 
+1139 |   if (!msg_type) {                       | ENABLE_FEATURE_UDHCPD_BOOTP                                                | 
+1140 |    log1("received %s", "BOOTP BOOTREQUES | ENABLE_FEATURE_UDHCPD_BOOTP&&(CONFIG_UDHCP_DEBUG)&&(CONFIG_UDHCP_DEBUG>=1) | 
+1141 |    if (!static_lease_nip) {              | ENABLE_FEATURE_UDHCPD_BOOTP                                                | 
+1142 |     bb_info_msg("no static lease for BOO | ENABLE_FEATURE_UDHCPD_BOOTP                                                | 
+1143 |     continue;                            | ENABLE_FEATURE_UDHCPD_BOOTP                                                | 
+1144 |    }                                     | ENABLE_FEATURE_UDHCPD_BOOTP                                                | 
+1145 |    send_offer(msg_type, &packet, static_ | ENABLE_FEATURE_UDHCPD_BOOTP                                                | 
+1146 |    continue;                             | ENABLE_FEATURE_UDHCPD_BOOTP                                                | 
+1147 |   }                                      | ENABLE_FEATURE_UDHCPD_BOOTP                                                | 
+1148 | #endif                                   | True                                                                       | 
+1149 |                                          | True                                                                       | 
+1150 |   switch (msg_type[0]) {                 | True                                                                       | 
+1151 |                                          | True                                                                       | 
+1152 |   case DHCPDISCOVER:                     | True                                                                       | 
+1153 |    log1("received %s", "DISCOVER");      | 1                                                                          | 
+1154 |                                          | True                                                                       | 
+1155 |    send_offer(msg_type, &packet, static_ | !ENABLE_FEATURE_UDHCPD_BOOTP                                               | 
+1156 |    break;                                | True                                                                       | 
+1157 |                                          | True                                                                       | 
+1158 |   case DHCPREQUEST:                      | True                                                                       | 
+1159 |    log1("received %s", "REQUEST");       | 1                                                                          | 
+1160 | /* RFC 2131:                             | True                                                                       | 
+1161 |                                          | True                                                                       | 
+1162 | o DHCPREQUEST generated during SELECTING | True                                                                       | 
+1163 |                                          | True                                                                       | 
+1164 |    Client inserts the address of the sel | True                                                                       | 
+1165 |    identifier', 'ciaddr' MUST be zero, ' | True                                                                       | 
+1166 |    filled in with the yiaddr value from  | True                                                                       | 
+1167 |                                          | True                                                                       | 
+1168 |    Note that the client may choose to co | True                                                                       | 
+1169 |    messages and select the "best" offer. | True                                                                       | 
+1170 |    selection by identifying the offering | True                                                                       | 
+1171 |    message.  If the client receives no a | True                                                                       | 
+1172 |    may choose to try another DHCPDISCOVE | True                                                                       | 
+1173 |    servers may not receive a specific DH | True                                                                       | 
+1174 |    decide whether or not the client has  | True                                                                       | 
+1175 |                                          | True                                                                       | 
+1176 | o DHCPREQUEST generated during INIT-REBO | True                                                                       | 
+1177 |                                          | True                                                                       | 
+1178 |    'server identifier' MUST NOT be fille | True                                                                       | 
+1179 |    option MUST be filled in with client' | True                                                                       | 
+1180 |    assigned address. 'ciaddr' MUST be ze | True                                                                       | 
+1181 |    verify a previously allocated, cached | True                                                                       | 
+1182 |    send a DHCPNAK message to the client  | True                                                                       | 
+1183 |    is incorrect, or is on the wrong netw | True                                                                       | 
+1184 |                                          | True                                                                       | 
+1185 |    Determining whether a client in the I | True                                                                       | 
+1186 |    correct network is done by examining  | True                                                                       | 
+1187 |    'requested IP address' option, and a  | True                                                                       | 
+1188 |    server detects that the client is on  | True                                                                       | 
+1189 |    result of applying the local subnet m | True                                                                       | 
+1190 |    'giaddr' is not zero) to 'requested I | True                                                                       | 
+1191 |    doesn't match reality), then the serv | True                                                                       | 
+1192 |    message to the client.                | True                                                                       | 
+1193 |                                          | True                                                                       | 
+1194 |    If the network is correct, then the D | True                                                                       | 
+1195 |    the client's notion of its IP address | True                                                                       | 
+1196 |    server SHOULD send a DHCPNAK message  | True                                                                       | 
+1197 |    server has no record of this client,  | True                                                                       | 
+1198 |    and MAY output a warning to the netwo | True                                                                       | 
+1199 |    behavior is necessary for peaceful co | True                                                                       | 
+1200 |    communicating DHCP servers on the sam | True                                                                       | 
+1201 |                                          | True                                                                       | 
+1202 |    If 'giaddr' is 0x0 in the DHCPREQUEST | True                                                                       | 
+1203 |    the same subnet as the server.  The s | True                                                                       | 
+1204 |    DHCPNAK message to the 0xffffffff bro | True                                                                       | 
+1205 |    client may not have a correct network | True                                                                       | 
+1206 |    the client may not be answering ARP r | True                                                                       | 
+1207 |                                          | True                                                                       | 
+1208 |    If 'giaddr' is set in the DHCPREQUEST | True                                                                       | 
+1209 |    different subnet.  The server MUST se | True                                                                       | 
+1210 |    DHCPNAK, so that the relay agent will | True                                                                       | 
+1211 |    client, because the client may not ha | True                                                                       | 
+1212 |    or subnet mask, and the client may no | True                                                                       | 
+1213 |                                          | True                                                                       | 
+1214 | o DHCPREQUEST generated during RENEWING  | True                                                                       | 
+1215 |                                          | True                                                                       | 
+1216 |    'server identifier' MUST NOT be fille | True                                                                       | 
+1217 |    option MUST NOT be filled in, 'ciaddr | True                                                                       | 
+1218 |    client's IP address. In this situatio | True                                                                       | 
+1219 |    configured, and is trying to extend i | True                                                                       | 
+1220 |    be unicast, so no relay agents will b | True                                                                       | 
+1221 |    transmission.  Because 'giaddr' is th | True                                                                       | 
+1222 |    DHCP server will trust the value in ' | True                                                                       | 
+1223 |    replying to the client.               | True                                                                       | 
+1224 |                                          | True                                                                       | 
+1225 |    A client MAY choose to renew or exten | True                                                                       | 
+1226 |    server may choose not to extend the l | True                                                                       | 
+1227 |    the network administrator), but shoul | True                                                                       | 
+1228 |    regardless.                           | True                                                                       | 
+1229 |                                          | True                                                                       | 
+1230 | o DHCPREQUEST generated during REBINDING | True                                                                       | 
+1231 |                                          | True                                                                       | 
+1232 |    'server identifier' MUST NOT be fille | True                                                                       | 
+1233 |    option MUST NOT be filled in, 'ciaddr | True                                                                       | 
+1234 |    client's IP address. In this situatio | True                                                                       | 
+1235 |    configured, and is trying to extend i | True                                                                       | 
+1236 |    be broadcast to the 0xffffffff IP bro | True                                                                       | 
+1237 |    server SHOULD check 'ciaddr' for corr | True                                                                       | 
+1238 |    the DHCPREQUEST.                      | True                                                                       | 
+1239 |                                          | True                                                                       | 
+1240 |    The DHCPREQUEST from a REBINDING clie | True                                                                       | 
+1241 |    sites that have multiple DHCP servers | True                                                                       | 
+1242 |    maintaining consistency among leases  | True                                                                       | 
+1243 |    A DHCP server MAY extend a client's l | True                                                                       | 
+1244 |    administrative authority to do so.    | True                                                                       | 
+1245 | */                                       | True                                                                       | 
+1246 |    if (!requested_ip_opt) {              | True                                                                       | 
+1247 |     requested_nip = packet.ciaddr;       | True                                                                       | 
+1248 |     if (requested_nip == 0) {            | True                                                                       | 
+1249 |      log1("no requested IP and no ciaddr | 1                                                                          | 
+1250 |      break;                              | True                                                                       | 
+1251 |     }                                    | True                                                                       | 
+1252 |    }                                     | True                                                                       | 
+1253 |    if (lease && requested_nip == lease-> | True                                                                       | 
+1254 |     /* client requested or configured IP | True                                                                       | 
+1255 |      * ACK it, and bump lease expiration | True                                                                       | 
+1256 |     send_ACK(&packet, lease->lease_nip); | True                                                                       | 
+1257 |     break;                               | True                                                                       | 
+1258 |    }                                     | True                                                                       | 
+1259 |    /* No lease for this MAC, or lease IP | True                                                                       | 
+1260 |                                          | True                                                                       | 
+1261 |    if (server_id_opt    /* client is in  | True                                                                       | 
+1262 |     || requested_ip_opt /* client is in  | True                                                                       | 
+1263 |    ) {                                   | True                                                                       | 
+1264 |     /* "No, we don't have this IP for yo | True                                                                       | 
+1265 |     send_NAK(&packet);                   | True                                                                       | 
+1266 |    } /* else: client is in RENEWING or R | True                                                                       | 
+1267 |                                          | True                                                                       | 
+1268 |    break;                                | True                                                                       | 
+1269 |                                          | True                                                                       | 
+1270 |   case DHCPDECLINE:                      | True                                                                       | 
+1271 |    /* RFC 2131:                          | True                                                                       | 
+1272 |     * "If the server receives a DHCPDECL | True                                                                       | 
+1273 |     * the client has discovered through  | True                                                                       | 
+1274 |     * that the suggested network address | True                                                                       | 
+1275 |     * in use. The server MUST mark the n | True                                                                       | 
+1276 |     * as not available and SHOULD notify | True                                                                       | 
+1277 |     * sysadmin of a possible configurati | True                                                                       | 
+1278 |     *                                    | True                                                                       | 
+1279 |     * SERVER_ID must be present,         | True                                                                       | 
+1280 |     * REQUESTED_IP must be present,      | True                                                                       | 
+1281 |     * chaddr must be filled in,          | True                                                                       | 
+1282 |     * ciaddr must be 0 (we do not check  | True                                                                       | 
+1283 |     */                                   | True                                                                       | 
+1284 |    log1("received %s", "DECLINE");       | 1                                                                          | 
+1285 |    if (server_id_opt                     | True                                                                       | 
+1286 |     && requested_ip_opt                  | True                                                                       | 
+1287 |     && lease  /* chaddr matches this lea | True                                                                       | 
+1288 |     && requested_nip == lease->lease_nip | True                                                                       | 
+1289 |    ) {                                   | True                                                                       | 
+1290 |     memset(lease->lease_mac, 0, sizeof(l | True                                                                       | 
+1291 |     lease->expires = time(NULL) + server | True                                                                       | 
+1292 |    }                                     | True                                                                       | 
+1293 |    break;                                | True                                                                       | 
+1294 |                                          | True                                                                       | 
+1295 |   case DHCPRELEASE:                      | True                                                                       | 
+1296 |    /* "Upon receipt of a DHCPRELEASE mes | True                                                                       | 
+1297 |     * marks the network address as not a | True                                                                       | 
+1298 |     *                                    | True                                                                       | 
+1299 |     * SERVER_ID must be present,         | True                                                                       | 
+1300 |     * REQUESTED_IP must not be present ( | True                                                                       | 
+1301 |     * chaddr must be filled in,          | True                                                                       | 
+1302 |     * ciaddr must be filled in           | True                                                                       | 
+1303 |     */                                   | True                                                                       | 
+1304 |    log1("received %s", "RELEASE");       | 1                                                                          | 
+1305 |    if (server_id_opt                     | True                                                                       | 
+1306 |     && lease  /* chaddr matches this lea | True                                                                       | 
+1307 |     && packet.ciaddr == lease->lease_nip | True                                                                       | 
+1308 |    ) {                                   | True                                                                       | 
+1309 |     lease->expires = time(NULL);         | True                                                                       | 
+1310 |    }                                     | True                                                                       | 
+1311 |    break;                                | True                                                                       | 
+1312 |                                          | True                                                                       | 
+1313 |   case DHCPINFORM:                       | True                                                                       | 
+1314 |    log1("received %s", "INFORM");        | 1                                                                          | 
+1315 |    send_inform(&packet);                 | True                                                                       | 
+1316 |    break;                                | True                                                                       | 
+1317 |   }                                      | True                                                                       | 
+1318 |  }                                       | True                                                                       | 
+1319 |  ret0:                                   | True                                                                       | 
+1320 |  retval = 0;                             | True                                                                       | 
+1321 |  ret:                                    | True                                                                       | 
+1322 |  /*if (server_data.pidfile) - server_dat | True                                                                       | 
+1323 |   remove_pidfile(server_data.pidfile);   | True                                                                       | 
+1324 |  return retval;                          | True                                                                       | 
+1325 | }                                        | True                                                                       | 
+-----+------------------------------------------+----------------------------------------------------------------------------+
+     |                                          | +179MB, 487ms                                                              | 

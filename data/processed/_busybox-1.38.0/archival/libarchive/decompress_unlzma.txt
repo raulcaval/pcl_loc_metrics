@@ -1,0 +1,533 @@
+FILE: data/raw/busybox-1.38.0/archival/libarchive/decompress_unlzma.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Small lzma deflate implementation.    | True                      | 
+   4 |  * Copyright (C) 2006  Aurelien Jacobs < | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Based on LzmaDecode.c from the LZMA S | True                      | 
+   7 |  * Copyright (C) 1999-2005  Igor Pavlov  | True                      | 
+   8 |  *                                       | True                      | 
+   9 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  10 |  */                                      | True                      | 
+  11 | #include "libbb.h"                       | True                      | 
+  12 | #include "bb_archive.h"                  | True                      | 
+  13 |                                          | True                      | 
+  14 | #if 0                                    | True                      | 
+  15 | # define dbg(...) bb_error_msg(__VA_ARGS | 0                         | 
+  16 | #else                                    | True                      | 
+  17 | # define dbg(...) ((void)0)              | !0                        | 
+  18 | #endif                                   | True                      | 
+  19 |                                          | True                      | 
+  20 |                                          | True                      | 
+  21 | #if ENABLE_FEATURE_LZMA_FAST             | True                      | 
+  22 | #  define speed_inline ALWAYS_INLINE     | ENABLE_FEATURE_LZMA_FAST  | 
+  23 | #  define size_inline                    | ENABLE_FEATURE_LZMA_FAST  | 
+  24 | #else                                    | True                      | 
+  25 | #  define speed_inline                   | !ENABLE_FEATURE_LZMA_FAST | 
+  26 | #  define size_inline ALWAYS_INLINE      | !ENABLE_FEATURE_LZMA_FAST | 
+  27 | #endif                                   | True                      | 
+  28 |                                          | True                      | 
+  29 |                                          | True                      | 
+  30 | typedef struct {                         | True                      | 
+  31 |  int fd;                                 | True                      | 
+  32 |  uint8_t *ptr;                           | True                      | 
+  33 |                                          | True                      | 
+  34 | /* Was keeping rc on stack in unlzma and | True                      | 
+  35 |  * but with "buffer 'attached to' alloca | True                      | 
+  36 |  /* uint8_t *buffer; */                  | True                      | 
+  37 | #define RC_BUFFER ((uint8_t*)(rc+1))     | True                      | 
+  38 |                                          | True                      | 
+  39 |  uint8_t *buffer_end;                    | True                      | 
+  40 |                                          | True                      | 
+  41 | /* Had provisions for variable buffer, b | True                      | 
+  42 |  /* int buffer_size; */                  | True                      | 
+  43 | #define RC_BUFFER_SIZE 0x10000           | True                      | 
+  44 |                                          | True                      | 
+  45 |  uint32_t code;                          | True                      | 
+  46 |  uint32_t range;                         | True                      | 
+  47 |  uint32_t bound;                         | True                      | 
+  48 | } rc_t;                                  | True                      | 
+  49 |                                          | True                      | 
+  50 | #define RC_TOP_BITS 24                   | True                      | 
+  51 | #define RC_MOVE_BITS 5                   | True                      | 
+  52 | #define RC_MODEL_TOTAL_BITS 11           | True                      | 
+  53 |                                          | True                      | 
+  54 |                                          | True                      | 
+  55 | /* Called once in rc_do_normalize() */   | True                      | 
+  56 | static void rc_read(rc_t *rc)            | True                      | 
+  57 | {                                        | True                      | 
+  58 |  int buffer_size = safe_read(rc->fd, RC_ | True                      | 
+  59 | //TODO: return -1 instead                | True                      | 
+  60 | //This will make unlzma delete broken un | True                      | 
+  61 |  if (buffer_size <= 0)                   | True                      | 
+  62 |   bb_simple_error_msg_and_die("unexpecte | True                      | 
+  63 |  rc->buffer_end = RC_BUFFER + buffer_siz | True                      | 
+  64 |  rc->ptr = RC_BUFFER;                    | True                      | 
+  65 | }                                        | True                      | 
+  66 |                                          | True                      | 
+  67 | /* Called twice, but one callsite is in  | True                      | 
+  68 | static void rc_do_normalize(rc_t *rc)    | True                      | 
+  69 | {                                        | True                      | 
+  70 |  if (rc->ptr >= rc->buffer_end)          | True                      | 
+  71 |   rc_read(rc);                           | True                      | 
+  72 |  rc->range <<= 8;                        | True                      | 
+  73 |  rc->code = (rc->code << 8) | *rc->ptr++ | True                      | 
+  74 | }                                        | True                      | 
+  75 | static ALWAYS_INLINE void rc_normalize(r | True                      | 
+  76 | {                                        | True                      | 
+  77 |  if (rc->range < (1 << RC_TOP_BITS)) {   | True                      | 
+  78 |   rc_do_normalize(rc);                   | True                      | 
+  79 |  }                                       | True                      | 
+  80 | }                                        | True                      | 
+  81 |                                          | True                      | 
+  82 | /* Called once */                        | True                      | 
+  83 | static ALWAYS_INLINE rc_t* rc_init(int f | True                      | 
+  84 | {                                        | True                      | 
+  85 |  int i;                                  | True                      | 
+  86 |  rc_t *rc;                               | True                      | 
+  87 |                                          | True                      | 
+  88 |  rc = xzalloc(sizeof(*rc) + RC_BUFFER_SI | True                      | 
+  89 |                                          | True                      | 
+  90 |  rc->fd = fd;                            | True                      | 
+  91 |  /* rc->ptr = rc->buffer_end; */         | True                      | 
+  92 |                                          | True                      | 
+  93 |  for (i = 0; i < 5; i++) {               | True                      | 
+  94 |   rc_do_normalize(rc);                   | True                      | 
+  95 |  }                                       | True                      | 
+  96 |  rc->range = 0xffffffff;                 | True                      | 
+  97 |  return rc;                              | True                      | 
+  98 | }                                        | True                      | 
+  99 |                                          | True                      | 
+ 100 | /* Called once  */                       | True                      | 
+ 101 | static ALWAYS_INLINE void rc_free(rc_t * | True                      | 
+ 102 | {                                        | True                      | 
+ 103 |  free(rc);                               | True                      | 
+ 104 | }                                        | True                      | 
+ 105 |                                          | True                      | 
+ 106 | /* rc_is_bit_1 is called 9 times */      | True                      | 
+ 107 | static speed_inline int rc_is_bit_1(rc_t | True                      | 
+ 108 | {                                        | True                      | 
+ 109 |  rc_normalize(rc);                       | True                      | 
+ 110 |  rc->bound = *p * (rc->range >> RC_MODEL | True                      | 
+ 111 |  if (rc->code < rc->bound) {             | True                      | 
+ 112 |   rc->range = rc->bound;                 | True                      | 
+ 113 |   *p += ((1 << RC_MODEL_TOTAL_BITS) - *p | True                      | 
+ 114 |   return 0;                              | True                      | 
+ 115 |  }                                       | True                      | 
+ 116 |  rc->range -= rc->bound;                 | True                      | 
+ 117 |  rc->code -= rc->bound;                  | True                      | 
+ 118 |  *p -= *p >> RC_MOVE_BITS;               | True                      | 
+ 119 |  return 1;                               | True                      | 
+ 120 | }                                        | True                      | 
+ 121 |                                          | True                      | 
+ 122 | /* Called 4 times in unlzma loop */      | True                      | 
+ 123 | static ALWAYS_INLINE int rc_get_bit(rc_t | True                      | 
+ 124 | {                                        | True                      | 
+ 125 |  int ret = rc_is_bit_1(rc, p);           | True                      | 
+ 126 |  *symbol = *symbol * 2 + ret;            | True                      | 
+ 127 |  return ret;                             | True                      | 
+ 128 | }                                        | True                      | 
+ 129 |                                          | True                      | 
+ 130 | /* Called once */                        | True                      | 
+ 131 | static ALWAYS_INLINE int rc_direct_bit(r | True                      | 
+ 132 | {                                        | True                      | 
+ 133 |  rc_normalize(rc);                       | True                      | 
+ 134 |  rc->range >>= 1;                        | True                      | 
+ 135 |  if (rc->code >= rc->range) {            | True                      | 
+ 136 |   rc->code -= rc->range;                 | True                      | 
+ 137 |   return 1;                              | True                      | 
+ 138 |  }                                       | True                      | 
+ 139 |  return 0;                               | True                      | 
+ 140 | }                                        | True                      | 
+ 141 |                                          | True                      | 
+ 142 | /* Called twice */                       | True                      | 
+ 143 | static speed_inline void                 | True                      | 
+ 144 | rc_bit_tree_decode(rc_t *rc, uint16_t *p | True                      | 
+ 145 | {                                        | True                      | 
+ 146 |  int i = num_levels;                     | True                      | 
+ 147 |                                          | True                      | 
+ 148 |  *symbol = 1;                            | True                      | 
+ 149 |  while (i--)                             | True                      | 
+ 150 |   rc_get_bit(rc, p + *symbol, symbol);   | True                      | 
+ 151 |  *symbol -= 1 << num_levels;             | True                      | 
+ 152 | }                                        | True                      | 
+ 153 |                                          | True                      | 
+ 154 |                                          | True                      | 
+ 155 | typedef struct {                         | True                      | 
+ 156 |  uint8_t pos;                            | True                      | 
+ 157 |  uint32_t dict_size;                     | True                      | 
+ 158 |  uint64_t dst_size;                      | True                      | 
+ 159 | } PACKED lzma_header_t;                  | True                      | 
+ 160 |                                          | True                      | 
+ 161 |                                          | True                      | 
+ 162 | /* #defines will force compiler to compu | True                      | 
+ 163 |  * Have heart and use enum instead. */   | True                      | 
+ 164 | enum {                                   | True                      | 
+ 165 |  LZMA_BASE_SIZE = 1846,                  | True                      | 
+ 166 |  LZMA_LIT_SIZE  = 768,                   | True                      | 
+ 167 |                                          | True                      | 
+ 168 |  LZMA_NUM_POS_BITS_MAX = 4,              | True                      | 
+ 169 |                                          | True                      | 
+ 170 |  LZMA_LEN_NUM_LOW_BITS  = 3,             | True                      | 
+ 171 |  LZMA_LEN_NUM_MID_BITS  = 3,             | True                      | 
+ 172 |  LZMA_LEN_NUM_HIGH_BITS = 8,             | True                      | 
+ 173 |                                          | True                      | 
+ 174 |  LZMA_LEN_CHOICE     = 0,                | True                      | 
+ 175 |  LZMA_LEN_CHOICE_2   = (LZMA_LEN_CHOICE  | True                      | 
+ 176 |  LZMA_LEN_LOW        = (LZMA_LEN_CHOICE_ | True                      | 
+ 177 |  LZMA_LEN_MID        = (LZMA_LEN_LOW \   | True                      | 
+ 178 |                        + (1 << (LZMA_NUM | True                      | 
+ 179 |  LZMA_LEN_HIGH       = (LZMA_LEN_MID \   | True                      | 
+ 180 |                        + (1 << (LZMA_NUM | True                      | 
+ 181 |  LZMA_NUM_LEN_PROBS  = (LZMA_LEN_HIGH +  | True                      | 
+ 182 |                                          | True                      | 
+ 183 |  LZMA_NUM_STATES     = 12,               | True                      | 
+ 184 |  LZMA_NUM_LIT_STATES = 7,                | True                      | 
+ 185 |                                          | True                      | 
+ 186 |  LZMA_START_POS_MODEL_INDEX = 4,         | True                      | 
+ 187 |  LZMA_END_POS_MODEL_INDEX   = 14,        | True                      | 
+ 188 |  LZMA_NUM_FULL_DISTANCES    = (1 << (LZM | True                      | 
+ 189 |                                          | True                      | 
+ 190 |  LZMA_NUM_POS_SLOT_BITS = 6,             | True                      | 
+ 191 |  LZMA_NUM_LEN_TO_POS_STATES = 4,         | True                      | 
+ 192 |                                          | True                      | 
+ 193 |  LZMA_NUM_ALIGN_BITS = 4,                | True                      | 
+ 194 |                                          | True                      | 
+ 195 |  LZMA_MATCH_MIN_LEN  = 2,                | True                      | 
+ 196 |                                          | True                      | 
+ 197 |  LZMA_IS_MATCH       = 0,                | True                      | 
+ 198 |  LZMA_IS_REP         = (LZMA_IS_MATCH +  | True                      | 
+ 199 |  LZMA_IS_REP_G0      = (LZMA_IS_REP + LZ | True                      | 
+ 200 |  LZMA_IS_REP_G1      = (LZMA_IS_REP_G0 + | True                      | 
+ 201 |  LZMA_IS_REP_G2      = (LZMA_IS_REP_G1 + | True                      | 
+ 202 |  LZMA_IS_REP_0_LONG  = (LZMA_IS_REP_G2 + | True                      | 
+ 203 |  LZMA_POS_SLOT       = (LZMA_IS_REP_0_LO | True                      | 
+ 204 |                        + (LZMA_NUM_STATE | True                      | 
+ 205 |  LZMA_SPEC_POS       = (LZMA_POS_SLOT \  | True                      | 
+ 206 |                        + (LZMA_NUM_LEN_T | True                      | 
+ 207 |  LZMA_ALIGN          = (LZMA_SPEC_POS \  | True                      | 
+ 208 |                        + LZMA_NUM_FULL_D | True                      | 
+ 209 |  LZMA_LEN_CODER      = (LZMA_ALIGN + (1  | True                      | 
+ 210 |  LZMA_REP_LEN_CODER  = (LZMA_LEN_CODER + | True                      | 
+ 211 |  LZMA_LITERAL        = (LZMA_REP_LEN_COD | True                      | 
+ 212 | };                                       | True                      | 
+ 213 |                                          | True                      | 
+ 214 |                                          | True                      | 
+ 215 | IF_DESKTOP(long long) int FAST_FUNC      | True                      | 
+ 216 | unpack_lzma_stream(transformer_state_t * | True                      | 
+ 217 | {                                        | True                      | 
+ 218 |  IF_DESKTOP(long long total_written = 0; | True                      | 
+ 219 |  lzma_header_t header;                   | True                      | 
+ 220 |  int lc, pb, lp;                         | True                      | 
+ 221 |  uint32_t pos_state_mask;                | True                      | 
+ 222 |  uint32_t literal_pos_mask;              | True                      | 
+ 223 |  uint16_t *p;                            | True                      | 
+ 224 |  rc_t *rc;                               | True                      | 
+ 225 |  int i;                                  | True                      | 
+ 226 |  uint8_t *buffer;                        | True                      | 
+ 227 |  uint32_t buffer_size;                   | True                      | 
+ 228 |  uint8_t previous_byte = 0;              | True                      | 
+ 229 |  size_t buffer_pos = 0, global_pos = 0;  | True                      | 
+ 230 |  int len = 0;                            | True                      | 
+ 231 |  int state = 0;                          | True                      | 
+ 232 |  uint32_t rep0 = 1, rep1 = 1, rep2 = 1,  | True                      | 
+ 233 |                                          | True                      | 
+ 234 |  if (full_read(xstate->src_fd, &header,  | True                      | 
+ 235 |   || header.pos >= (9 * 5 * 5)           | True                      | 
+ 236 |  ) {                                     | True                      | 
+ 237 |   bb_simple_error_msg("bad lzma header") | True                      | 
+ 238 |   return -1;                             | True                      | 
+ 239 |  }                                       | True                      | 
+ 240 |                                          | True                      | 
+ 241 |  i = header.pos / 9;                     | True                      | 
+ 242 |  lc = header.pos % 9;                    | True                      | 
+ 243 |  pb = i / 5;                             | True                      | 
+ 244 |  lp = i % 5;                             | True                      | 
+ 245 |  pos_state_mask = (1 << pb) - 1;         | True                      | 
+ 246 |  literal_pos_mask = (1 << lp) - 1;       | True                      | 
+ 247 |                                          | True                      | 
+ 248 |  /* Example values from linux-3.3.4.tar. | True                      | 
+ 249 |   * dict_size: 64M, dst_size: 2^64-1     | True                      | 
+ 250 |   */                                     | True                      | 
+ 251 |  header.dict_size = SWAP_LE32(header.dic | True                      | 
+ 252 |  header.dst_size = SWAP_LE64(header.dst_ | True                      | 
+ 253 |                                          | True                      | 
+ 254 |  if (header.dict_size == 0)              | True                      | 
+ 255 |   header.dict_size++;                    | True                      | 
+ 256 |                                          | True                      | 
+ 257 |  buffer_size = MIN(header.dst_size, head | True                      | 
+ 258 |  buffer = xmalloc(buffer_size);          | True                      | 
+ 259 |                                          | True                      | 
+ 260 |  {                                       | True                      | 
+ 261 |   int num_probs;                         | True                      | 
+ 262 |                                          | True                      | 
+ 263 |   num_probs = LZMA_BASE_SIZE + (LZMA_LIT | True                      | 
+ 264 |   p = xmalloc(num_probs * sizeof(*p));   | True                      | 
+ 265 |   num_probs += LZMA_LITERAL - LZMA_BASE_ | True                      | 
+ 266 |   for (i = 0; i < num_probs; i++)        | True                      | 
+ 267 |    p[i] = (1 << RC_MODEL_TOTAL_BITS) >>  | True                      | 
+ 268 |  }                                       | True                      | 
+ 269 |                                          | True                      | 
+ 270 |  rc = rc_init(xstate->src_fd); /*, RC_BU | True                      | 
+ 271 |                                          | True                      | 
+ 272 |  while (global_pos + buffer_pos < header | True                      | 
+ 273 |   int pos_state = (buffer_pos + global_p | True                      | 
+ 274 |   uint16_t *prob = p + LZMA_IS_MATCH + ( | True                      | 
+ 275 |                                          | True                      | 
+ 276 |   if (!rc_is_bit_1(rc, prob)) {          | True                      | 
+ 277 |    static const char next_state[LZMA_NUM | True                      | 
+ 278 |     { 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 4, 5 | True                      | 
+ 279 |    int mi = 1;                           | True                      | 
+ 280 |                                          | True                      | 
+ 281 |    prob = (p + LZMA_LITERAL              | True                      | 
+ 282 |            + (LZMA_LIT_SIZE * ((((buffer | True                      | 
+ 283 |                                + (previo | True                      | 
+ 284 |                               )          | True                      | 
+ 285 |              )                           | True                      | 
+ 286 |    );                                    | True                      | 
+ 287 |                                          | True                      | 
+ 288 |    if (state >= LZMA_NUM_LIT_STATES) {   | True                      | 
+ 289 |     int match_byte;                      | True                      | 
+ 290 |     uint32_t pos;                        | True                      | 
+ 291 |                                          | True                      | 
+ 292 |     pos = buffer_pos - rep0;             | True                      | 
+ 293 |     if ((int32_t)pos < 0) {              | True                      | 
+ 294 |      pos += header.dict_size;            | True                      | 
+ 295 |      if ((int32_t)pos < 0)               | True                      | 
+ 296 |       goto bad;                          | True                      | 
+ 297 |     }                                    | True                      | 
+ 298 |     match_byte = buffer[pos];            | True                      | 
+ 299 |     do {                                 | True                      | 
+ 300 |      int bit;                            | True                      | 
+ 301 |                                          | True                      | 
+ 302 |      match_byte <<= 1;                   | True                      | 
+ 303 |      bit = match_byte & 0x100;           | True                      | 
+ 304 |      bit ^= (rc_get_bit(rc, prob + 0x100 | True                      | 
+ 305 |      if (bit)                            | True                      | 
+ 306 |       break;                             | True                      | 
+ 307 |     } while (mi < 0x100);                | True                      | 
+ 308 |    }                                     | True                      | 
+ 309 |    while (mi < 0x100) {                  | True                      | 
+ 310 |     rc_get_bit(rc, prob + mi, &mi);      | True                      | 
+ 311 |    }                                     | True                      | 
+ 312 |                                          | True                      | 
+ 313 |    state = next_state[state];            | True                      | 
+ 314 |                                          | True                      | 
+ 315 |    previous_byte = (uint8_t) mi;         | True                      | 
+ 316 | #if ENABLE_FEATURE_LZMA_FAST             | True                      | 
+ 317 |  one_byte1:                              | ENABLE_FEATURE_LZMA_FAST  | 
+ 318 |    buffer[buffer_pos++] = previous_byte; | ENABLE_FEATURE_LZMA_FAST  | 
+ 319 |    if (buffer_pos == header.dict_size) { | ENABLE_FEATURE_LZMA_FAST  | 
+ 320 |     buffer_pos = 0;                      | ENABLE_FEATURE_LZMA_FAST  | 
+ 321 |     global_pos += header.dict_size;      | ENABLE_FEATURE_LZMA_FAST  | 
+ 322 |     if (transformer_write(xstate, buffer | ENABLE_FEATURE_LZMA_FAST  | 
+ 323 |      goto bad;                           | ENABLE_FEATURE_LZMA_FAST  | 
+ 324 |     IF_DESKTOP(total_written += header.d | ENABLE_FEATURE_LZMA_FAST  | 
+ 325 |    }                                     | ENABLE_FEATURE_LZMA_FAST  | 
+ 326 | #else                                    | True                      | 
+ 327 |    len = 1;                              | !ENABLE_FEATURE_LZMA_FAST | 
+ 328 |    goto one_byte2;                       | !ENABLE_FEATURE_LZMA_FAST | 
+ 329 | #endif                                   | True                      | 
+ 330 |   } else {                               | True                      | 
+ 331 |    int num_bits;                         | True                      | 
+ 332 |    int offset;                           | True                      | 
+ 333 |    uint16_t *prob2;                      | True                      | 
+ 334 | #define prob_len prob2                   | True                      | 
+ 335 |                                          | True                      | 
+ 336 |    prob2 = p + LZMA_IS_REP + state;      | True                      | 
+ 337 |    if (!rc_is_bit_1(rc, prob2)) {        | True                      | 
+ 338 |     rep3 = rep2;                         | True                      | 
+ 339 |     rep2 = rep1;                         | True                      | 
+ 340 |     rep1 = rep0;                         | True                      | 
+ 341 |     state = state < LZMA_NUM_LIT_STATES  | True                      | 
+ 342 |     prob2 = p + LZMA_LEN_CODER;          | True                      | 
+ 343 |    } else {                              | True                      | 
+ 344 |     prob2 += LZMA_IS_REP_G0 - LZMA_IS_RE | True                      | 
+ 345 |     if (!rc_is_bit_1(rc, prob2)) {       | True                      | 
+ 346 |      prob2 = (p + LZMA_IS_REP_0_LONG     | True                      | 
+ 347 |              + (state << LZMA_NUM_POS_BI | True                      | 
+ 348 |              + pos_state                 | True                      | 
+ 349 |      );                                  | True                      | 
+ 350 |      if (!rc_is_bit_1(rc, prob2)) {      | True                      | 
+ 351 | #if ENABLE_FEATURE_LZMA_FAST             | True                      | 
+ 352 |       uint32_t pos;                      | ENABLE_FEATURE_LZMA_FAST  | 
+ 353 |       state = state < LZMA_NUM_LIT_STATE | ENABLE_FEATURE_LZMA_FAST  | 
+ 354 |                                          | ENABLE_FEATURE_LZMA_FAST  | 
+ 355 |       pos = buffer_pos - rep0;           | ENABLE_FEATURE_LZMA_FAST  | 
+ 356 |       if ((int32_t)pos < 0) {            | ENABLE_FEATURE_LZMA_FAST  | 
+ 357 |        pos += header.dict_size;          | ENABLE_FEATURE_LZMA_FAST  | 
+ 358 |        /* see unzip_bad_lzma_2.zip: */   | ENABLE_FEATURE_LZMA_FAST  | 
+ 359 |        if (pos >= buffer_size) {         | ENABLE_FEATURE_LZMA_FAST  | 
+ 360 |         dbg("%d pos:%d buffer_size:%d",  | ENABLE_FEATURE_LZMA_FAST  | 
+ 361 |         goto bad;                        | ENABLE_FEATURE_LZMA_FAST  | 
+ 362 |        }                                 | ENABLE_FEATURE_LZMA_FAST  | 
+ 363 |       }                                  | ENABLE_FEATURE_LZMA_FAST  | 
+ 364 |       previous_byte = buffer[pos];       | ENABLE_FEATURE_LZMA_FAST  | 
+ 365 |       goto one_byte1;                    | ENABLE_FEATURE_LZMA_FAST  | 
+ 366 | #else                                    | True                      | 
+ 367 |       state = state < LZMA_NUM_LIT_STATE | !ENABLE_FEATURE_LZMA_FAST | 
+ 368 |       len = 1;                           | !ENABLE_FEATURE_LZMA_FAST | 
+ 369 |       goto string;                       | !ENABLE_FEATURE_LZMA_FAST | 
+ 370 | #endif                                   | True                      | 
+ 371 |      }                                   | True                      | 
+ 372 |     } else {                             | True                      | 
+ 373 |      uint32_t distance;                  | True                      | 
+ 374 |                                          | True                      | 
+ 375 |      prob2 += LZMA_IS_REP_G1 - LZMA_IS_R | True                      | 
+ 376 |      distance = rep1;                    | True                      | 
+ 377 |      if (rc_is_bit_1(rc, prob2)) {       | True                      | 
+ 378 |       prob2 += LZMA_IS_REP_G2 - LZMA_IS_ | True                      | 
+ 379 |       distance = rep2;                   | True                      | 
+ 380 |       if (rc_is_bit_1(rc, prob2)) {      | True                      | 
+ 381 |        distance = rep3;                  | True                      | 
+ 382 |        rep3 = rep2;                      | True                      | 
+ 383 |       }                                  | True                      | 
+ 384 |       rep2 = rep1;                       | True                      | 
+ 385 |      }                                   | True                      | 
+ 386 |      rep1 = rep0;                        | True                      | 
+ 387 |      rep0 = distance;                    | True                      | 
+ 388 |     }                                    | True                      | 
+ 389 |     state = state < LZMA_NUM_LIT_STATES  | True                      | 
+ 390 |     prob2 = p + LZMA_REP_LEN_CODER;      | True                      | 
+ 391 |    }                                     | True                      | 
+ 392 |                                          | True                      | 
+ 393 |    prob_len = prob2 + LZMA_LEN_CHOICE;   | True                      | 
+ 394 |    num_bits = LZMA_LEN_NUM_LOW_BITS;     | True                      | 
+ 395 |    if (!rc_is_bit_1(rc, prob_len)) {     | True                      | 
+ 396 |     prob_len += LZMA_LEN_LOW - LZMA_LEN_ | True                      | 
+ 397 |                 + (pos_state << LZMA_LEN | True                      | 
+ 398 |     offset = 0;                          | True                      | 
+ 399 |    } else {                              | True                      | 
+ 400 |     prob_len += LZMA_LEN_CHOICE_2 - LZMA | True                      | 
+ 401 |     if (!rc_is_bit_1(rc, prob_len)) {    | True                      | 
+ 402 |      prob_len += LZMA_LEN_MID - LZMA_LEN | True                      | 
+ 403 |                  + (pos_state << LZMA_LE | True                      | 
+ 404 |      offset = 1 << LZMA_LEN_NUM_LOW_BITS | True                      | 
+ 405 |      num_bits += LZMA_LEN_NUM_MID_BITS - | True                      | 
+ 406 |     } else {                             | True                      | 
+ 407 |      prob_len += LZMA_LEN_HIGH - LZMA_LE | True                      | 
+ 408 |      offset = ((1 << LZMA_LEN_NUM_LOW_BI | True                      | 
+ 409 |                + (1 << LZMA_LEN_NUM_MID_ | True                      | 
+ 410 |      num_bits += LZMA_LEN_NUM_HIGH_BITS  | True                      | 
+ 411 |     }                                    | True                      | 
+ 412 |    }                                     | True                      | 
+ 413 |    rc_bit_tree_decode(rc, prob_len, num_ | True                      | 
+ 414 |    len += offset;                        | True                      | 
+ 415 |                                          | True                      | 
+ 416 |    if (state < 4) {                      | True                      | 
+ 417 |     int pos_slot;                        | True                      | 
+ 418 |     uint16_t *prob3;                     | True                      | 
+ 419 |                                          | True                      | 
+ 420 |     state += LZMA_NUM_LIT_STATES;        | True                      | 
+ 421 |     prob3 = p + LZMA_POS_SLOT +          | True                      | 
+ 422 |            ((len < LZMA_NUM_LEN_TO_POS_S | True                      | 
+ 423 |              LZMA_NUM_LEN_TO_POS_STATES  | True                      | 
+ 424 |              << LZMA_NUM_POS_SLOT_BITS); | True                      | 
+ 425 |     rc_bit_tree_decode(rc, prob3,        | True                      | 
+ 426 |      LZMA_NUM_POS_SLOT_BITS, &pos_slot); | True                      | 
+ 427 |     rep0 = pos_slot;                     | True                      | 
+ 428 |     if (pos_slot >= LZMA_START_POS_MODEL | True                      | 
+ 429 |      int i2, mi2, num_bits2 = (pos_slot  | True                      | 
+ 430 |      rep0 = 2 | (pos_slot & 1);          | True                      | 
+ 431 |      if (pos_slot < LZMA_END_POS_MODEL_I | True                      | 
+ 432 |       rep0 <<= num_bits2;                | True                      | 
+ 433 |       prob3 = p + LZMA_SPEC_POS + rep0 - | True                      | 
+ 434 |      } else {                            | True                      | 
+ 435 |       for (; num_bits2 != LZMA_NUM_ALIGN | True                      | 
+ 436 |        rep0 = (rep0 << 1) | rc_direct_bi | True                      | 
+ 437 |       rep0 <<= LZMA_NUM_ALIGN_BITS;      | True                      | 
+ 438 |       // Note: (int32_t)rep0 may be < 0  | True                      | 
+ 439 |       // (I have linux-3.3.4.tar.lzma wh | True                      | 
+ 440 |       // I moved the check after "++rep0 | True                      | 
+ 441 |       prob3 = p + LZMA_ALIGN;            | True                      | 
+ 442 |      }                                   | True                      | 
+ 443 |      i2 = 1;                             | True                      | 
+ 444 |      mi2 = 1;                            | True                      | 
+ 445 |      while (num_bits2--) {               | True                      | 
+ 446 |       if (rc_get_bit(rc, prob3 + mi2, &m | True                      | 
+ 447 |        rep0 |= i2;                       | True                      | 
+ 448 |       i2 <<= 1;                          | True                      | 
+ 449 |      }                                   | True                      | 
+ 450 |     }                                    | True                      | 
+ 451 |     rep0++;                              | True                      | 
+ 452 |     if ((int32_t)rep0 <= 0) {            | True                      | 
+ 453 |      if (rep0 == 0)                      | True                      | 
+ 454 |       break;                             | True                      | 
+ 455 |      dbg("%d rep0:%d", __LINE__, rep0);  | True                      | 
+ 456 |      goto bad;                           | True                      | 
+ 457 |     }                                    | True                      | 
+ 458 |    }                                     | True                      | 
+ 459 |                                          | True                      | 
+ 460 |    len += LZMA_MATCH_MIN_LEN;            | True                      | 
+ 461 |    /*                                    | True                      | 
+ 462 |     * LZMA SDK has this optimized:       | True                      | 
+ 463 |     * it precalculates size and copies m | True                      | 
+ 464 |     * in a loop with simpler checks, a-l | True                      | 
+ 465 |     * do                                 | True                      | 
+ 466 |     *  *(dest) = *(dest + ofs);          | True                      | 
+ 467 |     * while (++dest != lim);             | True                      | 
+ 468 |     * and                                | True                      | 
+ 469 |     * do {                               | True                      | 
+ 470 |     *  buffer[buffer_pos++] = buffer[pos | True                      | 
+ 471 |     *  if (++pos == header.dict_size)    | True                      | 
+ 472 |     *   pos = 0;                         | True                      | 
+ 473 |     * } while (--cur_len != 0);          | True                      | 
+ 474 |     * Our code is slower (more checks pe | True                      | 
+ 475 |     */                                   | True                      | 
+ 476 |  IF_NOT_FEATURE_LZMA_FAST(string:)       | True                      | 
+ 477 |    do {                                  | True                      | 
+ 478 |     uint32_t pos = buffer_pos - rep0;    | True                      | 
+ 479 |     if ((int32_t)pos < 0) {              | True                      | 
+ 480 |      pos += header.dict_size;            | True                      | 
+ 481 |      /* bug 10436 has an example file wh | True                      | 
+ 482 |      //if ((int32_t)pos < 0)             | True                      | 
+ 483 |      // goto bad;                        | True                      | 
+ 484 |      /* more stringent test (see unzip_b | True                      | 
+ 485 |      if (pos >= buffer_size)             | True                      | 
+ 486 |       goto bad;                          | True                      | 
+ 487 |     }                                    | True                      | 
+ 488 |     previous_byte = buffer[pos];         | True                      | 
+ 489 |  IF_NOT_FEATURE_LZMA_FAST(one_byte2:)    | True                      | 
+ 490 |     buffer[buffer_pos++] = previous_byte | True                      | 
+ 491 |     if (buffer_pos == header.dict_size)  | True                      | 
+ 492 |      buffer_pos = 0;                     | True                      | 
+ 493 |      global_pos += header.dict_size;     | True                      | 
+ 494 |      if (transformer_write(xstate, buffe | True                      | 
+ 495 |       goto bad;                          | True                      | 
+ 496 |      IF_DESKTOP(total_written += header. | True                      | 
+ 497 |     }                                    | True                      | 
+ 498 |     len--;                               | True                      | 
+ 499 |    } while (len != 0 && buffer_pos < hea | True                      | 
+ 500 |    /* FIXME: ...........^^^^^            | True                      | 
+ 501 |     * shouldn't it be "global_pos + buff | True                      | 
+ 502 |     * It probably should, but it is a "d | True                      | 
+ 503 |     * unpack more bytes than expected?"  | True                      | 
+ 504 |     * never happens for well-formed comp | True                      | 
+ 505 |     */                                   | True                      | 
+ 506 |   }                                      | True                      | 
+ 507 |  }                                       | True                      | 
+ 508 |                                          | True                      | 
+ 509 |  {                                       | True                      | 
+ 510 |   IF_NOT_DESKTOP(int total_written = 0;  | True                      | 
+ 511 |   IF_DESKTOP(total_written += buffer_pos | True                      | 
+ 512 |   if (transformer_write(xstate, buffer,  | True                      | 
+ 513 |  bad:                                    | True                      | 
+ 514 |    /* One of our users, bbunpack(), expe | True                      | 
+ 515 |     * the error message (since it's the  | True                      | 
+ 516 |     * potentially more detailed informat | True                      | 
+ 517 |     * Do not fail silently.              | True                      | 
+ 518 |     */                                   | True                      | 
+ 519 |    bb_simple_error_msg("corrupted data") | True                      | 
+ 520 |    total_written = -1; /* failure */     | True                      | 
+ 521 |   }                                      | True                      | 
+ 522 |   rc_free(rc);                           | True                      | 
+ 523 |   free(p);                               | True                      | 
+ 524 |   free(buffer);                          | True                      | 
+ 525 |   return total_written;                  | True                      | 
+ 526 |  }                                       | True                      | 
+ 527 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +115MB, 260ms             | 

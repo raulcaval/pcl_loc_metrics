@@ -1,0 +1,184 @@
+FILE: data/raw/busybox-1.38.0/networking/libiproute/ll_map.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * This program is free software; you ca | True                      | 
+   4 |  * modify it under the terms of the GNU  | True                      | 
+   5 |  * as published by the Free Software Fou | True                      | 
+   6 |  * 2 of the License, or (at your option) | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Authors: Alexey Kuznetsov, <kuznet@ms | True                      | 
+   9 |  */                                      | True                      | 
+  10 | #include <net/if.h>  /* struct ifreq and | True                      | 
+  11 |                                          | True                      | 
+  12 | #include "libbb.h"                       | True                      | 
+  13 | #include "libnetlink.h"                  | True                      | 
+  14 | #include "ll_map.h"                      | True                      | 
+  15 |                                          | True                      | 
+  16 | struct idxmap {                          | True                      | 
+  17 |  struct idxmap *next;                    | True                      | 
+  18 |  int            index;                   | True                      | 
+  19 |  int            type;                    | True                      | 
+  20 |  int            alen;                    | True                      | 
+  21 |  unsigned       flags;                   | True                      | 
+  22 |  unsigned char  addr[8];                 | True                      | 
+  23 |  char           name[16];                | True                      | 
+  24 | };                                       | True                      | 
+  25 |                                          | True                      | 
+  26 | static struct idxmap **idxmap; /* treat  | True                      | 
+  27 |                                          | True                      | 
+  28 | static struct idxmap *find_by_index(int  | True                      | 
+  29 | {                                        | True                      | 
+  30 |  struct idxmap *im;                      | True                      | 
+  31 |                                          | True                      | 
+  32 |  if (idxmap)                             | True                      | 
+  33 |   for (im = idxmap[idx & 0xF]; im; im =  | True                      | 
+  34 |    if (im->index == idx)                 | True                      | 
+  35 |     return im;                           | True                      | 
+  36 |  return NULL;                            | True                      | 
+  37 | }                                        | True                      | 
+  38 |                                          | True                      | 
+  39 | int FAST_FUNC ll_remember_index(const st | True                      | 
+  40 |   struct nlmsghdr *n,                    | True                      | 
+  41 |   void *arg UNUSED_PARAM)                | True                      | 
+  42 | {                                        | True                      | 
+  43 |  int h;                                  | True                      | 
+  44 |  struct ifinfomsg *ifi = NLMSG_DATA(n);  | True                      | 
+  45 |  struct idxmap *im, **imp;               | True                      | 
+  46 |  struct rtattr *tb[IFLA_MAX+1];          | True                      | 
+  47 |                                          | True                      | 
+  48 |  if (n->nlmsg_type != RTM_NEWLINK)       | True                      | 
+  49 |   return 0;                              | True                      | 
+  50 |                                          | True                      | 
+  51 |  if (n->nlmsg_len < NLMSG_LENGTH(sizeof( | True                      | 
+  52 |   return -1;                             | True                      | 
+  53 |                                          | True                      | 
+  54 |  //memset(tb, 0, sizeof(tb)); - parse_rt | True                      | 
+  55 |  parse_rtattr(tb, IFLA_MAX, IFLA_RTA(ifi | True                      | 
+  56 |  if (tb[IFLA_IFNAME] == NULL)            | True                      | 
+  57 |   return 0;                              | True                      | 
+  58 |                                          | True                      | 
+  59 |  if (!idxmap)                            | True                      | 
+  60 |   idxmap = xzalloc(sizeof(idxmap[0]) * 1 | True                      | 
+  61 |                                          | True                      | 
+  62 |  h = ifi->ifi_index & 0xF;               | True                      | 
+  63 |  for (imp = &idxmap[h]; (im = *imp) != N | True                      | 
+  64 |   if (im->index == ifi->ifi_index)       | True                      | 
+  65 |    goto found;                           | True                      | 
+  66 |                                          | True                      | 
+  67 |  im = xmalloc(sizeof(*im));              | True                      | 
+  68 |  im->next = *imp;                        | True                      | 
+  69 |  im->index = ifi->ifi_index;             | True                      | 
+  70 |  *imp = im;                              | True                      | 
+  71 |  found:                                  | True                      | 
+  72 |  im->type = ifi->ifi_type;               | True                      | 
+  73 |  im->flags = ifi->ifi_flags;             | True                      | 
+  74 |  if (tb[IFLA_ADDRESS]) {                 | True                      | 
+  75 |   int alen;                              | True                      | 
+  76 |   im->alen = alen = RTA_PAYLOAD(tb[IFLA_ | True                      | 
+  77 |   if (alen > (int)sizeof(im->addr))      | True                      | 
+  78 |    alen = sizeof(im->addr);              | True                      | 
+  79 |   memcpy(im->addr, RTA_DATA(tb[IFLA_ADDR | True                      | 
+  80 |  } else {                                | True                      | 
+  81 |   im->alen = 0;                          | True                      | 
+  82 |   memset(im->addr, 0, sizeof(im->addr)); | True                      | 
+  83 |  }                                       | True                      | 
+  84 |  strcpy(im->name, RTA_DATA(tb[IFLA_IFNAM | True                      | 
+  85 |  return 0;                               | True                      | 
+  86 | }                                        | True                      | 
+  87 |                                          | True                      | 
+  88 | static                                   | True                      | 
+  89 | const char FAST_FUNC *ll_idx_n2a(int idx | True                      | 
+  90 | {                                        | True                      | 
+  91 |  struct idxmap *im;                      | True                      | 
+  92 |                                          | True                      | 
+  93 |  if (idx == 0)                           | True                      | 
+  94 |   return "*";                            | True                      | 
+  95 |  im = find_by_index(idx);                | True                      | 
+  96 |  if (im)                                 | True                      | 
+  97 |   return im->name;                       | True                      | 
+  98 |  //snprintf(buf, 16, "if%d", idx);       | True                      | 
+  99 |  //return buf;                           | True                      | 
+ 100 |  return auto_string(xasprintf("if%d", id | True                      | 
+ 101 | }                                        | True                      | 
+ 102 |                                          | True                      | 
+ 103 | const char FAST_FUNC *ll_index_to_name(i | True                      | 
+ 104 | {                                        | True                      | 
+ 105 |  //static char nbuf[16];                 | True                      | 
+ 106 |  return ll_idx_n2a(idx/*, nbuf*/);       | True                      | 
+ 107 | }                                        | True                      | 
+ 108 |                                          | True                      | 
+ 109 | #ifdef UNUSED                            | True                      | 
+ 110 | int ll_index_to_type(int idx)            | (UNUSED)                  | 
+ 111 | {                                        | (UNUSED)                  | 
+ 112 |  struct idxmap *im;                      | (UNUSED)                  | 
+ 113 |                                          | (UNUSED)                  | 
+ 114 |  if (idx == 0)                           | (UNUSED)                  | 
+ 115 |   return -1;                             | (UNUSED)                  | 
+ 116 |  im = find_by_index(idx);                | (UNUSED)                  | 
+ 117 |  if (im)                                 | (UNUSED)                  | 
+ 118 |   return im->type;                       | (UNUSED)                  | 
+ 119 |  return -1;                              | (UNUSED)                  | 
+ 120 | }                                        | (UNUSED)                  | 
+ 121 | #endif                                   | True                      | 
+ 122 |                                          | True                      | 
+ 123 | unsigned FAST_FUNC ll_index_to_flags(int | True                      | 
+ 124 | {                                        | True                      | 
+ 125 |  struct idxmap *im;                      | True                      | 
+ 126 |                                          | True                      | 
+ 127 |  if (idx == 0)                           | True                      | 
+ 128 |   return 0;                              | True                      | 
+ 129 |  im = find_by_index(idx);                | True                      | 
+ 130 |  if (im)                                 | True                      | 
+ 131 |   return im->flags;                      | True                      | 
+ 132 |  return 0;                               | True                      | 
+ 133 | }                                        | True                      | 
+ 134 |                                          | True                      | 
+ 135 | int FAST_FUNC xll_name_to_index(const ch | True                      | 
+ 136 | {                                        | True                      | 
+ 137 |  int ret = 0;                            | True                      | 
+ 138 |                                          | True                      | 
+ 139 | /* caching is not warranted - no users w | True                      | 
+ 140 | #ifdef UNUSED                            | True                      | 
+ 141 |  static char ncache[16];                 | (UNUSED)                  | 
+ 142 |  static int icache;                      | (UNUSED)                  | 
+ 143 |                                          | (UNUSED)                  | 
+ 144 |  struct idxmap *im;                      | (UNUSED)                  | 
+ 145 |  int i;                                  | (UNUSED)                  | 
+ 146 |                                          | (UNUSED)                  | 
+ 147 |  if (name == NULL)                       | (UNUSED)                  | 
+ 148 |   goto out;                              | (UNUSED)                  | 
+ 149 |  if (icache && strcmp(name, ncache) == 0 | (UNUSED)                  | 
+ 150 |   ret = icache;                          | (UNUSED)                  | 
+ 151 |   goto out;                              | (UNUSED)                  | 
+ 152 |  }                                       | (UNUSED)                  | 
+ 153 |  if (idxmap) {                           | (UNUSED)                  | 
+ 154 |   for (i = 0; i < 16; i++) {             | (UNUSED)                  | 
+ 155 |    for (im = idxmap[i]; im; im = im->nex | (UNUSED)                  | 
+ 156 |     if (strcmp(im->name, name) == 0) {   | (UNUSED)                  | 
+ 157 |      icache = im->index;                 | (UNUSED)                  | 
+ 158 |      strcpy(ncache, name);               | (UNUSED)                  | 
+ 159 |      ret = im->index;                    | (UNUSED)                  | 
+ 160 |      goto out;                           | (UNUSED)                  | 
+ 161 |     }                                    | (UNUSED)                  | 
+ 162 |    }                                     | (UNUSED)                  | 
+ 163 |   }                                      | (UNUSED)                  | 
+ 164 |  }                                       | (UNUSED)                  | 
+ 165 | #endif                                   | True                      | 
+ 166 |  ret = if_nametoindex(name);             | True                      | 
+ 167 | /* out:*/                                | True                      | 
+ 168 |  if (ret <= 0)                           | True                      | 
+ 169 |   bb_error_msg_and_die("can't find devic | True                      | 
+ 170 |  return ret;                             | True                      | 
+ 171 | }                                        | True                      | 
+ 172 |                                          | True                      | 
+ 173 | int FAST_FUNC ll_init_map(struct rtnl_ha | True                      | 
+ 174 | {                                        | True                      | 
+ 175 |  xrtnl_wilddump_request(rth, AF_UNSPEC,  | True                      | 
+ 176 |  xrtnl_dump_filter(rth, ll_remember_inde | True                      | 
+ 177 |  return 0;                               | True                      | 
+ 178 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +109MB, 275ms             | 

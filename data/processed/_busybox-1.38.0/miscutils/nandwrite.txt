@@ -1,0 +1,290 @@
+FILE: data/raw/busybox-1.38.0/miscutils/nandwrite.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * nandwrite and nanddump ported to busy | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * Author: Baruch Siach <baruch@tkos.co. | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * TODO: add support for large (>4GB) MT | True                      | 
+   9 |  */                                      | True                      | 
+  10 | //config:config NANDWRITE                | True                      | 
+  11 | //config: bool "nandwrite (5 kb)"        | True                      | 
+  12 | //config: default y                      | True                      | 
+  13 | //config: help                           | True                      | 
+  14 | //config: Write to the specified MTD dev | True                      | 
+  15 | //config:                                | True                      | 
+  16 | //config:config NANDDUMP                 | True                      | 
+  17 | //config: bool "nanddump (5.4 kb)"       | True                      | 
+  18 | //config: default y                      | True                      | 
+  19 | //config: help                           | True                      | 
+  20 | //config: Dump the content of raw NAND c | True                      | 
+  21 |                                          | True                      | 
+  22 | //applet:IF_NANDWRITE(APPLET(nandwrite,  | True                      | 
+  23 | //applet:IF_NANDDUMP(APPLET_ODDNAME(nand | True                      | 
+  24 |                                          | True                      | 
+  25 | //kbuild:lib-$(CONFIG_NANDWRITE) += nand | True                      | 
+  26 | //kbuild:lib-$(CONFIG_NANDDUMP) += nandw | True                      | 
+  27 |                                          | True                      | 
+  28 | //usage:#define nandwrite_trivial_usage  | True                      | 
+  29 | //usage: "[-np] [-s ADDR] MTD_DEVICE [FI | True                      | 
+  30 | //usage:#define nandwrite_full_usage "\n | True                      | 
+  31 | //usage: "Write to MTD_DEVICE\n"         | True                      | 
+  32 | //usage:     "\n -n Write without ecc"   | True                      | 
+  33 | //usage:     "\n -p Pad to page size"    | True                      | 
+  34 | //usage:     "\n -s ADDR Start address"  | True                      | 
+  35 |                                          | True                      | 
+  36 | //usage:#define nanddump_trivial_usage   | True                      | 
+  37 | //usage: "[-no]" IF_LONG_OPTS(" [--bb pa | True                      | 
+  38 | //usage:#define nanddump_full_usage "\n\ | True                      | 
+  39 | //usage: "Dump MTD_DEVICE\n"             | True                      | 
+  40 | //usage:     "\n -n Read without ecc"    | True                      | 
+  41 | //usage:     "\n -o Dump oob data"       | True                      | 
+  42 | //usage:     "\n -s ADDR Start address"  | True                      | 
+  43 | //usage:     "\n -l LEN Length"          | True                      | 
+  44 | //usage:     "\n -f FILE Dump to file (' | True                      | 
+  45 | //usage:     IF_LONG_OPTS(               | True                      | 
+  46 | //usage:     "\n --bb METHOD"            | True                      | 
+  47 | //usage:     "\n  skipbad: skip bad bloc | True                      | 
+  48 | //usage:     "\n  padbad: substitute bad | True                      | 
+  49 | //usage:     )                           | True                      | 
+  50 |                                          | True                      | 
+  51 | #include "libbb.h"                       | True                      | 
+  52 | #include <mtd/mtd-user.h>                | True                      | 
+  53 |                                          | True                      | 
+  54 | /* Old headers call it MTD_MODE_RAW.     | True                      | 
+  55 |  * FIXME: In kernel headers, MTD_FILE_MO | True                      | 
+  56 |  * it's an enum. How I can test for exis | True                      | 
+  57 |  */                                      | True                      | 
+  58 | #if !defined(MTD_FILE_MODE_RAW)          | True                      | 
+  59 | # define MTD_FILE_MODE_RAW 3             | !(MTD_FILE_MODE_RAW)      | 
+  60 | #endif                                   | True                      | 
+  61 |                                          | True                      | 
+  62 |                                          | True                      | 
+  63 | #define IS_NANDDUMP  (ENABLE_NANDDUMP && | True                      | 
+  64 | #define IS_NANDWRITE (ENABLE_NANDWRITE & | True                      | 
+  65 |                                          | True                      | 
+  66 | #define OPT_p  (1 << 0) /* nandwrite onl | True                      | 
+  67 | #define OPT_o  (1 << 0) /* nanddump only | True                      | 
+  68 | #define OPT_n  (1 << 1)                  | True                      | 
+  69 | #define OPT_s  (1 << 2)                  | True                      | 
+  70 | #define OPT_f  (1 << 3)                  | True                      | 
+  71 | #define OPT_l  (1 << 4)                  | True                      | 
+  72 | #define OPT_bb (1 << 5) /* must be the l | True                      | 
+  73 |                                          | True                      | 
+  74 | #define BB_PADBAD (1 << 0)               | True                      | 
+  75 | #define BB_SKIPBAD (1 << 1)              | True                      | 
+  76 |                                          | True                      | 
+  77 | /* helper for writing out 0xff for bad b | True                      | 
+  78 | static void dump_bad(struct mtd_info_use | True                      | 
+  79 | {                                        | True                      | 
+  80 |  unsigned char buf[meminfo->writesize];  | True                      | 
+  81 |  unsigned count;                         | True                      | 
+  82 |                                          | True                      | 
+  83 |  /* round len to the next page only if l | True                      | 
+  84 |  len = ((len - 1) | (meminfo->writesize  | True                      | 
+  85 |                                          | True                      | 
+  86 |  memset(buf, 0xff, sizeof(buf));         | True                      | 
+  87 |  for (count = 0; count < len; count += m | True                      | 
+  88 |   xwrite(STDOUT_FILENO, buf, meminfo->wr | True                      | 
+  89 |   if (oob)                               | True                      | 
+  90 |    xwrite(STDOUT_FILENO, buf, meminfo->o | True                      | 
+  91 |  }                                       | True                      | 
+  92 | }                                        | True                      | 
+  93 |                                          | True                      | 
+  94 | static unsigned next_good_eraseblock(int | True                      | 
+  95 |   unsigned block_offset)                 | True                      | 
+  96 | {                                        | True                      | 
+  97 |  while (1) {                             | True                      | 
+  98 |   loff_t offs;                           | True                      | 
+  99 |                                          | True                      | 
+ 100 |   if (block_offset >= meminfo->size) {   | True                      | 
+ 101 |    if (IS_NANDWRITE)                     | True                      | 
+ 102 |     bb_simple_error_msg_and_die("not eno | True                      | 
+ 103 |    return block_offset; /* let the calle | True                      | 
+ 104 |   }                                      | True                      | 
+ 105 |   offs = block_offset;                   | True                      | 
+ 106 |   if (xioctl(fd, MEMGETBADBLOCK, &offs)  | True                      | 
+ 107 |    return block_offset;                  | True                      | 
+ 108 |   /* ioctl returned 1 => "bad block" */  | True                      | 
+ 109 |   if (IS_NANDWRITE)                      | True                      | 
+ 110 |    printf("Skipping bad block at 0x%08x\ | True                      | 
+ 111 |   block_offset += meminfo->erasesize;    | True                      | 
+ 112 |  }                                       | True                      | 
+ 113 | }                                        | True                      | 
+ 114 |                                          | True                      | 
+ 115 | int nandwrite_main(int argc, char **argv | True                      | 
+ 116 | int nandwrite_main(int argc UNUSED_PARAM | True                      | 
+ 117 | {                                        | True                      | 
+ 118 |  /* Buffer for OOB data */               | True                      | 
+ 119 |  unsigned char *oobbuf;                  | True                      | 
+ 120 |  unsigned opts;                          | True                      | 
+ 121 |  unsigned bb_method = BB_SKIPBAD;        | True                      | 
+ 122 |  int fd;                                 | True                      | 
+ 123 |  ssize_t cnt;                            | True                      | 
+ 124 |  unsigned mtdoffset, meminfo_writesize,  | True                      | 
+ 125 |  unsigned end_addr = ~0;                 | True                      | 
+ 126 |  struct mtd_info_user meminfo;           | True                      | 
+ 127 |  struct mtd_oob_buf oob;                 | True                      | 
+ 128 |  unsigned char *filebuf;                 | True                      | 
+ 129 |  const char *opt_s = "0", *opt_f = "-",  | True                      | 
+ 130 |                                          | True                      | 
+ 131 |  if (IS_NANDDUMP) {                      | True                      | 
+ 132 |   opts = getopt32long(argv, "^" "ons:f:l | True                      | 
+ 133 |     "bb\0" Required_argument "\xff", /*  | True                      | 
+ 134 |     &opt_s, &opt_f, &opt_l, &opt_bb      | True                      | 
+ 135 |   );                                     | True                      | 
+ 136 |  } else { /* nandwrite */                | True                      | 
+ 137 |   opts = getopt32(argv, "^" "pns:" "\0"  | True                      | 
+ 138 |  }                                       | True                      | 
+ 139 |  argv += optind;                         | True                      | 
+ 140 |                                          | True                      | 
+ 141 |  if (IS_NANDWRITE && argv[1])            | True                      | 
+ 142 |   opt_f = argv[1];                       | True                      | 
+ 143 |  if (!LONE_DASH(opt_f)) {                | True                      | 
+ 144 |   int tmp_fd = xopen(opt_f,              | True                      | 
+ 145 |    IS_NANDDUMP ? O_WRONLY | O_TRUNC | O_ | True                      | 
+ 146 |   );                                     | True                      | 
+ 147 |   xmove_fd(tmp_fd, IS_NANDDUMP ? STDOUT_ | True                      | 
+ 148 |  }                                       | True                      | 
+ 149 |                                          | True                      | 
+ 150 |  fd = xopen(argv[0], IS_NANDWRITE ? O_RD | True                      | 
+ 151 |  xioctl(fd, MEMGETINFO, &meminfo);       | True                      | 
+ 152 |                                          | True                      | 
+ 153 |  if (opts & OPT_n)                       | True                      | 
+ 154 |   xioctl(fd, MTDFILEMODE, (void *)MTD_FI | True                      | 
+ 155 |                                          | True                      | 
+ 156 |  mtdoffset = xstrtou(opt_s, 0);          | True                      | 
+ 157 |  if (IS_NANDDUMP && (opts & OPT_l)) {    | True                      | 
+ 158 |   unsigned length = xstrtou(opt_l, 0);   | True                      | 
+ 159 |   if (length < meminfo.size - mtdoffset) | True                      | 
+ 160 |    end_addr = mtdoffset + length;        | True                      | 
+ 161 |  }                                       | True                      | 
+ 162 |  if (IS_NANDDUMP && (opts & OPT_bb)) {   | True                      | 
+ 163 |   if (strcmp("skipbad", opt_bb) == 0)    | True                      | 
+ 164 |    bb_method = BB_SKIPBAD;               | True                      | 
+ 165 |   else if (strcmp("padbad", opt_bb) == 0 | True                      | 
+ 166 |    bb_method = BB_PADBAD;                | True                      | 
+ 167 |   else                                   | True                      | 
+ 168 |    bb_show_usage();                      | True                      | 
+ 169 |  }                                       | True                      | 
+ 170 |                                          | True                      | 
+ 171 |  /* Pull it into a CPU register (hopeful | True                      | 
+ 172 |  meminfo_writesize = meminfo.writesize;  | True                      | 
+ 173 |                                          | True                      | 
+ 174 |  if (mtdoffset & (meminfo_writesize - 1) | True                      | 
+ 175 |   bb_simple_error_msg_and_die("start add | True                      | 
+ 176 |                                          | True                      | 
+ 177 |  filebuf = xmalloc(meminfo_writesize);   | True                      | 
+ 178 |  oobbuf = xmalloc(meminfo.oobsize);      | True                      | 
+ 179 |                                          | True                      | 
+ 180 |  oob.start  = 0;                         | True                      | 
+ 181 |  oob.length = meminfo.oobsize;           | True                      | 
+ 182 |  oob.ptr    = oobbuf;                    | True                      | 
+ 183 |                                          | True                      | 
+ 184 |  blockstart = mtdoffset & ~(meminfo.eras | True                      | 
+ 185 |  if (blockstart != mtdoffset) {          | True                      | 
+ 186 |   unsigned tmp;                          | True                      | 
+ 187 |   /* mtdoffset is in the middle of an er | True                      | 
+ 188 |    * this block is OK. Advance mtdoffset | True                      | 
+ 189 |    * bad.                                | True                      | 
+ 190 |    */                                    | True                      | 
+ 191 |   tmp = next_good_eraseblock(fd, &meminf | True                      | 
+ 192 |   if (tmp != blockstart) {               | True                      | 
+ 193 |    /* bad block(s), advance mtdoffset */ | True                      | 
+ 194 |    if (IS_NANDDUMP) {                    | True                      | 
+ 195 |     if (bb_method == BB_PADBAD) {        | True                      | 
+ 196 |      int bad_len = MIN(tmp, end_addr) -  | True                      | 
+ 197 |      dump_bad(&meminfo, bad_len, opts &  | True                      | 
+ 198 |     }                                    | True                      | 
+ 199 |     /* with option skipbad, increase the | True                      | 
+ 200 |     if (bb_method == BB_SKIPBAD) {       | True                      | 
+ 201 |      end_addr += (tmp - blockstart);     | True                      | 
+ 202 |     }                                    | True                      | 
+ 203 |    }                                     | True                      | 
+ 204 |    mtdoffset = tmp;                      | True                      | 
+ 205 |   }                                      | True                      | 
+ 206 |  }                                       | True                      | 
+ 207 |                                          | True                      | 
+ 208 |  cnt = -1;                               | True                      | 
+ 209 |  limit = MIN(meminfo.size, end_addr);    | True                      | 
+ 210 |  while (mtdoffset < limit) {             | True                      | 
+ 211 |   int input_fd = IS_NANDWRITE ? STDIN_FI | True                      | 
+ 212 |   int output_fd = IS_NANDWRITE ? fd : ST | True                      | 
+ 213 |                                          | True                      | 
+ 214 |   blockstart = mtdoffset & ~(meminfo.era | True                      | 
+ 215 |   if (blockstart == mtdoffset) {         | True                      | 
+ 216 |    /* starting a new eraseblock */       | True                      | 
+ 217 |    mtdoffset = next_good_eraseblock(fd,  | True                      | 
+ 218 |    if (IS_NANDWRITE)                     | True                      | 
+ 219 |     printf("Writing at 0x%08x\n", mtdoff | True                      | 
+ 220 |    else if (mtdoffset > blockstart) {    | True                      | 
+ 221 |     if (bb_method == BB_PADBAD) {        | True                      | 
+ 222 |      /* dump FF padded bad block */      | True                      | 
+ 223 |      int bad_len = MIN(mtdoffset, limit) | True                      | 
+ 224 |      dump_bad(&meminfo, bad_len, opts &  | True                      | 
+ 225 |     } else if (bb_method == BB_SKIPBAD)  | True                      | 
+ 226 |      /* for skipbad, increase the length | True                      | 
+ 227 |      if ((end_addr + mtdoffset - blockst | True                      | 
+ 228 |       end_addr += (mtdoffset - blockstar | True                      | 
+ 229 |      else                                | True                      | 
+ 230 |       end_addr = ~0;                     | True                      | 
+ 231 |      limit = MIN(meminfo.size, end_addr) | True                      | 
+ 232 |     }                                    | True                      | 
+ 233 |    }                                     | True                      | 
+ 234 |    if (mtdoffset >= limit)               | True                      | 
+ 235 |     break;                               | True                      | 
+ 236 |   }                                      | True                      | 
+ 237 |   xlseek(fd, mtdoffset, SEEK_SET);       | True                      | 
+ 238 |                                          | True                      | 
+ 239 |   /* get some more data from input */    | True                      | 
+ 240 |   cnt = full_read(input_fd, filebuf, mem | True                      | 
+ 241 |   if (cnt == 0) {                        | True                      | 
+ 242 |    /* even with -p, we do not pad past t | True                      | 
+ 243 |     * (-p only zero-pads last incomplete | True                      | 
+ 244 |     */                                   | True                      | 
+ 245 |    break;                                | True                      | 
+ 246 |   }                                      | True                      | 
+ 247 |   if (cnt < meminfo_writesize) {         | True                      | 
+ 248 |    if (IS_NANDDUMP)                      | True                      | 
+ 249 |     bb_simple_error_msg_and_die("short r | True                      | 
+ 250 |    if (!(opts & OPT_p))                  | True                      | 
+ 251 |     bb_simple_error_msg_and_die("input s | True                      | 
+ 252 |       "use -p to zero pad");             | True                      | 
+ 253 |    /* zero pad to end of write block */  | True                      | 
+ 254 |    memset(filebuf + cnt, 0, meminfo_writ | True                      | 
+ 255 |   }                                      | True                      | 
+ 256 |   xwrite(output_fd, filebuf, meminfo_wri | True                      | 
+ 257 |                                          | True                      | 
+ 258 |   if (IS_NANDDUMP && (opts & OPT_o)) {   | True                      | 
+ 259 |    /* Dump OOB data */                   | True                      | 
+ 260 |    oob.start = mtdoffset;                | True                      | 
+ 261 |    xioctl(fd, MEMREADOOB, &oob);         | True                      | 
+ 262 |    xwrite(output_fd, oobbuf, meminfo.oob | True                      | 
+ 263 |   }                                      | True                      | 
+ 264 |                                          | True                      | 
+ 265 |   mtdoffset += meminfo_writesize;        | True                      | 
+ 266 |   if (cnt < meminfo_writesize)           | True                      | 
+ 267 |    break;                                | True                      | 
+ 268 |  }                                       | True                      | 
+ 269 |                                          | True                      | 
+ 270 |  if (IS_NANDWRITE && cnt != 0) {         | True                      | 
+ 271 |   /* We filled entire MTD, but did we re | True                      | 
+ 272 |   if (full_read(STDIN_FILENO, filebuf, m | True                      | 
+ 273 |    /* no */                              | True                      | 
+ 274 |    bb_simple_error_msg_and_die("not enou | True                      | 
+ 275 |   }                                      | True                      | 
+ 276 |  }                                       | True                      | 
+ 277 |                                          | True                      | 
+ 278 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 279 |   free(filebuf);                         | True                      | 
+ 280 |   close(fd);                             | True                      | 
+ 281 |  }                                       | True                      | 
+ 282 |                                          | True                      | 
+ 283 |  return EXIT_SUCCESS;                    | True                      | 
+ 284 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +112MB, 264ms             | 

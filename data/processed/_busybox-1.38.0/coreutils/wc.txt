@@ -1,0 +1,263 @@
+FILE: data/raw/busybox-1.38.0/coreutils/wc.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * wc implementation for busybox         | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2003  Manuel Novoa III  | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   8 |  */                                      | True                      | 
+   9 | /* Mar 16, 2003      Manuel Novoa III    | True                      | 
+  10 |  *                                       | True                      | 
+  11 |  * Rewritten to fix a number of problems | True                      | 
+  12 |  * Problems in the previous busybox impl | True                      | 
+  13 |  *  1) broken 'wc -c' optimization (read | True                      | 
+  14 |  *  2) broken handling of '-' args       | True                      | 
+  15 |  *  3) no checking of ferror on EOF retu | True                      | 
+  16 |  *  4) isprint() wasn't considered when  | True                      | 
+  17 |  *                                       | True                      | 
+  18 |  * NOTES:                                | True                      | 
+  19 |  *                                       | True                      | 
+  20 |  * The previous busybox wc attempted an  | True                      | 
+  21 |  * case of counting chars only.  I omitt | True                      | 
+  22 |  * It didn't take into account the possi | True                      | 
+  23 |  * pipe, or input from a file with file  | True                      | 
+  24 |  *                                       | True                      | 
+  25 |  * To implement such a speed optimizatio | True                      | 
+  26 |  * need the size, but also the file posi | True                      | 
+  27 |  * file position may be past the end of  | True                      | 
+  28 |  * (adapted from example in gnu wc.c)    | True                      | 
+  29 |  *                                       | True                      | 
+  30 |  *      echo hello > /tmp/testfile &&    | True                      | 
+  31 |  *      (dd ibs=1k skip=1 count=0 &> /de | True                      | 
+  32 |  *                                       | True                      | 
+  33 |  * for which 'wc -c' should output '0'.  | True                      | 
+  34 |  */                                      | True                      | 
+  35 | //config:config WC                       | True                      | 
+  36 | //config: bool "wc (4.7 kb)"             | True                      | 
+  37 | //config: default y                      | True                      | 
+  38 | //config: help                           | True                      | 
+  39 | //config: wc is used to print the number | True                      | 
+  40 | //config: in specified files.            | True                      | 
+  41 | //config:                                | True                      | 
+  42 | //config:config FEATURE_WC_LARGE         | True                      | 
+  43 | //config: bool "Support very large count | True                      | 
+  44 | //config: default y                      | True                      | 
+  45 | //config: depends on WC                  | True                      | 
+  46 | //config: help                           | True                      | 
+  47 | //config: Use "unsigned long long" for c | True                      | 
+  48 |                                          | True                      | 
+  49 | //applet:IF_WC(APPLET(wc, BB_DIR_USR_BIN | True                      | 
+  50 |                                          | True                      | 
+  51 | //kbuild:lib-$(CONFIG_WC) += wc.o        | True                      | 
+  52 |                                          | True                      | 
+  53 | /* BB_AUDIT SUSv3 compliant. */          | True                      | 
+  54 | /* http://www.opengroup.org/onlinepubs/0 | True                      | 
+  55 |                                          | True                      | 
+  56 | #include "libbb.h"                       | True                      | 
+  57 | #include "unicode.h"                     | True                      | 
+  58 |                                          | True                      | 
+  59 | #if !ENABLE_LOCALE_SUPPORT               | True                      | 
+  60 | # undef isprint                          | !ENABLE_LOCALE_SUPPORT    | 
+  61 | # undef isspace                          | !ENABLE_LOCALE_SUPPORT    | 
+  62 | # define isprint(c) ((unsigned)((c) - 0x | !ENABLE_LOCALE_SUPPORT    | 
+  63 | # define isspace(c) ((c) == ' ')         | !ENABLE_LOCALE_SUPPORT    | 
+  64 | #endif                                   | True                      | 
+  65 |                                          | True                      | 
+  66 | #if ENABLE_FEATURE_WC_LARGE              | True                      | 
+  67 | # define COUNT_T unsigned long long      | ENABLE_FEATURE_WC_LARGE   | 
+  68 | # define COUNT_FMT "llu"                 | ENABLE_FEATURE_WC_LARGE   | 
+  69 | #else                                    | True                      | 
+  70 | # define COUNT_T unsigned                | !ENABLE_FEATURE_WC_LARGE  | 
+  71 | # define COUNT_FMT "u"                   | !ENABLE_FEATURE_WC_LARGE  | 
+  72 | #endif                                   | True                      | 
+  73 |                                          | True                      | 
+  74 | /* We support -m even when UNICODE_SUPPO | True                      | 
+  75 |  * we just don't advertise it in help te | True                      | 
+  76 |  * since it is the same as -c in this ca | True                      | 
+  77 |  */                                      | True                      | 
+  78 |                                          | True                      | 
+  79 | //usage:#define wc_trivial_usage         | True                      | 
+  80 | //usage:       "[-c"IF_UNICODE_SUPPORT(" | True                      | 
+  81 | //usage:                                 | True                      | 
+  82 | //usage:#define wc_full_usage "\n\n"     | True                      | 
+  83 | //usage:       "Count lines, words, and  | True                      | 
+  84 | //usage:     "\n -c Count bytes"         | True                      | 
+  85 | //usage: IF_UNICODE_SUPPORT(             | True                      | 
+  86 | //usage:     "\n -m Count characters"    | True                      | 
+  87 | //usage: )                               | True                      | 
+  88 | //usage:     "\n -l Count newlines"      | True                      | 
+  89 | //usage:     "\n -w Count words"         | True                      | 
+  90 | //usage:     "\n -L Print longest line l | True                      | 
+  91 | //usage:                                 | True                      | 
+  92 | //usage:#define wc_example_usage         | True                      | 
+  93 | //usage:       "$ wc /etc/passwd\n"      | True                      | 
+  94 | //usage:       "     31      46    1365  | True                      | 
+  95 |                                          | True                      | 
+  96 | /* Order is important if we want to be c | True                      | 
+  97 |  * column order in "wc -cmlwL" output:   | True                      | 
+  98 |  */                                      | True                      | 
+  99 | enum {                                   | True                      | 
+ 100 |  WC_LINES    = 0, /* -l */               | True                      | 
+ 101 |  WC_WORDS    = 1, /* -w */               | True                      | 
+ 102 |  WC_UNICHARS = 2, /* -m */               | True                      | 
+ 103 |  WC_BYTES    = 3, /* -c */               | True                      | 
+ 104 |  WC_LENGTH   = 4, /* -L */               | True                      | 
+ 105 |  NUM_WCS     = 5,                        | True                      | 
+ 106 | };                                       | True                      | 
+ 107 |                                          | True                      | 
+ 108 | int wc_main(int argc, char **argv) MAIN_ | True                      | 
+ 109 | int wc_main(int argc UNUSED_PARAM, char  | True                      | 
+ 110 | {                                        | True                      | 
+ 111 |  const char *arg;                        | True                      | 
+ 112 |  const char *start_fmt = " %9"COUNT_FMT  | True                      | 
+ 113 |  const char *fname_fmt = " %s\n";        | True                      | 
+ 114 |  COUNT_T *pcounts;                       | True                      | 
+ 115 |  COUNT_T counts[NUM_WCS];                | True                      | 
+ 116 |  COUNT_T totals[NUM_WCS];                | True                      | 
+ 117 |  int num_files;                          | True                      | 
+ 118 |  smallint status = EXIT_SUCCESS;         | True                      | 
+ 119 |  unsigned print_type;                    | True                      | 
+ 120 |                                          | True                      | 
+ 121 |  init_unicode();                         | True                      | 
+ 122 |                                          | True                      | 
+ 123 |  print_type = getopt32(argv, "lwmcL");   | True                      | 
+ 124 |                                          | True                      | 
+ 125 |  if (print_type == 0) {                  | True                      | 
+ 126 |   print_type = (1 << WC_LINES) | (1 << W | True                      | 
+ 127 |  }                                       | True                      | 
+ 128 |                                          | True                      | 
+ 129 |  argv += optind;                         | True                      | 
+ 130 |  if (!argv[0]) {                         | True                      | 
+ 131 |   *--argv = (char *) bb_msg_standard_inp | True                      | 
+ 132 |   fname_fmt = "\n";                      | True                      | 
+ 133 |  }                                       | True                      | 
+ 134 |  if (!argv[1]) { /* zero or one filename | True                      | 
+ 135 |   if (!((print_type-1) & print_type)) /* | True                      | 
+ 136 |    start_fmt = "%"COUNT_FMT;             | True                      | 
+ 137 |  }                                       | True                      | 
+ 138 |                                          | True                      | 
+ 139 |  memset(totals, 0, sizeof(totals));      | True                      | 
+ 140 |                                          | True                      | 
+ 141 |  pcounts = counts;                       | True                      | 
+ 142 |                                          | True                      | 
+ 143 |  num_files = 0;                          | True                      | 
+ 144 |  while ((arg = *argv++) != NULL) {       | True                      | 
+ 145 |   FILE *fp;                              | True                      | 
+ 146 |   const char *s;                         | True                      | 
+ 147 |   unsigned u;                            | True                      | 
+ 148 |   unsigned linepos;                      | True                      | 
+ 149 |   smallint in_word;                      | True                      | 
+ 150 |                                          | True                      | 
+ 151 |   ++num_files;                           | True                      | 
+ 152 |   fp = fopen_or_warn_stdin(arg);         | True                      | 
+ 153 |   if (!fp) {                             | True                      | 
+ 154 |    status = EXIT_FAILURE;                | True                      | 
+ 155 |    continue;                             | True                      | 
+ 156 |   }                                      | True                      | 
+ 157 |                                          | True                      | 
+ 158 |   memset(counts, 0, sizeof(counts));     | True                      | 
+ 159 |   linepos = 0;                           | True                      | 
+ 160 |   in_word = 0;                           | True                      | 
+ 161 |                                          | True                      | 
+ 162 |   while (1) {                            | True                      | 
+ 163 |    int c;                                | True                      | 
+ 164 |    /* Our -w doesn't match GNU wc exactl | True                      | 
+ 165 |                                          | True                      | 
+ 166 |    c = getc(fp);                         | True                      | 
+ 167 |    if (c == EOF) {                       | True                      | 
+ 168 |     if (ferror(fp)) {                    | True                      | 
+ 169 |      bb_simple_perror_msg(arg);          | True                      | 
+ 170 |      status = EXIT_FAILURE;              | True                      | 
+ 171 |     }                                    | True                      | 
+ 172 |     goto DO_EOF;  /* Treat an EOF as '\r | True                      | 
+ 173 |    }                                     | True                      | 
+ 174 |                                          | True                      | 
+ 175 |    /* Cater for -c and -m */             | True                      | 
+ 176 |    ++counts[WC_BYTES];                   | True                      | 
+ 177 |    if (unicode_status != UNICODE_ON /* e | True                      | 
+ 178 |     || (c & 0xc0) != 0x80 /* it isn't a  | True                      | 
+ 179 |    ) {                                   | True                      | 
+ 180 |     ++counts[WC_UNICHARS];               | True                      | 
+ 181 |    }                                     | True                      | 
+ 182 |                                          | True                      | 
+ 183 |    if (isprint_asciionly(c)) { /* FIXME: | True                      | 
+ 184 |     ++linepos;                           | True                      | 
+ 185 |     if (!isspace(c)) {                   | True                      | 
+ 186 |      in_word = 1;                        | True                      | 
+ 187 |      continue;                           | True                      | 
+ 188 |     }                                    | True                      | 
+ 189 |    } else if ((unsigned)(c - 9) <= 4) {  | True                      | 
+ 190 |     /* \t  9                             | True                      | 
+ 191 |      * \n 10                             | True                      | 
+ 192 |      * \v 11                             | True                      | 
+ 193 |      * \f 12                             | True                      | 
+ 194 |      * \r 13                             | True                      | 
+ 195 |      */                                  | True                      | 
+ 196 |     if (c == '\t') {                     | True                      | 
+ 197 |      linepos = (linepos | 7) + 1;        | True                      | 
+ 198 |     } else {  /* '\n', '\r', '\f', or '\ | True                      | 
+ 199 |  DO_EOF:                                 | True                      | 
+ 200 |      if (linepos > counts[WC_LENGTH]) {  | True                      | 
+ 201 |       counts[WC_LENGTH] = linepos;       | True                      | 
+ 202 |      }                                   | True                      | 
+ 203 |      if (c == '\n') {                    | True                      | 
+ 204 |       ++counts[WC_LINES];                | True                      | 
+ 205 |      }                                   | True                      | 
+ 206 |      if (c != '\v') {                    | True                      | 
+ 207 |       linepos = 0;                       | True                      | 
+ 208 |      }                                   | True                      | 
+ 209 |     }                                    | True                      | 
+ 210 |    } else {                              | True                      | 
+ 211 |     continue;                            | True                      | 
+ 212 |    }                                     | True                      | 
+ 213 |                                          | True                      | 
+ 214 |    counts[WC_WORDS] += in_word;          | True                      | 
+ 215 |    in_word = 0;                          | True                      | 
+ 216 |    if (c == EOF) {                       | True                      | 
+ 217 |     break;                               | True                      | 
+ 218 |    }                                     | True                      | 
+ 219 |   }                                      | True                      | 
+ 220 |                                          | True                      | 
+ 221 |   fclose_if_not_stdin(fp);               | True                      | 
+ 222 |                                          | True                      | 
+ 223 |   if (totals[WC_LENGTH] < counts[WC_LENG | True                      | 
+ 224 |    totals[WC_LENGTH] = counts[WC_LENGTH] | True                      | 
+ 225 |   }                                      | True                      | 
+ 226 |   totals[WC_LENGTH] -= counts[WC_LENGTH] | True                      | 
+ 227 |                                          | True                      | 
+ 228 |  OUTPUT:                                 | True                      | 
+ 229 |   /* coreutils wc tries hard to print pr | True                      | 
+ 230 |    * (saves results for all files, finds | True                      | 
+ 231 |    * we won't try that hard, it will blo | True                      | 
+ 232 |   s = start_fmt;                         | True                      | 
+ 233 |   u = 0;                                 | True                      | 
+ 234 |   do {                                   | True                      | 
+ 235 |    if (print_type & (1 << u)) {          | True                      | 
+ 236 |     printf(s, pcounts[u]);               | True                      | 
+ 237 |     s = " %9"COUNT_FMT; /* Ok... restore | True                      | 
+ 238 |    }                                     | True                      | 
+ 239 |    totals[u] += pcounts[u];              | True                      | 
+ 240 |   } while (++u < NUM_WCS);               | True                      | 
+ 241 |   printf(fname_fmt, arg);                | True                      | 
+ 242 |  }                                       | True                      | 
+ 243 |                                          | True                      | 
+ 244 |  /* If more than one file was processed, | True                      | 
+ 245 |   * space, we set the pcounts ptr to the | True                      | 
+ 246 |   * effect of trashing the totals array  | True                      | 
+ 247 |   * irrelavent since we no longer need i | True                      | 
+ 248 |  if (num_files > 1) {                    | True                      | 
+ 249 |   num_files = 0;  /* Make sure we don't  | True                      | 
+ 250 |   arg = "total";                         | True                      | 
+ 251 |   pcounts = totals;                      | True                      | 
+ 252 |   --argv;                                | True                      | 
+ 253 |   goto OUTPUT;                           | True                      | 
+ 254 |  }                                       | True                      | 
+ 255 |                                          | True                      | 
+ 256 |  fflush_stdout_and_exit(status);         | True                      | 
+ 257 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +111MB, 250ms             | 

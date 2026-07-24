@@ -1,0 +1,218 @@
+FILE: data/raw/busybox-1.38.0/selinux/chcon.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * chcon -- change security context, bas | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * Port to busybox: KaiGai Kohei <kaigai | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Copyright (C) 2006 - 2007 KaiGai Kohe | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   9 |  */                                      | True                      | 
+  10 | //config:config CHCON                    | True                      | 
+  11 | //config: bool "chcon (8.9 kb)"          | True                      | 
+  12 | //config: default n                      | True                      | 
+  13 | //config: depends on SELINUX             | True                      | 
+  14 | //config: help                           | True                      | 
+  15 | //config: Enable support to change the s | True                      | 
+  16 |                                          | True                      | 
+  17 | //applet:IF_CHCON(APPLET(chcon, BB_DIR_U | True                      | 
+  18 |                                          | True                      | 
+  19 | //kbuild:lib-$(CONFIG_CHCON) += chcon.o  | True                      | 
+  20 |                                          | True                      | 
+  21 | //usage:#define chcon_trivial_usage      | True                      | 
+  22 | //usage:       "[-chfRv] CONTEXT FILE... | True                      | 
+  23 | //usage:       "\n chcon [-chfRv] [-u US | True                      | 
+  24 | //usage: IF_LONG_OPTS(                   | True                      | 
+  25 | //usage:       "\n chcon [-chfRv] --refe | True                      | 
+  26 | //usage: )                               | True                      | 
+  27 | //usage:                                 | True                      | 
+  28 | //usage:#define chcon_full_usage "\n\n"  | True                      | 
+  29 | //usage:       "Change the security cont | True                      | 
+  30 | //usage:     "\n -v Verbose"             | True                      | 
+  31 | //usage:     "\n -c Report changes made" | True                      | 
+  32 | //usage:     "\n -h Affect symlinks inst | True                      | 
+  33 | //usage:     "\n -f Suppress most error  | True                      | 
+  34 | //usage: IF_LONG_OPTS(                   | True                      | 
+  35 | //usage:     "\n --reference RFILE Use R | True                      | 
+  36 | //usage: )                               | True                      | 
+  37 | //usage:     "\n -u USER Set user/role/t | True                      | 
+  38 | //usage:     "\n -r ROLE"                | True                      | 
+  39 | //usage:     "\n -t TYPE"                | True                      | 
+  40 | //usage:     "\n -l RANGE"               | True                      | 
+  41 | //usage:     "\n -R Recurse"             | True                      | 
+  42 |                                          | True                      | 
+  43 | #include <selinux/context.h>             | True                      | 
+  44 |                                          | True                      | 
+  45 | #include "libbb.h"                       | True                      | 
+  46 |                                          | True                      | 
+  47 | #define OPT_RECURSIVE  (1<<0) /* 'R' */  | True                      | 
+  48 | #define OPT_CHANHES  (1<<1) /* 'c' */    | True                      | 
+  49 | #define OPT_NODEREFERENCE (1<<2) /* 'h'  | True                      | 
+  50 | #define OPT_QUIET  (1<<3) /* 'f' */      | True                      | 
+  51 | #define OPT_USER  (1<<4) /* 'u' */       | True                      | 
+  52 | #define OPT_ROLE  (1<<5) /* 'r' */       | True                      | 
+  53 | #define OPT_TYPE  (1<<6) /* 't' */       | True                      | 
+  54 | #define OPT_RANGE  (1<<7) /* 'l' */      | True                      | 
+  55 | #define OPT_VERBOSE  (1<<8) /* 'v' */    | True                      | 
+  56 | #define OPT_REFERENCE  ((1<<9) * ENABLE_ | True                      | 
+  57 | #define OPT_COMPONENT_SPECIFIED (OPT_USE | True                      | 
+  58 |                                          | True                      | 
+  59 | static char *user = NULL;                | True                      | 
+  60 | static char *role = NULL;                | True                      | 
+  61 | static char *type = NULL;                | True                      | 
+  62 | static char *range = NULL;               | True                      | 
+  63 | static char *specified_context = NULL;   | True                      | 
+  64 |                                          | True                      | 
+  65 | static int FAST_FUNC change_filedir_cont | True                      | 
+  66 |   const char *fname,                     | True                      | 
+  67 |   struct stat *stbuf UNUSED_PARAM)       | True                      | 
+  68 | {                                        | True                      | 
+  69 |  context_t context = NULL;               | True                      | 
+  70 |  security_context_t file_context = NULL; | True                      | 
+  71 |  security_context_t context_string;      | True                      | 
+  72 |  int rc = FALSE;                         | True                      | 
+  73 |  int status = 0;                         | True                      | 
+  74 |                                          | True                      | 
+  75 |  if (option_mask32 & OPT_NODEREFERENCE)  | True                      | 
+  76 |   status = lgetfilecon(fname, &file_cont | True                      | 
+  77 |  } else {                                | True                      | 
+  78 |   status = getfilecon(fname, &file_conte | True                      | 
+  79 |  }                                       | True                      | 
+  80 |  if (status < 0 && errno != ENODATA) {   | True                      | 
+  81 |   if ((option_mask32 & OPT_QUIET) == 0)  | True                      | 
+  82 |    bb_error_msg("can't obtain security c | True                      | 
+  83 |   goto skip;                             | True                      | 
+  84 |  }                                       | True                      | 
+  85 |                                          | True                      | 
+  86 |  if (file_context == NULL && specified_c | True                      | 
+  87 |   bb_error_msg("can't apply partial cont | True                      | 
+  88 |   goto skip;                             | True                      | 
+  89 |  }                                       | True                      | 
+  90 |                                          | True                      | 
+  91 |  if (specified_context == NULL) {        | True                      | 
+  92 |   context = set_security_context_compone | True                      | 
+  93 |        user, role, type, range);         | True                      | 
+  94 |   if (!context) {                        | True                      | 
+  95 |    bb_error_msg("can't compute security  | True                      | 
+  96 |    goto skip;                            | True                      | 
+  97 |   }                                      | True                      | 
+  98 |  } else {                                | True                      | 
+  99 |   context = context_new(specified_contex | True                      | 
+ 100 |   if (!context) {                        | True                      | 
+ 101 |    bb_error_msg("invalid context: %s", s | True                      | 
+ 102 |    goto skip;                            | True                      | 
+ 103 |   }                                      | True                      | 
+ 104 |  }                                       | True                      | 
+ 105 |                                          | True                      | 
+ 106 |  context_string = context_str(context);  | True                      | 
+ 107 |  if (!context_string) {                  | True                      | 
+ 108 |   bb_simple_error_msg("can't obtain secu | True                      | 
+ 109 |   goto skip;                             | True                      | 
+ 110 |  }                                       | True                      | 
+ 111 |                                          | True                      | 
+ 112 |  if (file_context == NULL || strcmp(cont | True                      | 
+ 113 |   int fail;                              | True                      | 
+ 114 |                                          | True                      | 
+ 115 |   if (option_mask32 & OPT_NODEREFERENCE) | True                      | 
+ 116 |    fail = lsetfilecon(fname, context_str | True                      | 
+ 117 |   } else {                               | True                      | 
+ 118 |    fail = setfilecon(fname, context_stri | True                      | 
+ 119 |   }                                      | True                      | 
+ 120 |   if ((option_mask32 & OPT_VERBOSE) || ( | True                      | 
+ 121 |    printf(!fail                          | True                      | 
+ 122 |     ? "context of %s changed to %s\n"    | True                      | 
+ 123 |     : "can't change context of %s to %s\ | True                      | 
+ 124 |     fname, context_string);              | True                      | 
+ 125 |   }                                      | True                      | 
+ 126 |   if (!fail) {                           | True                      | 
+ 127 |    rc = TRUE;                            | True                      | 
+ 128 |   } else if ((option_mask32 & OPT_QUIET) | True                      | 
+ 129 |    bb_error_msg("can't change context of | True                      | 
+ 130 |      fname, context_string);             | True                      | 
+ 131 |   }                                      | True                      | 
+ 132 |  } else {                                | True                      | 
+ 133 |   if (option_mask32 & OPT_VERBOSE) {     | True                      | 
+ 134 |    printf("context of %s retained as %s\ | True                      | 
+ 135 |   }                                      | True                      | 
+ 136 |   rc = TRUE;                             | True                      | 
+ 137 |  }                                       | True                      | 
+ 138 | skip:                                    | True                      | 
+ 139 |  context_free(context);                  | True                      | 
+ 140 |  freecon(file_context);                  | True                      | 
+ 141 |                                          | True                      | 
+ 142 |  return rc;                              | True                      | 
+ 143 | }                                        | True                      | 
+ 144 |                                          | True                      | 
+ 145 | #if ENABLE_LONG_OPTS                     | True                      | 
+ 146 | static const char chcon_longopts[] ALIGN | ENABLE_LONG_OPTS          | 
+ 147 |  "recursive\0"      No_argument       "R | ENABLE_LONG_OPTS          | 
+ 148 |  "changes\0"        No_argument       "c | ENABLE_LONG_OPTS          | 
+ 149 |  "no-dereference\0" No_argument       "h | ENABLE_LONG_OPTS          | 
+ 150 |  "silent\0"         No_argument       "f | ENABLE_LONG_OPTS          | 
+ 151 |  "quiet\0"          No_argument       "f | ENABLE_LONG_OPTS          | 
+ 152 |  "user\0"           Required_argument "u | ENABLE_LONG_OPTS          | 
+ 153 |  "role\0"           Required_argument "r | ENABLE_LONG_OPTS          | 
+ 154 |  "type\0"           Required_argument "t | ENABLE_LONG_OPTS          | 
+ 155 |  "range\0"          Required_argument "l | ENABLE_LONG_OPTS          | 
+ 156 |  "verbose\0"        No_argument       "v | ENABLE_LONG_OPTS          | 
+ 157 |  "reference\0"      Required_argument "\ | ENABLE_LONG_OPTS          | 
+ 158 |  ;                                       | ENABLE_LONG_OPTS          | 
+ 159 | #endif                                   | True                      | 
+ 160 |                                          | True                      | 
+ 161 | int chcon_main(int argc, char **argv) MA | True                      | 
+ 162 | int chcon_main(int argc UNUSED_PARAM, ch | True                      | 
+ 163 | {                                        | True                      | 
+ 164 |  char *reference_file;                   | True                      | 
+ 165 |  char *fname;                            | True                      | 
+ 166 |  int i, errors = 0;                      | True                      | 
+ 167 |                                          | True                      | 
+ 168 |  getopt32long(argv, "^"                  | True                      | 
+ 169 |   "Rchfu:r:t:l:v"                        | True                      | 
+ 170 |   "\0"                                   | True                      | 
+ 171 |   "-1" /* at least 1 arg */              | True                      | 
+ 172 |   ":?" /* error if exclusivity constrain | True                      | 
+ 173 | #if ENABLE_LONG_OPTS                     | True                      | 
+ 174 |   ":\xff--urtl:u--\xff:r--\xff:t--\xff:l | ENABLE_LONG_OPTS          | 
+ 175 | #endif                                   | True                      | 
+ 176 |   ":f--v:v--f"  /* 'verbose' and 'quiet' | True                      | 
+ 177 |   , chcon_longopts,                      | True                      | 
+ 178 |   &user, &role, &type, &range, &referenc | True                      | 
+ 179 |  );                                      | True                      | 
+ 180 |  argv += optind;                         | True                      | 
+ 181 |                                          | True                      | 
+ 182 | #if ENABLE_LONG_OPTS                     | True                      | 
+ 183 |  if (option_mask32 & OPT_REFERENCE) {    | ENABLE_LONG_OPTS          | 
+ 184 |   /* FIXME: lgetfilecon() should be used | ENABLE_LONG_OPTS          | 
+ 185 |    * But current implementation follows  | ENABLE_LONG_OPTS          | 
+ 186 |   if (getfilecon(reference_file, &specif | ENABLE_LONG_OPTS          | 
+ 187 |    bb_perror_msg_and_die("getfilecon('%s | ENABLE_LONG_OPTS          | 
+ 188 |  } else                                  | ENABLE_LONG_OPTS          | 
+ 189 | #endif                                   | True                      | 
+ 190 |  if ((option_mask32 & OPT_COMPONENT_SPEC | True                      | 
+ 191 |   specified_context = *argv++;           | True                      | 
+ 192 |   /* specified_context is never NULL -   | True                      | 
+ 193 |    * "-1" in opt_complementary prevents  | True                      | 
+ 194 |   if (!argv[0])                          | True                      | 
+ 195 |    bb_simple_error_msg_and_die("too few  | True                      | 
+ 196 |  }                                       | True                      | 
+ 197 |                                          | True                      | 
+ 198 |  for (i = 0; (fname = argv[i]) != NULL;  | True                      | 
+ 199 |   int fname_len = strlen(fname);         | True                      | 
+ 200 |   while (fname_len > 1 && fname[fname_le | True                      | 
+ 201 |    fname_len--;                          | True                      | 
+ 202 |   fname[fname_len] = '\0';               | True                      | 
+ 203 |                                          | True                      | 
+ 204 |   if (recursive_action(fname,            | True                      | 
+ 205 |      ((option_mask32 & OPT_RECURSIVE) ?  | True                      | 
+ 206 |      change_filedir_context,             | True                      | 
+ 207 |      change_filedir_context,             | True                      | 
+ 208 |      NULL) != TRUE)                      | True                      | 
+ 209 |    errors = 1;                           | True                      | 
+ 210 |  }                                       | True                      | 
+ 211 |  return errors;                          | True                      | 
+ 212 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +111MB, 257ms             | 

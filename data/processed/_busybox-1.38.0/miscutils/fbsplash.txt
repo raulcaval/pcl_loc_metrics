@@ -1,0 +1,575 @@
+FILE: data/raw/busybox-1.38.0/miscutils/fbsplash.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Copyright (C) 2008 Michele Sanges <mi | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Usage:                                | True                      | 
+   8 |  * - use kernel option 'vga=xxx' or othe | True                      | 
+   9 |  * - put somewhere fbsplash.cfg file and | True                      | 
+  10 |  * - run applet: $ setsid fbsplash [para | True                      | 
+  11 |  *      -c: hide cursor                  | True                      | 
+  12 |  *      -d /dev/fbN: framebuffer device  | True                      | 
+  13 |  *      -s path_to_image_file (can be "- | True                      | 
+  14 |  *      -i path_to_cfg_file              | True                      | 
+  15 |  *      -f path_to_fifo (can be "-" for  | True                      | 
+  16 |  * - if you want to run it only in prese | True                      | 
+  17 |  *   (for example fbsplash=on), use:     | True                      | 
+  18 |  *   grep -q "fbsplash=on" </proc/cmdlin | True                      | 
+  19 |  * - commands for fifo:                  | True                      | 
+  20 |  *   "NN" (ASCII decimal number) - perce | True                      | 
+  21 |  *   "exit" (or just close fifo) - well  | True                      | 
+  22 |  */                                      | True                      | 
+  23 | //config:config FBSPLASH                 | True                      | 
+  24 | //config: bool "fbsplash (26 kb)"        | True                      | 
+  25 | //config: default y                      | True                      | 
+  26 | //config: help                           | True                      | 
+  27 | //config: Shows splash image and progres | True                      | 
+  28 | //config: Can be used during boot phase  | True                      | 
+  29 | //config: Usage:                         | True                      | 
+  30 | //config: - use kernel option 'vga=xxx'  | True                      | 
+  31 | //config: - put somewhere fbsplash.cfg f | True                      | 
+  32 | //config: - $ setsid fbsplash [params] & | True                      | 
+  33 | //config:     -c: hide cursor            | True                      | 
+  34 | //config:     -d /dev/fbN: framebuffer d | True                      | 
+  35 | //config:     -s path_to_image_file (can | True                      | 
+  36 | //config:     -i path_to_cfg_file (can b | True                      | 
+  37 | //config:     -f path_to_fifo (can be "- | True                      | 
+  38 | //config: - if you want to run it only i | True                      | 
+  39 | //config:     grep -q "fbsplash=on" </pr | True                      | 
+  40 | //config: - commands for fifo:           | True                      | 
+  41 | //config:     "NN" (ASCII decimal number | True                      | 
+  42 | //config:     "exit" - well you guessed  | True                      | 
+  43 |                                          | True                      | 
+  44 | //applet:IF_FBSPLASH(APPLET(fbsplash, BB | True                      | 
+  45 |                                          | True                      | 
+  46 | //kbuild:lib-$(CONFIG_FBSPLASH) += fbspl | True                      | 
+  47 |                                          | True                      | 
+  48 | //usage:#define fbsplash_trivial_usage   | True                      | 
+  49 | //usage:       "-s IMGFILE [-c] [-d DEV] | True                      | 
+  50 | //usage:#define fbsplash_full_usage "\n\ | True                      | 
+  51 | //usage:       " -s Image"               | True                      | 
+  52 | //usage:     "\n -c Hide cursor"         | True                      | 
+  53 | //usage:     "\n -d Framebuffer device ( | True                      | 
+  54 | //usage:     "\n -i Config file (var=val | True                      | 
+  55 | //usage:     "\n   BAR_LEFT,BAR_TOP,BAR_ | True                      | 
+  56 | //usage:     "\n   BAR_R,BAR_G,BAR_B,IMG | True                      | 
+  57 | //usage:     "\n -f Control pipe (else e | True                      | 
+  58 | //usage:     "\n   commands: 'NN' (% for | True                      | 
+  59 |                                          | True                      | 
+  60 | #include "libbb.h"                       | True                      | 
+  61 | #include "common_bufsiz.h"               | True                      | 
+  62 | #include <linux/fb.h>                    | True                      | 
+  63 |                                          | True                      | 
+  64 | /* If you want logging messages on /tmp/ | True                      | 
+  65 | #define DEBUG 0                          | True                      | 
+  66 |                                          | True                      | 
+  67 | #define ESC "\033"                       | True                      | 
+  68 |                                          | True                      | 
+  69 | struct globals {                         | True                      | 
+  70 | #if DEBUG                                | True                      | 
+  71 |  bool bdebug_messages; // enable/disable | DEBUG                     | 
+  72 |  FILE *logfile_fd; // log file           | DEBUG                     | 
+  73 | #endif                                   | True                      | 
+  74 |  unsigned char *addr; // pointer to fram | True                      | 
+  75 |  unsigned ns[9];  // n-parameters        | True                      | 
+  76 |  const char *image_filename;             | True                      | 
+  77 |  struct fb_var_screeninfo scr_var;       | True                      | 
+  78 |  struct fb_fix_screeninfo scr_fix;       | True                      | 
+  79 |  unsigned bytes_per_pixel;               | True                      | 
+  80 |  // cached (8 - scr_var.COLOR.length):   | True                      | 
+  81 |  unsigned red_shift;                     | True                      | 
+  82 |  unsigned green_shift;                   | True                      | 
+  83 |  unsigned blue_shift;                    | True                      | 
+  84 | };                                       | True                      | 
+  85 | #define G (*ptr_to_globals)              | True                      | 
+  86 | #define INIT_G() do { \                  | True                      | 
+  87 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+  88 | } while (0)                              | True                      | 
+  89 |                                          | True                      | 
+  90 | #define nbar_width ns[0] // progress bar | True                      | 
+  91 | #define nbar_height ns[1] // progress ba | True                      | 
+  92 | #define nbar_posx ns[2] // progress bar  | True                      | 
+  93 | #define nbar_posy ns[3] // progress bar  | True                      | 
+  94 | #define nbar_colr ns[4] // progress bar  | True                      | 
+  95 | #define nbar_colg ns[5] // progress bar  | True                      | 
+  96 | #define nbar_colb ns[6] // progress bar  | True                      | 
+  97 | #define img_posx ns[7] // image horizont | True                      | 
+  98 | #define img_posy ns[8] // image vertical | True                      | 
+  99 |                                          | True                      | 
+ 100 | #if DEBUG                                | True                      | 
+ 101 | #define DEBUG_MESSAGE(strMessage, args.. | DEBUG                     | 
+ 102 |  if (G.bdebug_messages) { \              | DEBUG                     | 
+ 103 |   fprintf(G.logfile_fd, "[%s][%s] - %s\n | DEBUG                     | 
+ 104 |   __FILE__, __FUNCTION__, strMessage); \ | DEBUG                     | 
+ 105 |  }                                       | DEBUG                     | 
+ 106 | #else                                    | True                      | 
+ 107 | #define DEBUG_MESSAGE(...) ((void)0)     | !DEBUG                    | 
+ 108 | #endif                                   | True                      | 
+ 109 |                                          | True                      | 
+ 110 | /**                                      | True                      | 
+ 111 |  * Configure palette for RGB:332         | True                      | 
+ 112 |  */                                      | True                      | 
+ 113 | static void fb_setpal(int fd)            | True                      | 
+ 114 | {                                        | True                      | 
+ 115 |  struct fb_cmap cmap;                    | True                      | 
+ 116 |  /* fb colors are 16 bit */              | True                      | 
+ 117 |  unsigned short red[256], green[256], bl | True                      | 
+ 118 |  unsigned i;                             | True                      | 
+ 119 |                                          | True                      | 
+ 120 |  /* RGB:332 */                           | True                      | 
+ 121 |  for (i = 0; i < 256; i++) {             | True                      | 
+ 122 |   /* Color is encoded in pixel value as  | True                      | 
+ 123 |    * 3-bit color is mapped to 16-bit one | True                      | 
+ 124 |    * 000 -> 00000000 00000000            | True                      | 
+ 125 |    * 001 -> 00100100 10010010            | True                      | 
+ 126 |    * ...                                 | True                      | 
+ 127 |    * 011 -> 01101101 10110110            | True                      | 
+ 128 |    * 100 -> 10010010 01001001            | True                      | 
+ 129 |    * ...                                 | True                      | 
+ 130 |    * 111 -> 11111111 11111111            | True                      | 
+ 131 |    */                                    | True                      | 
+ 132 |   red[i]   = (( i >> 5       ) * 0x9249) | True                      | 
+ 133 |   green[i] = (((i >> 2) & 0x7) * 0x9249) | True                      | 
+ 134 |   /* 2-bit color is easier: */           | True                      | 
+ 135 |   blue[i]  =  ( i       & 0x3) * 0x5555; | True                      | 
+ 136 |  }                                       | True                      | 
+ 137 |                                          | True                      | 
+ 138 |  cmap.start = 0;                         | True                      | 
+ 139 |  cmap.len   = 256;                       | True                      | 
+ 140 |  cmap.red   = red;                       | True                      | 
+ 141 |  cmap.green = green;                     | True                      | 
+ 142 |  cmap.blue  = blue;                      | True                      | 
+ 143 |  cmap.transp = 0;                        | True                      | 
+ 144 |                                          | True                      | 
+ 145 |  xioctl(fd, FBIOPUTCMAP, &cmap);         | True                      | 
+ 146 | }                                        | True                      | 
+ 147 |                                          | True                      | 
+ 148 | /**                                      | True                      | 
+ 149 |  * Open and initialize the framebuffer d | True                      | 
+ 150 |  * \param *strfb_device pointer to frame | True                      | 
+ 151 |  */                                      | True                      | 
+ 152 | static void fb_open(const char *strfb_de | True                      | 
+ 153 | {                                        | True                      | 
+ 154 |  int fbfd = xopen(strfb_device, O_RDWR); | True                      | 
+ 155 |                                          | True                      | 
+ 156 |  // framebuffer properties               | True                      | 
+ 157 |  xioctl(fbfd, FBIOGET_VSCREENINFO, &G.sc | True                      | 
+ 158 |  xioctl(fbfd, FBIOGET_FSCREENINFO, &G.sc | True                      | 
+ 159 |                                          | True                      | 
+ 160 |  switch (G.scr_var.bits_per_pixel) {     | True                      | 
+ 161 |  case 8:                                 | True                      | 
+ 162 |   fb_setpal(fbfd);                       | True                      | 
+ 163 |   break;                                 | True                      | 
+ 164 |                                          | True                      | 
+ 165 |  case 16:                                | True                      | 
+ 166 |  case 24:                                | True                      | 
+ 167 |  case 32:                                | True                      | 
+ 168 |   break;                                 | True                      | 
+ 169 |                                          | True                      | 
+ 170 |  default:                                | True                      | 
+ 171 |   bb_error_msg_and_die("unsupported %u b | True                      | 
+ 172 |   break;                                 | True                      | 
+ 173 |  }                                       | True                      | 
+ 174 |                                          | True                      | 
+ 175 |  G.red_shift   = 8 - G.scr_var.red.lengt | True                      | 
+ 176 |  G.green_shift = 8 - G.scr_var.green.len | True                      | 
+ 177 |  G.blue_shift  = 8 - G.scr_var.blue.leng | True                      | 
+ 178 |  G.bytes_per_pixel = (G.scr_var.bits_per | True                      | 
+ 179 |                                          | True                      | 
+ 180 |  // map the device in memory             | True                      | 
+ 181 |  G.addr = mmap(NULL,                     | True                      | 
+ 182 |    (G.scr_var.yres_virtual ?: G.scr_var. | True                      | 
+ 183 |    PROT_WRITE, MAP_SHARED, fbfd, 0);     | True                      | 
+ 184 |  if (G.addr == MAP_FAILED)               | True                      | 
+ 185 |   bb_simple_perror_msg_and_die("mmap");  | True                      | 
+ 186 |                                          | True                      | 
+ 187 |  // point to the start of the visible sc | True                      | 
+ 188 |  G.addr += G.scr_var.yoffset * G.scr_fix | True                      | 
+ 189 |  close(fbfd);                            | True                      | 
+ 190 | }                                        | True                      | 
+ 191 |                                          | True                      | 
+ 192 |                                          | True                      | 
+ 193 | /**                                      | True                      | 
+ 194 |  * Return pixel value of the passed RGB  | True                      | 
+ 195 |  * This is performance critical fn.      | True                      | 
+ 196 |  */                                      | True                      | 
+ 197 | static unsigned fb_pixel_value(unsigned  | True                      | 
+ 198 | {                                        | True                      | 
+ 199 |  /* We assume that the r,g,b values are  | True                      | 
+ 200 |                                          | True                      | 
+ 201 |  if (G.bytes_per_pixel == 1) {           | True                      | 
+ 202 |   r = r        & 0xe0; // 3-bit red      | True                      | 
+ 203 |   g = (g >> 3) & 0x1c; // 3-bit green    | True                      | 
+ 204 |   b =  b >> 6;         // 2-bit blue     | True                      | 
+ 205 |   return r + g + b;                      | True                      | 
+ 206 |  }                                       | True                      | 
+ 207 |  if (G.bytes_per_pixel == 2) {           | True                      | 
+ 208 |   // ARM PL110 on Integrator/CP has RGBA | True                      | 
+ 209 |   // We want to support bit locations li | True                      | 
+ 210 |   //                                     | True                      | 
+ 211 |   // First shift out unused bits         | True                      | 
+ 212 |   r = r >> G.red_shift;                  | True                      | 
+ 213 |   g = g >> G.green_shift;                | True                      | 
+ 214 |   b = b >> G.blue_shift;                 | True                      | 
+ 215 |   // Then shift the remaining bits to th | True                      | 
+ 216 |   return (r << G.scr_var.red.offset) +   | True                      | 
+ 217 |    (g << G.scr_var.green.offset) +       | True                      | 
+ 218 |    (b << G.scr_var.blue.offset);         | True                      | 
+ 219 |  }                                       | True                      | 
+ 220 |  // RGB 888                              | True                      | 
+ 221 |  return b + (g << 8) + (r << 16);        | True                      | 
+ 222 | }                                        | True                      | 
+ 223 |                                          | True                      | 
+ 224 | /**                                      | True                      | 
+ 225 |  * Draw pixel on framebuffer             | True                      | 
+ 226 |  */                                      | True                      | 
+ 227 | static void fb_write_pixel(unsigned char | True                      | 
+ 228 | {                                        | True                      | 
+ 229 |  switch (G.bytes_per_pixel) {            | True                      | 
+ 230 |  case 1:                                 | True                      | 
+ 231 |   *addr = pixel;                         | True                      | 
+ 232 |   break;                                 | True                      | 
+ 233 |  case 2:                                 | True                      | 
+ 234 |   *(uint16_t *)addr = pixel;             | True                      | 
+ 235 |   break;                                 | True                      | 
+ 236 |  case 4:                                 | True                      | 
+ 237 |   *(uint32_t *)addr = pixel;             | True                      | 
+ 238 |   break;                                 | True                      | 
+ 239 |  default: // 24 bits per pixel           | True                      | 
+ 240 |   addr[0] = pixel;                       | True                      | 
+ 241 |   addr[1] = pixel >> 8;                  | True                      | 
+ 242 |   addr[2] = pixel >> 16;                 | True                      | 
+ 243 |  }                                       | True                      | 
+ 244 | }                                        | True                      | 
+ 245 |                                          | True                      | 
+ 246 |                                          | True                      | 
+ 247 | /**                                      | True                      | 
+ 248 |  * Draw hollow rectangle on framebuffer  | True                      | 
+ 249 |  */                                      | True                      | 
+ 250 | static void fb_drawrectangle(void)       | True                      | 
+ 251 | {                                        | True                      | 
+ 252 |  int cnt;                                | True                      | 
+ 253 |  unsigned thispix;                       | True                      | 
+ 254 |  unsigned char *ptr1, *ptr2;             | True                      | 
+ 255 |  unsigned char nred = G.nbar_colr/2;     | True                      | 
+ 256 |  unsigned char ngreen =  G.nbar_colg/2;  | True                      | 
+ 257 |  unsigned char nblue = G.nbar_colb/2;    | True                      | 
+ 258 |                                          | True                      | 
+ 259 |  thispix = fb_pixel_value(nred, ngreen,  | True                      | 
+ 260 |                                          | True                      | 
+ 261 |  // horizontal lines                     | True                      | 
+ 262 |  ptr1 = G.addr + G.nbar_posy * G.scr_fix | True                      | 
+ 263 |  ptr2 = G.addr + (G.nbar_posy + G.nbar_h | True                      | 
+ 264 |  cnt = G.nbar_width - 1;                 | True                      | 
+ 265 |  do {                                    | True                      | 
+ 266 |   fb_write_pixel(ptr1, thispix);         | True                      | 
+ 267 |   fb_write_pixel(ptr2, thispix);         | True                      | 
+ 268 |   ptr1 += G.bytes_per_pixel;             | True                      | 
+ 269 |   ptr2 += G.bytes_per_pixel;             | True                      | 
+ 270 |  } while (--cnt >= 0);                   | True                      | 
+ 271 |                                          | True                      | 
+ 272 |  // vertical lines                       | True                      | 
+ 273 |  ptr1 = G.addr + G.nbar_posy * G.scr_fix | True                      | 
+ 274 |  ptr2 = G.addr + G.nbar_posy * G.scr_fix | True                      | 
+ 275 |  cnt = G.nbar_height - 1;                | True                      | 
+ 276 |  do {                                    | True                      | 
+ 277 |   fb_write_pixel(ptr1, thispix);         | True                      | 
+ 278 |   fb_write_pixel(ptr2, thispix);         | True                      | 
+ 279 |   ptr1 += G.scr_fix.line_length;         | True                      | 
+ 280 |   ptr2 += G.scr_fix.line_length;         | True                      | 
+ 281 |  } while (--cnt >= 0);                   | True                      | 
+ 282 | }                                        | True                      | 
+ 283 |                                          | True                      | 
+ 284 |                                          | True                      | 
+ 285 | /**                                      | True                      | 
+ 286 |  * Draw filled rectangle on framebuffer  | True                      | 
+ 287 |  * \param nx1pos,ny1pos upper left posit | True                      | 
+ 288 |  * \param nx2pos,ny2pos down right posit | True                      | 
+ 289 |  * \param nred,ngreen,nblue rgb color    | True                      | 
+ 290 |  */                                      | True                      | 
+ 291 | static void fb_drawfullrectangle(int nx1 | True                      | 
+ 292 |  unsigned char nred, unsigned char ngree | True                      | 
+ 293 | {                                        | True                      | 
+ 294 |  int cnt1, cnt2, nypos;                  | True                      | 
+ 295 |  unsigned thispix;                       | True                      | 
+ 296 |  unsigned char *ptr;                     | True                      | 
+ 297 |                                          | True                      | 
+ 298 |  thispix = fb_pixel_value(nred, ngreen,  | True                      | 
+ 299 |                                          | True                      | 
+ 300 |  cnt1 = ny2pos - ny1pos;                 | True                      | 
+ 301 |  nypos = ny1pos;                         | True                      | 
+ 302 |  do {                                    | True                      | 
+ 303 |   ptr = G.addr + nypos * G.scr_fix.line_ | True                      | 
+ 304 |   cnt2 = nx2pos - nx1pos;                | True                      | 
+ 305 |   do {                                   | True                      | 
+ 306 |    fb_write_pixel(ptr, thispix);         | True                      | 
+ 307 |    ptr += G.bytes_per_pixel;             | True                      | 
+ 308 |   } while (--cnt2 >= 0);                 | True                      | 
+ 309 |                                          | True                      | 
+ 310 |   nypos++;                               | True                      | 
+ 311 |  } while (--cnt1 >= 0);                  | True                      | 
+ 312 | }                                        | True                      | 
+ 313 |                                          | True                      | 
+ 314 |                                          | True                      | 
+ 315 | /**                                      | True                      | 
+ 316 |  * Draw a progress bar on framebuffer    | True                      | 
+ 317 |  * \param percent percentage of loading  | True                      | 
+ 318 |  */                                      | True                      | 
+ 319 | static void fb_drawprogressbar(unsigned  | True                      | 
+ 320 | {                                        | True                      | 
+ 321 |  int left_x, top_y, pos_x;               | True                      | 
+ 322 |  unsigned width, height;                 | True                      | 
+ 323 |                                          | True                      | 
+ 324 |  // outer box                            | True                      | 
+ 325 |  left_x = G.nbar_posx;                   | True                      | 
+ 326 |  top_y = G.nbar_posy;                    | True                      | 
+ 327 |  width = G.nbar_width - 1;               | True                      | 
+ 328 |  height = G.nbar_height - 1;             | True                      | 
+ 329 |  if ((int)(height | width) < 0)          | True                      | 
+ 330 |   return;                                | True                      | 
+ 331 |  // NB: "width" of 1 actually makes rect | True                      | 
+ 332 |  fb_drawrectangle();                     | True                      | 
+ 333 |                                          | True                      | 
+ 334 |  // inner "empty" rectangle              | True                      | 
+ 335 |  left_x++;                               | True                      | 
+ 336 |  top_y++;                                | True                      | 
+ 337 |  width -= 2;                             | True                      | 
+ 338 |  height -= 2;                            | True                      | 
+ 339 |  if ((int)(height | width) < 0)          | True                      | 
+ 340 |   return;                                | True                      | 
+ 341 |                                          | True                      | 
+ 342 |  pos_x = left_x;                         | True                      | 
+ 343 |  if (percent > 0) {                      | True                      | 
+ 344 |   int i, y;                              | True                      | 
+ 345 |                                          | True                      | 
+ 346 |   // actual progress bar                 | True                      | 
+ 347 |   pos_x += (unsigned)(width * percent) / | True                      | 
+ 348 |                                          | True                      | 
+ 349 |   y = top_y;                             | True                      | 
+ 350 |   i = height;                            | True                      | 
+ 351 |   if (height == 0)                       | True                      | 
+ 352 |    height++; // divide by 0 is bad       | True                      | 
+ 353 |   while (i >= 0) {                       | True                      | 
+ 354 |    // draw one-line thick "rectangle"    | True                      | 
+ 355 |    // top line will have gray lvl 200, b | True                      | 
+ 356 |    unsigned gray_level = 100 + (unsigned | True                      | 
+ 357 |    fb_drawfullrectangle(                 | True                      | 
+ 358 |      left_x, y, pos_x, y,                | True                      | 
+ 359 |      gray_level, gray_level, gray_level) | True                      | 
+ 360 |    y++;                                  | True                      | 
+ 361 |    i--;                                  | True                      | 
+ 362 |   }                                      | True                      | 
+ 363 |  }                                       | True                      | 
+ 364 |                                          | True                      | 
+ 365 |  fb_drawfullrectangle(                   | True                      | 
+ 366 |    pos_x, top_y,                         | True                      | 
+ 367 |    left_x + width, top_y + height,       | True                      | 
+ 368 |    G.nbar_colr, G.nbar_colg, G.nbar_colb | True                      | 
+ 369 | }                                        | True                      | 
+ 370 |                                          | True                      | 
+ 371 |                                          | True                      | 
+ 372 | /**                                      | True                      | 
+ 373 |  * Draw image from PPM file              | True                      | 
+ 374 |  */                                      | True                      | 
+ 375 | static void fb_drawimage(void)           | True                      | 
+ 376 | {                                        | True                      | 
+ 377 |  FILE *theme_file;                       | True                      | 
+ 378 |  char *read_ptr;                         | True                      | 
+ 379 |  unsigned char *pixline;                 | True                      | 
+ 380 |  unsigned i, j, width, height, line_size | True                      | 
+ 381 |                                          | True                      | 
+ 382 |  if (LONE_DASH(G.image_filename)) {      | True                      | 
+ 383 |   theme_file = stdin;                    | True                      | 
+ 384 |  } else {                                | True                      | 
+ 385 |   int fd = open_zipped(G.image_filename, | True                      | 
+ 386 |   if (fd < 0)                            | True                      | 
+ 387 |    bb_simple_perror_msg_and_die(G.image_ | True                      | 
+ 388 |   theme_file = xfdopen_for_read(fd);     | True                      | 
+ 389 |  }                                       | True                      | 
+ 390 |                                          | True                      | 
+ 391 |  /* Parse ppm header:                    | True                      | 
+ 392 |   * - Magic: two characters "P6".        | True                      | 
+ 393 |   * - Whitespace (blanks, TABs, CRs, LFs | True                      | 
+ 394 |   * - A width, formatted as ASCII charac | True                      | 
+ 395 |   * - Whitespace.                        | True                      | 
+ 396 |   * - A height, ASCII decimal.           | True                      | 
+ 397 |   * - Whitespace.                        | True                      | 
+ 398 |   * - The maximum color value, ASCII dec | True                      | 
+ 399 |   * - Newline or other single whitespace | True                      | 
+ 400 |   *   (we support newline only)          | True                      | 
+ 401 |   * - A raster of Width * Height pixels  | True                      | 
+ 402 |   *   in pure binary by 1 or 2 bytes. (w | True                      | 
+ 403 |   */                                     | True                      | 
+ 404 | #define concat_buf bb_common_bufsiz1     | True                      | 
+ 405 |  setup_common_bufsiz();                  | True                      | 
+ 406 |                                          | True                      | 
+ 407 |  read_ptr = concat_buf;                  | True                      | 
+ 408 |  while (1) {                             | True                      | 
+ 409 |   int w, h, max_color_val;               | True                      | 
+ 410 |   int rem = concat_buf + COMMON_BUFSIZE  | True                      | 
+ 411 |   if (rem < 2                            | True                      | 
+ 412 |    || fgets(read_ptr, rem, theme_file) = | True                      | 
+ 413 |   ) {                                    | True                      | 
+ 414 |    bb_error_msg_and_die("bad PPM file '% | True                      | 
+ 415 |   }                                      | True                      | 
+ 416 |   read_ptr = strchrnul(read_ptr, '#');   | True                      | 
+ 417 |   *read_ptr = '\0'; /* ignore #comments  | True                      | 
+ 418 |   if (sscanf(concat_buf, "P6 %u %u %u",  | True                      | 
+ 419 |    && max_color_val <= 255               | True                      | 
+ 420 |   ) {                                    | True                      | 
+ 421 |    width = w; /* w is on stack, width ma | True                      | 
+ 422 |    height = h;                           | True                      | 
+ 423 |    break;                                | True                      | 
+ 424 |   }                                      | True                      | 
+ 425 |  }                                       | True                      | 
+ 426 |                                          | True                      | 
+ 427 |  line_size = width*3;                    | True                      | 
+ 428 |  pixline = xmalloc(line_size);           | True                      | 
+ 429 |                                          | True                      | 
+ 430 |  if ((width + G.img_posx) > G.scr_var.xr | True                      | 
+ 431 |   width = G.scr_var.xres - G.img_posx;   | True                      | 
+ 432 |  if ((height + G.img_posy) > G.scr_var.y | True                      | 
+ 433 |   height = G.scr_var.yres - G.img_posy;  | True                      | 
+ 434 |  for (j = 0; j < height; j++) {          | True                      | 
+ 435 |   unsigned char *pixel;                  | True                      | 
+ 436 |   unsigned char *src;                    | True                      | 
+ 437 |                                          | True                      | 
+ 438 |   if (fread(pixline, 1, line_size, theme | True                      | 
+ 439 |    bb_error_msg_and_die("bad PPM file '% | True                      | 
+ 440 |   pixel = pixline;                       | True                      | 
+ 441 |   src = G.addr + (G.img_posy + j) * G.sc | True                      | 
+ 442 |   for (i = 0; i < width; i++) {          | True                      | 
+ 443 |    unsigned thispix = fb_pixel_value(pix | True                      | 
+ 444 |    fb_write_pixel(src, thispix);         | True                      | 
+ 445 |    src += G.bytes_per_pixel;             | True                      | 
+ 446 |    pixel += 3;                           | True                      | 
+ 447 |   }                                      | True                      | 
+ 448 |  }                                       | True                      | 
+ 449 |  free(pixline);                          | True                      | 
+ 450 |  fclose(theme_file);                     | True                      | 
+ 451 | }                                        | True                      | 
+ 452 |                                          | True                      | 
+ 453 |                                          | True                      | 
+ 454 | /**                                      | True                      | 
+ 455 |  * Parse configuration file              | True                      | 
+ 456 |  * \param *cfg_filename name of the conf | True                      | 
+ 457 |  */                                      | True                      | 
+ 458 | static void init(const char *cfg_filenam | True                      | 
+ 459 | {                                        | True                      | 
+ 460 |  static const char param_names[] ALIGN1  | True                      | 
+ 461 |   "BAR_WIDTH\0" "BAR_HEIGHT\0"           | True                      | 
+ 462 |   "BAR_LEFT\0" "BAR_TOP\0"               | True                      | 
+ 463 |   "BAR_R\0" "BAR_G\0" "BAR_B\0"          | True                      | 
+ 464 |   "IMG_LEFT\0" "IMG_TOP\0"               | True                      | 
+ 465 | #if DEBUG                                | True                      | 
+ 466 |   "DEBUG\0"                              | DEBUG                     | 
+ 467 | #endif                                   | True                      | 
+ 468 |   ;                                      | True                      | 
+ 469 |  char *token[2];                         | True                      | 
+ 470 |  parser_t *parser = config_open2(cfg_fil | True                      | 
+ 471 |  while (config_read(parser, token, 2, 2, | True                      | 
+ 472 |     (PARSE_NORMAL | PARSE_MIN_DIE) & ~(P | True                      | 
+ 473 |   unsigned val = xatoi_positive(token[1] | True                      | 
+ 474 |   int i = index_in_strings(param_names,  | True                      | 
+ 475 |   if (i < 0)                             | True                      | 
+ 476 |    bb_error_msg_and_die("syntax error: % | True                      | 
+ 477 |   if (i >= 0 && i < 9)                   | True                      | 
+ 478 |    G.ns[i] = val;                        | True                      | 
+ 479 | #if DEBUG                                | True                      | 
+ 480 |   if (i == 9) {                          | DEBUG                     | 
+ 481 |    G.bdebug_messages = val;              | DEBUG                     | 
+ 482 |    if (G.bdebug_messages)                | DEBUG                     | 
+ 483 |     G.logfile_fd = xfopen_for_write("/tm | DEBUG                     | 
+ 484 |   }                                      | DEBUG                     | 
+ 485 | #endif                                   | True                      | 
+ 486 |  }                                       | True                      | 
+ 487 |  config_close(parser);                   | True                      | 
+ 488 | }                                        | True                      | 
+ 489 |                                          | True                      | 
+ 490 |                                          | True                      | 
+ 491 | int fbsplash_main(int argc, char **argv) | True                      | 
+ 492 | int fbsplash_main(int argc UNUSED_PARAM, | True                      | 
+ 493 | {                                        | True                      | 
+ 494 |  const char *fb_device, *cfg_filename, * | True                      | 
+ 495 |  FILE *fp = fp; // for compiler          | True                      | 
+ 496 |  char *num_buf;                          | True                      | 
+ 497 |  unsigned num;                           | True                      | 
+ 498 |  bool bCursorOff;                        | True                      | 
+ 499 |                                          | True                      | 
+ 500 |  INIT_G();                               | True                      | 
+ 501 |                                          | True                      | 
+ 502 |  // parse command line options           | True                      | 
+ 503 |  fb_device = "/dev/fb0";                 | True                      | 
+ 504 |  cfg_filename = NULL;                    | True                      | 
+ 505 |  fifo_filename = NULL;                   | True                      | 
+ 506 |  bCursorOff = 1 & getopt32(argv, "cs:d:i | True                      | 
+ 507 |    &G.image_filename, &fb_device, &cfg_f | True                      | 
+ 508 |                                          | True                      | 
+ 509 |  // parse configuration file             | True                      | 
+ 510 |  if (cfg_filename)                       | True                      | 
+ 511 |   init(cfg_filename);                    | True                      | 
+ 512 |                                          | True                      | 
+ 513 |  // We must have -s IMG                  | True                      | 
+ 514 |  if (!G.image_filename)                  | True                      | 
+ 515 |   bb_show_usage();                       | True                      | 
+ 516 |                                          | True                      | 
+ 517 |  fb_open(fb_device);                     | True                      | 
+ 518 |                                          | True                      | 
+ 519 |  if (fifo_filename && bCursorOff) {      | True                      | 
+ 520 |   // hide cursor (BEFORE any fb ops)     | True                      | 
+ 521 |   full_write(STDOUT_FILENO, ESC"[?25l",  | True                      | 
+ 522 |  }                                       | True                      | 
+ 523 |                                          | True                      | 
+ 524 |  fb_drawimage();                         | True                      | 
+ 525 |                                          | True                      | 
+ 526 |  if (!fifo_filename)                     | True                      | 
+ 527 |   return EXIT_SUCCESS;                   | True                      | 
+ 528 |                                          | True                      | 
+ 529 |  fp = xfopen_stdin(fifo_filename);       | True                      | 
+ 530 |  if (fp != stdin) {                      | True                      | 
+ 531 |   // For named pipes, we want to support | True                      | 
+ 532 |   //  mkfifo cmd_pipe                    | True                      | 
+ 533 |   //  fbsplash -f cmd_pipe .... &        | True                      | 
+ 534 |   //  ...                                | True                      | 
+ 535 |   //  echo 33 >cmd_pipe                  | True                      | 
+ 536 |   //  ...                                | True                      | 
+ 537 |   //  echo 66 >cmd_pipe                  | True                      | 
+ 538 |   // This means that we don't want fbspl | True                      | 
+ 539 |   // when last writer closes input end.  | True                      | 
+ 540 |   // The simplest way is to open fifo fo | True                      | 
+ 541 |   // and become an additional writer :)  | True                      | 
+ 542 |   open(fifo_filename, O_WRONLY); // erro | True                      | 
+ 543 |  }                                       | True                      | 
+ 544 |                                          | True                      | 
+ 545 |  fb_drawprogressbar(0);                  | True                      | 
+ 546 |  // Block on read, waiting for some inpu | True                      | 
+ 547 |  // Use of <stdio.h> style I/O allows to | True                      | 
+ 548 |  // handle a case when we have many buff | True                      | 
+ 549 |  // already in the pipe                  | True                      | 
+ 550 |  while ((num_buf = xmalloc_fgetline(fp)) | True                      | 
+ 551 |   if (is_prefixed_with(num_buf, "exit")) | True                      | 
+ 552 |    DEBUG_MESSAGE("exit");                | True                      | 
+ 553 |    break;                                | True                      | 
+ 554 |   }                                      | True                      | 
+ 555 |   num = atoi(num_buf);                   | True                      | 
+ 556 |   if (isdigit(num_buf[0]) && (num <= 100 | True                      | 
+ 557 | #if DEBUG                                | True                      | 
+ 558 |    DEBUG_MESSAGE(itoa(num));             | DEBUG                     | 
+ 559 | #endif                                   | True                      | 
+ 560 |    fb_drawprogressbar(num);              | True                      | 
+ 561 |   }                                      | True                      | 
+ 562 |   free(num_buf);                         | True                      | 
+ 563 |  }                                       | True                      | 
+ 564 |                                          | True                      | 
+ 565 |  if (bCursorOff) // restore cursor       | True                      | 
+ 566 |   full_write(STDOUT_FILENO, ESC"[?25h",  | True                      | 
+ 567 |                                          | True                      | 
+ 568 |  return EXIT_SUCCESS;                    | True                      | 
+ 569 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +116MB, 278ms             | 

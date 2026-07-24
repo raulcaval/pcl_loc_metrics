@@ -1,0 +1,745 @@
+FILE: data/raw/busybox-1.38.0/loginutils/getty.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Based on agetty - another getty progr | True                      | 
+   4 |  * Ported to Linux by Peter Orbaek <poe@ | True                      | 
+   5 |  * This program is freely distributable. | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * option added by Eric Rasmussen <ear@u | True                      | 
+   8 |  *                                       | True                      | 
+   9 |  * 1999-02-22 Arkadiusz Mickiewicz <misi | True                      | 
+  10 |  * - Added Native Language Support       | True                      | 
+  11 |  *                                       | True                      | 
+  12 |  * 1999-05-05 Thorsten Kranzkowski <dl8b | True                      | 
+  13 |  * - Enabled hardware flow control befor | True                      | 
+  14 |  *                                       | True                      | 
+  15 |  * 2011-01 Venys Vlasenko                | True                      | 
+  16 |  * - Removed parity detection code. It c | True                      | 
+  17 |  * if all chars received have bit 7 clea | True                      | 
+  18 |  * it is impossible to determine whether | True                      | 
+  19 |  * or 7-bit,odd(even)-parity. It also in | True                      | 
+  20 |  * - From now on, we assume that parity  | True                      | 
+  21 |  *                                       | True                      | 
+  22 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  23 |  */                                      | True                      | 
+  24 | //config:config GETTY                    | True                      | 
+  25 | //config: bool "getty (11 kb)"           | True                      | 
+  26 | //config: default y                      | True                      | 
+  27 | //config: select FEATURE_SYSLOG          | True                      | 
+  28 | //config: help                           | True                      | 
+  29 | //config: getty lets you log in on a tty | True                      | 
+  30 | //config:                                | True                      | 
+  31 | //config: Note that you can save a few b | True                      | 
+  32 | //config: using login applet directly.   | True                      | 
+  33 | //config: If you need to reset tty attri | True                      | 
+  34 | //config: this script approximates getty | True                      | 
+  35 | //config:                                | True                      | 
+  36 | //config: exec </dev/$1 >/dev/$1 2>&1 || | True                      | 
+  37 | //config: reset                          | True                      | 
+  38 | //config: stty sane; stty ispeed 38400;  | True                      | 
+  39 | //config: printf "%s login: " "`hostname | True                      | 
+  40 | //config: read -r login                  | True                      | 
+  41 | //config: exec /bin/login "$login"       | True                      | 
+  42 |                                          | True                      | 
+  43 | //applet:IF_GETTY(APPLET(getty, BB_DIR_S | True                      | 
+  44 |                                          | True                      | 
+  45 | //kbuild:lib-$(CONFIG_GETTY) += getty.o  | True                      | 
+  46 |                                          | True                      | 
+  47 | #include "libbb.h"                       | True                      | 
+  48 | #include <syslog.h>                      | True                      | 
+  49 | #ifndef IUCLC                            | True                      | 
+  50 | # define IUCLC 0                         | !(IUCLC)                  | 
+  51 | #endif                                   | True                      | 
+  52 |                                          | True                      | 
+  53 | #ifndef LOGIN_PROCESS                    | True                      | 
+  54 | # undef ENABLE_FEATURE_UTMP              | !(LOGIN_PROCESS)          | 
+  55 | # undef ENABLE_FEATURE_WTMP              | !(LOGIN_PROCESS)          | 
+  56 | # define ENABLE_FEATURE_UTMP 0           | !(LOGIN_PROCESS)          | 
+  57 | # define ENABLE_FEATURE_WTMP 0           | !(LOGIN_PROCESS)          | 
+  58 | #endif                                   | True                      | 
+  59 |                                          | True                      | 
+  60 |                                          | True                      | 
+  61 | /* The following is used for understanda | True                      | 
+  62 | #ifdef DEBUGGING                         | True                      | 
+  63 | static FILE *dbf;                        | (DEBUGGING)               | 
+  64 | # define DEBUGTERM "/dev/ttyp0"          | (DEBUGGING)               | 
+  65 | # define debug(...) do { fprintf(dbf, __ | (DEBUGGING)               | 
+  66 | #else                                    | True                      | 
+  67 | # define debug(...) ((void)0)            | !(DEBUGGING)              | 
+  68 | #endif                                   | True                      | 
+  69 |                                          | True                      | 
+  70 |                                          | True                      | 
+  71 | /*                                       | True                      | 
+  72 |  * Things you may want to modify.        | True                      | 
+  73 |  *                                       | True                      | 
+  74 |  * You may disagree with the default lin | True                      | 
+  75 |  * below. Note, however, that DEL cannot | True                      | 
+  76 |  * and for line editing at the same time | True                      | 
+  77 |  */                                      | True                      | 
+  78 | #undef  _PATH_LOGIN                      | True                      | 
+  79 | #define _PATH_LOGIN "/bin/login"         | True                      | 
+  80 |                                          | True                      | 
+  81 | /* Displayed before the login prompt.    | True                      | 
+  82 |  * If ISSUE is not defined, getty will n | True                      | 
+  83 |  * /etc/issue file. You will not want to | True                      | 
+  84 |  * wrong baud rate.                      | True                      | 
+  85 |  */                                      | True                      | 
+  86 | #define ISSUE "/etc/issue"               | True                      | 
+  87 |                                          | True                      | 
+  88 | /* Macro to build Ctrl-LETTER. Assumes A | True                      | 
+  89 | #define CTL(x)          ((x) ^ 0100)     | True                      | 
+  90 |                                          | True                      | 
+  91 | /*                                       | True                      | 
+  92 |  * When multiple baud rates are specifie | True                      | 
+  93 |  * the first one we will try is the firs | True                      | 
+  94 |  */                                      | True                      | 
+  95 | #define MAX_SPEED       10               | True                      | 
+  96 |                                          | True                      | 
+  97 | struct globals {                         | True                      | 
+  98 |  unsigned timeout;                       | True                      | 
+  99 |  const char *login;              /* logi | True                      | 
+ 100 |  const char *fakehost;                   | True                      | 
+ 101 |  const char *tty_name;                   | True                      | 
+ 102 |  char *initstring;               /* mode | True                      | 
+ 103 |  const char *issue;              /* alte | True                      | 
+ 104 |  int numspeed;                   /* numb | True                      | 
+ 105 |  int speeds[MAX_SPEED];          /* baud | True                      | 
+ 106 |  unsigned char eol;              /* end- | True                      | 
+ 107 |  struct termios tty_attrs;               | True                      | 
+ 108 |  char line_buf[128];                     | True                      | 
+ 109 | };                                       | True                      | 
+ 110 |                                          | True                      | 
+ 111 | #define G (*ptr_to_globals)              | True                      | 
+ 112 | #define INIT_G() do { \                  | True                      | 
+ 113 |  SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); | True                      | 
+ 114 | } while (0)                              | True                      | 
+ 115 |                                          | True                      | 
+ 116 | //usage:#define getty_trivial_usage      | True                      | 
+ 117 | //usage:       "[OPTIONS] BAUD_RATE[,BAU | True                      | 
+ 118 | //usage:#define getty_full_usage "\n\n"  | True                      | 
+ 119 | //usage:       "Open TTY, prompt for log | True                      | 
+ 120 | //usage:     "\n -h  Enable hardware RTS | True                      | 
+ 121 | //usage:     "\n -L  Set CLOCAL (ignore  | True                      | 
+ 122 | //usage:     "\n -m  Get baud rate from  | True                      | 
+ 123 | //usage:     "\n -n  Don't prompt for lo | True                      | 
+ 124 | //usage:     "\n -w  Wait for CR or LF b | True                      | 
+ 125 | //usage:     "\n -i  Don't display /etc/ | True                      | 
+ 126 | //usage:     "\n -f ISSUE_FILE Display I | True                      | 
+ 127 | //usage:     "\n -l LOGIN Invoke LOGIN i | True                      | 
+ 128 | //usage:     "\n -t SEC  Terminate after | True                      | 
+ 129 | //usage:     "\n -I INITSTR Send INITSTR | True                      | 
+ 130 | //usage:     "\n -H HOST  Log HOST into  | True                      | 
+ 131 | //usage:     "\n"                        | True                      | 
+ 132 | //usage:     "\nBAUD_RATE of 0 leaves it | True                      | 
+ 133 |                                          | True                      | 
+ 134 | #define OPT_STR "I:LH:f:hil:mt:+wn"      | True                      | 
+ 135 | #define F_INITSTRING    (1 << 0)   /* -I | True                      | 
+ 136 | #define F_LOCAL         (1 << 1)   /* -L | True                      | 
+ 137 | #define F_FAKEHOST      (1 << 2)   /* -H | True                      | 
+ 138 | #define F_CUSTISSUE     (1 << 3)   /* -f | True                      | 
+ 139 | #define F_RTSCTS        (1 << 4)   /* -h | True                      | 
+ 140 | #define F_NOISSUE       (1 << 5)   /* -i | True                      | 
+ 141 | #define F_LOGIN         (1 << 6)   /* -l | True                      | 
+ 142 | #define F_PARSE         (1 << 7)   /* -m | True                      | 
+ 143 | #define F_TIMEOUT       (1 << 8)   /* -t | True                      | 
+ 144 | #define F_WAITCRLF      (1 << 9)   /* -w | True                      | 
+ 145 | #define F_NOPROMPT      (1 << 10)  /* -n | True                      | 
+ 146 |                                          | True                      | 
+ 147 |                                          | True                      | 
+ 148 | /* convert speed string to speed code; r | True                      | 
+ 149 | static int bcode(const char *s)          | True                      | 
+ 150 | {                                        | True                      | 
+ 151 |  int value = bb_strtou(s, NULL, 10); /*  | True                      | 
+ 152 |  if (value < 0) /* bad terminating char, | True                      | 
+ 153 |   return value;                          | True                      | 
+ 154 |  return tty_value_to_baud(value);        | True                      | 
+ 155 | }                                        | True                      | 
+ 156 |                                          | True                      | 
+ 157 | /* parse alternate baud rates */         | True                      | 
+ 158 | static void parse_speeds(char *arg)      | True                      | 
+ 159 | {                                        | True                      | 
+ 160 |  char *cp;                               | True                      | 
+ 161 |                                          | True                      | 
+ 162 |  /* NB: at least one iteration is always | True                      | 
+ 163 |  debug("entered parse_speeds\n");        | True                      | 
+ 164 |  while ((cp = strsep(&arg, ",")) != NULL | True                      | 
+ 165 |   G.speeds[G.numspeed] = bcode(cp);      | True                      | 
+ 166 |   if (G.speeds[G.numspeed] < 0)          | True                      | 
+ 167 |    bb_error_msg_and_die("bad speed: %s", | True                      | 
+ 168 |   /* note: arg "0" turns into speed B0 * | True                      | 
+ 169 |   G.numspeed++;                          | True                      | 
+ 170 |   if (G.numspeed > MAX_SPEED)            | True                      | 
+ 171 |    bb_simple_error_msg_and_die("too many | True                      | 
+ 172 |  }                                       | True                      | 
+ 173 |  debug("exiting parse_speeds\n");        | True                      | 
+ 174 | }                                        | True                      | 
+ 175 |                                          | True                      | 
+ 176 | /* parse command-line arguments */       | True                      | 
+ 177 | static void parse_args(char **argv)      | True                      | 
+ 178 | {                                        | True                      | 
+ 179 |  char *ts;                               | True                      | 
+ 180 |  int flags;                              | True                      | 
+ 181 |                                          | True                      | 
+ 182 |  flags = getopt32(argv, "^" OPT_STR "\0" | True                      | 
+ 183 |   &G.initstring, &G.fakehost, &G.issue,  | True                      | 
+ 184 |   &G.login, &G.timeout                   | True                      | 
+ 185 |  );                                      | True                      | 
+ 186 |  if (flags & F_INITSTRING) {             | True                      | 
+ 187 |   G.initstring = xstrdup(G.initstring);  | True                      | 
+ 188 |   /* decode \ddd octal codes into chars  | True                      | 
+ 189 |   strcpy_and_process_escape_sequences(G. | True                      | 
+ 190 |  }                                       | True                      | 
+ 191 |  argv += optind;                         | True                      | 
+ 192 |  debug("after getopt\n");                | True                      | 
+ 193 |                                          | True                      | 
+ 194 |  /* We loosen up a bit and accept both " | True                      | 
+ 195 |  G.tty_name = argv[0];                   | True                      | 
+ 196 |  ts = argv[1];            /* baud rate(s | True                      | 
+ 197 |  if (isdigit(argv[0][0])) {              | True                      | 
+ 198 |   /* A number first, assume it's a speed | True                      | 
+ 199 |   G.tty_name = ts; /* tty name is in arg | True                      | 
+ 200 |   ts = argv[0];    /* baud rate(s) */    | True                      | 
+ 201 |  }                                       | True                      | 
+ 202 |  parse_speeds(ts);                       | True                      | 
+ 203 |                                          | True                      | 
+ 204 |  if (argv[2])                            | True                      | 
+ 205 |   xsetenv("TERM", argv[2]);              | True                      | 
+ 206 |                                          | True                      | 
+ 207 |  debug("exiting parse_args\n");          | True                      | 
+ 208 | }                                        | True                      | 
+ 209 |                                          | True                      | 
+ 210 | /* set up tty as standard input, output, | True                      | 
+ 211 | static void open_tty(void)               | True                      | 
+ 212 | {                                        | True                      | 
+ 213 |  /* Set up new standard input, unless we | True                      | 
+ 214 |  if (NOT_LONE_DASH(G.tty_name)) {        | True                      | 
+ 215 |   if (G.tty_name[0] != '/')              | True                      | 
+ 216 |    G.tty_name = concat_path_file("/dev", | True                      | 
+ 217 |                                          | True                      | 
+ 218 |   /* Open the tty as standard input */   | True                      | 
+ 219 |   debug("open(2)\n");                    | True                      | 
+ 220 |   close(0);                              | True                      | 
+ 221 |   xopen(G.tty_name, O_RDWR | O_NONBLOCK) | True                      | 
+ 222 |                                          | True                      | 
+ 223 |   /* Set proper protections and ownershi | True                      | 
+ 224 |   fchown(0, 0, 0);        /* 0:0 */      | True                      | 
+ 225 |   fchmod(0, 0620);        /* crw--w----  | True                      | 
+ 226 |  } else {                                | True                      | 
+ 227 |   char *n;                               | True                      | 
+ 228 |   /*                                     | True                      | 
+ 229 |    * Standard input should already be co | True                      | 
+ 230 |    * Make sure it is open for read/write | True                      | 
+ 231 |    */                                    | True                      | 
+ 232 |   if ((fcntl(0, F_GETFL) & (O_RDWR|O_RDO | True                      | 
+ 233 |    bb_simple_error_msg_and_die("stdin is | True                      | 
+ 234 |                                          | True                      | 
+ 235 |   /* Try to get real tty name instead of | True                      | 
+ 236 |   n = xmalloc_ttyname(0);                | True                      | 
+ 237 |   if (n)                                 | True                      | 
+ 238 |    G.tty_name = n;                       | True                      | 
+ 239 |  }                                       | True                      | 
+ 240 |  applet_name = xasprintf("getty: %s", sk | True                      | 
+ 241 | }                                        | True                      | 
+ 242 |                                          | True                      | 
+ 243 | static void set_tty_attrs(void)          | True                      | 
+ 244 | {                                        | True                      | 
+ 245 |  if (tcsetattr_stdin_TCSANOW(&G.tty_attr | True                      | 
+ 246 |   bb_simple_perror_msg_and_die("tcsetatt | True                      | 
+ 247 | }                                        | True                      | 
+ 248 |                                          | True                      | 
+ 249 | /* We manipulate tty_attrs this way:     | True                      | 
+ 250 |  * - first, we read existing tty_attrs   | True                      | 
+ 251 |  * - init_tty_attrs modifies some parts  | True                      | 
+ 252 |  * - auto_baud and/or BREAK processing c | True                      | 
+ 253 |  * - finalize_tty_attrs again modifies s | True                      | 
+ 254 |  *   execing login                       | True                      | 
+ 255 |  */                                      | True                      | 
+ 256 | static void init_tty_attrs(int speed)    | True                      | 
+ 257 | {                                        | True                      | 
+ 258 |  /* Try to drain output buffer, with 5 s | True                      | 
+ 259 |   * Added on request from users of ~600  | True                      | 
+ 260 |   * with biggish buffer on a 90MHz CPU.  | True                      | 
+ 261 |   * They were losing hundreds of bytes o | True                      | 
+ 262 |   * on tcflush.                          | True                      | 
+ 263 |   */                                     | True                      | 
+ 264 |  signal_no_SA_RESTART_empty_mask(SIGALRM | True                      | 
+ 265 |  alarm(5);                               | True                      | 
+ 266 |  tcdrain(STDIN_FILENO);                  | True                      | 
+ 267 |  alarm(0);                               | True                      | 
+ 268 |                                          | True                      | 
+ 269 |  /* Flush input and output queues, impor | True                      | 
+ 270 |  tcflush(STDIN_FILENO, TCIOFLUSH);       | True                      | 
+ 271 |                                          | True                      | 
+ 272 |  /* Set speed if it wasn't specified as  | True                      | 
+ 273 |  if (speed != B0)                        | True                      | 
+ 274 |   cfsetspeed(&G.tty_attrs, speed);       | True                      | 
+ 275 |                                          | True                      | 
+ 276 |  /* Initial settings: 8-bit characters,  | True                      | 
+ 277 |   * Special characters are set after we  | True                      | 
+ 278 |   * reads will be done in raw mode anywa | True                      | 
+ 279 |   */                                     | True                      | 
+ 280 |  /* Clear all bits except: */            | True                      | 
+ 281 |  G.tty_attrs.c_cflag &= (0               | True                      | 
+ 282 |   /* 2 stop bits (1 otherwise)           | True                      | 
+ 283 |    * Enable parity bit (both on input an | True                      | 
+ 284 |    * Odd parity (else even)              | True                      | 
+ 285 |    */                                    | True                      | 
+ 286 |   | CSTOPB | PARENB | PARODD             | True                      | 
+ 287 | #ifdef CMSPAR                            | True                      | 
+ 288 |   | CMSPAR  /* mark or space parity */   | (CMSPAR)                  | 
+ 289 | #endif                                   | True                      | 
+ 290 | #ifdef CBAUD                             | True                      | 
+ 291 |   | CBAUD   /* (output) baud rate */     | (CBAUD)                   | 
+ 292 | #endif                                   | True                      | 
+ 293 | #ifdef CBAUDEX                           | True                      | 
+ 294 |   | CBAUDEX /* (output) baud rate */     | (CBAUDEX)                 | 
+ 295 | #endif                                   | True                      | 
+ 296 | #ifdef CIBAUD                            | True                      | 
+ 297 |   | CIBAUD   /* input baud rate */       | (CIBAUD)                  | 
+ 298 | #endif                                   | True                      | 
+ 299 |  );                                      | True                      | 
+ 300 |  /* Set: 8 bits; hang up (drop DTR) on l | True                      | 
+ 301 |  G.tty_attrs.c_cflag |= CS8 | HUPCL | CR | True                      | 
+ 302 |  if (option_mask32 & F_LOCAL) {          | True                      | 
+ 303 |   /* ignore Carrier Detect pin:          | True                      | 
+ 304 |    * opens don't block when CD is low,   | True                      | 
+ 305 |    * losing CD doesn't hang up processes | True                      | 
+ 306 |    */                                    | True                      | 
+ 307 |   G.tty_attrs.c_cflag |= CLOCAL;         | True                      | 
+ 308 |  }                                       | True                      | 
+ 309 | #ifdef CRTSCTS                           | True                      | 
+ 310 |  if (option_mask32 & F_RTSCTS)           | (CRTSCTS)                 | 
+ 311 |   G.tty_attrs.c_cflag |= CRTSCTS; /* flo | (CRTSCTS)                 | 
+ 312 | #endif                                   | True                      | 
+ 313 |  G.tty_attrs.c_iflag = 0;                | True                      | 
+ 314 |  G.tty_attrs.c_lflag = 0;                | True                      | 
+ 315 |  /* non-raw output; add CR to each NL */ | True                      | 
+ 316 |  G.tty_attrs.c_oflag = OPOST | ONLCR;    | True                      | 
+ 317 |                                          | True                      | 
+ 318 |  /* reads will block only if < 1 char is | True                      | 
+ 319 |  G.tty_attrs.c_cc[VMIN] = 1;             | True                      | 
+ 320 |  /* no timeout (reads block forever) */  | True                      | 
+ 321 |  G.tty_attrs.c_cc[VTIME] = 0;            | True                      | 
+ 322 | #ifdef __linux__                         | True                      | 
+ 323 |  G.tty_attrs.c_line = 0;                 | (__linux__)               | 
+ 324 | #endif                                   | True                      | 
+ 325 |                                          | True                      | 
+ 326 |  set_tty_attrs();                        | True                      | 
+ 327 |                                          | True                      | 
+ 328 |  debug("term_io 2\n");                   | True                      | 
+ 329 | }                                        | True                      | 
+ 330 |                                          | True                      | 
+ 331 | static void finalize_tty_attrs(void)     | True                      | 
+ 332 | {                                        | True                      | 
+ 333 |  /* software flow control on output (sto | True                      | 
+ 334 |   * and on input (send XOFF when buffer  | True                      | 
+ 335 |   */                                     | True                      | 
+ 336 |  G.tty_attrs.c_iflag |= IXON | IXOFF;    | True                      | 
+ 337 |  if (G.eol == '\r') {                    | True                      | 
+ 338 |   G.tty_attrs.c_iflag |= ICRNL; /* map C | True                      | 
+ 339 |  }                                       | True                      | 
+ 340 |  /* Other bits in c_iflag:               | True                      | 
+ 341 |   * IXANY   Any recvd char enables outpu | True                      | 
+ 342 |   * INPCK   Enable parity check          | True                      | 
+ 343 |   * IGNPAR  Ignore parity errors (drop b | True                      | 
+ 344 |   * PARMRK  Mark parity errors with 0xff | True                      | 
+ 345 |   *         (else bad byte is received a | True                      | 
+ 346 |   * ISTRIP  Strip parity bit             | True                      | 
+ 347 |   * IGNBRK  Ignore break condition       | True                      | 
+ 348 |   * BRKINT  Send SIGINT on break - maybe | True                      | 
+ 349 |   * INLCR   Map NL to CR                 | True                      | 
+ 350 |   * IGNCR   Ignore CR                    | True                      | 
+ 351 |   * ICRNL   Map CR to NL                 | True                      | 
+ 352 |   * IUCLC   Map uppercase to lowercase   | True                      | 
+ 353 |   * IMAXBEL Echo BEL on input line too l | True                      | 
+ 354 |   * IUTF8   Appears to affect tty's idea | True                      | 
+ 355 |   *         observed to improve backspac | True                      | 
+ 356 |   */                                     | True                      | 
+ 357 |                                          | True                      | 
+ 358 |  /* ICANON  line buffered input (NL or E | True                      | 
+ 359 |   * ISIG    recognize INT/QUIT/SUSP char | True                      | 
+ 360 |   * ECHO    echo input chars;            | True                      | 
+ 361 |   * ECHOE   echo BS-SP-BS on erase chara | True                      | 
+ 362 |   * ECHOK   echo kill char specially, no | True                      | 
+ 363 |   * ECHOKE  erase all input via BS-SP-BS | True                      | 
+ 364 |   * ECHOCTL Echo ctrl chars as ^c (else  | True                      | 
+ 365 |   *         e.g. up arrow emits "ESC-som | True                      | 
+ 366 |   */                                     | True                      | 
+ 367 |  G.tty_attrs.c_lflag |= ICANON | ISIG |  | True                      | 
+ 368 |  /* Other bits in c_lflag:               | True                      | 
+ 369 |   * XCASE   Map uppercase to \lowercase  | True                      | 
+ 370 |   * ECHONL  Echo NL even if ECHO is not  | True                      | 
+ 371 |   * ECHOPRT On erase, echo erased chars  | True                      | 
+ 372 |   *         [qwe<BS><BS><BS> input looks | True                      | 
+ 373 |   * NOFLSH  Don't flush input buffer aft | True                      | 
+ 374 |   * IEXTEN  Enable extended functions (? | True                      | 
+ 375 |   *         [glibc says it enables c_cc[ | True                      | 
+ 376 |   *         and c_cc[VDISCARD] "toggle d | True                      | 
+ 377 |   * FLUSHO  Output being flushed (c_cc[V | True                      | 
+ 378 |   * PENDIN  Retype pending input at next | True                      | 
+ 379 |   *         (c_cc[VREPRINT] is being pro | True                      | 
+ 380 |   * TOSTOP  Send SIGTTOU for background  | True                      | 
+ 381 |   *         (why "stty sane" unsets this | True                      | 
+ 382 |   */                                     | True                      | 
+ 383 |                                          | True                      | 
+ 384 |  G.tty_attrs.c_cc[VINTR] = CTL('C');     | True                      | 
+ 385 |  G.tty_attrs.c_cc[VQUIT] = CTL('\\');    | True                      | 
+ 386 |  G.tty_attrs.c_cc[VEOF] = CTL('D');      | True                      | 
+ 387 |  G.tty_attrs.c_cc[VEOL] = '\n';          | True                      | 
+ 388 | #ifdef VSWTC                             | True                      | 
+ 389 |  G.tty_attrs.c_cc[VSWTC] = 0;            | (VSWTC)                   | 
+ 390 | #endif                                   | True                      | 
+ 391 | #ifdef VSWTCH                            | True                      | 
+ 392 |  G.tty_attrs.c_cc[VSWTCH] = 0;           | (VSWTCH)                  | 
+ 393 | #endif                                   | True                      | 
+ 394 |  G.tty_attrs.c_cc[VKILL] = CTL('U');     | True                      | 
+ 395 |  /* Other control chars:                 | True                      | 
+ 396 |   * VEOL2                                | True                      | 
+ 397 |   * VERASE, VWERASE - (word) erase. we m | True                      | 
+ 398 |   * VREPRINT - reprint current input buf | True                      | 
+ 399 |   * VLNEXT, VDISCARD, VSTATUS            | True                      | 
+ 400 |   * VSUSP, VDSUSP - send (delayed) SIGTS | True                      | 
+ 401 |   * VSTART, VSTOP - chars used for IXON/ | True                      | 
+ 402 |   */                                     | True                      | 
+ 403 |                                          | True                      | 
+ 404 |  set_tty_attrs();                        | True                      | 
+ 405 |                                          | True                      | 
+ 406 |  /* Now the newline character should be  | True                      | 
+ 407 |  full_write1_str("\n");                  | True                      | 
+ 408 | }                                        | True                      | 
+ 409 |                                          | True                      | 
+ 410 | /* extract baud rate from modem status m | True                      | 
+ 411 | static void auto_baud(void)              | True                      | 
+ 412 | {                                        | True                      | 
+ 413 |  int nread;                              | True                      | 
+ 414 |                                          | True                      | 
+ 415 |  /*                                      | True                      | 
+ 416 |   * This works only if the modem produce | True                      | 
+ 417 |   * the DCD line, and if the computer is | True                      | 
+ 418 |   * baud rate before the message has gon | True                      | 
+ 419 |   * following format:                    | True                      | 
+ 420 |   *                                      | True                      | 
+ 421 |   * <junk><number><junk>                 | True                      | 
+ 422 |   *                                      | True                      | 
+ 423 |   * The number is interpreted as the bau | True                      | 
+ 424 |   * modem does not tell us the baud rate | True                      | 
+ 425 |   * using the current baud rate. It is a | True                      | 
+ 426 |   * processing (comma-separated list of  | True                      | 
+ 427 |   * modem status messages is enabled.    | True                      | 
+ 428 |   */                                     | True                      | 
+ 429 |                                          | True                      | 
+ 430 |  G.tty_attrs.c_cc[VMIN] = 0; /* don't bl | True                      | 
+ 431 |  set_tty_attrs();                        | True                      | 
+ 432 |                                          | True                      | 
+ 433 |  /*                                      | True                      | 
+ 434 |   * Wait for a while, then read everythi | True                      | 
+ 435 |   * try to extract the speed of the dial | True                      | 
+ 436 |   */                                     | True                      | 
+ 437 |  sleep1();                               | True                      | 
+ 438 |  nread = safe_read(STDIN_FILENO, G.line_ | True                      | 
+ 439 |  if (nread > 0) {                        | True                      | 
+ 440 |   int speed;                             | True                      | 
+ 441 |   char *bp;                              | True                      | 
+ 442 |   G.line_buf[nread] = '\0';              | True                      | 
+ 443 |   for (bp = G.line_buf; bp < G.line_buf  | True                      | 
+ 444 |    if (isdigit(*bp)) {                   | True                      | 
+ 445 |     speed = bcode(bp);                   | True                      | 
+ 446 |     if (speed > 0)                       | True                      | 
+ 447 |      cfsetspeed(&G.tty_attrs, speed);    | True                      | 
+ 448 |     break;                               | True                      | 
+ 449 |    }                                     | True                      | 
+ 450 |   }                                      | True                      | 
+ 451 |  }                                       | True                      | 
+ 452 |                                          | True                      | 
+ 453 |  /* Restore terminal settings */         | True                      | 
+ 454 |  G.tty_attrs.c_cc[VMIN] = 1; /* restore  | True                      | 
+ 455 |  set_tty_attrs();                        | True                      | 
+ 456 | }                                        | True                      | 
+ 457 |                                          | True                      | 
+ 458 | /* get user name, establish parity, spee | True                      | 
+ 459 |  * return NULL on BREAK, logname on succ | True                      | 
+ 460 |  */                                      | True                      | 
+ 461 | static char *get_logname(void)           | True                      | 
+ 462 | {                                        | True                      | 
+ 463 |  char *bp;                               | True                      | 
+ 464 |  char c;                                 | True                      | 
+ 465 |                                          | True                      | 
+ 466 |  /* Flush pending input (esp. after pars | True                      | 
+ 467 |  usleep(100*1000); /* 0.1 sec */         | True                      | 
+ 468 |  tcflush(STDIN_FILENO, TCIFLUSH);        | True                      | 
+ 469 |                                          | True                      | 
+ 470 |  /* Prompt for and read a login name */  | True                      | 
+ 471 |  do {                                    | True                      | 
+ 472 |   /* Write issue file and prompt */      | True                      | 
+ 473 | #ifdef ISSUE                             | True                      | 
+ 474 |   if (!(option_mask32 & F_NOISSUE)) {    | True                      | 
+ 475 |    puts("\r");  /* start a new line */   | True                      | 
+ 476 |    print_login_issue(G.issue, G.tty_name | True                      | 
+ 477 |   }                                      | True                      | 
+ 478 | #endif                                   | True                      | 
+ 479 |   print_login_prompt();                  | True                      | 
+ 480 |                                          | True                      | 
+ 481 |   /* Read name, watch for break, erase,  | True                      | 
+ 482 |   bp = G.line_buf;                       | True                      | 
+ 483 |   while (1) {                            | True                      | 
+ 484 |    /* Do not report trivial EINTR/EIO er | True                      | 
+ 485 |    errno = EINTR; /* make read of 0 byte | True                      | 
+ 486 |    if (read(STDIN_FILENO, &c, 1) < 1) {  | True                      | 
+ 487 |     finalize_tty_attrs();                | True                      | 
+ 488 |     if (errno == EINTR || errno == EIO)  | True                      | 
+ 489 |      exit_SUCCESS();                     | True                      | 
+ 490 |     bb_simple_perror_msg_and_die(bb_msg_ | True                      | 
+ 491 |    }                                     | True                      | 
+ 492 |                                          | True                      | 
+ 493 |    switch (c) {                          | True                      | 
+ 494 |    case '\r':                            | True                      | 
+ 495 |    case '\n':                            | True                      | 
+ 496 |     *bp = '\0';                          | True                      | 
+ 497 |     G.eol = c;                           | True                      | 
+ 498 |     goto got_logname;                    | True                      | 
+ 499 |    case CTL('H'):                        | True                      | 
+ 500 |    case 0x7f:                            | True                      | 
+ 501 |     G.tty_attrs.c_cc[VERASE] = c;        | True                      | 
+ 502 |     if (bp > G.line_buf) {               | True                      | 
+ 503 |      full_write1_str("\010 \010");       | True                      | 
+ 504 |      bp--;                               | True                      | 
+ 505 |     }                                    | True                      | 
+ 506 |     break;                               | True                      | 
+ 507 |    case CTL('U'):                        | True                      | 
+ 508 |     while (bp > G.line_buf) {            | True                      | 
+ 509 |      full_write1_str("\010 \010");       | True                      | 
+ 510 |      bp--;                               | True                      | 
+ 511 |     }                                    | True                      | 
+ 512 |     break;                               | True                      | 
+ 513 |    case CTL('C'):                        | True                      | 
+ 514 |    case CTL('D'):                        | True                      | 
+ 515 |     finalize_tty_attrs();                | True                      | 
+ 516 |     exit_SUCCESS();                      | True                      | 
+ 517 |    case '\0':                            | True                      | 
+ 518 |     /* BREAK. If we have speeds to try,  | True                      | 
+ 519 |      * return NULL (will switch speeds a | True                      | 
+ 520 |     if (G.numspeed > 1)                  | True                      | 
+ 521 |      return NULL;                        | True                      | 
+ 522 |     /* fall through and ignore it */     | True                      | 
+ 523 |    default:                              | True                      | 
+ 524 |     if ((unsigned char)c < ' ') {        | True                      | 
+ 525 |      /* ignore garbage characters */     | True                      | 
+ 526 |     } else if ((int)(bp - G.line_buf) <  | True                      | 
+ 527 |      /* echo and store the character */  | True                      | 
+ 528 |      full_write(STDOUT_FILENO, &c, 1);   | True                      | 
+ 529 |      *bp++ = c;                          | True                      | 
+ 530 |     }                                    | True                      | 
+ 531 |     break;                               | True                      | 
+ 532 |    }                                     | True                      | 
+ 533 |   } /* end of get char loop */           | True                      | 
+ 534 |  got_logname: ;                          | True                      | 
+ 535 |  } while (G.line_buf[0] == '\0');  /* wh | True                      | 
+ 536 |                                          | True                      | 
+ 537 |  return G.line_buf;                      | True                      | 
+ 538 | }                                        | True                      | 
+ 539 |                                          | True                      | 
+ 540 | static void alarm_handler(int sig UNUSED | True                      | 
+ 541 | {                                        | True                      | 
+ 542 |  finalize_tty_attrs();                   | True                      | 
+ 543 |  _exit_SUCCESS();                        | True                      | 
+ 544 | }                                        | True                      | 
+ 545 |                                          | True                      | 
+ 546 | static void sleep10(void)                | True                      | 
+ 547 | {                                        | True                      | 
+ 548 |  sleep(10);                              | True                      | 
+ 549 | }                                        | True                      | 
+ 550 |                                          | True                      | 
+ 551 | int getty_main(int argc, char **argv) MA | True                      | 
+ 552 | int getty_main(int argc UNUSED_PARAM, ch | True                      | 
+ 553 | {                                        | True                      | 
+ 554 |  int n;                                  | True                      | 
+ 555 |  pid_t pid, tsid;                        | True                      | 
+ 556 |  char *logname;                          | True                      | 
+ 557 |                                          | True                      | 
+ 558 |  INIT_G();                               | True                      | 
+ 559 |  G.login = _PATH_LOGIN;    /* default lo | True                      | 
+ 560 | #ifdef ISSUE                             | True                      | 
+ 561 |  G.issue = ISSUE;          /* default is | True                      | 
+ 562 | #endif                                   | True                      | 
+ 563 |  G.eol = '\r';                           | True                      | 
+ 564 |                                          | True                      | 
+ 565 |  /* Parse command-line arguments */      | True                      | 
+ 566 |  parse_args(argv);                       | True                      | 
+ 567 |                                          | True                      | 
+ 568 |  /* Create new session and pgrp, lose co | True                      | 
+ 569 |  pid = setsid();  /* this also gives us  | True                      | 
+ 570 |  if (pid < 0) {                          | True                      | 
+ 571 |   int fd;                                | True                      | 
+ 572 |   /* :(                                  | True                      | 
+ 573 |    * docs/ctty.htm says:                 | True                      | 
+ 574 |    * "This is allowed only when the curr | True                      | 
+ 575 |    *  is not a process group leader".    | True                      | 
+ 576 |    * Thus, setsid() will fail if we _alr | True                      | 
+ 577 |    * a session leader - which is quite p | True                      | 
+ 578 |    */                                    | True                      | 
+ 579 |   pid = getpid();                        | True                      | 
+ 580 |   if (getsid(0) != pid) {                | True                      | 
+ 581 |    //for debugging:                      | True                      | 
+ 582 |    //bb_perror_msg_and_die("setsid faile | True                      | 
+ 583 |    // " pid %d ppid %d"                  | True                      | 
+ 584 |    // " sid %d pgid %d",                 | True                      | 
+ 585 |    // pid, getppid(),                    | True                      | 
+ 586 |    // getsid(0), getpgid(0));            | True                      | 
+ 587 |    bb_simple_perror_msg_and_die("setsid" | True                      | 
+ 588 |    /*                                    | True                      | 
+ 589 |     * When we can end up here?           | True                      | 
+ 590 |     * Example: setsid() fails when run a | True                      | 
+ 591 |     *  # getty 115200 /dev/tty2          | True                      | 
+ 592 |     * because shell's child (getty) is p | True                      | 
+ 593 |     * But doesn't fail if shell is not i | True                      | 
+ 594 |     * (and therefore doesn't create proc | True                      | 
+ 595 |     * or if getty is not the first proce | True                      | 
+ 596 |     *  # true | getty 115200 /dev/tty2   | True                      | 
+ 597 |     */                                   | True                      | 
+ 598 |   }                                      | True                      | 
+ 599 |   /* Looks like we are already a session | True                      | 
+ 600 |    * In this case (setsid failed) we may | True                      | 
+ 601 |    * and it may be different from tty we | True                      | 
+ 602 |    * If we still have ctty, on Linux ioc | True                      | 
+ 603 |    * (which we are going to use a bit la | True                      | 
+ 604 |    * even if we try to take ctty which i | True                      | 
+ 605 |    * Try to drop old ctty now to prevent | True                      | 
+ 606 |    * Use O_NONBLOCK: old ctty may be a s | True                      | 
+ 607 |    */                                    | True                      | 
+ 608 |   fd = open("/dev/tty", O_RDWR | O_NONBL | True                      | 
+ 609 |   if (fd >= 0) {                         | True                      | 
+ 610 |    /* TIOCNOTTY sends SIGHUP to the fore | True                      | 
+ 611 |     * process group - which may include  | True                      | 
+ 612 |     * Make sure to not die on it:        | True                      | 
+ 613 |     */                                   | True                      | 
+ 614 |    sighandler_t old = signal(SIGHUP, SIG | True                      | 
+ 615 |    ioctl(fd, TIOCNOTTY);                 | True                      | 
+ 616 |    close(fd);                            | True                      | 
+ 617 |    signal(SIGHUP, old);                  | True                      | 
+ 618 |   }                                      | True                      | 
+ 619 |  }                                       | True                      | 
+ 620 |                                          | True                      | 
+ 621 |  /* Close stdio, and stray descriptors,  | True                      | 
+ 622 |  n = xopen(bb_dev_null, O_RDWR);         | True                      | 
+ 623 |  /* dup2(n, 0); - no, we need to handle  | True                      | 
+ 624 |  xdup2(n, 1);                            | True                      | 
+ 625 |  xdup2(n, 2);                            | True                      | 
+ 626 |  while (n > 2)                           | True                      | 
+ 627 |   close(n--);                            | True                      | 
+ 628 |                                          | True                      | 
+ 629 |  /* Logging. We want special flavor of e | True                      | 
+ 630 |  die_func = sleep10;                     | True                      | 
+ 631 |  msg_eol = "\r\n";                       | True                      | 
+ 632 |  /* most likely will internally use fd # | True                      | 
+ 633 |  openlog(applet_name, LOG_PID, LOG_AUTH) | True                      | 
+ 634 |  logmode = LOGMODE_BOTH;                 | True                      | 
+ 635 |                                          | True                      | 
+ 636 | #ifdef DEBUGGING                         | True                      | 
+ 637 |  dbf = xfopen_for_write(DEBUGTERM);      | (DEBUGGING)               | 
+ 638 |  for (n = 1; argv[n]; n++) {             | (DEBUGGING)               | 
+ 639 |   debug(argv[n]);                        | (DEBUGGING)               | 
+ 640 |   debug("\n");                           | (DEBUGGING)               | 
+ 641 |  }                                       | (DEBUGGING)               | 
+ 642 | #endif                                   | True                      | 
+ 643 |                                          | True                      | 
+ 644 |  /* Open the tty as standard input, if i | True                      | 
+ 645 |  debug("calling open_tty\n");            | True                      | 
+ 646 |  open_tty();                             | True                      | 
+ 647 |  ndelay_off(STDIN_FILENO);               | True                      | 
+ 648 |  debug("duping\n");                      | True                      | 
+ 649 |  xdup2(STDIN_FILENO, 1);                 | True                      | 
+ 650 |  xdup2(STDIN_FILENO, 2);                 | True                      | 
+ 651 |                                          | True                      | 
+ 652 |  /* Steal ctty if we don't have it yet * | True                      | 
+ 653 |  tsid = tcgetsid(STDIN_FILENO);          | True                      | 
+ 654 |  if (tsid < 0 || pid != tsid) {          | True                      | 
+ 655 |   if (ioctl(STDIN_FILENO, TIOCSCTTY, /*f | True                      | 
+ 656 |    bb_simple_perror_msg_and_die("TIOCSCT | True                      | 
+ 657 |  }                                       | True                      | 
+ 658 |                                          | True                      | 
+ 659 | #ifdef __linux__                         | True                      | 
+ 660 |  /* Make ourself a foreground process gr | (__linux__)               | 
+ 661 |  if (tcsetpgrp(STDIN_FILENO, pid) < 0)   | (__linux__)               | 
+ 662 |   bb_simple_perror_msg_and_die("tcsetpgr | (__linux__)               | 
+ 663 | #endif                                   | True                      | 
+ 664 |                                          | True                      | 
+ 665 |  /*                                      | True                      | 
+ 666 |   * The following ioctl will fail if std | True                      | 
+ 667 |   * there is noise on the modem control  | True                      | 
+ 668 |   * common course of action is (1) fix y | True                      | 
+ 669 |   * time to properly reset after hanging | True                      | 
+ 670 |   * by patching the SunOS kernel variabl | True                      | 
+ 671 |   * 5 seconds seems to be a good value.  | True                      | 
+ 672 |   */                                     | True                      | 
+ 673 |  if (tcgetattr(STDIN_FILENO, &G.tty_attr | True                      | 
+ 674 |   bb_simple_perror_msg_and_die("tcgetatt | True                      | 
+ 675 |                                          | True                      | 
+ 676 |  /* Update the utmp file. This tty is ou | True                      | 
+ 677 |  update_utmp(pid, LOGIN_PROCESS, G.tty_n | True                      | 
+ 678 |                                          | True                      | 
+ 679 |  /* Initialize tty attrs (raw mode, eigh | True                      | 
+ 680 |  debug("calling init_tty_attrs\n");      | True                      | 
+ 681 |  init_tty_attrs(G.speeds[0]);            | True                      | 
+ 682 |                                          | True                      | 
+ 683 |  /* Write the modem init string and DON' | True                      | 
+ 684 |  if (option_mask32 & F_INITSTRING) {     | True                      | 
+ 685 |   debug("writing init string\n");        | True                      | 
+ 686 |   full_write1_str(G.initstring);         | True                      | 
+ 687 |  }                                       | True                      | 
+ 688 |                                          | True                      | 
+ 689 |  /* Optionally detect the baud rate from | True                      | 
+ 690 |  debug("before autobaud\n");             | True                      | 
+ 691 |  if (option_mask32 & F_PARSE)            | True                      | 
+ 692 |   auto_baud();                           | True                      | 
+ 693 |                                          | True                      | 
+ 694 |  /* Set the optional timer */            | True                      | 
+ 695 |  signal(SIGALRM, alarm_handler);         | True                      | 
+ 696 |  alarm(G.timeout); /* if 0, alarm is not | True                      | 
+ 697 |                                          | True                      | 
+ 698 |  /* Optionally wait for CR or LF before  | True                      | 
+ 699 |  if (option_mask32 & F_WAITCRLF) {       | True                      | 
+ 700 |   char ch;                               | True                      | 
+ 701 |   debug("waiting for cr-lf\n");          | True                      | 
+ 702 |   while (safe_read(STDIN_FILENO, &ch, 1) | True                      | 
+ 703 |    debug("read %x\n", (unsigned char)ch) | True                      | 
+ 704 |    if (ch == '\n' || ch == '\r')         | True                      | 
+ 705 |     break;                               | True                      | 
+ 706 |   }                                      | True                      | 
+ 707 |  }                                       | True                      | 
+ 708 |                                          | True                      | 
+ 709 |  logname = NULL;                         | True                      | 
+ 710 |  if (!(option_mask32 & F_NOPROMPT)) {    | True                      | 
+ 711 |   /* NB: init_tty_attrs already set line | True                      | 
+ 712 |    * to G.speeds[0] */                   | True                      | 
+ 713 |   int baud_index = 0;                    | True                      | 
+ 714 |                                          | True                      | 
+ 715 |   while (1) {                            | True                      | 
+ 716 |    /* Read the login name */             | True                      | 
+ 717 |    debug("reading login name\n");        | True                      | 
+ 718 |    logname = get_logname();              | True                      | 
+ 719 |    if (logname)                          | True                      | 
+ 720 |     break;                               | True                      | 
+ 721 |    /* We are here only if G.numspeed > 1 | True                      | 
+ 722 |    baud_index = (baud_index + 1) % G.num | True                      | 
+ 723 |    cfsetspeed(&G.tty_attrs, G.speeds[bau | True                      | 
+ 724 |    set_tty_attrs();                      | True                      | 
+ 725 |   }                                      | True                      | 
+ 726 |  }                                       | True                      | 
+ 727 |                                          | True                      | 
+ 728 |  /* Disable timer */                     | True                      | 
+ 729 |  alarm(0);                               | True                      | 
+ 730 |                                          | True                      | 
+ 731 |  finalize_tty_attrs();                   | True                      | 
+ 732 |                                          | True                      | 
+ 733 |  /* Let the login program take care of p | True                      | 
+ 734 |  /* We use PATH because we trust that ro | True                      | 
+ 735 |   * and getty is not suid-root applet */ | True                      | 
+ 736 |  /* With -n, logname == NULL, and login  | True                      | 
+ 737 |  BB_EXECLP(G.login, G.login, "--", logna | True                      | 
+ 738 |  bb_error_msg_and_die("can't execute '%s | True                      | 
+ 739 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +123MB, 292ms             | 

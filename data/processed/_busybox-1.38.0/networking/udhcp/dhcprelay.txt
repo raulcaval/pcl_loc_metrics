@@ -1,0 +1,403 @@
+FILE: data/raw/busybox-1.38.0/networking/udhcp/dhcprelay.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Port to Busybox Copyright (C) 2006 Je | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * DHCP Relay for 'DHCPv4 Configuration  | True                      | 
+   8 |  * Copyright (C) 2002 Mario Strasser <ma | True                      | 
+   9 |  *                   Zuercher Hochschule | True                      | 
+  10 |  *                   Netbeat AG          | True                      | 
+  11 |  * Upstream has GPL v2 or later          | True                      | 
+  12 |  */                                      | True                      | 
+  13 | //applet:IF_DHCPRELAY(APPLET(dhcprelay,  | True                      | 
+  14 |                                          | True                      | 
+  15 | //kbuild:lib-$(CONFIG_DHCPRELAY) += dhcp | True                      | 
+  16 |                                          | True                      | 
+  17 | //usage:#define dhcprelay_trivial_usage  | True                      | 
+  18 | //usage:       "CLIENT_IFACE[,CLIENT_IFA | True                      | 
+  19 | //usage:#define dhcprelay_full_usage "\n | True                      | 
+  20 | //usage:       "Relay DHCP requests betw | True                      | 
+  21 | //usage:       "Without SERVER_IP, reque | True                      | 
+  22 |                                          | True                      | 
+  23 | #include "common.h"                      | True                      | 
+  24 |                                          | True                      | 
+  25 | #define SERVER_PORT    67                | True                      | 
+  26 |                                          | True                      | 
+  27 | /* lifetime of an xid entry in sec. */   | True                      | 
+  28 | #define MAX_LIFETIME   2*60              | True                      | 
+  29 | /* select timeout in sec. */             | True                      | 
+  30 | #define SELECT_TIMEOUT (MAX_LIFETIME / 8 | True                      | 
+  31 |                                          | True                      | 
+  32 | /* This list holds information about cli | True                      | 
+  33 | struct xid_item {                        | True                      | 
+  34 |  unsigned timestamp;                     | True                      | 
+  35 |  unsigned iface_no;                      | True                      | 
+  36 |  uint32_t xid;                           | True                      | 
+  37 |  struct sockaddr_in ip;                  | True                      | 
+  38 |  struct xid_item *next;                  | True                      | 
+  39 | } FIX_ALIASING;                          | True                      | 
+  40 |                                          | True                      | 
+  41 | #define dhcprelay_xid_list (*(struct xid | True                      | 
+  42 | #define INIT_G() do { setup_common_bufsi | True                      | 
+  43 |                                          | True                      | 
+  44 | static struct xid_item *xid_add(uint32_t | True                      | 
+  45 | {                                        | True                      | 
+  46 |  struct xid_item *item;                  | True                      | 
+  47 |                                          | True                      | 
+  48 |  /* create new xid entry */              | True                      | 
+  49 |  item = xmalloc(sizeof(struct xid_item)) | True                      | 
+  50 |                                          | True                      | 
+  51 |  /* add xid entry */                     | True                      | 
+  52 |  item->ip = *ip;                         | True                      | 
+  53 |  item->xid = xid;                        | True                      | 
+  54 |  item->iface_no = iface_no;              | True                      | 
+  55 |  item->timestamp = monotonic_sec();      | True                      | 
+  56 |  item->next = dhcprelay_xid_list.next;   | True                      | 
+  57 |  dhcprelay_xid_list.next = item;         | True                      | 
+  58 |                                          | True                      | 
+  59 |  return item;                            | True                      | 
+  60 | }                                        | True                      | 
+  61 |                                          | True                      | 
+  62 | static void xid_expire(void)             | True                      | 
+  63 | {                                        | True                      | 
+  64 |  struct xid_item *item = dhcprelay_xid_l | True                      | 
+  65 |  struct xid_item *last = &dhcprelay_xid_ | True                      | 
+  66 |  unsigned current_time = monotonic_sec() | True                      | 
+  67 |                                          | True                      | 
+  68 |  while (item != NULL) {                  | True                      | 
+  69 |   if ((current_time - item->timestamp) > | True                      | 
+  70 |    last->next = item->next;              | True                      | 
+  71 |    free(item);                           | True                      | 
+  72 |    item = last->next;                    | True                      | 
+  73 |   } else {                               | True                      | 
+  74 |    last = item;                          | True                      | 
+  75 |    item = item->next;                    | True                      | 
+  76 |   }                                      | True                      | 
+  77 |  }                                       | True                      | 
+  78 | }                                        | True                      | 
+  79 |                                          | True                      | 
+  80 | static struct xid_item *xid_find(uint32_ | True                      | 
+  81 | {                                        | True                      | 
+  82 |  struct xid_item *item = dhcprelay_xid_l | True                      | 
+  83 |  while (item != NULL) {                  | True                      | 
+  84 |   if (item->xid == xid) {                | True                      | 
+  85 |    break;                                | True                      | 
+  86 |   }                                      | True                      | 
+  87 |   item = item->next;                     | True                      | 
+  88 |  }                                       | True                      | 
+  89 |  return item;                            | True                      | 
+  90 | }                                        | True                      | 
+  91 |                                          | True                      | 
+  92 | static void xid_del(uint32_t xid)        | True                      | 
+  93 | {                                        | True                      | 
+  94 |  struct xid_item *item = dhcprelay_xid_l | True                      | 
+  95 |  struct xid_item *last = &dhcprelay_xid_ | True                      | 
+  96 |  while (item != NULL) {                  | True                      | 
+  97 |   if (item->xid == xid) {                | True                      | 
+  98 |    last->next = item->next;              | True                      | 
+  99 |    free(item);                           | True                      | 
+ 100 |    item = last->next;                    | True                      | 
+ 101 |   } else {                               | True                      | 
+ 102 |    last = item;                          | True                      | 
+ 103 |    item = item->next;                    | True                      | 
+ 104 |   }                                      | True                      | 
+ 105 |  }                                       | True                      | 
+ 106 | }                                        | True                      | 
+ 107 |                                          | True                      | 
+ 108 | /**                                      | True                      | 
+ 109 |  * get_dhcp_packet_type - gets the messa | True                      | 
+ 110 |  * p - pointer to the dhcp packet        | True                      | 
+ 111 |  * returns the message type on success,  | True                      | 
+ 112 |  */                                      | True                      | 
+ 113 | static int get_dhcp_packet_type(struct d | True                      | 
+ 114 | {                                        | True                      | 
+ 115 |  uint8_t *op;                            | True                      | 
+ 116 |                                          | True                      | 
+ 117 |  /* it must be either a BOOTREQUEST or a | True                      | 
+ 118 |  if (p->op != BOOTREQUEST && p->op != BO | True                      | 
+ 119 |   return -1;                             | True                      | 
+ 120 |  /* get message type option */           | True                      | 
+ 121 |  op = udhcp_get_option(p, DHCP_MESSAGE_T | True                      | 
+ 122 |  if (op != NULL)                         | True                      | 
+ 123 |   return op[0];                          | True                      | 
+ 124 |  return -1;                              | True                      | 
+ 125 | }                                        | True                      | 
+ 126 |                                          | True                      | 
+ 127 | /**                                      | True                      | 
+ 128 |  * make_iface_list - parses client/serve | True                      | 
+ 129 |  * returns array                         | True                      | 
+ 130 |  */                                      | True                      | 
+ 131 | static char **make_iface_list(char **cli | True                      | 
+ 132 | {                                        | True                      | 
+ 133 |  char *s, **iface_list;                  | True                      | 
+ 134 |  unsigned i, cn;                         | True                      | 
+ 135 |                                          | True                      | 
+ 136 |  /* get number of items */               | True                      | 
+ 137 |  cn = 2; /* 1 server iface + at least 1  | True                      | 
+ 138 |  s = client_and_server_ifaces[0]; /* lis | True                      | 
+ 139 |  while (*s) {                            | True                      | 
+ 140 |   if (*s == ',')                         | True                      | 
+ 141 |    cn++;                                 | True                      | 
+ 142 |   s++;                                   | True                      | 
+ 143 |  }                                       | True                      | 
+ 144 |  *client_number = cn;                    | True                      | 
+ 145 |                                          | True                      | 
+ 146 |  /* create vector of pointers */         | True                      | 
+ 147 |  iface_list = xzalloc(cn * sizeof(iface_ | True                      | 
+ 148 |                                          | True                      | 
+ 149 |  iface_list[0] = client_and_server_iface | True                      | 
+ 150 |                                          | True                      | 
+ 151 |  i = 1;                                  | True                      | 
+ 152 |  s = xstrdup(client_and_server_ifaces[0] | True                      | 
+ 153 |  goto store_client_iface_name;           | True                      | 
+ 154 |                                          | True                      | 
+ 155 |  while (i < cn) {                        | True                      | 
+ 156 |   if (*s++ == ',') {                     | True                      | 
+ 157 |    s[-1] = '\0';                         | True                      | 
+ 158 |  store_client_iface_name:                | True                      | 
+ 159 |    iface_list[i++] = s;                  | True                      | 
+ 160 |   }                                      | True                      | 
+ 161 |  }                                       | True                      | 
+ 162 |                                          | True                      | 
+ 163 |  return iface_list;                      | True                      | 
+ 164 | }                                        | True                      | 
+ 165 |                                          | True                      | 
+ 166 | /* Creates listen sockets (in fds) bound | True                      | 
+ 167 |  * and returns numerically max fd.       | True                      | 
+ 168 |  */                                      | True                      | 
+ 169 | static unsigned init_sockets(char **ifac | True                      | 
+ 170 | {                                        | True                      | 
+ 171 |  unsigned i, n;                          | True                      | 
+ 172 |                                          | True                      | 
+ 173 |  n = 0;                                  | True                      | 
+ 174 |  for (i = 0; i < num_clients; i++) {     | True                      | 
+ 175 |   fds[i] = udhcp_listen_socket(/*INADDR_ | True                      | 
+ 176 |   if (n < fds[i])                        | True                      | 
+ 177 |    n = fds[i];                           | True                      | 
+ 178 |  }                                       | True                      | 
+ 179 |  return n;                               | True                      | 
+ 180 | }                                        | True                      | 
+ 181 |                                          | True                      | 
+ 182 | static int sendto_ip4(int sock, const vo | True                      | 
+ 183 | {                                        | True                      | 
+ 184 |  int err;                                | True                      | 
+ 185 |                                          | True                      | 
+ 186 |  errno = 0;                              | True                      | 
+ 187 |  err = sendto(sock, msg, msg_len, 0, (st | True                      | 
+ 188 |  err -= msg_len;                         | True                      | 
+ 189 |  if (err)                                | True                      | 
+ 190 |   bb_simple_perror_msg("sendto");        | True                      | 
+ 191 |  return err;                             | True                      | 
+ 192 | }                                        | True                      | 
+ 193 |                                          | True                      | 
+ 194 | /**                                      | True                      | 
+ 195 |  * pass_to_server() - forwards dhcp pack | True                      | 
+ 196 |  * p - packet to send                    | True                      | 
+ 197 |  * client - number of the client         | True                      | 
+ 198 |  */                                      | True                      | 
+ 199 | static void pass_to_server(struct dhcp_p | True                      | 
+ 200 |    struct sockaddr_in *client_addr, stru | True                      | 
+ 201 | {                                        | True                      | 
+ 202 |  int type;                               | True                      | 
+ 203 |                                          | True                      | 
+ 204 |  /* check packet_type */                 | True                      | 
+ 205 |  type = get_dhcp_packet_type(p);         | True                      | 
+ 206 | //FIXME: the above does not consider pac | True                      | 
+ 207 |  if (type != DHCPDISCOVER && type != DHC | True                      | 
+ 208 |   && type != DHCPDECLINE && type != DHCP | True                      | 
+ 209 |   && type != DHCPINFORM                  | True                      | 
+ 210 |  ) {                                     | True                      | 
+ 211 |   return;                                | True                      | 
+ 212 |  }                                       | True                      | 
+ 213 |                                          | True                      | 
+ 214 |  /* create new xid entry */              | True                      | 
+ 215 |  xid_add(p->xid, client_addr, from_iface | True                      | 
+ 216 | //TODO: since we key request/reply pairs | True                      | 
+ 217 | //with xid accidentally matching a xid o | True                      | 
+ 218 | //waiting for their replies?             | True                      | 
+ 219 |                                          | True                      | 
+ 220 |  /* forward request to server */         | True                      | 
+ 221 |  /* note that we send from fds[0] which  | True                      | 
+ 222 |   * IOW: we send _from_ SERVER_PORT! Alt | True                      | 
+ 223 |   * RFC 1542 not only allows, but prescr | True                      | 
+ 224 |   */                                     | True                      | 
+ 225 |  sendto_ip4(fds[0], p, packet_len, serve | True                      | 
+ 226 | }                                        | True                      | 
+ 227 |                                          | True                      | 
+ 228 | /**                                      | True                      | 
+ 229 |  * pass_to_client() - forwards dhcp pack | True                      | 
+ 230 |  * p - packet to send                    | True                      | 
+ 231 |  */                                      | True                      | 
+ 232 | static void pass_to_client(struct dhcp_p | True                      | 
+ 233 | {                                        | True                      | 
+ 234 |  int type;                               | True                      | 
+ 235 |  struct xid_item *item;                  | True                      | 
+ 236 |                                          | True                      | 
+ 237 |  /* check packet type */                 | True                      | 
+ 238 |  type = get_dhcp_packet_type(p);         | True                      | 
+ 239 | //FIXME: the above does not consider pac | True                      | 
+ 240 |  if (type != DHCPOFFER && type != DHCPAC | True                      | 
+ 241 |   return;                                | True                      | 
+ 242 |  }                                       | True                      | 
+ 243 |                                          | True                      | 
+ 244 |  /* check xid */                         | True                      | 
+ 245 |  item = xid_find(p->xid);                | True                      | 
+ 246 |  if (!item) {                            | True                      | 
+ 247 |   return;                                | True                      | 
+ 248 |  }                                       | True                      | 
+ 249 | //NB: RFC 1542 section 4.1 seems to envi | True                      | 
+ 250 | //relay agents use giaddr (dhcp_msg.gate | True                      | 
+ 251 | //to find out on which interface to repl | True                      | 
+ 252 | //(server is meant to copy giaddr from o | True                      | 
+ 253 | //Above, we don't use that logic, instea | True                      | 
+ 254 |                                          | True                      | 
+ 255 | //TODO: also do it if (p->flags & htons( | True                      | 
+ 256 |  if (item->ip.sin_addr.s_addr == htonl(I | True                      | 
+ 257 |   item->ip.sin_addr.s_addr = htonl(INADD | True                      | 
+ 258 |                                          | True                      | 
+ 259 |  sendto_ip4(fds[item->iface_no], p, pack | True                      | 
+ 260 |  /* ^^^ if send error occurred, we can't | True                      | 
+ 261 |                                          | True                      | 
+ 262 |  /* remove xid entry */                  | True                      | 
+ 263 |  xid_del(p->xid);                        | True                      | 
+ 264 | }                                        | True                      | 
+ 265 |                                          | True                      | 
+ 266 | int dhcprelay_main(int argc, char **argv | True                      | 
+ 267 | int dhcprelay_main(int argc UNUSED_PARAM | True                      | 
+ 268 | {                                        | True                      | 
+ 269 |  struct sockaddr_in server_addr;         | True                      | 
+ 270 |  char **iface_list;                      | True                      | 
+ 271 |  int *fds;                               | True                      | 
+ 272 |  unsigned num_sockets, max_socket;       | True                      | 
+ 273 |  uint32_t our_nip;                       | True                      | 
+ 274 |                                          | True                      | 
+ 275 |  INIT_G();                               | True                      | 
+ 276 |                                          | True                      | 
+ 277 |  server_addr.sin_family = AF_INET;       | True                      | 
+ 278 |  server_addr.sin_addr.s_addr = htonl(INA | True                      | 
+ 279 |  server_addr.sin_port = htons(SERVER_POR | True                      | 
+ 280 |                                          | True                      | 
+ 281 |  /* dhcprelay CLIENT_IFACE1[,CLIENT_IFAC | True                      | 
+ 282 |  if (!argv[1] || !argv[2])               | True                      | 
+ 283 |   bb_show_usage();                       | True                      | 
+ 284 |  if (argv[3]) {                          | True                      | 
+ 285 |   if (!inet_aton(argv[3], &server_addr.s | True                      | 
+ 286 |    bb_simple_perror_msg_and_die("bad ser | True                      | 
+ 287 |  }                                       | True                      | 
+ 288 |                                          | True                      | 
+ 289 |  iface_list = make_iface_list(argv + 1,  | True                      | 
+ 290 |                                          | True                      | 
+ 291 |  fds = xmalloc(num_sockets * sizeof(fds[ | True                      | 
+ 292 |                                          | True                      | 
+ 293 |  /* Create sockets and bind one to every | True                      | 
+ 294 |  max_socket = init_sockets(iface_list, n | True                      | 
+ 295 |                                          | True                      | 
+ 296 |  /* Get our IP on server_iface */        | True                      | 
+ 297 |  if (udhcp_read_interface(argv[2], NULL, | True                      | 
+ 298 |   return 1;                              | True                      | 
+ 299 |                                          | True                      | 
+ 300 |  /* Main loop */                         | True                      | 
+ 301 |  while (1) {                             | True                      | 
+ 302 | // reinit stuff from time to time? go ba | True                      | 
+ 303 | // every N minutes?                      | True                      | 
+ 304 |   fd_set rfds;                           | True                      | 
+ 305 |   struct timeval tv;                     | True                      | 
+ 306 |   unsigned i;                            | True                      | 
+ 307 |                                          | True                      | 
+ 308 |   FD_ZERO(&rfds);                        | True                      | 
+ 309 |   for (i = 0; i < num_sockets; i++)      | True                      | 
+ 310 |    FD_SET(fds[i], &rfds);                | True                      | 
+ 311 |   tv.tv_sec = SELECT_TIMEOUT;            | True                      | 
+ 312 |   tv.tv_usec = 0;                        | True                      | 
+ 313 |   if (select(max_socket + 1, &rfds, NULL | True                      | 
+ 314 |    int packlen;                          | True                      | 
+ 315 |    struct dhcp_packet dhcp_msg;          | True                      | 
+ 316 |                                          | True                      | 
+ 317 |    /* from server */                     | True                      | 
+ 318 |    if (FD_ISSET(fds[0], &rfds)) {        | True                      | 
+ 319 |     packlen = udhcp_recv_kernel_packet(& | True                      | 
+ 320 | //NB: we do not check source port here.  | True                      | 
+ 321 | //It should be SERVER_PORT.              | True                      | 
+ 322 |     if (packlen > 0) {                   | True                      | 
+ 323 |      pass_to_client(&dhcp_msg, packlen,  | True                      | 
+ 324 |     }                                    | True                      | 
+ 325 |    }                                     | True                      | 
+ 326 |                                          | True                      | 
+ 327 |    /* from clients */                    | True                      | 
+ 328 |    for (i = 1; i < num_sockets; i++) {   | True                      | 
+ 329 |     struct sockaddr_in client_addr;      | True                      | 
+ 330 |     socklen_t addr_size;                 | True                      | 
+ 331 |                                          | True                      | 
+ 332 |     if (!FD_ISSET(fds[i], &rfds))        | True                      | 
+ 333 |      continue;                           | True                      | 
+ 334 |                                          | True                      | 
+ 335 |     addr_size = sizeof(client_addr);     | True                      | 
+ 336 |     packlen = recvfrom(fds[i], &dhcp_msg | True                      | 
+ 337 |       (struct sockaddr *)(&client_addr), | True                      | 
+ 338 |     if (packlen <= 0)                    | True                      | 
+ 339 |      continue;                           | True                      | 
+ 340 | //NB: we do not check source port here.  | True                      | 
+ 341 | //It should be CLIENT_PORT for clients.  | True                      | 
+ 342 | //It can be SERVER_PORT for relay agents | True                      | 
+ 343 | //but is it even supported to chain rela | True                      | 
+ 344 | //(we still copy client_addr.port and us | True                      | 
+ 345 |                                          | True                      | 
+ 346 |     /* Get our IP on corresponding clien | True                      | 
+ 347 | // RFC 1542                              | True                      | 
+ 348 | // 4.1 General BOOTP Processing for Rela | True                      | 
+ 349 | // 4.1.1 BOOTREQUEST Messages            | True                      | 
+ 350 | //   If the relay agent does decide to r | True                      | 
+ 351 | //   the 'giaddr' ("gateway" IP address) | True                      | 
+ 352 | //   the relay agent MUST fill this fiel | True                      | 
+ 353 | //   interface on which the request was  | True                      | 
+ 354 | //   more than one IP address logically  | True                      | 
+ 355 | //   agent SHOULD choose one IP address  | True                      | 
+ 356 | //   use it consistently for all BOOTP m | True                      | 
+ 357 | //   'giaddr' field contains some non-ze | True                      | 
+ 358 | //   NOT be modified.  The relay agent M | True                      | 
+ 359 | //   fill the 'giaddr' field with a broa | True                      | 
+ 360 | //   [1] (Section 8, sixth paragraph).   | True                      | 
+ 361 |                                          | True                      | 
+ 362 | // but why? what if server can't route s | True                      | 
+ 363 |                                          | True                      | 
+ 364 | // 4.1.2 BOOTREPLY Messages              | True                      | 
+ 365 | //   BOOTP relay agents relay BOOTREPLY  | True                      | 
+ 366 | //   It is the responsibility of BOOTP s | True                      | 
+ 367 | //   directly to the relay agent identif | True                      | 
+ 368 | // (yeah right, unless it is impossible. | True                      | 
+ 369 | //   Therefore, a relay agent may assume | True                      | 
+ 370 | //   receives are intended for BOOTP cli | True                      | 
+ 371 | //   networks.                           | True                      | 
+ 372 | //                                       | True                      | 
+ 373 | //   When a relay agent receives a BOOTR | True                      | 
+ 374 | //   the BOOTP 'giaddr', 'yiaddr', 'chad | True                      | 
+ 375 | //   These fields should provide adequat | True                      | 
+ 376 | //   to deliver the BOOTREPLY message to | True                      | 
+ 377 | //                                       | True                      | 
+ 378 | //   The 'giaddr' field can be used to i | True                      | 
+ 379 | //   which the reply must be sent (i.e., | True                      | 
+ 380 | //   connected to the same network as th | True                      | 
+ 381 | //   of the 'giaddr' field does not matc | True                      | 
+ 382 | //   directly-connected logical interfac | True                      | 
+ 383 | //   silently discarded.                 | True                      | 
+ 384 |     if (udhcp_read_interface(iface_list[ | True                      | 
+ 385 |      /* Fall back to our IP on server if | True                      | 
+ 386 | // this makes more sense!                | True                      | 
+ 387 |      dhcp_msg.gateway_nip = our_nip;     | True                      | 
+ 388 |     }                                    | True                      | 
+ 389 | // maybe dhcp_msg.hops++? drop packets w | True                      | 
+ 390 |     pass_to_server(&dhcp_msg, packlen, i | True                      | 
+ 391 |    }                                     | True                      | 
+ 392 |   }                                      | True                      | 
+ 393 |   xid_expire();                          | True                      | 
+ 394 |  } /* while (1) */                       | True                      | 
+ 395 |                                          | True                      | 
+ 396 |  /* return 0; - not reached */           | True                      | 
+ 397 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +118MB, 386ms             | 

@@ -1,0 +1,716 @@
+FILE: data/raw/busybox-1.38.0/networking/tcpudp.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                        | 
+-----+------------------------------------------+----------------------------------------------+
+   1 | /* Based on ipsvd utilities written by G | True                                         | 
+   2 |  * which are released into public domain | True                                         | 
+   3 |  * Homepage: http://smarden.sunsite.dk/i | True                                         | 
+   4 |  *                                       | True                                         | 
+   5 |  * Copyright (C) 2007 Denys Vlasenko.    | True                                         | 
+   6 |  *                                       | True                                         | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                                         | 
+   8 |  */                                      | True                                         | 
+   9 |                                          | True                                         | 
+  10 | /* Based on ipsvd-0.12.1. This tcpsvd ac | True                                         | 
+  11 |  * which are supported by one from ipsvd | True                                         | 
+  12 |  * functional. See help text at the end  | True                                         | 
+  13 |  *                                       | True                                         | 
+  14 |  * Code inside "#ifdef SSLSVD" is for ss | True                                         | 
+  15 |  *                                       | True                                         | 
+  16 |  * Busybox version exports TCPLOCALADDR  | True                                         | 
+  17 |  * TCPLOCALIP + TCPLOCALPORT pair. ADDR  | True                                         | 
+  18 |  * (which is "struct sockaddr_XXX". Port | True                                         | 
+  19 |  * it's just a part of (AF_INET[6]) sock | True                                         | 
+  20 |  *                                       | True                                         | 
+  21 |  * TCPORIGDSTADDR is Busybox-specific ad | True                                         | 
+  22 |  *                                       | True                                         | 
+  23 |  * udp server is hacked up by reusing TC | True                                         | 
+  24 |  * limitation inherent in Unix DGRAM soc | True                                         | 
+  25 |  * - local IP address is retrieved (usin | True                                         | 
+  26 |  *   child's socket is not bound to it ( | True                                         | 
+  27 |  *   already bound socket). Thus it stil | True                                         | 
+  28 |  *   with wrong source IP...             | True                                         | 
+  29 |  * - don't know how to retrieve ORIGDST  | True                                         | 
+  30 |  */                                      | True                                         | 
+  31 | //config:config TCPSVD                   | True                                         | 
+  32 | //config: bool "tcpsvd (14 kb)"          | True                                         | 
+  33 | //config: default y                      | True                                         | 
+  34 | //config: help                           | True                                         | 
+  35 | //config: tcpsvd listens on a TCP port a | True                                         | 
+  36 | //config: connection.                    | True                                         | 
+  37 | //config:                                | True                                         | 
+  38 | //config:config UDPSVD                   | True                                         | 
+  39 | //config: bool "udpsvd (13 kb)"          | True                                         | 
+  40 | //config: default y                      | True                                         | 
+  41 | //config: help                           | True                                         | 
+  42 | //config: udpsvd listens on an UDP port  | True                                         | 
+  43 | //config: connection.                    | True                                         | 
+  44 |                                          | True                                         | 
+  45 | //applet:IF_TCPSVD(APPLET_ODDNAME(tcpsvd | True                                         | 
+  46 | //applet:IF_UDPSVD(APPLET_ODDNAME(udpsvd | True                                         | 
+  47 |                                          | True                                         | 
+  48 | //kbuild:lib-$(CONFIG_TCPSVD) += tcpudp. | True                                         | 
+  49 | //kbuild:lib-$(CONFIG_UDPSVD) += tcpudp. | True                                         | 
+  50 |                                          | True                                         | 
+  51 | //usage:#define tcpsvd_trivial_usage     | True                                         | 
+  52 | //usage:       "[-hEv] [-c N] [-C N[:MSG | True                                         | 
+  53 | /* with not-implemented options: */      | True                                         | 
+  54 | /* //usage:    "[-hpEvv] [-c N] [-C N[:M | True                                         | 
+  55 | //usage:#define tcpsvd_full_usage "\n\n" | True                                         | 
+  56 | //usage:       "Create TCP socket, bind  | True                                         | 
+  57 | //usage:       "Run PROG for each connec | True                                         | 
+  58 | //usage:     "\n IP PORT  IP:PORT to lis | True                                         | 
+  59 | //usage:     "\n PROG ARGS Program to ru | True                                         | 
+  60 | //usage:     "\n -u USER[:GRP] Change to | True                                         | 
+  61 | //usage:     "\n -c N  Up to N connectio | True                                         | 
+  62 | //usage:     "\n -b N  Allow backlog of  | True                                         | 
+  63 | //usage:     "\n -C N[:MSG] Allow only u | True                                         | 
+  64 | //usage:     "\n   new connections from  | True                                         | 
+  65 | //usage:     "\n   immediately, MSG is w | True                                         | 
+  66 | //usage:     "\n -E  Don't set up enviro | True                                         | 
+  67 | //usage:     "\n -h  Look up peer's host | True                                         | 
+  68 | //usage:     "\n -l NAME  Local hostname | True                                         | 
+  69 | //usage:     "\n -v  Verbose"            | True                                         | 
+  70 | //usage:     "\n"                        | True                                         | 
+  71 | //usage:     "\nEnvironment if no -E:"   | True                                         | 
+  72 | //usage:     "\nPROTO='TCP'"             | True                                         | 
+  73 | //usage:     "\nTCPREMOTEADDR='ip:port'" | True                                         | 
+  74 | //usage:     "\nTCPLOCALADDR='ip:port'"  | True                                         | 
+  75 | //usage:     "\nTCPORIGDSTADDR='ip:port' | True                                         | 
+  76 | //usage:     "\n Useful for REDIRECTed-t | True                                         | 
+  77 | //usage:     "\n iptables -t nat -A PRER | True                                         | 
+  78 | //usage:     "\nTCPCONCURRENCY=num_of_co | True                                         | 
+  79 | //usage:     "\nIf -h:"                  | True                                         | 
+  80 | //usage:     "\nTCPLOCALHOST='hostname'  | True                                         | 
+  81 | //usage:     "\nTCPREMOTEHOST='hostname' | True                                         | 
+  82 |                                          | True                                         | 
+  83 | //usage:                                 | True                                         | 
+  84 | //usage:#define udpsvd_trivial_usage     | True                                         | 
+  85 | //usage:       "[-hEv] [-c N] [-u USER]  | True                                         | 
+  86 | //usage:#define udpsvd_full_usage "\n\n" | True                                         | 
+  87 | //usage:       "Create UDP socket, bind  | True                                         | 
+  88 | //usage:       "Run PROG for each packet | True                                         | 
+  89 | //usage:       "peer ip:port to it.\n"   | True                                         | 
+  90 | //usage:     "\n IP PORT  IP:PORT to lis | True                                         | 
+  91 | //usage:     "\n PROG ARGS Program to ru | True                                         | 
+  92 | //usage:     "\n -u USER[:GRP] Change to | True                                         | 
+  93 | //usage:     "\n -c N  Up to N connectio | True                                         | 
+  94 | //usage:     "\n -E  Don't set up enviro | True                                         | 
+  95 | //usage:     "\n -h  Look up peer's host | True                                         | 
+  96 | //usage:     "\n -l NAME  Local hostname | True                                         | 
+  97 | //usage:     "\n -v  Verbose"            | True                                         | 
+  98 | //usage:     "\n"                        | True                                         | 
+  99 | //usage:     "\nEnvironment if no -E:"   | True                                         | 
+ 100 | //usage:     "\nPROTO='UDP'"             | True                                         | 
+ 101 | //usage:     "\nUDPREMOTEADDR='ip:port'" | True                                         | 
+ 102 | //usage:     "\nUDPLOCALADDR='ip:port'"  | True                                         | 
+ 103 | //usage:     "\nIf -h:"                  | True                                         | 
+ 104 | //usage:     "\nUDPLOCALHOST='hostname'  | True                                         | 
+ 105 | //usage:     "\nUDPREMOTEHOST='hostname' | True                                         | 
+ 106 |                                          | True                                         | 
+ 107 | #include "libbb.h"                       | True                                         | 
+ 108 | #include "common_bufsiz.h"               | True                                         | 
+ 109 |                                          | True                                         | 
+ 110 | #ifdef __linux__                         | True                                         | 
+ 111 | /* from linux/netfilter_ipv4.h: */       | (__linux__)                                  | 
+ 112 | # undef  SO_ORIGINAL_DST                 | (__linux__)                                  | 
+ 113 | # define SO_ORIGINAL_DST 80              | (__linux__)                                  | 
+ 114 | #endif                                   | True                                         | 
+ 115 |                                          | True                                         | 
+ 116 | // TODO: move into this file:            | True                                         | 
+ 117 | #include "tcpudp_perhost.h"              | True                                         | 
+ 118 |                                          | True                                         | 
+ 119 | #ifdef SSLSVD                            | True                                         | 
+ 120 | #include "matrixSsl.h"                   | (SSLSVD)                                     | 
+ 121 | #include "ssl_io.h"                      | (SSLSVD)                                     | 
+ 122 | #endif                                   | True                                         | 
+ 123 |                                          | True                                         | 
+ 124 | struct globals {                         | True                                         | 
+ 125 |  unsigned verbose;                       | True                                         | 
+ 126 |  unsigned max_per_host;                  | True                                         | 
+ 127 |  unsigned cur_per_host;                  | True                                         | 
+ 128 |  unsigned cnum;                          | True                                         | 
+ 129 |  unsigned cmax;                          | True                                         | 
+ 130 |  struct hcc *cc;                         | True                                         | 
+ 131 |  char **env_cur;                         | True                                         | 
+ 132 |  char *env_var[1]; /* actually bigger */ | True                                         | 
+ 133 | } FIX_ALIASING;                          | True                                         | 
+ 134 | #define G (*(struct globals*)bb_common_b | True                                         | 
+ 135 | #define verbose      (G.verbose     )    | True                                         | 
+ 136 | #define max_per_host (G.max_per_host)    | True                                         | 
+ 137 | #define cur_per_host (G.cur_per_host)    | True                                         | 
+ 138 | #define cnum         (G.cnum        )    | True                                         | 
+ 139 | #define cmax         (G.cmax        )    | True                                         | 
+ 140 | #define env_cur      (G.env_cur     )    | True                                         | 
+ 141 | #define env_var      (G.env_var     )    | True                                         | 
+ 142 | #define INIT_G() do { \                  | True                                         | 
+ 143 |  setup_common_bufsiz(); \                | True                                         | 
+ 144 |  cmax = 30; \                            | True                                         | 
+ 145 |  env_cur = &env_var[0]; \                | True                                         | 
+ 146 | } while (0)                              | True                                         | 
+ 147 |                                          | True                                         | 
+ 148 |                                          | True                                         | 
+ 149 | /* We have to be careful about leaking m | True                                         | 
+ 150 | static void xsetenv_plain(const char *n, | True                                         | 
+ 151 | {                                        | True                                         | 
+ 152 |  char *var = xasprintf("%s=%s", n, v);   | True                                         | 
+ 153 |  *env_cur++ = var;                       | True                                         | 
+ 154 |  putenv(var);                            | True                                         | 
+ 155 | }                                        | True                                         | 
+ 156 |                                          | True                                         | 
+ 157 | static void xsetenv_proto(const char *pr | True                                         | 
+ 158 | {                                        | True                                         | 
+ 159 |  char *var = xasprintf("%s%s=%s", proto, | True                                         | 
+ 160 |  *env_cur++ = var;                       | True                                         | 
+ 161 |  putenv(var);                            | True                                         | 
+ 162 | }                                        | True                                         | 
+ 163 |                                          | True                                         | 
+ 164 | static void undo_xsetenv(void)           | True                                         | 
+ 165 | {                                        | True                                         | 
+ 166 |  char **pp = env_cur = &env_var[0];      | True                                         | 
+ 167 |  while (*pp) {                           | True                                         | 
+ 168 |   char *var = *pp;                       | True                                         | 
+ 169 |   bb_unsetenv_and_free(var);             | True                                         | 
+ 170 |   *pp++ = NULL;                          | True                                         | 
+ 171 |  }                                       | True                                         | 
+ 172 | }                                        | True                                         | 
+ 173 |                                          | True                                         | 
+ 174 | static void sig_term_handler(int sig)    | True                                         | 
+ 175 | {                                        | True                                         | 
+ 176 |  if (verbose)                            | True                                         | 
+ 177 |   bb_error_msg("got signal %u, exit", si | True                                         | 
+ 178 |  kill_myself_with_sig(sig);              | True                                         | 
+ 179 | }                                        | True                                         | 
+ 180 |                                          | True                                         | 
+ 181 | /* Little bloated, but tries to give acc | True                                         | 
+ 182 |  * Makes easier to spot segfaulting chil | True                                         | 
+ 183 | static void print_waitstat(unsigned pid, | True                                         | 
+ 184 | {                                        | True                                         | 
+ 185 |  unsigned e = 0;                         | True                                         | 
+ 186 |  const char *cause = "?exit";            | True                                         | 
+ 187 |                                          | True                                         | 
+ 188 |  if (WIFEXITED(wstat)) {                 | True                                         | 
+ 189 |   cause++;                               | True                                         | 
+ 190 |   e = WEXITSTATUS(wstat);                | True                                         | 
+ 191 |  } else if (WIFSIGNALED(wstat)) {        | True                                         | 
+ 192 |   cause = "signal";                      | True                                         | 
+ 193 |   e = WTERMSIG(wstat);                   | True                                         | 
+ 194 |  }                                       | True                                         | 
+ 195 |  bb_error_msg("end %d %s %d", pid, cause | True                                         | 
+ 196 | }                                        | True                                         | 
+ 197 |                                          | True                                         | 
+ 198 | /* Must match getopt32 in main! */       | True                                         | 
+ 199 | enum {                                   | True                                         | 
+ 200 |  OPT_c = (1 << 0),                       | True                                         | 
+ 201 |  OPT_C = (1 << 1),                       | True                                         | 
+ 202 |  OPT_i = (1 << 2),                       | True                                         | 
+ 203 |  OPT_x = (1 << 3),                       | True                                         | 
+ 204 |  OPT_u = (1 << 4),                       | True                                         | 
+ 205 |  OPT_l = (1 << 5),                       | True                                         | 
+ 206 |  OPT_E = (1 << 6),                       | True                                         | 
+ 207 |  OPT_b = (1 << 7),                       | True                                         | 
+ 208 |  OPT_h = (1 << 8),                       | True                                         | 
+ 209 |  OPT_p = (1 << 9),                       | True                                         | 
+ 210 |  OPT_t = (1 << 10),                      | True                                         | 
+ 211 |  OPT_v = (1 << 11),                      | True                                         | 
+ 212 |  OPT_V = (1 << 12),                      | True                                         | 
+ 213 |  OPT_U = (1 << 13), /* from here: sslsvd | True                                         | 
+ 214 |  OPT_slash = (1 << 14),                  | True                                         | 
+ 215 |  OPT_Z = (1 << 15),                      | True                                         | 
+ 216 |  OPT_K = (1 << 16),                      | True                                         | 
+ 217 | };                                       | True                                         | 
+ 218 |                                          | True                                         | 
+ 219 | static void if_verbose_print_connection_ | True                                         | 
+ 220 | {                                        | True                                         | 
+ 221 |  if (verbose) {                          | True                                         | 
+ 222 |   /* "only 1 client max" desn't need thi | True                                         | 
+ 223 |   if (cmax > 1)                          | True                                         | 
+ 224 |    bb_error_msg("status %u/%u", cnum, cm | True                                         | 
+ 225 |  }                                       | True                                         | 
+ 226 | }                                        | True                                         | 
+ 227 |                                          | True                                         | 
+ 228 | /* SIGCHLD handler is reentrancy-safe be | True                                         | 
+ 229 |  * only over accept() or recvfrom() call | True                                         | 
+ 230 |  * or printouts. Do need to save/restore | True                                         | 
+ 231 |  * these syscalls' error code, if any.   | True                                         | 
+ 232 |  */                                      | True                                         | 
+ 233 | static void sig_child_handler(int sig UN | True                                         | 
+ 234 | {                                        | True                                         | 
+ 235 |  int wstat;                              | True                                         | 
+ 236 |  pid_t pid;                              | True                                         | 
+ 237 |  int sv_errno = errno;                   | True                                         | 
+ 238 |                                          | True                                         | 
+ 239 |  while ((pid = wait_any_nohang(&wstat))  | True                                         | 
+ 240 |   if (max_per_host)                      | True                                         | 
+ 241 |    ipsvd_perhost_remove(G.cc, pid);      | True                                         | 
+ 242 |   if (cnum)                              | True                                         | 
+ 243 |    cnum--;                               | True                                         | 
+ 244 |   if (verbose)                           | True                                         | 
+ 245 |    print_waitstat(pid, wstat);           | True                                         | 
+ 246 |  }                                       | True                                         | 
+ 247 |  if_verbose_print_connection_status();   | True                                         | 
+ 248 |  errno = sv_errno;                       | True                                         | 
+ 249 | }                                        | True                                         | 
+ 250 |                                          | True                                         | 
+ 251 | int tcpudpsvd_main(int argc, char **argv | True                                         | 
+ 252 | int tcpudpsvd_main(int argc UNUSED_PARAM | True                                         | 
+ 253 | {                                        | True                                         | 
+ 254 |  char *str_C, *str_t;                    | True                                         | 
+ 255 |  char *user;                             | True                                         | 
+ 256 |  struct hcc *hccp;                       | True                                         | 
+ 257 |  const char *instructs;                  | True                                         | 
+ 258 |  char *msg_per_host = NULL;              | True                                         | 
+ 259 |  unsigned len_per_host = len_per_host; / | True                                         | 
+ 260 | #ifndef SSLSVD                           | True                                         | 
+ 261 |  struct bb_uidgid_t ugid;                | !(SSLSVD)                                    | 
+ 262 | #endif                                   | True                                         | 
+ 263 |  bool tcp;                               | True                                         | 
+ 264 |  uint16_t local_port;                    | True                                         | 
+ 265 |  char *preset_local_hostname = NULL;     | True                                         | 
+ 266 |  char *remote_hostname = remote_hostname | True                                         | 
+ 267 |  char *remote_addr = remote_addr; /* for | True                                         | 
+ 268 |  len_and_sockaddr *lsa;                  | True                                         | 
+ 269 |  len_and_sockaddr local, remote;         | True                                         | 
+ 270 |  socklen_t sa_len;                       | True                                         | 
+ 271 |  int pid;                                | True                                         | 
+ 272 |  int sock;                               | True                                         | 
+ 273 |  int conn;                               | True                                         | 
+ 274 |  unsigned backlog = 20;                  | True                                         | 
+ 275 |  unsigned opts;                          | True                                         | 
+ 276 |                                          | True                                         | 
+ 277 |  INIT_G();                               | True                                         | 
+ 278 |                                          | True                                         | 
+ 279 |  tcp = (applet_name[0] == 't');          | True                                         | 
+ 280 |                                          | True                                         | 
+ 281 |  /* "+": stop on first non-option */     | True                                         | 
+ 282 | #ifdef SSLSVD                            | True                                         | 
+ 283 |  opts = getopt32(argv, "^+"              | (SSLSVD)                                     | 
+ 284 |   "c:+C:i:x:u:l:Eb:+hpt:vU:/:Z:K:" /* -c | (SSLSVD)                                     | 
+ 285 |   "\0"                                   | (SSLSVD)                                     | 
+ 286 |   /* 3+ args, -i at most once, -p implie | (SSLSVD)                                     | 
+ 287 |   "-3:i--i:ph:vv",                       | (SSLSVD)                                     | 
+ 288 |   &cmax, &str_C, &instructs, &instructs, | (SSLSVD)                                     | 
+ 289 |   &backlog, &str_t, &ssluser, &root, &ce | (SSLSVD)                                     | 
+ 290 |  );                                      | (SSLSVD)                                     | 
+ 291 | #else                                    | True                                         | 
+ 292 |  opts = getopt32(argv, "^+"              | !(SSLSVD)                                    | 
+ 293 |   "c:+C:i:x:u:l:Eb:+hpt:v" /* -c NUM, -b | !(SSLSVD)                                    | 
+ 294 |   "\0"                                   | !(SSLSVD)                                    | 
+ 295 |   /* 3+ args, -i at most once, -p implie | !(SSLSVD)                                    | 
+ 296 |   "-3:i--i:ph:vv",                       | !(SSLSVD)                                    | 
+ 297 |   &cmax, &str_C, &instructs, &instructs, | !(SSLSVD)                                    | 
+ 298 |   &backlog, &str_t, &verbose             | !(SSLSVD)                                    | 
+ 299 |  );                                      | !(SSLSVD)                                    | 
+ 300 | #endif                                   | True                                         | 
+ 301 |  if (opts & OPT_C) { /* -C n[:message] * | True                                         | 
+ 302 |   max_per_host = bb_strtou(str_C, &str_C | True                                         | 
+ 303 |   if (str_C[0]) {                        | True                                         | 
+ 304 |    if (str_C[0] != ':')                  | True                                         | 
+ 305 |     bb_show_usage();                     | True                                         | 
+ 306 |    msg_per_host = str_C + 1;             | True                                         | 
+ 307 |    len_per_host = strlen(msg_per_host);  | True                                         | 
+ 308 |   }                                      | True                                         | 
+ 309 |  }                                       | True                                         | 
+ 310 |  if (max_per_host > cmax)                | True                                         | 
+ 311 |   max_per_host = cmax;                   | True                                         | 
+ 312 |  if (opts & OPT_u) {                     | True                                         | 
+ 313 |   xget_uidgid(&ugid, user);              | True                                         | 
+ 314 |  }                                       | True                                         | 
+ 315 | #ifdef SSLSVD                            | True                                         | 
+ 316 |  if (opts & OPT_U) ssluser = optarg;     | (SSLSVD)                                     | 
+ 317 |  if (opts & OPT_slash) root = optarg;    | (SSLSVD)                                     | 
+ 318 |  if (opts & OPT_Z) cert = optarg;        | (SSLSVD)                                     | 
+ 319 |  if (opts & OPT_K) key = optarg;         | (SSLSVD)                                     | 
+ 320 | #endif                                   | True                                         | 
+ 321 |  argv += optind;                         | True                                         | 
+ 322 |  if (!argv[0][0] || LONE_CHAR(argv[0], ' | True                                         | 
+ 323 |   argv[0] = (char*)"0.0.0.0";            | True                                         | 
+ 324 |                                          | True                                         | 
+ 325 |  /* Per-IP flood protection is not thoug | True                                         | 
+ 326 |  if (!tcp)                               | True                                         | 
+ 327 |   max_per_host = 0;                      | True                                         | 
+ 328 |                                          | True                                         | 
+ 329 |  bb_sanitize_stdio(); /* fd# 0,1,2 must  | True                                         | 
+ 330 |                                          | True                                         | 
+ 331 | #ifdef SSLSVD                            | True                                         | 
+ 332 |  sslser = user;                          | (SSLSVD)                                     | 
+ 333 |  client = 0;                             | (SSLSVD)                                     | 
+ 334 |  if ((getuid() == 0) && !(opts & OPT_u)) | (SSLSVD)                                     | 
+ 335 |   xfunc_error_retval = 100;              | (SSLSVD)                                     | 
+ 336 |   bb_simple_error_msg_and_die(bb_msg_you | (SSLSVD)                                     | 
+ 337 |  }                                       | (SSLSVD)                                     | 
+ 338 |  if (opts & OPT_u)                       | (SSLSVD)                                     | 
+ 339 |   if (!uidgid_get(&sslugid, ssluser, 1)) | (SSLSVD)                                     | 
+ 340 |    if (errno) {                          | (SSLSVD)                                     | 
+ 341 |     bb_perror_msg_and_die("can't get use | (SSLSVD)                                     | 
+ 342 |    }                                     | (SSLSVD)                                     | 
+ 343 |    bb_error_msg_and_die("unknown user/gr | (SSLSVD)                                     | 
+ 344 |   }                                      | (SSLSVD)                                     | 
+ 345 |  if (!cert) cert = "./cert.pem";         | (SSLSVD)                                     | 
+ 346 |  if (!key) key = cert;                   | (SSLSVD)                                     | 
+ 347 |  if (matrixSslOpen() < 0)                | (SSLSVD)                                     | 
+ 348 |   fatal("can't initialize ssl");         | (SSLSVD)                                     | 
+ 349 |  if (matrixSslReadKeys(&keys, cert, key, | (SSLSVD)                                     | 
+ 350 |   if (client)                            | (SSLSVD)                                     | 
+ 351 |    fatal("can't read cert, key, or ca fi | (SSLSVD)                                     | 
+ 352 |   fatal("can't read cert or key file");  | (SSLSVD)                                     | 
+ 353 |  }                                       | (SSLSVD)                                     | 
+ 354 |  if (matrixSslNewSession(&ssl, keys, 0,  | (SSLSVD)                                     | 
+ 355 |   fatal("can't create ssl session");     | (SSLSVD)                                     | 
+ 356 | #endif                                   | True                                         | 
+ 357 |                                          | True                                         | 
+ 358 |  sig_block(SIGCHLD);                     | True                                         | 
+ 359 |  signal(SIGCHLD, sig_child_handler);     | True                                         | 
+ 360 |  bb_signals(BB_FATAL_SIGS, sig_term_hand | True                                         | 
+ 361 |  signal(SIGPIPE, SIG_IGN);               | True                                         | 
+ 362 |                                          | True                                         | 
+ 363 |  if (max_per_host)                       | True                                         | 
+ 364 |   G.cc = ipsvd_perhost_init(cmax);       | True                                         | 
+ 365 |                                          | True                                         | 
+ 366 |  local_port = bb_lookup_port(argv[1], tc | True                                         | 
+ 367 |  lsa = xhost2sockaddr(argv[0], local_por | True                                         | 
+ 368 |  argv += 2;                              | True                                         | 
+ 369 |                                          | True                                         | 
+ 370 |  sock = xsocket(lsa->u.sa.sa_family, tcp | True                                         | 
+ 371 |  setsockopt_reuseaddr(sock);             | True                                         | 
+ 372 |  sa_len = lsa->len; /* I presume sockadd | True                                         | 
+ 373 |  xbind(sock, &lsa->u.sa, sa_len);        | True                                         | 
+ 374 |  if (tcp) {                              | True                                         | 
+ 375 |   xlisten(sock, backlog);                | True                                         | 
+ 376 |   close_on_exec_on(sock);                | True                                         | 
+ 377 |  } else { /* udp: needed for recv_from_t | True                                         | 
+ 378 |   socket_want_pktinfo(sock);             | True                                         | 
+ 379 |  }                                       | True                                         | 
+ 380 |  /* ndelay_off(sock); - it is the defaul | True                                         | 
+ 381 |                                          | True                                         | 
+ 382 | #ifndef SSLSVD                           | True                                         | 
+ 383 |  if (opts & OPT_u) {                     | !(SSLSVD)                                    | 
+ 384 |   /* drop permissions */                 | !(SSLSVD)                                    | 
+ 385 |   xsetgid(ugid.gid);                     | !(SSLSVD)                                    | 
+ 386 |   xsetuid(ugid.uid);                     | !(SSLSVD)                                    | 
+ 387 |  }                                       | !(SSLSVD)                                    | 
+ 388 | #endif                                   | True                                         | 
+ 389 |                                          | True                                         | 
+ 390 |  if (verbose) {                          | True                                         | 
+ 391 |   char *addr = xmalloc_sockaddr2dotted(& | True                                         | 
+ 392 |   if (opts & OPT_u)                      | True                                         | 
+ 393 |    bb_error_msg("listening on %s, starti | True                                         | 
+ 394 |     (unsigned)ugid.uid, (unsigned)ugid.g | True                                         | 
+ 395 |   else                                   | True                                         | 
+ 396 |    bb_error_msg("listening on %s, starti | True                                         | 
+ 397 |   free(addr);                            | True                                         | 
+ 398 |  }                                       | True                                         | 
+ 399 |                                          | True                                         | 
+ 400 |  /* Main accept() loop */                | True                                         | 
+ 401 |                                          | True                                         | 
+ 402 |  again:                                  | True                                         | 
+ 403 |  hccp = NULL;                            | True                                         | 
+ 404 |                                          | True                                         | 
+ 405 |  again1:                                 | True                                         | 
+ 406 |  close(0);                               | True                                         | 
+ 407 |  /* It's important to close(0) _before_  | True                                         | 
+ 408 |   * fd#0 can be a shared connection fd.  | True                                         | 
+ 409 |   * If kept open by us, peer can't detec | True                                         | 
+ 410 |   */                                     | True                                         | 
+ 411 |  while (cnum >= cmax)                    | True                                         | 
+ 412 |   wait_for_any_sig(); /* expecting SIGCH | True                                         | 
+ 413 |                                          | True                                         | 
+ 414 |  again2:                                 | True                                         | 
+ 415 |  sig_unblock(SIGCHLD);                   | True                                         | 
+ 416 |  local.len = remote.len = sa_len;        | True                                         | 
+ 417 |  if (tcp) {                              | True                                         | 
+ 418 |   /* Accept a connection to fd #0 */     | True                                         | 
+ 419 |   conn = accept(sock, &remote.u.sa, &rem | True                                         | 
+ 420 |  } else {                                | True                                         | 
+ 421 |   /* In case recv_from_to won't be able  | True                                         | 
+ 422 |    * Also sets port - recv_from_to is un | True                                         | 
+ 423 |   local = *lsa;                          | True                                         | 
+ 424 |   conn = recv_from_to(sock, NULL, 0, MSG | True                                         | 
+ 425 |     &remote.u.sa, &local.u.sa, sa_len);  | True                                         | 
+ 426 |  }                                       | True                                         | 
+ 427 |  sig_block(SIGCHLD);                     | True                                         | 
+ 428 |  if (conn < 0) {                         | True                                         | 
+ 429 |   if (errno != EINTR)                    | True                                         | 
+ 430 |    bb_simple_perror_msg(tcp ? "accept" : | True                                         | 
+ 431 |   goto again2;                           | True                                         | 
+ 432 |  }                                       | True                                         | 
+ 433 |  xmove_fd(tcp ? conn : sock, 0);         | True                                         | 
+ 434 |                                          | True                                         | 
+ 435 |  if (max_per_host) {                     | True                                         | 
+ 436 |   /* Drop connection immediately if cur_ | True                                         | 
+ 437 |    * (minimizing load under SYN flood) * | True                                         | 
+ 438 |   remote_addr = xmalloc_sockaddr2dotted_ | True                                         | 
+ 439 |   cur_per_host = ipsvd_perhost_add(G.cc, | True                                         | 
+ 440 |   if (cur_per_host > max_per_host) {     | True                                         | 
+ 441 |    /* ipsvd_perhost_add detected that ma | True                                         | 
+ 442 |     * (and did not store ip in connectio | True                                         | 
+ 443 |    free(remote_addr);                    | True                                         | 
+ 444 |    if (msg_per_host) {                   | True                                         | 
+ 445 |     /* don't block or test for errors */ | True                                         | 
+ 446 |     send(0, msg_per_host, len_per_host,  | True                                         | 
+ 447 |    }                                     | True                                         | 
+ 448 |    goto again1;                          | True                                         | 
+ 449 |   }                                      | True                                         | 
+ 450 |   /* NB: remote_addr is not leaked, it i | True                                         | 
+ 451 |  }                                       | True                                         | 
+ 452 |                                          | True                                         | 
+ 453 |  if (!tcp) {                             | True                                         | 
+ 454 |   /* Voodoo magic: making udp sockets ea | True                                         | 
+ 455 |    * packets is not trivial, and I still | True                                         | 
+ 456 |    * I do it 100% right.                 | True                                         | 
+ 457 |    * 1) we have to do it before fork()   | True                                         | 
+ 458 |    * 2) order is important - is it right | True                                         | 
+ 459 |                                          | True                                         | 
+ 460 |   /* Open new non-connected UDP socket f | True                                         | 
+ 461 |   sock = xsocket(lsa->u.sa.sa_family, SO | True                                         | 
+ 462 |   setsockopt_reuseaddr(sock);            | True                                         | 
+ 463 |   /* Make plain write/send work for old  | True                                         | 
+ 464 |    * destination address. This also rest | True                                         | 
+ 465 |    * to ones coming from this remote IP. | True                                         | 
+ 466 |   xconnect(0, &remote.u.sa, sa_len);     | True                                         | 
+ 467 |  /* hole? at this point we have no wildc | True                                         | 
+ 468 |   * can this cause clients to get "port  | True                                         | 
+ 469 |   * Yup, time window is very small, but  | True                                         | 
+ 470 |   /* ..."open new socket", continued */  | True                                         | 
+ 471 |   xbind(sock, &lsa->u.sa, sa_len);       | True                                         | 
+ 472 |   socket_want_pktinfo(sock);             | True                                         | 
+ 473 |                                          | True                                         | 
+ 474 |   /* Doesn't work:                       | True                                         | 
+ 475 |    * we cannot replace fd #0 - we will l | True                                         | 
+ 476 |    * which is already buffered for us! A | True                                         | 
+ 477 |    * instead - it will "intercept" all f | True                                         | 
+ 478 |    * does not expect data coming *from f | True                                         | 
+ 479 | #if 0                                    | True                                         | 
+ 480 |   /* Make it so that local addr is fixed | 0                                            | 
+ 481 |    * and we don't accidentally accept pa | 0                                            | 
+ 482 |   /* NB: we possibly bind to the _very_  | 0                                            | 
+ 483 |    * already bound in parent! This seems | 0                                            | 
+ 484 |    * (otherwise we can move socket to fd | 0                                            | 
+ 485 |   close(0);                              | 0                                            | 
+ 486 |   set_nport(&localp->u.sa, htons(local_p | 0                                            | 
+ 487 |   xmove_fd(xsocket(localp->u.sa.sa_famil | 0                                            | 
+ 488 |   setsockopt_reuseaddr(0); /* crucial */ | 0                                            | 
+ 489 |   xbind(0, &localp->u.sa, localp->len);  | 0                                            | 
+ 490 | #endif                                   | True                                         | 
+ 491 |  }                                       | True                                         | 
+ 492 |                                          | True                                         | 
+ 493 |  pid = vfork();                          | True                                         | 
+ 494 |  if (pid == -1) {                        | True                                         | 
+ 495 |   bb_simple_perror_msg("vfork");         | True                                         | 
+ 496 |   goto again;                            | True                                         | 
+ 497 |  }                                       | True                                         | 
+ 498 |                                          | True                                         | 
+ 499 |  if (pid != 0) {                         | True                                         | 
+ 500 |   /* Parent */                           | True                                         | 
+ 501 |   cnum++;                                | True                                         | 
+ 502 |   if_verbose_print_connection_status();  | True                                         | 
+ 503 |   if (hccp)                              | True                                         | 
+ 504 |    hccp->pid = pid;                      | True                                         | 
+ 505 |   /* clean up changes done by vforked ch | True                                         | 
+ 506 |   undo_xsetenv();                        | True                                         | 
+ 507 |   goto again;                            | True                                         | 
+ 508 |  }                                       | True                                         | 
+ 509 |                                          | True                                         | 
+ 510 |  /* Child: prepare env, log, and exec pr | True                                         | 
+ 511 |                                          | True                                         | 
+ 512 |  { /* vfork alert! every xmalloc in this | True                                         | 
+ 513 |   char *local_hostname = local_hostname; | True                                         | 
+ 514 |   char *local_addr = NULL;               | True                                         | 
+ 515 |   char *free_me0 = NULL;                 | True                                         | 
+ 516 |   char *free_me1 = NULL;                 | True                                         | 
+ 517 |   char *free_me2 = NULL;                 | True                                         | 
+ 518 |                                          | True                                         | 
+ 519 |   if (verbose || !(opts & OPT_E)) {      | True                                         | 
+ 520 |    if (!max_per_host) /* remote_addr is  | True                                         | 
+ 521 |     free_me0 = remote_addr = xmalloc_soc | True                                         | 
+ 522 |    if (opts & OPT_h) {                   | True                                         | 
+ 523 |     free_me1 = remote_hostname = xmalloc | True                                         | 
+ 524 |     if (!remote_hostname) {              | True                                         | 
+ 525 |      bb_error_msg("can't look up hostnam | True                                         | 
+ 526 |      remote_hostname = remote_addr;      | True                                         | 
+ 527 |     }                                    | True                                         | 
+ 528 |    }                                     | True                                         | 
+ 529 |    /* Find out local IP peer connected t | True                                         | 
+ 530 |     * Errors ignored (I'm not paranoid e | True                                         | 
+ 531 |     * which doesn't know local IP). */   | True                                         | 
+ 532 |    if (tcp)                              | True                                         | 
+ 533 |     getsockname(0, &local.u.sa, &local.l | True                                         | 
+ 534 |    /* else: for UDP it is done earlier b | True                                         | 
+ 535 |    local_addr = xmalloc_sockaddr2dotted( | True                                         | 
+ 536 |    if (opts & OPT_h) {                   | True                                         | 
+ 537 |     local_hostname = preset_local_hostna | True                                         | 
+ 538 |     if (!local_hostname) {               | True                                         | 
+ 539 |      free_me2 = local_hostname = xmalloc | True                                         | 
+ 540 |      if (!local_hostname)                | True                                         | 
+ 541 |       bb_error_msg_and_die("can't look u | True                                         | 
+ 542 |     }                                    | True                                         | 
+ 543 |     /* else: local_hostname is not NULL, | True                                         | 
+ 544 |    }                                     | True                                         | 
+ 545 |   }                                      | True                                         | 
+ 546 |   if (verbose) {                         | True                                         | 
+ 547 |    pid = getpid();                       | True                                         | 
+ 548 |    if (max_per_host) {                   | True                                         | 
+ 549 |     bb_error_msg("concurrency %s %u/%u", | True                                         | 
+ 550 |      remote_addr,                        | True                                         | 
+ 551 |      cur_per_host, max_per_host);        | True                                         | 
+ 552 |    }                                     | True                                         | 
+ 553 |    bb_error_msg((opts & OPT_h)           | True                                         | 
+ 554 |     ? "start %u %s-%s (%s-%s)"           | True                                         | 
+ 555 |     : "start %u %s-%s",                  | True                                         | 
+ 556 |     pid,                                 | True                                         | 
+ 557 |     local_addr, remote_addr,             | True                                         | 
+ 558 |     local_hostname, remote_hostname);    | True                                         | 
+ 559 |   }                                      | True                                         | 
+ 560 |                                          | True                                         | 
+ 561 |   if (!(opts & OPT_E)) {                 | True                                         | 
+ 562 |    /* setup ucspi env */                 | True                                         | 
+ 563 |    const char *proto = tcp ? "TCP" : "UD | True                                         | 
+ 564 |                                          | True                                         | 
+ 565 | #ifdef SO_ORIGINAL_DST                   | True                                         | 
+ 566 |    /* Extract "original" destination add | !(__linux__)&&(SO_ORIGINAL_DST)||(__linux__) | 
+ 567 |     * from Linux firewall. Useful when y | !(__linux__)&&(SO_ORIGINAL_DST)||(__linux__) | 
+ 568 |     * an outbond connection to local han | !(__linux__)&&(SO_ORIGINAL_DST)||(__linux__) | 
+ 569 |     * to know where it originally tried  | !(__linux__)&&(SO_ORIGINAL_DST)||(__linux__) | 
+ 570 |    if (tcp && getsockopt(0, SOL_IP, SO_O | !(__linux__)&&(SO_ORIGINAL_DST)||(__linux__) | 
+ 571 |     char *addr = xmalloc_sockaddr2dotted | !(__linux__)&&(SO_ORIGINAL_DST)||(__linux__) | 
+ 572 |     xsetenv_plain("TCPORIGDSTADDR", addr | !(__linux__)&&(SO_ORIGINAL_DST)||(__linux__) | 
+ 573 |     free(addr);                          | !(__linux__)&&(SO_ORIGINAL_DST)||(__linux__) | 
+ 574 |    }                                     | !(__linux__)&&(SO_ORIGINAL_DST)||(__linux__) | 
+ 575 | #endif                                   | True                                         | 
+ 576 |    xsetenv_plain("PROTO", proto);        | True                                         | 
+ 577 |    xsetenv_proto(proto, "LOCALADDR", loc | True                                         | 
+ 578 |    xsetenv_proto(proto, "REMOTEADDR", re | True                                         | 
+ 579 |    if (opts & OPT_h) {                   | True                                         | 
+ 580 |     xsetenv_proto(proto, "LOCALHOST", lo | True                                         | 
+ 581 |     xsetenv_proto(proto, "REMOTEHOST", r | True                                         | 
+ 582 |    }                                     | True                                         | 
+ 583 |    //compat? xsetenv_proto(proto, "REMOT | True                                         | 
+ 584 |    /* additional */                      | True                                         | 
+ 585 |    if (cur_per_host > 0) /* can not be t | True                                         | 
+ 586 |     xsetenv_plain("TCPCONCURRENCY", utoa | True                                         | 
+ 587 |   }                                      | True                                         | 
+ 588 |   free(local_addr);                      | True                                         | 
+ 589 |   free(free_me0);                        | True                                         | 
+ 590 |   free(free_me1);                        | True                                         | 
+ 591 |   free(free_me2);                        | True                                         | 
+ 592 |  }                                       | True                                         | 
+ 593 |                                          | True                                         | 
+ 594 |  xdup2(0, 1);                            | True                                         | 
+ 595 |                                          | True                                         | 
+ 596 |  /* Restore signal handling for the to-b | True                                         | 
+ 597 |  signal(SIGPIPE, SIG_DFL); /* this one w | True                                         | 
+ 598 |  /* Non-ignored signals revert to SIG_DF | True                                         | 
+ 599 |   * But we can get signals BEFORE execvp | True                                         | 
+ 600 |   * but it would invoke sig_child_handle | True                                         | 
+ 601 |   * check waitpid(WNOHANG), then print " | True                                         | 
+ 602 |   * I guess we can live with that possib | True                                         | 
+ 603 |   */                                     | True                                         | 
+ 604 |  /*signal(SIGCHLD, SIG_DFL);*/           | True                                         | 
+ 605 |  sig_unblock(SIGCHLD);                   | True                                         | 
+ 606 |                                          | True                                         | 
+ 607 | #ifdef SSLSVD                            | True                                         | 
+ 608 |  strcpy(id, utoa(pid));                  | (SSLSVD)                                     | 
+ 609 |  ssl_io(0, argv);                        | (SSLSVD)                                     | 
+ 610 |  bb_perror_msg_and_die("can't execute '% | (SSLSVD)                                     | 
+ 611 | #else                                    | True                                         | 
+ 612 |  BB_EXECVP_or_die(argv);                 | !(SSLSVD)                                    | 
+ 613 | #endif                                   | True                                         | 
+ 614 | }                                        | True                                         | 
+ 615 |                                          | True                                         | 
+ 616 | /*                                       | True                                         | 
+ 617 | tcpsvd [-hpEvv] [-c n] [-C n:msg] [-b n] | True                                         | 
+ 618 |  [-i dir|-x cdb] [ -t sec] host port pro | True                                         | 
+ 619 |                                          | True                                         | 
+ 620 | tcpsvd creates a TCP/IP socket, binds it | True                                         | 
+ 621 | and listens on the socket for incoming c | True                                         | 
+ 622 |                                          | True                                         | 
+ 623 | On each incoming connection, tcpsvd cond | True                                         | 
+ 624 | with standard input reading from the soc | True                                         | 
+ 625 | writing to the socket, to handle this co | True                                         | 
+ 626 | listening on the socket for new connecti | True                                         | 
+ 627 | multiple connections simultaneously.     | True                                         | 
+ 628 |                                          | True                                         | 
+ 629 | tcpsvd optionally checks for special ins | True                                         | 
+ 630 | on the IP address or hostname of the cli | True                                         | 
+ 631 | the connection, see ipsvd-instruct(5).   | True                                         | 
+ 632 |                                          | True                                         | 
+ 633 | host                                     | True                                         | 
+ 634 |     host either is a hostname, or a dott | True                                         | 
+ 635 |     or 0. If host is 0, tcpsvd accepts c | True                                         | 
+ 636 |     IP address.                          | True                                         | 
+ 637 |     * busybox accepts IPv6 addresses and | True                                         | 
+ 638 |       In this case second parameter is i | True                                         | 
+ 639 | port                                     | True                                         | 
+ 640 |     tcpsvd accepts connections to host:p | True                                         | 
+ 641 |     from /etc/services or a number.      | True                                         | 
+ 642 | prog                                     | True                                         | 
+ 643 |     prog consists of one or more argumen | True                                         | 
+ 644 |     tcpsvd normally runs prog, with file | True                                         | 
+ 645 |     the network, and file descriptor 1 w | True                                         | 
+ 646 |     By default it also sets up TCP-relat | True                                         | 
+ 647 |     see tcp-environ(5)                   | True                                         | 
+ 648 | -i dir                                   | True                                         | 
+ 649 |     read instructions for handling new c | True                                         | 
+ 650 |     directory dir. See ipsvd-instruct(5) | True                                         | 
+ 651 |     * ignored by busyboxed version       | True                                         | 
+ 652 | -x cdb                                   | True                                         | 
+ 653 |     read instructions for handling new c | True                                         | 
+ 654 |     cdb. The constant database normally  | True                                         | 
+ 655 |     directory by running ipsvd-cdb(8).   | True                                         | 
+ 656 |     * ignored by busyboxed version       | True                                         | 
+ 657 | -t sec                                   | True                                         | 
+ 658 |     timeout. This option only takes effe | True                                         | 
+ 659 |     While checking the instructions dire | True                                         | 
+ 660 |     of the file that matches the clients | True                                         | 
+ 661 |     and remove the file if it wasn't acc | True                                         | 
+ 662 |     tcpsvd does not discard or remove a  | True                                         | 
+ 663 |     is not set, for those files the time | True                                         | 
+ 664 |     which means that the timeout is disa | True                                         | 
+ 665 |     * ignored by busyboxed version       | True                                         | 
+ 666 | -l name                                  | True                                         | 
+ 667 |     local hostname. Do not look up the l | True                                         | 
+ 668 |     as hostname. This option must be set | True                                         | 
+ 669 |     to avoid loops.                      | True                                         | 
+ 670 | -u user[:group]                          | True                                         | 
+ 671 |     drop permissions. Switch user ID to  | True                                         | 
+ 672 |     primary GID after creating and bindi | True                                         | 
+ 673 |     by a colon and a group name, the gro | True                                         | 
+ 674 |     instead. All supplementary groups ar | True                                         | 
+ 675 | -c n                                     | True                                         | 
+ 676 |     concurrency. Handle up to n connecti | True                                         | 
+ 677 |     If there are n connections active, t | True                                         | 
+ 678 |     connection until an active connectio | True                                         | 
+ 679 | -C n[:msg]                               | True                                         | 
+ 680 |     per host concurrency. Allow only up  | True                                         | 
+ 681 |     address simultaneously. If there are | True                                         | 
+ 682 |     address, new incoming connections fr | True                                         | 
+ 683 |     immediately. If n is followed by :ms | True                                         | 
+ 684 |     to the client if possible, before cl | True                                         | 
+ 685 |     msg is empty. See ipsvd-instruct(5)  | True                                         | 
+ 686 |                                          | True                                         | 
+ 687 |     For each accepted connection, the cu | True                                         | 
+ 688 |     available through the environment va | True                                         | 
+ 689 |     can be overwritten by ipsvd(7) instr | True                                         | 
+ 690 |     By default tcpsvd doesn't keep track | True                                         | 
+ 691 | -h                                       | True                                         | 
+ 692 |     Look up the client's hostname in DNS | True                                         | 
+ 693 | -p                                       | True                                         | 
+ 694 |     paranoid. After looking up the clien | True                                         | 
+ 695 |     addresses in DNS for that hostname,  | True                                         | 
+ 696 |     if none of the addresses match the c | True                                         | 
+ 697 |     set this option if you use hostname  | True                                         | 
+ 698 |     implies the -h option.               | True                                         | 
+ 699 |     * ignored by busyboxed version       | True                                         | 
+ 700 | -b n                                     | True                                         | 
+ 701 |     backlog. Allow a backlog of approxim | True                                         | 
+ 702 |     is silently limited. Default is 20.  | True                                         | 
+ 703 | -E                                       | True                                         | 
+ 704 |     no special environment. Do not set u | True                                         | 
+ 705 | -v                                       | True                                         | 
+ 706 |     verbose. Print verbose messages to s | True                                         | 
+ 707 | -vv                                      | True                                         | 
+ 708 |     more verbose. Print more verbose mes | True                                         | 
+ 709 |     * no difference between -v and -vv i | True                                         | 
+ 710 | */                                       | True                                         | 
+-----+------------------------------------------+----------------------------------------------+
+     |                                          | +123MB, 278ms                                | 

@@ -1,0 +1,220 @@
+FILE: data/raw/busybox-1.38.0/miscutils/crontab.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * CRONTAB                               | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * usually setuid root, -c option only w | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Copyright 1994 Matthew Dillon (dillon | True                      | 
+   8 |  * Vladimir Oleynik <dzo@simtreas.ru> (C | True                      | 
+   9 |  *                                       | True                      | 
+  10 |  * Licensed under GPLv2 or later, see fi | True                      | 
+  11 |  */                                      | True                      | 
+  12 | //config:config CRONTAB                  | True                      | 
+  13 | //config: bool "crontab (10 kb)"         | True                      | 
+  14 | //config: default y                      | True                      | 
+  15 | //config: help                           | True                      | 
+  16 | //config: Crontab manipulates the cronta | True                      | 
+  17 | //config: the superuser may specify a di | True                      | 
+  18 | //config: Note that busybox binary must  | True                      | 
+  19 | //config: work properly.                 | True                      | 
+  20 |                                          | True                      | 
+  21 | /* Needs to be run by root or be suid ro | True                      | 
+  22 | //applet:IF_CRONTAB(APPLET(crontab, BB_D | True                      | 
+  23 |                                          | True                      | 
+  24 | //kbuild:lib-$(CONFIG_CRONTAB) += cronta | True                      | 
+  25 |                                          | True                      | 
+  26 | //usage:#define crontab_trivial_usage    | True                      | 
+  27 | //usage:       "[-c DIR] [-u USER] [-ler | True                      | 
+  28 | //usage:#define crontab_full_usage "\n\n | True                      | 
+  29 | //usage:       " -c Crontab directory"   | True                      | 
+  30 | //usage:     "\n -u User"                | True                      | 
+  31 | //usage:     "\n -l List crontab"        | True                      | 
+  32 | //usage:     "\n -e Edit crontab"        | True                      | 
+  33 | //usage:     "\n -r Delete crontab"      | True                      | 
+  34 | //usage:     "\n FILE Replace crontab by | True                      | 
+  35 |                                          | True                      | 
+  36 | #include "libbb.h"                       | True                      | 
+  37 |                                          | True                      | 
+  38 | #define CRONTABS        CONFIG_FEATURE_C | True                      | 
+  39 | #ifndef CRONUPDATE                       | True                      | 
+  40 | #define CRONUPDATE      "cron.update"    | !(CRONUPDATE)             | 
+  41 | #endif                                   | True                      | 
+  42 |                                          | True                      | 
+  43 | static void edit_file(const struct passw | True                      | 
+  44 | {                                        | True                      | 
+  45 |  const char *ptr;                        | True                      | 
+  46 |  pid_t pid;                              | True                      | 
+  47 |                                          | True                      | 
+  48 |  pid = xvfork();                         | True                      | 
+  49 |  if (pid) { /* parent */                 | True                      | 
+  50 |   wait4pid(pid);                         | True                      | 
+  51 |   return;                                | True                      | 
+  52 |  }                                       | True                      | 
+  53 |                                          | True                      | 
+  54 |  /* CHILD - change user and run editor * | True                      | 
+  55 |  /* initgroups, setgid, setuid */        | True                      | 
+  56 |  change_identity(pas);                   | True                      | 
+  57 |  setup_environment(pas->pw_shell,        | True                      | 
+  58 |   SETUP_ENV_CHANGEENV | SETUP_ENV_TO_TMP | True                      | 
+  59 |   pas);                                  | True                      | 
+  60 |  ptr = getenv("VISUAL");                 | True                      | 
+  61 |  if (!ptr) {                             | True                      | 
+  62 |   ptr = getenv("EDITOR");                | True                      | 
+  63 |   if (!ptr)                              | True                      | 
+  64 |    ptr = "vi";                           | True                      | 
+  65 |  }                                       | True                      | 
+  66 |                                          | True                      | 
+  67 |  BB_EXECLP(ptr, ptr, file, NULL);        | True                      | 
+  68 |  bb_perror_msg_and_die("can't execute '% | True                      | 
+  69 | }                                        | True                      | 
+  70 |                                          | True                      | 
+  71 | int crontab_main(int argc, char **argv)  | True                      | 
+  72 | int crontab_main(int argc UNUSED_PARAM,  | True                      | 
+  73 | {                                        | True                      | 
+  74 |  const struct passwd *pas;               | True                      | 
+  75 |  const char *crontab_dir = CRONTABS;     | True                      | 
+  76 |  char *tmp_fname;                        | True                      | 
+  77 |  char *new_fname;                        | True                      | 
+  78 |  char *user_name;  /* -u USER */         | True                      | 
+  79 |  int fd;                                 | True                      | 
+  80 |  int src_fd;                             | True                      | 
+  81 |  int opt_ler;                            | True                      | 
+  82 |                                          | True                      | 
+  83 |  /* file [opts]     Replace crontab from | True                      | 
+  84 |   * - [opts]        Replace crontab from | True                      | 
+  85 |   * -u user         User                 | True                      | 
+  86 |   * -c dir          Crontab directory    | True                      | 
+  87 |   * -l              List crontab for use | True                      | 
+  88 |   * -e              Edit crontab for use | True                      | 
+  89 |   * -r              Delete crontab for u | True                      | 
+  90 |   * bbox also supports -d == -r, but mos | True                      | 
+  91 |   * implementations do not. Deprecated.  | True                      | 
+  92 |   */                                     | True                      | 
+  93 |  enum {                                  | True                      | 
+  94 |   OPT_u = (1 << 0),                      | True                      | 
+  95 |   OPT_c = (1 << 1),                      | True                      | 
+  96 |   OPT_l = (1 << 2),                      | True                      | 
+  97 |   OPT_e = (1 << 3),                      | True                      | 
+  98 |   OPT_r = (1 << 4),                      | True                      | 
+  99 |   OPT_ler = OPT_l + OPT_e + OPT_r,       | True                      | 
+ 100 |  };                                      | True                      | 
+ 101 |                                          | True                      | 
+ 102 |  opt_ler = getopt32(argv, "^" "u:c:lerd" | True                      | 
+ 103 |     &user_name, &crontab_dir             | True                      | 
+ 104 |  );                                      | True                      | 
+ 105 |  argv += optind;                         | True                      | 
+ 106 |                                          | True                      | 
+ 107 |  if (sanitize_env_if_suid()) { /* Clears | True                      | 
+ 108 |   /* Run by non-root */                  | True                      | 
+ 109 |   if (opt_ler & (OPT_u|OPT_c))           | True                      | 
+ 110 |    bb_simple_error_msg_and_die(bb_msg_yo | True                      | 
+ 111 |  }                                       | True                      | 
+ 112 |                                          | True                      | 
+ 113 |  if (opt_ler & OPT_u) {                  | True                      | 
+ 114 |   pas = xgetpwnam(user_name);            | True                      | 
+ 115 |  } else {                                | True                      | 
+ 116 |   pas = xgetpwuid(getuid());             | True                      | 
+ 117 |  }                                       | True                      | 
+ 118 |                                          | True                      | 
+ 119 | #define user_name DONT_USE_ME_BEYOND_THI | True                      | 
+ 120 |                                          | True                      | 
+ 121 |  /* From now on, keep only -l, -e, -r bi | True                      | 
+ 122 |  opt_ler &= OPT_ler;                     | True                      | 
+ 123 |  if ((opt_ler - 1) & opt_ler) /* more th | True                      | 
+ 124 |   bb_show_usage();                       | True                      | 
+ 125 |                                          | True                      | 
+ 126 |  /* Read replacement file under user's U | True                      | 
+ 127 |  src_fd = STDIN_FILENO;                  | True                      | 
+ 128 |  if (!opt_ler) { /* Replace? */          | True                      | 
+ 129 |   if (!argv[0])                          | True                      | 
+ 130 |    bb_show_usage();                      | True                      | 
+ 131 |   if (NOT_LONE_DASH(argv[0])) {          | True                      | 
+ 132 |    src_fd = xopen_as_uid_gid(argv[0], O_ | True                      | 
+ 133 |   }                                      | True                      | 
+ 134 |  }                                       | True                      | 
+ 135 |                                          | True                      | 
+ 136 |  /* cd to our crontab directory */       | True                      | 
+ 137 |  xchdir(crontab_dir);                    | True                      | 
+ 138 |                                          | True                      | 
+ 139 |  tmp_fname = NULL;                       | True                      | 
+ 140 |                                          | True                      | 
+ 141 |  /* Handle requested operation */        | True                      | 
+ 142 |  switch (opt_ler) {                      | True                      | 
+ 143 |                                          | True                      | 
+ 144 |  default: /* case OPT_r: Delete */       | True                      | 
+ 145 |   unlink(pas->pw_name);                  | True                      | 
+ 146 |   break;                                 | True                      | 
+ 147 |                                          | True                      | 
+ 148 |  case OPT_l: /* List */                  | True                      | 
+ 149 |   {                                      | True                      | 
+ 150 |    char *args[2] = { pas->pw_name, NULL  | True                      | 
+ 151 |    return bb_cat(args);                  | True                      | 
+ 152 |    /* list exits,                        | True                      | 
+ 153 |     * the rest go play with cron update  | True                      | 
+ 154 |   }                                      | True                      | 
+ 155 |                                          | True                      | 
+ 156 |  case OPT_e: /* Edit */                  | True                      | 
+ 157 |   tmp_fname = xasprintf("%s.%u", crontab | True                      | 
+ 158 |   /* No O_EXCL: we don't want to be stuc | True                      | 
+ 159 |    * were killed, leaving stale temp fil | True                      | 
+ 160 |   src_fd = xopen3(tmp_fname, O_RDWR|O_CR | True                      | 
+ 161 |   fchown(src_fd, pas->pw_uid, pas->pw_gi | True                      | 
+ 162 |   fd = open(pas->pw_name, O_RDONLY);     | True                      | 
+ 163 |   if (fd >= 0) {                         | True                      | 
+ 164 |    bb_copyfd_eof(fd, src_fd);            | True                      | 
+ 165 |    close(fd);                            | True                      | 
+ 166 |    xlseek(src_fd, 0, SEEK_SET);          | True                      | 
+ 167 |   }                                      | True                      | 
+ 168 |   close(src_fd);                         | True                      | 
+ 169 |   edit_file(pas, tmp_fname);             | True                      | 
+ 170 |   /* The src_fd needs to be reopened to  | True                      | 
+ 171 |    * save the buffer as new file and ren | True                      | 
+ 172 |    * for example vim). */                | True                      | 
+ 173 |   src_fd = xopen3(tmp_fname, O_RDONLY, 0 | True                      | 
+ 174 |   /* fall through */                     | True                      | 
+ 175 |                                          | True                      | 
+ 176 |  case 0: /* Replace (no -l, -e, or -r we | True                      | 
+ 177 |   new_fname = xasprintf("%s.new", pas->p | True                      | 
+ 178 |   fd = open(new_fname, O_WRONLY|O_CREAT| | True                      | 
+ 179 |   if (fd >= 0) {                         | True                      | 
+ 180 |    bb_copyfd_eof(src_fd, fd);            | True                      | 
+ 181 |    close(fd);                            | True                      | 
+ 182 |    xrename(new_fname, pas->pw_name);     | True                      | 
+ 183 |   } else {                               | True                      | 
+ 184 |    bb_error_msg("can't create %s/%s",    | True                      | 
+ 185 |      crontab_dir, new_fname);            | True                      | 
+ 186 |   }                                      | True                      | 
+ 187 |   if (tmp_fname)                         | True                      | 
+ 188 |    unlink(tmp_fname);                    | True                      | 
+ 189 |   /*free(tmp_fname);*/                   | True                      | 
+ 190 |   /*free(new_fname);*/                   | True                      | 
+ 191 |  } /* switch */                          | True                      | 
+ 192 |                                          | True                      | 
+ 193 |  /* Bump notification file.  Handle wind | True                      | 
+ 194 |   * before we can write our entry out.   | True                      | 
+ 195 |   */                                     | True                      | 
+ 196 |  while ((fd = open(CRONUPDATE, O_WRONLY| | True                      | 
+ 197 |   struct stat st;                        | True                      | 
+ 198 |                                          | True                      | 
+ 199 |   fdprintf(fd, "%s\n", pas->pw_name);    | True                      | 
+ 200 |   if (fstat(fd, &st) != 0 || st.st_nlink | True                      | 
+ 201 |    /*close(fd);*/                        | True                      | 
+ 202 |    break;                                | True                      | 
+ 203 |   }                                      | True                      | 
+ 204 |   /* st.st_nlink == 0:                   | True                      | 
+ 205 |    * file was deleted, maybe crond misse | True                      | 
+ 206 |   close(fd);                             | True                      | 
+ 207 |   /* loop */                             | True                      | 
+ 208 |  }                                       | True                      | 
+ 209 |  if (fd < 0) {                           | True                      | 
+ 210 |   bb_error_msg("can't append to %s/%s",  | True                      | 
+ 211 |     crontab_dir, CRONUPDATE);            | True                      | 
+ 212 |  }                                       | True                      | 
+ 213 |  return 0;                               | True                      | 
+ 214 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +108MB, 240ms             | 

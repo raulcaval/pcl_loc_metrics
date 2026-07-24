@@ -1,0 +1,168 @@
+FILE: data/raw/busybox-1.38.0/networking/vconfig.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * vconfig implementation for busybox    | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2001  Manuel Novoa III  | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config VCONFIG                  | True                      | 
+  10 | //config: bool "vconfig (2.6 kb)"        | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Creates, removes, and configur | True                      | 
+  14 |                                          | True                      | 
+  15 | //applet:IF_VCONFIG(APPLET_NOEXEC(vconfi | True                      | 
+  16 |                                          | True                      | 
+  17 | //kbuild:lib-$(CONFIG_VCONFIG) += vconfi | True                      | 
+  18 |                                          | True                      | 
+  19 | //usage:#define vconfig_trivial_usage    | True                      | 
+  20 | //usage:       "COMMAND [OPTIONS]"       | True                      | 
+  21 | //usage:#define vconfig_full_usage "\n\n | True                      | 
+  22 | //usage:       "Create and remove virtua | True                      | 
+  23 | //usage:     "\n add IFACE VLAN_ID"      | True                      | 
+  24 | //usage:     "\n rem VLAN_NAME"          | True                      | 
+  25 | //usage:     "\n set_flag IFACE 0|1 VLAN | True                      | 
+  26 | //usage:     "\n set_egress_map VLAN_NAM | True                      | 
+  27 | //usage:     "\n set_ingress_map VLAN_NA | True                      | 
+  28 | //usage:     "\n set_name_type NAME_TYPE | True                      | 
+  29 |                                          | True                      | 
+  30 | #include "libbb.h"                       | True                      | 
+  31 | #include <net/if.h>                      | True                      | 
+  32 |                                          | True                      | 
+  33 | /* BB_AUDIT SUSv3 N/A */                 | True                      | 
+  34 |                                          | True                      | 
+  35 | /* Stuff from linux/if_vlan.h, kernel ve | True                      | 
+  36 | enum vlan_ioctl_cmds {                   | True                      | 
+  37 |  ADD_VLAN_CMD,                           | True                      | 
+  38 |  DEL_VLAN_CMD,                           | True                      | 
+  39 |  SET_VLAN_INGRESS_PRIORITY_CMD,          | True                      | 
+  40 |  SET_VLAN_EGRESS_PRIORITY_CMD,           | True                      | 
+  41 |  GET_VLAN_INGRESS_PRIORITY_CMD,          | True                      | 
+  42 |  GET_VLAN_EGRESS_PRIORITY_CMD,           | True                      | 
+  43 |  SET_VLAN_NAME_TYPE_CMD,                 | True                      | 
+  44 |  SET_VLAN_FLAG_CMD                       | True                      | 
+  45 | };                                       | True                      | 
+  46 | enum vlan_name_types {                   | True                      | 
+  47 |  VLAN_NAME_TYPE_PLUS_VID, /* Name will l | True                      | 
+  48 |  VLAN_NAME_TYPE_RAW_PLUS_VID, /* name wi | True                      | 
+  49 |  VLAN_NAME_TYPE_PLUS_VID_NO_PAD, /* Name | True                      | 
+  50 |  VLAN_NAME_TYPE_RAW_PLUS_VID_NO_PAD, /*  | True                      | 
+  51 |  VLAN_NAME_TYPE_HIGHEST                  | True                      | 
+  52 | };                                       | True                      | 
+  53 |                                          | True                      | 
+  54 | struct vlan_ioctl_args {                 | True                      | 
+  55 |  int cmd; /* Should be one of the vlan_i | True                      | 
+  56 |  char device1[24];                       | True                      | 
+  57 |                                          | True                      | 
+  58 |  union {                                 | True                      | 
+  59 |   char device2[24];                      | True                      | 
+  60 |   int VID;                               | True                      | 
+  61 |   unsigned int skb_priority;             | True                      | 
+  62 |   unsigned int name_type;                | True                      | 
+  63 |   unsigned int bind_type;                | True                      | 
+  64 |   unsigned int flag; /* Matches vlan_dev | True                      | 
+  65 |  } u;                                    | True                      | 
+  66 |                                          | True                      | 
+  67 |  short vlan_qos;                         | True                      | 
+  68 | };                                       | True                      | 
+  69 |                                          | True                      | 
+  70 | #define VLAN_GROUP_ARRAY_LEN  4096       | True                      | 
+  71 | #define SIOCSIFVLAN           0x8983  /* | True                      | 
+  72 |                                          | True                      | 
+  73 | /* On entry, table points to the length  | True                      | 
+  74 |  * plus NUL terminator plus data length  | True                      | 
+  75 |  * The return value is the last data ent | True                      | 
+  76 | static const char *xfind_str(const char  | True                      | 
+  77 | {                                        | True                      | 
+  78 |  while (strcasecmp(str, table + 1) != 0) | True                      | 
+  79 |   if (!table[0])                         | True                      | 
+  80 |    bb_show_usage();                      | True                      | 
+  81 |   table += table[0];                     | True                      | 
+  82 |  }                                       | True                      | 
+  83 |  return table - 1;                       | True                      | 
+  84 | }                                        | True                      | 
+  85 |                                          | True                      | 
+  86 | static const char cmds[] ALIGN1 = {      | True                      | 
+  87 |  4, ADD_VLAN_CMD, 7,                     | True                      | 
+  88 |  'a','d','d',0,                          | True                      | 
+  89 |  3, DEL_VLAN_CMD, 7,                     | True                      | 
+  90 |  'r','e','m',0,                          | True                      | 
+  91 |  3, SET_VLAN_NAME_TYPE_CMD, 17,          | True                      | 
+  92 |  's','e','t','_','n','a','m','e','_','t' | True                      | 
+  93 |  5, SET_VLAN_FLAG_CMD, 12,               | True                      | 
+  94 |  's','e','t','_','f','l','a','g',0,      | True                      | 
+  95 |  5, SET_VLAN_EGRESS_PRIORITY_CMD, 18,    | True                      | 
+  96 |  's','e','t','_','e','g','r','e','s','s' | True                      | 
+  97 |  5, SET_VLAN_INGRESS_PRIORITY_CMD, 0,    | True                      | 
+  98 |  's','e','t','_','i','n','g','r','e','s' | True                      | 
+  99 | };                                       | True                      | 
+ 100 |                                          | True                      | 
+ 101 | static const char name_types[] ALIGN1 =  | True                      | 
+ 102 |  VLAN_NAME_TYPE_PLUS_VID, 16,            | True                      | 
+ 103 |  'V','L','A','N','_','P','L','U','S','_' | True                      | 
+ 104 |  VLAN_NAME_TYPE_PLUS_VID_NO_PAD, 22,     | True                      | 
+ 105 |  'V','L','A','N','_','P','L','U','S','_' | True                      | 
+ 106 |  VLAN_NAME_TYPE_RAW_PLUS_VID, 15,        | True                      | 
+ 107 |  'D','E','V','_','P','L','U','S','_','V' | True                      | 
+ 108 |  VLAN_NAME_TYPE_RAW_PLUS_VID_NO_PAD, 0,  | True                      | 
+ 109 |  'D','E','V','_','P','L','U','S','_','V' | True                      | 
+ 110 | };                                       | True                      | 
+ 111 |                                          | True                      | 
+ 112 | int vconfig_main(int argc, char **argv)  | True                      | 
+ 113 | int vconfig_main(int argc, char **argv)  | True                      | 
+ 114 | {                                        | True                      | 
+ 115 |  struct vlan_ioctl_args ifr;             | True                      | 
+ 116 |  const char *p;                          | True                      | 
+ 117 |  int fd;                                 | True                      | 
+ 118 |                                          | True                      | 
+ 119 |  memset(&ifr, 0, sizeof(ifr));           | True                      | 
+ 120 |                                          | True                      | 
+ 121 |  ++argv;                                 | True                      | 
+ 122 |  if (!argv[0])                           | True                      | 
+ 123 |   bb_show_usage();                       | True                      | 
+ 124 |  p = xfind_str(cmds + 2, argv[0]);       | True                      | 
+ 125 |  ifr.cmd = *p;                           | True                      | 
+ 126 |  if (argc != p[-1])                      | True                      | 
+ 127 |   bb_show_usage();                       | True                      | 
+ 128 |                                          | True                      | 
+ 129 |  if (ifr.cmd == SET_VLAN_NAME_TYPE_CMD)  | True                      | 
+ 130 |   /* set_name_type */                    | True                      | 
+ 131 |   ifr.u.name_type = *xfind_str(name_type | True                      | 
+ 132 |  } else {                                | True                      | 
+ 133 |   strncpy_IFNAMSIZ(ifr.device1, argv[1]) | True                      | 
+ 134 |   p = argv[2];                           | True                      | 
+ 135 |                                          | True                      | 
+ 136 |   /* I suppose one could try to combine  | True                      | 
+ 137 |    * since ifr.u.flag, ifr.u.VID, and if | True                      | 
+ 138 |    * (unsigned) int members of a unions. | True                      | 
+ 139 |    * doing so wouldn't save that much sp | True                      | 
+ 140 |    * more of a pain.                     | True                      | 
+ 141 |    */                                    | True                      | 
+ 142 |   if (ifr.cmd == SET_VLAN_FLAG_CMD) {    | True                      | 
+ 143 |    /* set_flag */                        | True                      | 
+ 144 |    ifr.u.flag = xatou_range(p, 0, 1);    | True                      | 
+ 145 |    /* DM: in order to set reorder header | True                      | 
+ 146 |    ifr.vlan_qos = xatou_range(argv[3], 0 | True                      | 
+ 147 |   } else if (ifr.cmd == ADD_VLAN_CMD) {  | True                      | 
+ 148 |    /* add */                             | True                      | 
+ 149 |    ifr.u.VID = xatou_range(p, 0, VLAN_GR | True                      | 
+ 150 |   } else if (ifr.cmd != DEL_VLAN_CMD) {  | True                      | 
+ 151 |    /* set_{egress|ingress}_map */        | True                      | 
+ 152 |    ifr.u.skb_priority = xatou(p);        | True                      | 
+ 153 |    ifr.vlan_qos = xatou_range(argv[3], 0 | True                      | 
+ 154 |   }                                      | True                      | 
+ 155 |  }                                       | True                      | 
+ 156 |                                          | True                      | 
+ 157 |  fd = xsocket(AF_INET, SOCK_STREAM, 0);  | True                      | 
+ 158 |  ioctl_or_perror_and_die(fd, SIOCSIFVLAN | True                      | 
+ 159 |       "ioctl error for %s", argv[0]);    | True                      | 
+ 160 |                                          | True                      | 
+ 161 |  return 0;                               | True                      | 
+ 162 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +18MB, 265ms              | 

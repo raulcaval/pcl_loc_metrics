@@ -1,0 +1,356 @@
+FILE: data/raw/busybox-1.38.0/procps/sysctl.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Sysctl 1.01 - A utility to read and m | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright 1999 George Staikos         | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   8 |  *                                       | True                      | 
+   9 |  * Changelog:                            | True                      | 
+  10 |  * v1.01   - added -p <preload> to prelo | True                      | 
+  11 |  * v1.01.1 - busybox applet aware by <so | True                      | 
+  12 |  */                                      | True                      | 
+  13 | //config:config BB_SYSCTL                | True                      | 
+  14 | //config: bool "sysctl (7.9 kb)"         | True                      | 
+  15 | //config: default y                      | True                      | 
+  16 | //config: help                           | True                      | 
+  17 | //config: Configure kernel parameters at | True                      | 
+  18 |                                          | True                      | 
+  19 | //applet:IF_BB_SYSCTL(APPLET_NOEXEC(sysc | True                      | 
+  20 |                                          | True                      | 
+  21 | //kbuild:lib-$(CONFIG_BB_SYSCTL) += sysc | True                      | 
+  22 |                                          | True                      | 
+  23 | //usage:#define sysctl_trivial_usage     | True                      | 
+  24 | //usage:       "[-enq] { -a | -p [FILE]. | True                      | 
+  25 | //usage:#define sysctl_full_usage "\n\n" | True                      | 
+  26 | //usage:       "Show/set kernel paramete | True                      | 
+  27 | //usage:     "\n -e Don't warn about unk | True                      | 
+  28 | //usage:     "\n -n Don't show key names | True                      | 
+  29 | //usage:     "\n -q      Quiet"          | True                      | 
+  30 | //usage:     "\n -a Show all values"     | True                      | 
+  31 | /* Same as -a, no need to show it */     | True                      | 
+  32 | /* //usage:     "\n -A Show all values i | True                      | 
+  33 | //usage:     "\n -p Set values from FILE | True                      | 
+  34 | //usage:     "\n -w Set values"          | True                      | 
+  35 | //usage:                                 | True                      | 
+  36 | //usage:#define sysctl_example_usage     | True                      | 
+  37 | //usage:       "sysctl [-n] [-e] variabl | True                      | 
+  38 | //usage:       "sysctl [-n] [-e] [-q] -w | True                      | 
+  39 | //usage:       "sysctl [-n] [-e] -a\n"   | True                      | 
+  40 | //usage:       "sysctl [-n] [-e] [-q] -p | True                      | 
+  41 | //usage:       "sysctl [-n] [-e] -A\n"   | True                      | 
+  42 |                                          | True                      | 
+  43 | #include "libbb.h"                       | True                      | 
+  44 |                                          | True                      | 
+  45 | enum {                                   | True                      | 
+  46 |  FLAG_SHOW_KEYS       = 1 << 0,          | True                      | 
+  47 |  FLAG_SHOW_KEY_ERRORS = 1 << 1,          | True                      | 
+  48 |  FLAG_TABLE_FORMAT    = 1 << 2, /* not i | True                      | 
+  49 |  FLAG_SHOW_ALL        = 1 << 3,          | True                      | 
+  50 |  FLAG_PRELOAD_FILE    = 1 << 4,          | True                      | 
+  51 |  /* NB: procps 3.2.8 does not require -w | True                      | 
+  52 |  FLAG_WRITE           = 1 << 5,          | True                      | 
+  53 |  FLAG_QUIET           = 1 << 6,          | True                      | 
+  54 | };                                       | True                      | 
+  55 | #define OPTION_STR "neAapwq"             | True                      | 
+  56 |                                          | True                      | 
+  57 | static void sysctl_dots_to_slashes(char  | True                      | 
+  58 | {                                        | True                      | 
+  59 |  char *cptr, *last_good, *end, *slash;   | True                      | 
+  60 |  char end_ch;                            | True                      | 
+  61 |                                          | True                      | 
+  62 |  end = strchrnul(name, '=');             | True                      | 
+  63 |                                          | True                      | 
+  64 |  slash = strchrnul(name, '/');           | True                      | 
+  65 |  if (slash < end                         | True                      | 
+  66 |   && strchrnul(name, '.') < slash        | True                      | 
+  67 |  ) {                                     | True                      | 
+  68 |   /* There are both dots and slashes, an | True                      | 
+  69 |    * before 1st slash.                   | True                      | 
+  70 |    * (IOW: not raw, unmangled a/b/c.d fo | True                      | 
+  71 |    *                                     | True                      | 
+  72 |    * procps supports this syntax for nam | True                      | 
+  73 |    *  net.ipv4.conf.eth0/100.mc_forwardi | True                      | 
+  74 |    * (dots and slashes are simply swappe | True                      | 
+  75 |    */                                    | True                      | 
+  76 |   while (end != name) {                  | True                      | 
+  77 |    end--;                                | True                      | 
+  78 |    if (*end == '.') *end = '/';          | True                      | 
+  79 |    else if (*end == '/') *end = '.';     | True                      | 
+  80 |   }                                      | True                      | 
+  81 |   return;                                | True                      | 
+  82 |  }                                       | True                      | 
+  83 |  /* else: use our old behavior: */       | True                      | 
+  84 |                                          | True                      | 
+  85 |  /* Convert minimum number of '.' to '/' | True                      | 
+  86 |   * we end up with existing file's name. | True                      | 
+  87 |   *                                      | True                      | 
+  88 |   * Example from bug 3894:               | True                      | 
+  89 |   * net.ipv4.conf.eth0.100.mc_forwarding | True                      | 
+  90 |   * net/ipv4/conf/eth0.100/mc_forwarding | True                      | 
+  91 |   * NB: net/ipv4/conf/eth0/mc_forwarding | True                      | 
+  92 |   * therefore we must start from the end | True                      | 
+  93 |   * we replaced even one . -> /, start o | True                      | 
+  94 |   * but never replace dots before the po | True                      | 
+  95 |   * where last replacement occurred.     | True                      | 
+  96 |   *                                      | True                      | 
+  97 |   * Another bug we later had is that     | True                      | 
+  98 |   * net.ipv4.conf.eth0.100               | True                      | 
+  99 |   * (without .mc_forwarding) was mishand | True                      | 
+ 100 |   *                                      | True                      | 
+ 101 |   * To set up testing: modprobe 8021q; v | True                      | 
+ 102 |   */                                     | True                      | 
+ 103 |  end_ch = *end;                          | True                      | 
+ 104 |  *end = '.'; /* trick the loop into tryi | True                      | 
+ 105 |                                          | True                      | 
+ 106 |  last_good = name - 1;                   | True                      | 
+ 107 |  again:                                  | True                      | 
+ 108 |  cptr = end;                             | True                      | 
+ 109 |  while (cptr > last_good) {              | True                      | 
+ 110 |   if (*cptr == '.') {                    | True                      | 
+ 111 |    *cptr = '\0';                         | True                      | 
+ 112 |    //bb_error_msg("trying:'%s'", name);  | True                      | 
+ 113 |    if (access(name, F_OK) == 0) {        | True                      | 
+ 114 |     *cptr = '/';                         | True                      | 
+ 115 |     //bb_error_msg("replaced:'%s'", name | True                      | 
+ 116 |     last_good = cptr;                    | True                      | 
+ 117 |     goto again;                          | True                      | 
+ 118 |    }                                     | True                      | 
+ 119 |    *cptr = '.';                          | True                      | 
+ 120 |   }                                      | True                      | 
+ 121 |   cptr--;                                | True                      | 
+ 122 |  }                                       | True                      | 
+ 123 |  *end = end_ch;                          | True                      | 
+ 124 | }                                        | True                      | 
+ 125 |                                          | True                      | 
+ 126 | static int sysctl_act_on_setting(char *s | True                      | 
+ 127 | {                                        | True                      | 
+ 128 |  int fd, retval = EXIT_SUCCESS;          | True                      | 
+ 129 |  char *cptr, *outname;                   | True                      | 
+ 130 |  char *value = value; /* for compiler */ | True                      | 
+ 131 |  bool writing = (option_mask32 & FLAG_WR | True                      | 
+ 132 |                                          | True                      | 
+ 133 |  outname = xstrdup(setting);             | True                      | 
+ 134 |                                          | True                      | 
+ 135 |  cptr = outname;                         | True                      | 
+ 136 |  while (*cptr) {                         | True                      | 
+ 137 |   if (*cptr == '/')                      | True                      | 
+ 138 |    *cptr = '.';                          | True                      | 
+ 139 |   else if (*cptr == '.')                 | True                      | 
+ 140 |    *cptr = '/';                          | True                      | 
+ 141 |   cptr++;                                | True                      | 
+ 142 |  }                                       | True                      | 
+ 143 |                                          | True                      | 
+ 144 |  cptr = strchr(setting, '=');            | True                      | 
+ 145 |  if (cptr)                               | True                      | 
+ 146 |   writing = 1;                           | True                      | 
+ 147 |  if (writing) {                          | True                      | 
+ 148 |   if (!cptr) {                           | True                      | 
+ 149 |    bb_error_msg("error: '%s' must be of  | True                      | 
+ 150 |     outname);                            | True                      | 
+ 151 |    retval = EXIT_FAILURE;                | True                      | 
+ 152 |    goto end;                             | True                      | 
+ 153 |   }                                      | True                      | 
+ 154 |   value = cptr + 1;  /* point to the val | True                      | 
+ 155 |   if (setting == cptr /* "name" can't be | True                      | 
+ 156 |    /* || !*value - WRONG: "sysctl net.ip | True                      | 
+ 157 |   ) {                                    | True                      | 
+ 158 |    bb_error_msg("error: malformed settin | True                      | 
+ 159 |    retval = EXIT_FAILURE;                | True                      | 
+ 160 |    goto end;                             | True                      | 
+ 161 |   }                                      | True                      | 
+ 162 |   *cptr = '\0';                          | True                      | 
+ 163 |   outname[cptr - setting] = '\0';        | True                      | 
+ 164 |   /* procps 3.2.7 actually uses these fl | True                      | 
+ 165 |   fd = open(setting, O_WRONLY|O_CREAT|O_ | True                      | 
+ 166 |  } else {                                | True                      | 
+ 167 |   fd = open(setting, O_RDONLY);          | True                      | 
+ 168 |  }                                       | True                      | 
+ 169 |                                          | True                      | 
+ 170 |  if (fd < 0) {                           | True                      | 
+ 171 |   switch (errno) {                       | True                      | 
+ 172 |   case ENOENT:                           | True                      | 
+ 173 |    if (option_mask32 & FLAG_SHOW_KEY_ERR | True                      | 
+ 174 |     bb_error_msg("error: '%s' is an unkn | True                      | 
+ 175 |    break;                                | True                      | 
+ 176 |   case EACCES:                           | True                      | 
+ 177 |    /* Happens for write-only settings, e | True                      | 
+ 178 |    if (!writing)                         | True                      | 
+ 179 |     goto end;                            | True                      | 
+ 180 |    /* fall through */                    | True                      | 
+ 181 |   default:                               | True                      | 
+ 182 |    bb_perror_msg("error %sing key '%s'", | True                      | 
+ 183 |      writing ?                           | True                      | 
+ 184 |       "sett" : "read",                   | True                      | 
+ 185 |      outname);                           | True                      | 
+ 186 |    break;                                | True                      | 
+ 187 |   }                                      | True                      | 
+ 188 |   retval = EXIT_FAILURE;                 | True                      | 
+ 189 |   goto end;                              | True                      | 
+ 190 |  }                                       | True                      | 
+ 191 |                                          | True                      | 
+ 192 |  if (writing) {                          | True                      | 
+ 193 | //TODO: procps 3.2.7 writes "value\n", n | True                      | 
+ 194 |   xwrite_str(fd, value);                 | True                      | 
+ 195 |   close(fd);                             | True                      | 
+ 196 |   if (!(option_mask32 & FLAG_QUIET)) {   | True                      | 
+ 197 |    if (option_mask32 & FLAG_SHOW_KEYS)   | True                      | 
+ 198 |     printf("%s = ", outname);            | True                      | 
+ 199 |    puts(value);                          | True                      | 
+ 200 |   }                                      | True                      | 
+ 201 |  } else {                                | True                      | 
+ 202 |   char c;                                | True                      | 
+ 203 |                                          | True                      | 
+ 204 |   value = cptr = xmalloc_read(fd, NULL); | True                      | 
+ 205 |   close(fd);                             | True                      | 
+ 206 |   if (value == NULL) {                   | True                      | 
+ 207 |    bb_perror_msg("error reading key '%s' | True                      | 
+ 208 |    retval = EXIT_FAILURE;                | True                      | 
+ 209 |    goto end;                             | True                      | 
+ 210 |   }                                      | True                      | 
+ 211 |                                          | True                      | 
+ 212 |   /* dev.cdrom.info and sunrpc.transport | True                      | 
+ 213 |    * are multi-line. Try "sysctl sunrpc. | True                      | 
+ 214 |    */                                    | True                      | 
+ 215 |   while ((c = *cptr) != '\0') {          | True                      | 
+ 216 |    if (option_mask32 & FLAG_SHOW_KEYS)   | True                      | 
+ 217 |     printf("%s = ", outname);            | True                      | 
+ 218 |    while (1) {                           | True                      | 
+ 219 |     fputc(c, stdout);                    | True                      | 
+ 220 |     cptr++;                              | True                      | 
+ 221 |     if (c == '\n')                       | True                      | 
+ 222 |      break;                              | True                      | 
+ 223 |     c = *cptr;                           | True                      | 
+ 224 |     if (c == '\0')                       | True                      | 
+ 225 |      break;                              | True                      | 
+ 226 |    }                                     | True                      | 
+ 227 |   }                                      | True                      | 
+ 228 |   free(value);                           | True                      | 
+ 229 |  }                                       | True                      | 
+ 230 |  end:                                    | True                      | 
+ 231 |  free(outname);                          | True                      | 
+ 232 |  return retval;                          | True                      | 
+ 233 | }                                        | True                      | 
+ 234 |                                          | True                      | 
+ 235 | static int sysctl_act_recursive(const ch | True                      | 
+ 236 | {                                        | True                      | 
+ 237 |  struct stat buf;                        | True                      | 
+ 238 |  int retval = 0;                         | True                      | 
+ 239 |                                          | True                      | 
+ 240 |  if (!(option_mask32 & FLAG_WRITE)       | True                      | 
+ 241 |   && !strchr(path, '=')  /* do not try t | True                      | 
+ 242 |   && stat(path, &buf) == 0               | True                      | 
+ 243 |   && S_ISDIR(buf.st_mode)                | True                      | 
+ 244 |  ) {                                     | True                      | 
+ 245 |   struct dirent *entry;                  | True                      | 
+ 246 |   DIR *dirp;                             | True                      | 
+ 247 |                                          | True                      | 
+ 248 |   dirp = opendir(path);                  | True                      | 
+ 249 |   if (dirp == NULL)                      | True                      | 
+ 250 |    return -1;                            | True                      | 
+ 251 |   while ((entry = readdir(dirp)) != NULL | True                      | 
+ 252 |    char *next = concat_subpath_file(path | True                      | 
+ 253 |    if (next == NULL)                     | True                      | 
+ 254 |     continue; /* d_name is "." or ".." * | True                      | 
+ 255 |    /* if path was ".", drop "./" prefix: | True                      | 
+ 256 |    retval |= sysctl_act_recursive((next[ | True                      | 
+ 257 |      next + 2 : next);                   | True                      | 
+ 258 |    free(next);                           | True                      | 
+ 259 |   }                                      | True                      | 
+ 260 |   closedir(dirp);                        | True                      | 
+ 261 |  } else {                                | True                      | 
+ 262 |   char *name = xstrdup(path);            | True                      | 
+ 263 |   retval |= sysctl_act_on_setting(name); | True                      | 
+ 264 |   free(name);                            | True                      | 
+ 265 |  }                                       | True                      | 
+ 266 |                                          | True                      | 
+ 267 |  return retval;                          | True                      | 
+ 268 | }                                        | True                      | 
+ 269 |                                          | True                      | 
+ 270 | /* Set sysctl's from a conf file. Format | True                      | 
+ 271 |  * # Controls IP packet forwarding       | True                      | 
+ 272 |  * net.ipv4.ip_forward = 0               | True                      | 
+ 273 |  */                                      | True                      | 
+ 274 | static int sysctl_handle_preload_file(co | True                      | 
+ 275 | {                                        | True                      | 
+ 276 |  char *token[2];                         | True                      | 
+ 277 |  parser_t *parser;                       | True                      | 
+ 278 |  int parse_flags;                        | True                      | 
+ 279 |                                          | True                      | 
+ 280 |  parser = config_open(filename);         | True                      | 
+ 281 |  /* Must do it _after_ config_open(): */ | True                      | 
+ 282 |  xchdir("/proc/sys");                    | True                      | 
+ 283 |                                          | True                      | 
+ 284 |  parse_flags = 0;                        | True                      | 
+ 285 |  parse_flags &= ~PARSE_COLLAPSE;   // NO | True                      | 
+ 286 |  parse_flags &= ~PARSE_TRIM;       // NO | True                      | 
+ 287 |  parse_flags |= PARSE_GREEDY;      // YE | True                      | 
+ 288 |  parse_flags &= ~PARSE_MIN_DIE;    // NO | True                      | 
+ 289 |  parse_flags &= ~PARSE_EOL_COMMENTS; //  | True                      | 
+ 290 |  parse_flags |= PARSE_ALT_COMMENTS;// YE | True                      | 
+ 291 |  /* <space><tab><space>#comment is also  | True                      | 
+ 292 |  parse_flags |= PARSE_WS_COMMENTS; // YE | True                      | 
+ 293 |  while (config_read(parser, token, 2, 2, | True                      | 
+ 294 |   char *tp;                              | True                      | 
+ 295 |                                          | True                      | 
+ 296 |   trim(token[1]);                        | True                      | 
+ 297 |   tp = trim(token[0]);                   | True                      | 
+ 298 |   sysctl_dots_to_slashes(token[0]);      | True                      | 
+ 299 |   /* ^^^converted in-place. tp still poi | True                      | 
+ 300 |   /* now, add "=TOKEN1" */               | True                      | 
+ 301 |   *tp++ = '=';                           | True                      | 
+ 302 |   overlapping_strcpy(tp, token[1]);      | True                      | 
+ 303 |                                          | True                      | 
+ 304 |   sysctl_act_on_setting(token[0]);       | True                      | 
+ 305 |  }                                       | True                      | 
+ 306 |  if (ENABLE_FEATURE_CLEAN_UP)            | True                      | 
+ 307 |   config_close(parser);                  | True                      | 
+ 308 |  return 0;                               | True                      | 
+ 309 | }                                        | True                      | 
+ 310 |                                          | True                      | 
+ 311 | int sysctl_main(int argc, char **argv) M | True                      | 
+ 312 | int sysctl_main(int argc UNUSED_PARAM, c | True                      | 
+ 313 | {                                        | True                      | 
+ 314 |  int retval;                             | True                      | 
+ 315 |  int opt;                                | True                      | 
+ 316 |                                          | True                      | 
+ 317 |  opt = getopt32(argv, "+" OPTION_STR); / | True                      | 
+ 318 |  argv += optind;                         | True                      | 
+ 319 |  opt ^= (FLAG_SHOW_KEYS | FLAG_SHOW_KEY_ | True                      | 
+ 320 |  option_mask32 = opt;                    | True                      | 
+ 321 |                                          | True                      | 
+ 322 |  if (opt & FLAG_PRELOAD_FILE) {          | True                      | 
+ 323 |   int cur_dir_fd;                        | True                      | 
+ 324 |   option_mask32 |= FLAG_WRITE;           | True                      | 
+ 325 |   if (!*argv)                            | True                      | 
+ 326 |    *--argv = (char*)"/etc/sysctl.conf";  | True                      | 
+ 327 |   cur_dir_fd = xopen(".", O_RDONLY | O_D | True                      | 
+ 328 |   do {                                   | True                      | 
+ 329 |    /* xchdir("/proc/sys") is inside */   | True                      | 
+ 330 |    sysctl_handle_preload_file(*argv);    | True                      | 
+ 331 |    xfchdir(cur_dir_fd); /* files can be  | True                      | 
+ 332 |   } while (*++argv);                     | True                      | 
+ 333 |   return 0; /* procps-ng 3.3.10 does not | True                      | 
+ 334 |  }                                       | True                      | 
+ 335 |  xchdir("/proc/sys");                    | True                      | 
+ 336 |  if (opt & (FLAG_TABLE_FORMAT | FLAG_SHO | True                      | 
+ 337 |   return sysctl_act_recursive(".");      | True                      | 
+ 338 |  }                                       | True                      | 
+ 339 |                                          | True                      | 
+ 340 | //TODO: if(!argv[0]) bb_show_usage() ?   | True                      | 
+ 341 |                                          | True                      | 
+ 342 |  retval = 0;                             | True                      | 
+ 343 |  while (*argv) {                         | True                      | 
+ 344 |   sysctl_dots_to_slashes(*argv);         | True                      | 
+ 345 |   retval |= sysctl_act_recursive(*argv); | True                      | 
+ 346 |   argv++;                                | True                      | 
+ 347 |  }                                       | True                      | 
+ 348 |                                          | True                      | 
+ 349 |  return retval;                          | True                      | 
+ 350 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +109MB, 257ms             | 

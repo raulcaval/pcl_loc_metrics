@@ -1,0 +1,280 @@
+FILE: data/raw/busybox-1.38.0/util-linux/nsenter.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Mini nsenter implementation for busyb | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2016 by Bartosz Golasze | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config NSENTER                  | True                      | 
+  10 | //config: bool "nsenter (6.8 kb)"        | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Run program with namespaces of | True                      | 
+  14 |                                          | True                      | 
+  15 | //applet:IF_NSENTER(APPLET(nsenter, BB_D | True                      | 
+  16 |                                          | True                      | 
+  17 | //kbuild:lib-$(CONFIG_NSENTER) += nsente | True                      | 
+  18 |                                          | True                      | 
+  19 | //usage:#define nsenter_trivial_usage    | True                      | 
+  20 | //usage:       "[OPTIONS] [PROG ARGS]"   | True                      | 
+  21 | //usage:#define nsenter_full_usage "\n"  | True                      | 
+  22 | //usage:     "\n -t PID  Target process  | True                      | 
+  23 | //usage:     "\n -m[FILE] Enter mount na | True                      | 
+  24 | //usage:     "\n -u[FILE] Enter UTS name | True                      | 
+  25 | //usage:     "\n -i[FILE] Enter System V | True                      | 
+  26 | //usage:     "\n -n[FILE] Enter network  | True                      | 
+  27 | //usage:     "\n -p[FILE] Enter pid name | True                      | 
+  28 | //usage:     "\n -U[FILE] Enter user nam | True                      | 
+  29 | //usage:     "\n -S UID  Set uid in ente | True                      | 
+  30 | //usage:     "\n -G GID  Set gid in ente | True                      | 
+  31 | //usage: IF_LONG_OPTS(                   | True                      | 
+  32 | //usage:     "\n --preserve-credentials  | True                      | 
+  33 | //usage: )                               | True                      | 
+  34 | //usage:     "\n -r[DIR]  Set root direc | True                      | 
+  35 | //usage:     "\n -w[DIR]  Set working di | True                      | 
+  36 | //usage:     "\n -F  Don't fork before e | True                      | 
+  37 |                                          | True                      | 
+  38 | #include <sched.h>                       | True                      | 
+  39 | #ifndef CLONE_NEWUTS                     | True                      | 
+  40 | # define CLONE_NEWUTS  0x04000000        | !(CLONE_NEWUTS)           | 
+  41 | #endif                                   | True                      | 
+  42 | #ifndef CLONE_NEWIPC                     | True                      | 
+  43 | # define CLONE_NEWIPC  0x08000000        | !(CLONE_NEWIPC)           | 
+  44 | #endif                                   | True                      | 
+  45 | #ifndef CLONE_NEWUSER                    | True                      | 
+  46 | # define CLONE_NEWUSER 0x10000000        | !(CLONE_NEWUSER)          | 
+  47 | #endif                                   | True                      | 
+  48 | #ifndef CLONE_NEWPID                     | True                      | 
+  49 | # define CLONE_NEWPID  0x20000000        | !(CLONE_NEWPID)           | 
+  50 | #endif                                   | True                      | 
+  51 | #ifndef CLONE_NEWNET                     | True                      | 
+  52 | # define CLONE_NEWNET  0x40000000        | !(CLONE_NEWNET)           | 
+  53 | #endif                                   | True                      | 
+  54 |                                          | True                      | 
+  55 | #include "libbb.h"                       | True                      | 
+  56 |                                          | True                      | 
+  57 | struct namespace_descr {                 | True                      | 
+  58 |  int flag;  /* value passed to setns() * | True                      | 
+  59 |  char ns_nsfile8[8]; /* "ns/" + namespac | True                      | 
+  60 | };                                       | True                      | 
+  61 |                                          | True                      | 
+  62 | struct namespace_ctx {                   | True                      | 
+  63 |  char *path;  /* optional path to a cust | True                      | 
+  64 |  int fd;   /* opened namespace file desc | True                      | 
+  65 | };                                       | True                      | 
+  66 |                                          | True                      | 
+  67 | enum {                                   | True                      | 
+  68 |  OPT_user = 1 << 0,                      | True                      | 
+  69 |  OPT_ipc  = 1 << 1,                      | True                      | 
+  70 |  OPT_uts  = 1 << 2,                      | True                      | 
+  71 |  OPT_network = 1 << 3,                   | True                      | 
+  72 |  OPT_pid  = 1 << 4,                      | True                      | 
+  73 |  OPT_mount = 1 << 5,                     | True                      | 
+  74 |  OPT_target = 1 << 6,                    | True                      | 
+  75 |  OPT_setuid = 1 << 7,                    | True                      | 
+  76 |  OPT_setgid = 1 << 8,                    | True                      | 
+  77 |  OPT_root = 1 << 9,                      | True                      | 
+  78 |  OPT_wd  = 1 << 10,                      | True                      | 
+  79 |  OPT_nofork = 1 << 11,                   | True                      | 
+  80 |  OPT_prescred = (1 << 12) * ENABLE_LONG_ | True                      | 
+  81 | };                                       | True                      | 
+  82 | enum {                                   | True                      | 
+  83 |  NS_USR_POS = 0,                         | True                      | 
+  84 |  NS_IPC_POS,                             | True                      | 
+  85 |  NS_UTS_POS,                             | True                      | 
+  86 |  NS_NET_POS,                             | True                      | 
+  87 |  NS_PID_POS,                             | True                      | 
+  88 |  NS_MNT_POS,                             | True                      | 
+  89 |  NS_COUNT,                               | True                      | 
+  90 | };                                       | True                      | 
+  91 | /*                                       | True                      | 
+  92 |  * The order is significant in nsenter.  | True                      | 
+  93 |  * The user namespace comes first, so th | True                      | 
+  94 |  * This gives an unprivileged user the p | True                      | 
+  95 |  */                                      | True                      | 
+  96 | static const struct namespace_descr ns_l | True                      | 
+  97 |  { CLONE_NEWUSER, "ns/user", },          | True                      | 
+  98 |  { CLONE_NEWIPC,  "ns/ipc",  },          | True                      | 
+  99 |  { CLONE_NEWUTS,  "ns/uts",  },          | True                      | 
+ 100 |  { CLONE_NEWNET,  "ns/net",  },          | True                      | 
+ 101 |  { CLONE_NEWPID,  "ns/pid",  },          | True                      | 
+ 102 |  { CLONE_NEWNS,   "ns/mnt",  },          | True                      | 
+ 103 | };                                       | True                      | 
+ 104 | /*                                       | True                      | 
+ 105 |  * Upstream nsenter doesn't support the  | True                      | 
+ 106 |  * "+": stop on first non-option         | True                      | 
+ 107 |  */                                      | True                      | 
+ 108 | static const char opt_str[] ALIGN1 = "+" | True                      | 
+ 109 |                                          | True                      | 
+ 110 | #if ENABLE_LONG_OPTS                     | True                      | 
+ 111 | static const char nsenter_longopts[] ALI | ENABLE_LONG_OPTS          | 
+ 112 |  "user\0"   Optional_argument "U"        | ENABLE_LONG_OPTS          | 
+ 113 |  "ipc\0"    Optional_argument "i"        | ENABLE_LONG_OPTS          | 
+ 114 |  "uts\0"    Optional_argument "u"        | ENABLE_LONG_OPTS          | 
+ 115 |  "net\0"    Optional_argument "n"        | ENABLE_LONG_OPTS          | 
+ 116 |  "pid\0"    Optional_argument "p"        | ENABLE_LONG_OPTS          | 
+ 117 |  "mount\0"   Optional_argument "m"       | ENABLE_LONG_OPTS          | 
+ 118 |  "target\0"   Required_argument "t"      | ENABLE_LONG_OPTS          | 
+ 119 |  "setuid\0"   Required_argument "S"      | ENABLE_LONG_OPTS          | 
+ 120 |  "setgid\0"   Required_argument "G"      | ENABLE_LONG_OPTS          | 
+ 121 |  "root\0"   Optional_argument "r"        | ENABLE_LONG_OPTS          | 
+ 122 |  "wd\0"    Optional_argument "w"         | ENABLE_LONG_OPTS          | 
+ 123 |  "no-fork\0"   No_argument  "F"          | ENABLE_LONG_OPTS          | 
+ 124 |  "preserve-credentials\0" No_argument  " | ENABLE_LONG_OPTS          | 
+ 125 |  ;                                       | ENABLE_LONG_OPTS          | 
+ 126 | #endif                                   | True                      | 
+ 127 |                                          | True                      | 
+ 128 | /*                                       | True                      | 
+ 129 |  * Open a file and return the new descri | True                      | 
+ 130 |  * fs_path, then the file to which it po | True                      | 
+ 131 |  * NULL) the routine builds a path to a  | True                      | 
+ 132 |  * template: '/proc/<target_pid>/<target | True                      | 
+ 133 |  */                                      | True                      | 
+ 134 | static int open_by_path_or_target(const  | True                      | 
+ 135 |       pid_t target_pid, const char *targ | True                      | 
+ 136 | {                                        | True                      | 
+ 137 |  char proc_path_buf[sizeof("/proc/%u/123 | True                      | 
+ 138 |                                          | True                      | 
+ 139 |  if (!path) {                            | True                      | 
+ 140 |   if (target_pid == 0) {                 | True                      | 
+ 141 |    /* Example:                           | True                      | 
+ 142 |     * "nsenter -p PROG" - neither -pFILE | True                      | 
+ 143 |     */                                   | True                      | 
+ 144 |    bb_show_usage();                      | True                      | 
+ 145 |   }                                      | True                      | 
+ 146 |   snprintf(proc_path_buf, sizeof(proc_pa | True                      | 
+ 147 |     "/proc/%u/%s", (unsigned)target_pid, | True                      | 
+ 148 |   path = proc_path_buf;                  | True                      | 
+ 149 |  }                                       | True                      | 
+ 150 |                                          | True                      | 
+ 151 |  return xopen(path, O_RDONLY);           | True                      | 
+ 152 | }                                        | True                      | 
+ 153 |                                          | True                      | 
+ 154 | int nsenter_main(int argc, char **argv)  | True                      | 
+ 155 | int nsenter_main(int argc UNUSED_PARAM,  | True                      | 
+ 156 | {                                        | True                      | 
+ 157 |  int i;                                  | True                      | 
+ 158 |  unsigned int opts;                      | True                      | 
+ 159 |  const char *root_dir_str = NULL;        | True                      | 
+ 160 |  const char *wd_str = NULL;              | True                      | 
+ 161 |  struct namespace_ctx ns_ctx_list[NS_COU | True                      | 
+ 162 |  int setgroups_failed;                   | True                      | 
+ 163 |  int root_fd, wd_fd;                     | True                      | 
+ 164 |  int target_pid = 0;                     | True                      | 
+ 165 |  int uid = 0;                            | True                      | 
+ 166 |  int gid = 0;                            | True                      | 
+ 167 |                                          | True                      | 
+ 168 |  memset(ns_ctx_list, 0, sizeof(ns_ctx_li | True                      | 
+ 169 |                                          | True                      | 
+ 170 |  opts = getopt32long(argv, opt_str, nsen | True                      | 
+ 171 |    &ns_ctx_list[NS_USR_POS].path,        | True                      | 
+ 172 |    &ns_ctx_list[NS_IPC_POS].path,        | True                      | 
+ 173 |    &ns_ctx_list[NS_UTS_POS].path,        | True                      | 
+ 174 |    &ns_ctx_list[NS_NET_POS].path,        | True                      | 
+ 175 |    &ns_ctx_list[NS_PID_POS].path,        | True                      | 
+ 176 |    &ns_ctx_list[NS_MNT_POS].path,        | True                      | 
+ 177 |    &target_pid, &uid, &gid,              | True                      | 
+ 178 |    &root_dir_str, &wd_str                | True                      | 
+ 179 |  );                                      | True                      | 
+ 180 |  argv += optind;                         | True                      | 
+ 181 |                                          | True                      | 
+ 182 |  root_fd = wd_fd = -1;                   | True                      | 
+ 183 |  if (opts & OPT_root)                    | True                      | 
+ 184 |   root_fd = open_by_path_or_target(root_ | True                      | 
+ 185 |        target_pid, "root");              | True                      | 
+ 186 |  if (opts & OPT_wd)                      | True                      | 
+ 187 |   wd_fd = open_by_path_or_target(wd_str, | True                      | 
+ 188 |                                          | True                      | 
+ 189 |  for (i = 0; i < NS_COUNT; i++) {        | True                      | 
+ 190 |   const struct namespace_descr *ns = &ns | True                      | 
+ 191 |   struct namespace_ctx *ns_ctx = &ns_ctx | True                      | 
+ 192 |                                          | True                      | 
+ 193 |   ns_ctx->fd = -1;                       | True                      | 
+ 194 |   if (opts & (1 << i))                   | True                      | 
+ 195 |    ns_ctx->fd = open_by_path_or_target(n | True                      | 
+ 196 |      target_pid, ns->ns_nsfile8);        | True                      | 
+ 197 |  }                                       | True                      | 
+ 198 |                                          | True                      | 
+ 199 |  /*                                      | True                      | 
+ 200 |   * Entering the user namespace without  | True                      | 
+ 201 |   * --setuid & --setgid and clearing roo | True                      | 
+ 202 |   */                                     | True                      | 
+ 203 |  setgroups_failed = 0;                   | True                      | 
+ 204 |  if ((opts & OPT_user) && !(opts & OPT_p | True                      | 
+ 205 |   opts |= (OPT_setuid | OPT_setgid);     | True                      | 
+ 206 |   /*                                     | True                      | 
+ 207 |    * We call setgroups() before and afte | True                      | 
+ 208 |    * bail-out if it fails twice.         | True                      | 
+ 209 |    */                                    | True                      | 
+ 210 |   setgroups_failed = (setgroups(0, NULL) | True                      | 
+ 211 |  }                                       | True                      | 
+ 212 |                                          | True                      | 
+ 213 |  for (i = 0; i < NS_COUNT; i++) {        | True                      | 
+ 214 |   const struct namespace_descr *ns = &ns | True                      | 
+ 215 |   struct namespace_ctx *ns_ctx = &ns_ctx | True                      | 
+ 216 |                                          | True                      | 
+ 217 |   if (ns_ctx->fd < 0)                    | True                      | 
+ 218 |    continue;                             | True                      | 
+ 219 |   if (setns(ns_ctx->fd, ns->flag)) {     | True                      | 
+ 220 |    bb_perror_msg_and_die(                | True                      | 
+ 221 |     "setns(): can't reassociate to names | True                      | 
+ 222 |     ns->ns_nsfile8 + 3 /* skip over "ns/ | True                      | 
+ 223 |    );                                    | True                      | 
+ 224 |   }                                      | True                      | 
+ 225 |   close(ns_ctx->fd); /* should close fds | True                      | 
+ 226 |   /*ns_ctx->fd = -1;*/                   | True                      | 
+ 227 |  }                                       | True                      | 
+ 228 |                                          | True                      | 
+ 229 |  if (root_fd >= 0) {                     | True                      | 
+ 230 |   if (wd_fd < 0) {                       | True                      | 
+ 231 |    /*                                    | True                      | 
+ 232 |     * Save the current working directory | True                      | 
+ 233 |     * changing it.                       | True                      | 
+ 234 |     */                                   | True                      | 
+ 235 |    wd_fd = xopen(".", O_RDONLY);         | True                      | 
+ 236 |   }                                      | True                      | 
+ 237 |   xfchdir(root_fd);                      | True                      | 
+ 238 |   xchroot(".");                          | True                      | 
+ 239 |   close(root_fd);                        | True                      | 
+ 240 |   /*root_fd = -1;*/                      | True                      | 
+ 241 |  }                                       | True                      | 
+ 242 |                                          | True                      | 
+ 243 |  if (wd_fd >= 0) {                       | True                      | 
+ 244 |   xfchdir(wd_fd);                        | True                      | 
+ 245 |   close(wd_fd);                          | True                      | 
+ 246 |   /*wd_fd = -1;*/                        | True                      | 
+ 247 |  }                                       | True                      | 
+ 248 |                                          | True                      | 
+ 249 |  /*                                      | True                      | 
+ 250 |   * Entering the pid namespace implies f | True                      | 
+ 251 |   * explicitly requested by the user not | True                      | 
+ 252 |   */                                     | True                      | 
+ 253 |  if (!(opts & OPT_nofork) && (opts & OPT | True                      | 
+ 254 |   pid_t pid = xvfork();                  | True                      | 
+ 255 |   if (pid > 0) {                         | True                      | 
+ 256 |    /* Parent */                          | True                      | 
+ 257 |    int exit_status = wait_for_exitstatus | True                      | 
+ 258 |    if (WIFSIGNALED(exit_status))         | True                      | 
+ 259 |     kill_myself_with_sig(WTERMSIG(exit_s | True                      | 
+ 260 |    return WEXITSTATUS(exit_status);      | True                      | 
+ 261 |   }                                      | True                      | 
+ 262 |   /* Child continues */                  | True                      | 
+ 263 |  }                                       | True                      | 
+ 264 |                                          | True                      | 
+ 265 |  if (opts & OPT_setgid) {                | True                      | 
+ 266 |   if (setgroups(0, NULL) < 0 && setgroup | True                      | 
+ 267 |    bb_simple_perror_msg_and_die("setgrou | True                      | 
+ 268 |   xsetgid(gid);                          | True                      | 
+ 269 |  }                                       | True                      | 
+ 270 |  if (opts & OPT_setuid)                  | True                      | 
+ 271 |   xsetuid(uid);                          | True                      | 
+ 272 |                                          | True                      | 
+ 273 |  exec_prog_or_SHELL(argv);               | True                      | 
+ 274 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +112MB, 278ms             | 

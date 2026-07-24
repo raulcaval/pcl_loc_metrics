@@ -1,0 +1,335 @@
+FILE: data/raw/busybox-1.38.0/networking/nameif.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                   | 
+-----+------------------------------------------+---------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                    | 
+   2 | /*                                       | True                                                    | 
+   3 |  * nameif.c - Naming Interfaces based on | True                                                    | 
+   4 |  *                                       | True                                                    | 
+   5 |  * Written 2000 by Andi Kleen.           | True                                                    | 
+   6 |  * Busybox port 2002 by Nick Fedchik <ni | True                                                    | 
+   7 |  *   Glenn McGrath                       | True                                                    | 
+   8 |  * Extended matching support 2008 by Nic | True                                                    | 
+   9 |  *                                       | True                                                    | 
+  10 |  * Licensed under GPLv2 or later, see fi | True                                                    | 
+  11 |  */                                      | True                                                    | 
+  12 | //config:config NAMEIF                   | True                                                    | 
+  13 | //config: bool "nameif (6.9 kb)"         | True                                                    | 
+  14 | //config: default y                      | True                                                    | 
+  15 | //config: select FEATURE_SYSLOG          | True                                                    | 
+  16 | //config: help                           | True                                                    | 
+  17 | //config: nameif is used to rename netwo | True                                                    | 
+  18 | //config: Renamed interfaces MUST be in  | True                                                    | 
+  19 | //config: It is possible to use a file ( | True                                                    | 
+  20 | //config: with list of new interface nam | True                                                    | 
+  21 | //config: Maximum interface name length: | True                                                    | 
+  22 | //config: File fields are separated by s | True                                                    | 
+  23 | //config: File format:                   | True                                                    | 
+  24 | //config:  # Comment                     | True                                                    | 
+  25 | //config:  new_interface_name  XX:XX:XX: | True                                                    | 
+  26 | //config:                                | True                                                    | 
+  27 | //config:config FEATURE_NAMEIF_EXTENDED  | True                                                    | 
+  28 | //config: bool "Extended nameif"         | True                                                    | 
+  29 | //config: default y                      | True                                                    | 
+  30 | //config: depends on NAMEIF              | True                                                    | 
+  31 | //config: help                           | True                                                    | 
+  32 | //config: This extends the nameif syntax | True                                                    | 
+  33 | //config: phyaddr selectors. The syntax  | True                                                    | 
+  34 | //config: File format:                   | True                                                    | 
+  35 | //config:  new_interface_name  driver=as | True                                                    | 
+  36 | //config:  new_interface_name  bus=usb-0 | True                                                    | 
+  37 | //config:  new_interface_name  phy_addre | True                                                    | 
+  38 | //config:  new_interface_name  mac=00:80 | True                                                    | 
+  39 | //config:  new_interface_name  00:80:C8: | True                                                    | 
+  40 |                                          | True                                                    | 
+  41 | //applet:IF_NAMEIF(APPLET_NOEXEC(nameif, | True                                                    | 
+  42 |                                          | True                                                    | 
+  43 | //kbuild:lib-$(CONFIG_NAMEIF) += nameif. | True                                                    | 
+  44 |                                          | True                                                    | 
+  45 | //usage:#define nameif_trivial_usage     | True                                                    | 
+  46 | //usage: IF_NOT_FEATURE_NAMEIF_EXTENDED( | True                                                    | 
+  47 | //usage:  "[-s] [-c FILE] [IFNAME HWADDR | True                                                    | 
+  48 | //usage: )                               | True                                                    | 
+  49 | //usage: IF_FEATURE_NAMEIF_EXTENDED(     | True                                                    | 
+  50 | //usage:  "[-s] [-c FILE] [IFNAME SELECT | True                                                    | 
+  51 | //usage: )                               | True                                                    | 
+  52 | //usage:#define nameif_full_usage "\n\n" | True                                                    | 
+  53 | //usage: "Rename network interface while | True                                                    | 
+  54 | //usage: IF_NOT_FEATURE_NAMEIF_EXTENDED( | True                                                    | 
+  55 | //usage:     "\nThe device with address  | True                                                    | 
+  56 | //usage: )                               | True                                                    | 
+  57 | //usage: IF_FEATURE_NAMEIF_EXTENDED(     | True                                                    | 
+  58 | //usage:     "\nThe device matched by SE | True                                                    | 
+  59 | //usage:     "\nSELECTOR can be a combin | True                                                    | 
+  60 | //usage:     "\n driver=STRING"          | True                                                    | 
+  61 | //usage:     "\n bus=STRING"             | True                                                    | 
+  62 | //usage:     "\n phy_address=NUM"        | True                                                    | 
+  63 | //usage:     "\n [mac=]XX:XX:XX:XX:XX:XX | True                                                    | 
+  64 | //usage: )                               | True                                                    | 
+  65 | //usage:     "\n"                        | True                                                    | 
+  66 | //usage:     "\n -c FILE Configuration f | True                                                    | 
+  67 | //usage:     "\n -s Log to syslog"       | True                                                    | 
+  68 | //usage:                                 | True                                                    | 
+  69 | //usage:#define nameif_example_usage     | True                                                    | 
+  70 | //usage:       "$ nameif -s dmz0 00:A0:C | True                                                    | 
+  71 | //usage:       " or\n"                   | True                                                    | 
+  72 | //usage:       "$ nameif -c /etc/my_mact | True                                                    | 
+  73 |                                          | True                                                    | 
+  74 | #include "libbb.h"                       | True                                                    | 
+  75 | #include <syslog.h>                      | True                                                    | 
+  76 | #include <net/if.h>                      | True                                                    | 
+  77 | #include <netinet/ether.h>               | True                                                    | 
+  78 | #include <linux/sockios.h>               | True                                                    | 
+  79 |                                          | True                                                    | 
+  80 | #ifndef IFNAMSIZ                         | True                                                    | 
+  81 | #define IFNAMSIZ 16                      | !(IFNAMSIZ)                                             | 
+  82 | #endif                                   | True                                                    | 
+  83 |                                          | True                                                    | 
+  84 | /* Taken from linux/sockios.h */         | True                                                    | 
+  85 | #define SIOCSIFNAME  0x8923  /* set inte | True                                                    | 
+  86 |                                          | True                                                    | 
+  87 | /* Octets in one Ethernet addr, from <li | True                                                    | 
+  88 | #define ETH_ALEN     6                   | True                                                    | 
+  89 |                                          | True                                                    | 
+  90 | #ifndef ifr_newname                      | True                                                    | 
+  91 | #define ifr_newname ifr_ifru.ifru_slave  | !(ifr_newname)                                          | 
+  92 | #endif                                   | True                                                    | 
+  93 |                                          | True                                                    | 
+  94 | typedef struct ethtable_s {              | True                                                    | 
+  95 |  struct ethtable_s *next;                | True                                                    | 
+  96 |  struct ethtable_s *prev;                | True                                                    | 
+  97 |  char *ifname;                           | True                                                    | 
+  98 |  struct ether_addr *mac;                 | True                                                    | 
+  99 | #if ENABLE_FEATURE_NAMEIF_EXTENDED       | True                                                    | 
+ 100 |  char *bus_info;                         | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 101 |  char *driver;                           | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 102 |  int32_t phy_address;                    | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 103 | #endif                                   | True                                                    | 
+ 104 | } ethtable_t;                            | True                                                    | 
+ 105 |                                          | True                                                    | 
+ 106 | #if ENABLE_FEATURE_NAMEIF_EXTENDED       | True                                                    | 
+ 107 | /* Cut'n'paste from ethtool.h */         | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 108 | #define ETHTOOL_BUSINFO_LEN 32           | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 109 | /* these strings are set to whatever the | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 110 | struct ethtool_drvinfo {                 | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 111 |  uint32_t cmd;                           | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 112 |  char  driver[32]; /* driver short name, | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 113 |  char  version[32];  /* driver version s | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 114 |  char  fw_version[32]; /* firmware versi | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 115 |  char  bus_info[ETHTOOL_BUSINFO_LEN];  / | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 116 |  /* For PCI devices, use pci_dev->slot_n | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 117 |  char  reserved1[32];                    | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 118 |  char  reserved2[16];                    | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 119 |  uint32_t n_stats;  /* number of u64's f | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 120 |  uint32_t testinfo_len;                  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 121 |  uint32_t eedump_len; /* Size of data fr | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 122 |  uint32_t regdump_len;  /* Size of data  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 123 | };                                       | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 124 |                                          | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 125 | struct ethtool_cmd {                     | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 126 |  uint32_t   cmd;                         | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 127 |  uint32_t   supported;      /* Features  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 128 |  uint32_t   advertising;    /* Features  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 129 |  uint16_t   speed;          /* The force | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 130 |  uint8_t    duplex;         /* Duplex, h | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 131 |  uint8_t    port;           /* Which con | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 132 |  uint8_t    phy_address;                 | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 133 |  uint8_t    transceiver;    /* Which tra | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 134 |  uint8_t    autoneg;        /* Enable or | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 135 |  uint32_t   maxtxpkt;       /* Tx pkts b | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 136 |  uint32_t   maxrxpkt;       /* Rx pkts b | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 137 |  uint16_t   speed_hi;                    | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 138 |  uint16_t   reserved2;                   | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 139 |  uint32_t   reserved[3];                 | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 140 | };                                       | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 141 |                                          | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 142 | #define ETHTOOL_GSET      0x00000001 /*  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 143 | #define ETHTOOL_GDRVINFO  0x00000003 /*  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 144 | #endif                                   | True                                                    | 
+ 145 |                                          | True                                                    | 
+ 146 |                                          | True                                                    | 
+ 147 | static void nameif_parse_selector(ethtab | True                                                    | 
+ 148 | {                                        | True                                                    | 
+ 149 |  struct ether_addr *lmac;                | True                                                    | 
+ 150 | #if ENABLE_FEATURE_NAMEIF_EXTENDED       | True                                                    | 
+ 151 |  int found_selector = 0;                 | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 152 |                                          | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 153 |  while (*selector) {                     | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 154 |   char *next;                            | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 155 | #endif                                   | True                                                    | 
+ 156 |   selector = skip_whitespace(selector);  | True                                                    | 
+ 157 | #if ENABLE_FEATURE_NAMEIF_EXTENDED       | True                                                    | 
+ 158 |   ch->phy_address = -1;                  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 159 |   if (*selector == '\0')                 | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 160 |    break;                                | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 161 |   /* Search for the end .... */          | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 162 |   next = skip_non_whitespace(selector);  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 163 |   if (*next)                             | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 164 |    *next++ = '\0';                       | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 165 |   /* Check for selectors, mac= is assume | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 166 |   if (is_prefixed_with(selector, "bus=") | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 167 |    ch->bus_info = xstrdup(selector + 4); | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 168 |    found_selector++;                     | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 169 |   } else if (is_prefixed_with(selector,  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 170 |    ch->driver = xstrdup(selector + 7);   | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 171 |    found_selector++;                     | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 172 |   } else if (is_prefixed_with(selector,  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 173 |    ch->phy_address = xatoi_positive(sele | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 174 |    found_selector++;                     | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 175 |   } else {                               | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 176 | #endif                                   | True                                                    | 
+ 177 |    lmac = xmalloc(ETH_ALEN);             | True                                                    | 
+ 178 |    ch->mac = ether_aton_r(selector + (is | True                                                    | 
+ 179 |    if (ch->mac == NULL)                  | True                                                    | 
+ 180 |     bb_error_msg_and_die("can't parse %s | True                                                    | 
+ 181 | #if  ENABLE_FEATURE_NAMEIF_EXTENDED      | True                                                    | 
+ 182 |    found_selector++;                     | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 183 |   };                                     | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 184 |   selector = next;                       | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 185 |  }                                       | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 186 |  if (found_selector == 0)                | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 187 |   bb_error_msg_and_die("no selectors fou | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 188 | #endif                                   | True                                                    | 
+ 189 | }                                        | True                                                    | 
+ 190 |                                          | True                                                    | 
+ 191 | static void prepend_new_eth_table(ethtab | True                                                    | 
+ 192 | {                                        | True                                                    | 
+ 193 |  ethtable_t *ch;                         | True                                                    | 
+ 194 |  if (strlen(ifname) >= IFNAMSIZ)         | True                                                    | 
+ 195 |   bb_error_msg_and_die("interface name ' | True                                                    | 
+ 196 |  ch = xzalloc(sizeof(*ch));              | True                                                    | 
+ 197 |  ch->ifname = xstrdup(ifname);           | True                                                    | 
+ 198 |  nameif_parse_selector(ch, selector);    | True                                                    | 
+ 199 |  ch->next = *clist;                      | True                                                    | 
+ 200 |  if (*clist)                             | True                                                    | 
+ 201 |   (*clist)->prev = ch;                   | True                                                    | 
+ 202 |  *clist = ch;                            | True                                                    | 
+ 203 | }                                        | True                                                    | 
+ 204 |                                          | True                                                    | 
+ 205 | #if ENABLE_FEATURE_CLEAN_UP              | True                                                    | 
+ 206 | static void delete_eth_table(ethtable_t  | ENABLE_FEATURE_CLEAN_UP                                 | 
+ 207 | {                                        | ENABLE_FEATURE_CLEAN_UP                                 | 
+ 208 |  free(ch->ifname);                       | ENABLE_FEATURE_CLEAN_UP                                 | 
+ 209 | #if ENABLE_FEATURE_NAMEIF_EXTENDED       | ENABLE_FEATURE_CLEAN_UP                                 | 
+ 210 |  free(ch->bus_info);                     | ENABLE_FEATURE_NAMEIF_EXTENDED&&ENABLE_FEATURE_CLEAN_UP | 
+ 211 |  free(ch->driver);                       | ENABLE_FEATURE_NAMEIF_EXTENDED&&ENABLE_FEATURE_CLEAN_UP | 
+ 212 | #endif                                   | ENABLE_FEATURE_CLEAN_UP                                 | 
+ 213 |  free(ch->mac);                          | ENABLE_FEATURE_CLEAN_UP                                 | 
+ 214 |  free(ch);                               | ENABLE_FEATURE_CLEAN_UP                                 | 
+ 215 | };                                       | ENABLE_FEATURE_CLEAN_UP                                 | 
+ 216 | #else                                    | True                                                    | 
+ 217 | void delete_eth_table(ethtable_t *ch);   | !ENABLE_FEATURE_CLEAN_UP                                | 
+ 218 | #endif                                   | True                                                    | 
+ 219 |                                          | True                                                    | 
+ 220 | int nameif_main(int argc, char **argv) M | True                                                    | 
+ 221 | int nameif_main(int argc UNUSED_PARAM, c | True                                                    | 
+ 222 | {                                        | True                                                    | 
+ 223 |  ethtable_t *clist = NULL;               | True                                                    | 
+ 224 |  const char *fname = "/etc/mactab";      | True                                                    | 
+ 225 |  int ctl_sk;                             | True                                                    | 
+ 226 |  ethtable_t *ch;                         | True                                                    | 
+ 227 |  parser_t *parser;                       | True                                                    | 
+ 228 |  char *token[2];                         | True                                                    | 
+ 229 |                                          | True                                                    | 
+ 230 |  if (1 & getopt32(argv, "sc:", &fname))  | True                                                    | 
+ 231 |   openlog(applet_name, 0, LOG_LOCAL0);   | True                                                    | 
+ 232 |   /* Why not just "="? I assume logging  | True                                                    | 
+ 233 |    * can't hurt. 2>/dev/null if you don' | True                                                    | 
+ 234 |   logmode |= LOGMODE_SYSLOG;             | True                                                    | 
+ 235 |  }                                       | True                                                    | 
+ 236 |  argv += optind;                         | True                                                    | 
+ 237 |                                          | True                                                    | 
+ 238 |  if (argv[0]) {                          | True                                                    | 
+ 239 |   do {                                   | True                                                    | 
+ 240 |    if (!argv[1])                         | True                                                    | 
+ 241 |     bb_show_usage();                     | True                                                    | 
+ 242 |    prepend_new_eth_table(&clist, argv[0] | True                                                    | 
+ 243 |    argv += 2;                            | True                                                    | 
+ 244 |   } while (*argv);                       | True                                                    | 
+ 245 |  } else {                                | True                                                    | 
+ 246 |   parser = config_open(fname);           | True                                                    | 
+ 247 |   while (config_read(parser, token, 2, 2 | True                                                    | 
+ 248 |    prepend_new_eth_table(&clist, token[0 | True                                                    | 
+ 249 |   config_close(parser);                  | True                                                    | 
+ 250 |  }                                       | True                                                    | 
+ 251 |                                          | True                                                    | 
+ 252 |  ctl_sk = xsocket(PF_INET, SOCK_DGRAM, 0 | True                                                    | 
+ 253 |  parser = config_open2("/proc/net/dev",  | True                                                    | 
+ 254 |                                          | True                                                    | 
+ 255 |  while (clist && config_read(parser, tok | True                                                    | 
+ 256 |   struct ifreq ifr;                      | True                                                    | 
+ 257 | #if  ENABLE_FEATURE_NAMEIF_EXTENDED      | True                                                    | 
+ 258 |   struct ethtool_drvinfo drvinfo;        | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 259 |   struct ethtool_cmd eth_settings;       | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 260 | #endif                                   | True                                                    | 
+ 261 |   if (parser->lineno <= 2)               | True                                                    | 
+ 262 |    continue; /* Skip the first two lines | True                                                    | 
+ 263 |                                          | True                                                    | 
+ 264 |   /* Find the current interface name and | True                                                    | 
+ 265 |   memset(&ifr, 0, sizeof(struct ifreq)); | True                                                    | 
+ 266 |   strncpy_IFNAMSIZ(ifr.ifr_name, token[0 | True                                                    | 
+ 267 |                                          | True                                                    | 
+ 268 | #if ENABLE_FEATURE_NAMEIF_EXTENDED       | True                                                    | 
+ 269 |   /* Check for phy address */            | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 270 |   memset(&eth_settings, 0, sizeof(eth_se | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 271 |   eth_settings.cmd = ETHTOOL_GSET;       | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 272 |   ifr.ifr_data = (caddr_t) &eth_settings | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 273 |   ioctl(ctl_sk, SIOCETHTOOL, &ifr);      | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 274 |                                          | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 275 |   /* Check for driver etc. */            | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 276 |   memset(&drvinfo, 0, sizeof(drvinfo));  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 277 |   drvinfo.cmd = ETHTOOL_GDRVINFO;        | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 278 |   ifr.ifr_data = (caddr_t) &drvinfo;     | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 279 |   /* Get driver and businfo first, so we | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 280 |   ioctl(ctl_sk, SIOCETHTOOL, &ifr);      | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 281 | #endif                                   | True                                                    | 
+ 282 |   ioctl(ctl_sk, SIOCGIFHWADDR, &ifr);    | True                                                    | 
+ 283 |                                          | True                                                    | 
+ 284 |   /* Search the list for a matching devi | True                                                    | 
+ 285 |   for (ch = clist; ch; ch = ch->next) {  | True                                                    | 
+ 286 | #if ENABLE_FEATURE_NAMEIF_EXTENDED       | True                                                    | 
+ 287 |    if (ch->bus_info && strcmp(ch->bus_in | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 288 |     continue;                            | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 289 |    if (ch->driver && strcmp(ch->driver,  | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 290 |     continue;                            | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 291 |    if (ch->phy_address != -1 && ch->phy_ | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 292 |     continue;                            | ENABLE_FEATURE_NAMEIF_EXTENDED                          | 
+ 293 | #endif                                   | True                                                    | 
+ 294 |    if (ch->mac && memcmp(ch->mac, ifr.if | True                                                    | 
+ 295 |     continue;                            | True                                                    | 
+ 296 |    /* if we came here, all selectors hav | True                                                    | 
+ 297 |    goto found;                           | True                                                    | 
+ 298 |   }                                      | True                                                    | 
+ 299 |   /* Nothing found for current interface | True                                                    | 
+ 300 |   continue;                              | True                                                    | 
+ 301 |  found:                                  | True                                                    | 
+ 302 |   if (strcmp(ifr.ifr_name, ch->ifname) ! | True                                                    | 
+ 303 |    strcpy(ifr.ifr_newname, ch->ifname);  | True                                                    | 
+ 304 |    ioctl_or_perror_and_die(ctl_sk, SIOCS | True                                                    | 
+ 305 |      "can't change ifname %s to %s",     | True                                                    | 
+ 306 |      ifr.ifr_name, ch->ifname);          | True                                                    | 
+ 307 |   }                                      | True                                                    | 
+ 308 |   /* Remove list entry of renamed interf | True                                                    | 
+ 309 |   if (ch->prev != NULL)                  | True                                                    | 
+ 310 |    ch->prev->next = ch->next;            | True                                                    | 
+ 311 |   else                                   | True                                                    | 
+ 312 |    clist = ch->next;                     | True                                                    | 
+ 313 |   if (ch->next != NULL)                  | True                                                    | 
+ 314 |    ch->next->prev = ch->prev;            | True                                                    | 
+ 315 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                                                    | 
+ 316 |    delete_eth_table(ch);                 | True                                                    | 
+ 317 |  } /* while */                           | True                                                    | 
+ 318 |                                          | True                                                    | 
+ 319 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                                                    | 
+ 320 |   ethtable_t *next;                      | True                                                    | 
+ 321 |   for (ch = clist; ch; ch = next) {      | True                                                    | 
+ 322 |    next = ch->next;                      | True                                                    | 
+ 323 |    delete_eth_table(ch);                 | True                                                    | 
+ 324 |   }                                      | True                                                    | 
+ 325 |   config_close(parser);                  | True                                                    | 
+ 326 |  };                                      | True                                                    | 
+ 327 |                                          | True                                                    | 
+ 328 |  return 0;                               | True                                                    | 
+ 329 | }                                        | True                                                    | 
+-----+------------------------------------------+---------------------------------------------------------+
+     |                                          | +109MB, 264ms                                           | 

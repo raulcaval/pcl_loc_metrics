@@ -1,0 +1,462 @@
+FILE: data/raw/busybox-1.38.0/coreutils/printf.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * printf - format and print data        | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright 1999 Dave Cinege            | True                      | 
+   6 |  * Portions copyright (C) 1990-1996 Free | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   9 |  */                                      | True                      | 
+  10 | /* Usage: printf format [argument...]    | True                      | 
+  11 |  *                                       | True                      | 
+  12 |  * A front end to the printf function th | True                      | 
+  13 |  *                                       | True                      | 
+  14 |  * Backslash escapes:                    | True                      | 
+  15 |  *                                       | True                      | 
+  16 |  * \" = double quote                     | True                      | 
+  17 |  * \\ = backslash                        | True                      | 
+  18 |  * \a = alert (bell)                     | True                      | 
+  19 |  * \b = backspace                        | True                      | 
+  20 |  * \c = produce no further output        | True                      | 
+  21 |  * \f = form feed                        | True                      | 
+  22 |  * \n = new line                         | True                      | 
+  23 |  * \r = carriage return                  | True                      | 
+  24 |  * \t = horizontal tab                   | True                      | 
+  25 |  * \v = vertical tab                     | True                      | 
+  26 |  * \0ooo = octal number (ooo is 0 to 3 d | True                      | 
+  27 |  * \xhhh = hexadecimal number (hhh is 1  | True                      | 
+  28 |  *                                       | True                      | 
+  29 |  * Additional directive:                 | True                      | 
+  30 |  *                                       | True                      | 
+  31 |  * %b = print an argument string, interp | True                      | 
+  32 |  *                                       | True                      | 
+  33 |  * The 'format' argument is re-used as m | True                      | 
+  34 |  * to convert all of the given arguments | True                      | 
+  35 |  *                                       | True                      | 
+  36 |  * David MacKenzie <djm@gnu.ai.mit.edu>  | True                      | 
+  37 |  */                                      | True                      | 
+  38 | /* 19990508 Busy Boxed! Dave Cinege */   | True                      | 
+  39 |                                          | True                      | 
+  40 | //config:config PRINTF                   | True                      | 
+  41 | //config: bool "printf (4.1 kb)"         | True                      | 
+  42 | //config: default y                      | True                      | 
+  43 | //config: help                           | True                      | 
+  44 | //config: printf is used to format and p | True                      | 
+  45 | //config: It's similar to 'echo' except  | True                      | 
+  46 |                                          | True                      | 
+  47 | //applet:IF_PRINTF(APPLET_NOFORK(printf, | True                      | 
+  48 |                                          | True                      | 
+  49 | //kbuild:lib-$(CONFIG_PRINTF) += printf. | True                      | 
+  50 | //kbuild:lib-$(CONFIG_ASH_PRINTF)  += pr | True                      | 
+  51 | //kbuild:lib-$(CONFIG_HUSH_PRINTF) += pr | True                      | 
+  52 |                                          | True                      | 
+  53 | //usage:#define printf_trivial_usage     | True                      | 
+  54 | //usage:       "FORMAT [ARG]..."         | True                      | 
+  55 | //usage:#define printf_full_usage "\n\n" | True                      | 
+  56 | //usage:       "Format and print ARG(s)  | True                      | 
+  57 | //usage:                                 | True                      | 
+  58 | //usage:#define printf_example_usage     | True                      | 
+  59 | //usage:       "$ printf \"Val=%d\\n\" 5 | True                      | 
+  60 | //usage:       "Val=5\n"                 | True                      | 
+  61 |                                          | True                      | 
+  62 | #include "libbb.h"                       | True                      | 
+  63 |                                          | True                      | 
+  64 | /* A note on bad input: neither bash 3.2 | True                      | 
+  65 |  * They report it:                       | True                      | 
+  66 |  *  bash: printf: XXX: invalid number    | True                      | 
+  67 |  *  printf: XXX: expected a numeric valu | True                      | 
+  68 |  *  bash: printf: 123XXX: invalid number | True                      | 
+  69 |  *  printf: 123XXX: value not completely | True                      | 
+  70 |  * but then they use 0 (or partially con | True                      | 
+  71 |  * and continue. They exit with 1 in thi | True                      | 
+  72 |  * Both accept insane field width/precis | True                      | 
+  73 |  * Both print error message and assume 0 | True                      | 
+  74 |  *  (but negative numbers are not "bad") | True                      | 
+  75 |  * Both accept negative numbers for %u s | True                      | 
+  76 |  *                                       | True                      | 
+  77 |  * We try to be compatible.              | True                      | 
+  78 |  */                                      | True                      | 
+  79 |                                          | True                      | 
+  80 | typedef void FAST_FUNC (*converter)(cons | True                      | 
+  81 |                                          | True                      | 
+  82 | static int multiconvert(const char *arg, | True                      | 
+  83 | {                                        | True                      | 
+  84 |  if (*arg == '"' || *arg == '\'') {      | True                      | 
+  85 |   arg = utoa((unsigned char)arg[1]);     | True                      | 
+  86 |  }                                       | True                      | 
+  87 |  errno = 0;                              | True                      | 
+  88 |  convert(arg, result);                   | True                      | 
+  89 |  if (errno) {                            | True                      | 
+  90 |   bb_error_msg("invalid number '%s'", ar | True                      | 
+  91 |   return 1;                              | True                      | 
+  92 |  }                                       | True                      | 
+  93 |  return 0;                               | True                      | 
+  94 | }                                        | True                      | 
+  95 |                                          | True                      | 
+  96 | static void FAST_FUNC conv_strtoull(cons | True                      | 
+  97 | {                                        | True                      | 
+  98 |  /* Allow leading '+' - bb_strtoull() by | True                      | 
+  99 |   * and probably shouldn't (other caller | True                      | 
+ 100 |   * inputs to be allowed.                | True                      | 
+ 101 |   */                                     | True                      | 
+ 102 |  if (arg[0] == '+')                      | True                      | 
+ 103 |   arg++;                                 | True                      | 
+ 104 |  *(unsigned long long*)result = bb_strto | True                      | 
+ 105 |  /* both coreutils 6.10 and bash 3.2:    | True                      | 
+ 106 |   * $ printf '%x\n' -2                   | True                      | 
+ 107 |   * fffffffffffffffe                     | True                      | 
+ 108 |   * Mimic that:                          | True                      | 
+ 109 |   */                                     | True                      | 
+ 110 |  if (errno) {                            | True                      | 
+ 111 |   *(unsigned long long*)result = bb_strt | True                      | 
+ 112 |  }                                       | True                      | 
+ 113 | }                                        | True                      | 
+ 114 | static void FAST_FUNC conv_strtoll(const | True                      | 
+ 115 | {                                        | True                      | 
+ 116 |  if (arg[0] == '+')                      | True                      | 
+ 117 |   arg++;                                 | True                      | 
+ 118 |  *(long long*)result = bb_strtoll(arg, N | True                      | 
+ 119 | }                                        | True                      | 
+ 120 | static void FAST_FUNC conv_strtod(const  | True                      | 
+ 121 | {                                        | True                      | 
+ 122 |  char *end;                              | True                      | 
+ 123 |  /* Well, this one allows leading whites | True                      | 
+ 124 |  /* What I like much less is that "-" ac | True                      | 
+ 125 | //TODO: needs setlocale(LC_NUMERIC, "C") | True                      | 
+ 126 |  *(double*)result = strtod(arg, &end);   | True                      | 
+ 127 |  if (end[0]) {                           | True                      | 
+ 128 |   errno = ERANGE;                        | True                      | 
+ 129 |   *(double*)result = 0;                  | True                      | 
+ 130 |  }                                       | True                      | 
+ 131 | }                                        | True                      | 
+ 132 |                                          | True                      | 
+ 133 | /* Callers should check errno to detect  | True                      | 
+ 134 | static unsigned long long my_xstrtoull(c | True                      | 
+ 135 | {                                        | True                      | 
+ 136 |  unsigned long long result;              | True                      | 
+ 137 |  if (multiconvert(arg, &result, conv_str | True                      | 
+ 138 |   result = 0;                            | True                      | 
+ 139 |  return result;                          | True                      | 
+ 140 | }                                        | True                      | 
+ 141 | static long long my_xstrtoll(const char  | True                      | 
+ 142 | {                                        | True                      | 
+ 143 |  long long result;                       | True                      | 
+ 144 |  if (multiconvert(arg, &result, conv_str | True                      | 
+ 145 |   result = 0;                            | True                      | 
+ 146 |  return result;                          | True                      | 
+ 147 | }                                        | True                      | 
+ 148 | static double my_xstrtod(const char *arg | True                      | 
+ 149 | {                                        | True                      | 
+ 150 |  double result;                          | True                      | 
+ 151 |  multiconvert(arg, &result, conv_strtod) | True                      | 
+ 152 |  return result;                          | True                      | 
+ 153 | }                                        | True                      | 
+ 154 |                                          | True                      | 
+ 155 | /* Handles %b; return 1 if output is to  | True                      | 
+ 156 | static int print_esc_string(const char * | True                      | 
+ 157 | {                                        | True                      | 
+ 158 |  char c;                                 | True                      | 
+ 159 |  while ((c = *str) != '\0') {            | True                      | 
+ 160 |   str++;                                 | True                      | 
+ 161 |   if (c == '\\') {                       | True                      | 
+ 162 |    /* %b also accepts 4-digit octals of  | True                      | 
+ 163 |    if (*str == '0') {                    | True                      | 
+ 164 |     if ((unsigned char)(str[1] - '0') <  | True                      | 
+ 165 |      /* 2nd char is 0..7: skip leading ' | True                      | 
+ 166 |      str++;                              | True                      | 
+ 167 |     }                                    | True                      | 
+ 168 |    }                                     | True                      | 
+ 169 |    else if (*str == 'c') {               | True                      | 
+ 170 |     return 1;                            | True                      | 
+ 171 |    }                                     | True                      | 
+ 172 |    {                                     | True                      | 
+ 173 |     /* optimization: don't force arg to  | True                      | 
+ 174 |      * use another variable for that. */ | True                      | 
+ 175 |     const char *z = str;                 | True                      | 
+ 176 |     c = bb_process_escape_sequence(&z);  | True                      | 
+ 177 |     str = z;                             | True                      | 
+ 178 |    }                                     | True                      | 
+ 179 |   }                                      | True                      | 
+ 180 |   putchar(c);                            | True                      | 
+ 181 |  }                                       | True                      | 
+ 182 |                                          | True                      | 
+ 183 |  return 0;                               | True                      | 
+ 184 | }                                        | True                      | 
+ 185 |                                          | True                      | 
+ 186 | static void print_direc(char *format, un | True                      | 
+ 187 |   int field_width, int precision,        | True                      | 
+ 188 |   const char *argument)                  | True                      | 
+ 189 | {                                        | True                      | 
+ 190 |  long long llv;                          | True                      | 
+ 191 |  double dv;                              | True                      | 
+ 192 |  char saved;                             | True                      | 
+ 193 |  char *have_prec, *have_width;           | True                      | 
+ 194 |                                          | True                      | 
+ 195 |  saved = format[fmt_length];             | True                      | 
+ 196 |  format[fmt_length] = '\0';              | True                      | 
+ 197 |                                          | True                      | 
+ 198 |  have_prec = strstr(format, ".*");       | True                      | 
+ 199 |  have_width = strchr(format, '*');       | True                      | 
+ 200 |  if (have_width - 1 == have_prec)        | True                      | 
+ 201 |   have_width = NULL;                     | True                      | 
+ 202 |                                          | True                      | 
+ 203 |  /* multiconvert sets errno = 0, but %s  | True                      | 
+ 204 |  errno = 0;                              | True                      | 
+ 205 |                                          | True                      | 
+ 206 |  switch (format[fmt_length - 1]) {       | True                      | 
+ 207 |  case 'c':                               | True                      | 
+ 208 |   printf(format, *argument);             | True                      | 
+ 209 |   break;                                 | True                      | 
+ 210 |  case 'd':                               | True                      | 
+ 211 |  case 'i':                               | True                      | 
+ 212 |   llv = my_xstrtoll(skip_whitespace(argu | True                      | 
+ 213 |  print_long:                             | True                      | 
+ 214 |   if (!have_width) {                     | True                      | 
+ 215 |    if (!have_prec)                       | True                      | 
+ 216 |     printf(format, llv);                 | True                      | 
+ 217 |    else                                  | True                      | 
+ 218 |     printf(format, precision, llv);      | True                      | 
+ 219 |   } else {                               | True                      | 
+ 220 |    if (!have_prec)                       | True                      | 
+ 221 |     printf(format, field_width, llv);    | True                      | 
+ 222 |    else                                  | True                      | 
+ 223 |     printf(format, field_width, precisio | True                      | 
+ 224 |   }                                      | True                      | 
+ 225 |   break;                                 | True                      | 
+ 226 |  case 'o':                               | True                      | 
+ 227 |  case 'u':                               | True                      | 
+ 228 |  case 'x':                               | True                      | 
+ 229 |  case 'X':                               | True                      | 
+ 230 |   llv = my_xstrtoull(skip_whitespace(arg | True                      | 
+ 231 |   /* cheat: unsigned long and long have  | True                      | 
+ 232 |   goto print_long;                       | True                      | 
+ 233 |  case 's':                               | True                      | 
+ 234 |   /* Are char* and long long the same? * | True                      | 
+ 235 |   if (sizeof(argument) == sizeof(llv)) { | True                      | 
+ 236 |    llv = (long long)(ptrdiff_t)argument; | True                      | 
+ 237 |    goto print_long;                      | True                      | 
+ 238 |   } else {                               | True                      | 
+ 239 |    /* Hope compiler will optimize it out | True                      | 
+ 240 |     * instruction after the ifs... */    | True                      | 
+ 241 |    if (!have_width) {                    | True                      | 
+ 242 |     if (!have_prec)                      | True                      | 
+ 243 |      printf(format, argument, /*unused:* | True                      | 
+ 244 |     else                                 | True                      | 
+ 245 |      printf(format, precision, argument, | True                      | 
+ 246 |    } else {                              | True                      | 
+ 247 |     if (!have_prec)                      | True                      | 
+ 248 |      printf(format, field_width, argumen | True                      | 
+ 249 |     else                                 | True                      | 
+ 250 |      printf(format, field_width, precisi | True                      | 
+ 251 |    }                                     | True                      | 
+ 252 |    break;                                | True                      | 
+ 253 |   }                                      | True                      | 
+ 254 |  case 'f':                               | True                      | 
+ 255 |  case 'e':                               | True                      | 
+ 256 |  case 'E':                               | True                      | 
+ 257 |  case 'g':                               | True                      | 
+ 258 |  case 'G':                               | True                      | 
+ 259 |   dv = my_xstrtod(argument);             | True                      | 
+ 260 |   if (!have_width) {                     | True                      | 
+ 261 |    if (!have_prec)                       | True                      | 
+ 262 |     printf(format, dv);                  | True                      | 
+ 263 |    else                                  | True                      | 
+ 264 |     printf(format, precision, dv);       | True                      | 
+ 265 |   } else {                               | True                      | 
+ 266 |    if (!have_prec)                       | True                      | 
+ 267 |     printf(format, field_width, dv);     | True                      | 
+ 268 |    else                                  | True                      | 
+ 269 |     printf(format, field_width, precisio | True                      | 
+ 270 |   }                                      | True                      | 
+ 271 |   break;                                 | True                      | 
+ 272 |  } /* switch */                          | True                      | 
+ 273 |                                          | True                      | 
+ 274 |  format[fmt_length] = saved;             | True                      | 
+ 275 | }                                        | True                      | 
+ 276 |                                          | True                      | 
+ 277 | /* Handle params for "%*.*f". Negative n | True                      | 
+ 278 | static int get_width_prec(const char *st | True                      | 
+ 279 | {                                        | True                      | 
+ 280 |  int v = bb_strtoi(str, NULL, 10);       | True                      | 
+ 281 |  if (errno) {                            | True                      | 
+ 282 |   bb_error_msg("invalid number '%s'", st | True                      | 
+ 283 |   v = 0;                                 | True                      | 
+ 284 |  }                                       | True                      | 
+ 285 |  return v;                               | True                      | 
+ 286 | }                                        | True                      | 
+ 287 |                                          | True                      | 
+ 288 | /* Print the text in FORMAT, using ARGV  | True                      | 
+ 289 |    Return advanced ARGV.  */             | True                      | 
+ 290 | static char **print_formatted(char *f, c | True                      | 
+ 291 | {                                        | True                      | 
+ 292 |  char *direc_start;      /* Start of % d | True                      | 
+ 293 |  unsigned direc_length;  /* Length of %  | True                      | 
+ 294 |  int field_width;        /* Arg to first | True                      | 
+ 295 |  int precision;          /* Arg to secon | True                      | 
+ 296 |  char **saved_argv = argv;               | True                      | 
+ 297 |                                          | True                      | 
+ 298 |  for (; *f; ++f) {                       | True                      | 
+ 299 |   switch (*f) {                          | True                      | 
+ 300 |   case '%':                              | True                      | 
+ 301 |    direc_start = f++;                    | True                      | 
+ 302 |    direc_length = 1;                     | True                      | 
+ 303 |    field_width = precision = 0;          | True                      | 
+ 304 |    if (*f == '%') {                      | True                      | 
+ 305 |     bb_putchar('%');                     | True                      | 
+ 306 |     break;                               | True                      | 
+ 307 |    }                                     | True                      | 
+ 308 |    if (*f == 'b') {                      | True                      | 
+ 309 |     if (*argv) {                         | True                      | 
+ 310 |      if (print_esc_string(*argv))        | True                      | 
+ 311 |       return saved_argv; /* causes main( | True                      | 
+ 312 |      ++argv;                             | True                      | 
+ 313 |     }                                    | True                      | 
+ 314 |     break;                               | True                      | 
+ 315 |    }                                     | True                      | 
+ 316 |    while (*f && strchr("-+ #0", *f)) {   | True                      | 
+ 317 |     ++f;                                 | True                      | 
+ 318 |     ++direc_length;                      | True                      | 
+ 319 |    }                                     | True                      | 
+ 320 |    if (*f == '*') {                      | True                      | 
+ 321 |     ++f;                                 | True                      | 
+ 322 |     ++direc_length;                      | True                      | 
+ 323 |     if (*argv)                           | True                      | 
+ 324 |      field_width = get_width_prec(*argv+ | True                      | 
+ 325 |    } else {                              | True                      | 
+ 326 |     while (isdigit(*f)) {                | True                      | 
+ 327 |      ++f;                                | True                      | 
+ 328 |      ++direc_length;                     | True                      | 
+ 329 |     }                                    | True                      | 
+ 330 |    }                                     | True                      | 
+ 331 |    if (*f == '.') {                      | True                      | 
+ 332 |     ++f;                                 | True                      | 
+ 333 |     ++direc_length;                      | True                      | 
+ 334 |     if (*f == '*') {                     | True                      | 
+ 335 |      ++f;                                | True                      | 
+ 336 |      ++direc_length;                     | True                      | 
+ 337 |      if (*argv)                          | True                      | 
+ 338 |       precision = get_width_prec(*argv++ | True                      | 
+ 339 |     } else {                             | True                      | 
+ 340 |      while (isdigit(*f)) {               | True                      | 
+ 341 |       ++f;                               | True                      | 
+ 342 |       ++direc_length;                    | True                      | 
+ 343 |      }                                   | True                      | 
+ 344 |     }                                    | True                      | 
+ 345 |    }                                     | True                      | 
+ 346 |                                          | True                      | 
+ 347 |    /* Remove "lLhz" size modifiers, repe | True                      | 
+ 348 |     * bash does not like "%lld", but cor | True                      | 
+ 349 |     * happily takes even "%Llllhhzhhzd"! | True                      | 
+ 350 |     * We are permissive like coreutils * | True                      | 
+ 351 |    while ((*f | 0x20) == 'l' || *f == 'h | True                      | 
+ 352 |     overlapping_strcpy(f, f + 1);        | True                      | 
+ 353 |    }                                     | True                      | 
+ 354 |    /* Add "ll" if integer modifier, then | True                      | 
+ 355 |    {                                     | True                      | 
+ 356 |     static const char format_chars[] ALI | True                      | 
+ 357 |     char *p = (char*)strchr(format_chars | True                      | 
+ 358 |     /* needed - try "printf %" without i | True                      | 
+ 359 |     if (p == NULL || *f == '\0') {       | True                      | 
+ 360 |      bb_error_msg("%s: invalid format",  | True                      | 
+ 361 |      /* causes main() to exit with error | True                      | 
+ 362 |      return saved_argv - 1;              | True                      | 
+ 363 |     }                                    | True                      | 
+ 364 |     ++direc_length;                      | True                      | 
+ 365 |     if (p - format_chars <= 5) {         | True                      | 
+ 366 |      /* it is one of "diouxX" */         | True                      | 
+ 367 |      p = xmalloc(direc_length + 3);      | True                      | 
+ 368 |      memcpy(p, direc_start, direc_length | True                      | 
+ 369 |      p[direc_length + 1] = p[direc_lengt | True                      | 
+ 370 |      p[direc_length - 1] = 'l';          | True                      | 
+ 371 |      p[direc_length] = 'l';              | True                      | 
+ 372 |      //bb_error_msg("<%s>", p);          | True                      | 
+ 373 |      direc_length += 2;                  | True                      | 
+ 374 |      direc_start = p;                    | True                      | 
+ 375 |     } else {                             | True                      | 
+ 376 |      p = NULL;                           | True                      | 
+ 377 |     }                                    | True                      | 
+ 378 |     if (*argv) {                         | True                      | 
+ 379 |      print_direc(direc_start, direc_leng | True                      | 
+ 380 |         precision, *argv++);             | True                      | 
+ 381 |     } else {                             | True                      | 
+ 382 |      print_direc(direc_start, direc_leng | True                      | 
+ 383 |         precision, "");                  | True                      | 
+ 384 |     }                                    | True                      | 
+ 385 |     *conv_err |= errno;                  | True                      | 
+ 386 |     free(p);                             | True                      | 
+ 387 |    }                                     | True                      | 
+ 388 |    break;                                | True                      | 
+ 389 |   case '\\':                             | True                      | 
+ 390 |    if (*++f == 'c') {                    | True                      | 
+ 391 |     return saved_argv; /* causes main()  | True                      | 
+ 392 |    }                                     | True                      | 
+ 393 |    bb_putchar(bb_process_escape_sequence | True                      | 
+ 394 |    f--;                                  | True                      | 
+ 395 |    break;                                | True                      | 
+ 396 |   default:                               | True                      | 
+ 397 |    putchar(*f);                          | True                      | 
+ 398 |   }                                      | True                      | 
+ 399 |  }                                       | True                      | 
+ 400 |                                          | True                      | 
+ 401 |  return argv;                            | True                      | 
+ 402 | }                                        | True                      | 
+ 403 |                                          | True                      | 
+ 404 | int printf_main(int argc UNUSED_PARAM, c | True                      | 
+ 405 | {                                        | True                      | 
+ 406 |  int conv_err;                           | True                      | 
+ 407 |  char *format;                           | True                      | 
+ 408 |  char **argv2;                           | True                      | 
+ 409 |                                          | True                      | 
+ 410 |  /* We must check that stdout is not clo | True                      | 
+ 411 |   * The reason for this is highly non-ob | True                      | 
+ 412 |   * printf_main is used from shell.      | True                      | 
+ 413 |   * Shell must correctly handle 'printf  | True                      | 
+ 414 |   * if stdout is closed. With stdio, out | True                      | 
+ 415 |   * stdout buffer, and even fflush canno | True                      | 
+ 416 |   * even if libc receives EBADF on write | True                      | 
+ 417 |   * to output data no matter what. So it | True                      | 
+ 418 |   * and possibly will clobber future out | True                      | 
+ 419 | // TODO: check fcntl() & O_ACCMODE == O_ | True                      | 
+ 420 |  if (fcntl(1, F_GETFL) == -1)            | True                      | 
+ 421 |   return 1; /* match coreutils 6.10 (san | True                      | 
+ 422 |  //if (dup2(1, 1) != 1) - old way        | True                      | 
+ 423 |  // return 1;                            | True                      | 
+ 424 |                                          | True                      | 
+ 425 |  /* bash builtin errors out on "printf ' | True                      | 
+ 426 |   * coreutils-6.9 works. Both work with  | True                      | 
+ 427 |   * We will mimic coreutils. */          | True                      | 
+ 428 |  argv = skip_dash_dash(argv);            | True                      | 
+ 429 |                                          | True                      | 
+ 430 |  if (!argv[0]) {                         | True                      | 
+ 431 |   if ((ENABLE_ASH_PRINTF || ENABLE_HUSH_ | True                      | 
+ 432 |    && applet_name[0] != 'p'              | True                      | 
+ 433 |   ) {                                    | True                      | 
+ 434 |    bb_simple_error_msg("usage: printf FO | True                      | 
+ 435 |    return 2; /* bash compat */           | True                      | 
+ 436 |   }                                      | True                      | 
+ 437 |   bb_show_usage();                       | True                      | 
+ 438 |  }                                       | True                      | 
+ 439 |                                          | True                      | 
+ 440 |  format = argv[0];                       | True                      | 
+ 441 |  argv2 = argv + 1;                       | True                      | 
+ 442 |                                          | True                      | 
+ 443 |  conv_err = 0;                           | True                      | 
+ 444 |  do {                                    | True                      | 
+ 445 |   argv = argv2;                          | True                      | 
+ 446 |   argv2 = print_formatted(format, argv,  | True                      | 
+ 447 |  } while (argv2 > argv && *argv2);       | True                      | 
+ 448 |                                          | True                      | 
+ 449 |  /* coreutils compat (bash doesn't do th | True                      | 
+ 450 |  if (*argv)                              | True                      | 
+ 451 |   fprintf(stderr, "excess args ignored") | True                      | 
+ 452 |  */                                      | True                      | 
+ 453 |                                          | True                      | 
+ 454 |  return (argv2 < argv) /* if true, print | True                      | 
+ 455 |   || conv_err; /* print_formatted saw in | True                      | 
+ 456 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +18MB, 263ms              | 

@@ -1,0 +1,887 @@
+FILE: data/raw/busybox-1.38.0/findutils/grep.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                             | 
+-----+------------------------------------------+---------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                              | 
+   2 | /*                                       | True                                              | 
+   3 |  * Mini grep implementation for busybox  | True                                              | 
+   4 |  *                                       | True                                              | 
+   5 |  * Copyright (C) 1999,2000,2001 by Lineo | True                                              | 
+   6 |  * Copyright (C) 1999,2000,2001 by Mark  | True                                              | 
+   7 |  *                                       | True                                              | 
+   8 |  * Licensed under GPLv2 or later, see fi | True                                              | 
+   9 |  */                                      | True                                              | 
+  10 | /* BB_AUDIT SUSv3 defects - unsupported  | True                                              | 
+  11 | /* BB_AUDIT GNU defects - always acts as | True                                              | 
+  12 | /* http://www.opengroup.org/onlinepubs/0 | True                                              | 
+  13 | /*                                       | True                                              | 
+  14 |  * 2004,2006 (C) Vladimir Oleynik <dzo@s | True                                              | 
+  15 |  * correction "-e pattern1 -e pattern2"  | True                                              | 
+  16 |  * precompiled regex                     | True                                              | 
+  17 |  *                                       | True                                              | 
+  18 |  * (C) 2006 Jac Goudsmit added -o option | True                                              | 
+  19 |  */                                      | True                                              | 
+  20 | //config:config GREP                     | True                                              | 
+  21 | //config: bool "grep (8.9 kb)"           | True                                              | 
+  22 | //config: default y                      | True                                              | 
+  23 | //config: help                           | True                                              | 
+  24 | //config: grep is used to search files f | True                                              | 
+  25 | //config:                                | True                                              | 
+  26 | //config:config EGREP                    | True                                              | 
+  27 | //config: bool "egrep (8 kb)"            | True                                              | 
+  28 | //config: default y                      | True                                              | 
+  29 | //config: help                           | True                                              | 
+  30 | //config: Alias to "grep -E".            | True                                              | 
+  31 | //config:                                | True                                              | 
+  32 | //config:config FGREP                    | True                                              | 
+  33 | //config: bool "fgrep (8 kb)"            | True                                              | 
+  34 | //config: default y                      | True                                              | 
+  35 | //config: help                           | True                                              | 
+  36 | //config: Alias to "grep -F".            | True                                              | 
+  37 | //config:                                | True                                              | 
+  38 | //config:config FEATURE_GREP_CONTEXT     | True                                              | 
+  39 | //config: bool "Enable before and after  | True                                              | 
+  40 | //config: default y                      | True                                              | 
+  41 | //config: depends on GREP || EGREP || FG | True                                              | 
+  42 | //config: help                           | True                                              | 
+  43 | //config: Print the specified number of  | True                                              | 
+  44 | //config: context surrounding our matchi | True                                              | 
+  45 | //config: Print the specified number of  | True                                              | 
+  46 |                                          | True                                              | 
+  47 | //applet:IF_GREP(APPLET(grep, BB_DIR_BIN | True                                              | 
+  48 | //                APPLET_ODDNAME:name    | True                                              | 
+  49 | //applet:IF_EGREP(APPLET_ODDNAME(egrep,  | True                                              | 
+  50 | //applet:IF_FGREP(APPLET_ODDNAME(fgrep,  | True                                              | 
+  51 |                                          | True                                              | 
+  52 | //kbuild:lib-$(CONFIG_GREP) += grep.o    | True                                              | 
+  53 | //kbuild:lib-$(CONFIG_EGREP) += grep.o   | True                                              | 
+  54 | //kbuild:lib-$(CONFIG_FGREP) += grep.o   | True                                              | 
+  55 |                                          | True                                              | 
+  56 | #include "libbb.h"                       | True                                              | 
+  57 | #include "common_bufsiz.h"               | True                                              | 
+  58 | #include "xregex.h"                      | True                                              | 
+  59 |                                          | True                                              | 
+  60 | //usage:#define grep_trivial_usage       | True                                              | 
+  61 | //usage:       "[-HhnlLoqvsrRiwFE"       | True                                              | 
+  62 | //usage: IF_EXTRA_COMPAT("z")            | True                                              | 
+  63 | //usage:       "] [-m N] "               | True                                              | 
+  64 | //usage: IF_FEATURE_GREP_CONTEXT("[-A|B| | True                                              | 
+  65 | //usage:       "{ PATTERN | -e PATTERN.. | True                                              | 
+  66 | //usage:#define grep_full_usage "\n\n"   | True                                              | 
+  67 | //usage:       "Search for PATTERN in FI | True                                              | 
+  68 | //usage:     "\n -H Add 'filename:' pref | True                                              | 
+  69 | //usage:     "\n -h Do not add 'filename | True                                              | 
+  70 | //usage:     "\n -n Add 'line_no:' prefi | True                                              | 
+  71 | //usage:     "\n -l Show only names of f | True                                              | 
+  72 | //usage:     "\n -L Show only names of f | True                                              | 
+  73 | //usage:     "\n -c Show only count of m | True                                              | 
+  74 | //usage:     "\n -o Show only the matchi | True                                              | 
+  75 | //usage:     "\n -q Quiet. Return 0 if P | True                                              | 
+  76 | //usage:     "\n -v Select non-matching  | True                                              | 
+  77 | //usage:     "\n -s Suppress open and re | True                                              | 
+  78 | //usage:     "\n -r Recurse"             | True                                              | 
+  79 | //usage:     "\n -R Recurse and derefere | True                                              | 
+  80 | //usage:     "\n -i Ignore case"         | True                                              | 
+  81 | //usage:     "\n -w Match whole words on | True                                              | 
+  82 | //usage:     "\n -x Match whole lines on | True                                              | 
+  83 | //usage:     "\n -F PATTERN is a literal | True                                              | 
+  84 | //usage:     "\n -E PATTERN is an extend | True                                              | 
+  85 | //usage: IF_EXTRA_COMPAT(                | True                                              | 
+  86 | //usage:     "\n -z NUL terminated input | True                                              | 
+  87 | //usage: )                               | True                                              | 
+  88 | //usage:     "\n -m N Match up to N time | True                                              | 
+  89 | //usage: IF_FEATURE_GREP_CONTEXT(        | True                                              | 
+  90 | //usage:     "\n -A N Print N lines of t | True                                              | 
+  91 | //usage:     "\n -B N Print N lines of l | True                                              | 
+  92 | //usage:     "\n -C N Same as '-A N -B N | True                                              | 
+  93 | //usage: )                               | True                                              | 
+  94 | //usage:     "\n -e PTRN Pattern to matc | True                                              | 
+  95 | //usage:     "\n -f FILE Read pattern fr | True                                              | 
+  96 | //usage:                                 | True                                              | 
+  97 | //usage:#define grep_example_usage       | True                                              | 
+  98 | //usage:       "$ grep root /etc/passwd\ | True                                              | 
+  99 | //usage:       "root:x:0:0:root:/root:/b | True                                              | 
+ 100 | //usage:       "$ grep ^[rR]oo. /etc/pas | True                                              | 
+ 101 | //usage:       "root:x:0:0:root:/root:/b | True                                              | 
+ 102 | //usage:                                 | True                                              | 
+ 103 | //usage:#define egrep_trivial_usage NOUS | True                                              | 
+ 104 | //usage:#define egrep_full_usage ""      | True                                              | 
+ 105 | //usage:#define fgrep_trivial_usage NOUS | True                                              | 
+ 106 | //usage:#define fgrep_full_usage ""      | True                                              | 
+ 107 |                                          | True                                              | 
+ 108 | /* -e,-f are lists; -m,-A,-B,-C have num | True                                              | 
+ 109 | #define OPTSTR_GREP \                    | True                                              | 
+ 110 |  "lnqvscFiHhe:*f:*LorRm:+wx" \           | True                                              | 
+ 111 |  IF_FEATURE_GREP_CONTEXT("A:+B:+C:+") \  | True                                              | 
+ 112 |  "E" \                                   | True                                              | 
+ 113 |  IF_EXTRA_COMPAT("z") \                  | True                                              | 
+ 114 |  "aI"                                    | True                                              | 
+ 115 | /* ignored: -a "assume all files to be t | True                                              | 
+ 116 | /* ignored: -I "assume binary files have | True                                              | 
+ 117 | enum {                                   | True                                              | 
+ 118 |  OPTBIT_l, /* list matched file names on | True                                              | 
+ 119 |  OPTBIT_n, /* print line# */             | True                                              | 
+ 120 |  OPTBIT_q, /* quiet - exit(EXIT_SUCCESS) | True                                              | 
+ 121 |  OPTBIT_v, /* invert the match, to selec | True                                              | 
+ 122 |  OPTBIT_s, /* suppress errors about file | True                                              | 
+ 123 |  OPTBIT_c, /* count matches per file (su | True                                              | 
+ 124 |  OPTBIT_F, /* literal match */           | True                                              | 
+ 125 |  OPTBIT_i, /* case-insensitive */        | True                                              | 
+ 126 |  OPTBIT_H, /* force filename display */  | True                                              | 
+ 127 |  OPTBIT_h, /* inhibit filename display * | True                                              | 
+ 128 |  OPTBIT_e, /* -e PATTERN */              | True                                              | 
+ 129 |  OPTBIT_f, /* -f FILE_WITH_PATTERNS */   | True                                              | 
+ 130 |  OPTBIT_L, /* list unmatched file names  | True                                              | 
+ 131 |  OPTBIT_o, /* show only matching parts o | True                                              | 
+ 132 |  OPTBIT_r, /* recurse dirs */            | True                                              | 
+ 133 |  OPTBIT_R, /* recurse dirs and symlinks  | True                                              | 
+ 134 |  OPTBIT_m, /* -m MAX_MATCHES */          | True                                              | 
+ 135 |  OPTBIT_w, /* -w whole word match */     | True                                              | 
+ 136 |  OPTBIT_x, /* -x whole line match */     | True                                              | 
+ 137 |  IF_FEATURE_GREP_CONTEXT(    OPTBIT_A ,) | True                                              | 
+ 138 |  IF_FEATURE_GREP_CONTEXT(    OPTBIT_B ,) | True                                              | 
+ 139 |  IF_FEATURE_GREP_CONTEXT(    OPTBIT_C ,) | True                                              | 
+ 140 |  OPTBIT_E, /* extended regexp */         | True                                              | 
+ 141 |  IF_EXTRA_COMPAT(            OPTBIT_z ,) | True                                              | 
+ 142 |  OPT_l = 1 << OPTBIT_l,                  | True                                              | 
+ 143 |  OPT_n = 1 << OPTBIT_n,                  | True                                              | 
+ 144 |  OPT_q = 1 << OPTBIT_q,                  | True                                              | 
+ 145 |  OPT_v = 1 << OPTBIT_v,                  | True                                              | 
+ 146 |  OPT_s = 1 << OPTBIT_s,                  | True                                              | 
+ 147 |  OPT_c = 1 << OPTBIT_c,                  | True                                              | 
+ 148 |  OPT_F = 1 << OPTBIT_F,                  | True                                              | 
+ 149 |  OPT_i = 1 << OPTBIT_i,                  | True                                              | 
+ 150 |  OPT_H = 1 << OPTBIT_H,                  | True                                              | 
+ 151 |  OPT_h = 1 << OPTBIT_h,                  | True                                              | 
+ 152 |  OPT_e = 1 << OPTBIT_e,                  | True                                              | 
+ 153 |  OPT_f = 1 << OPTBIT_f,                  | True                                              | 
+ 154 |  OPT_L = 1 << OPTBIT_L,                  | True                                              | 
+ 155 |  OPT_o = 1 << OPTBIT_o,                  | True                                              | 
+ 156 |  OPT_r = 1 << OPTBIT_r,                  | True                                              | 
+ 157 |  OPT_R = 1 << OPTBIT_R,                  | True                                              | 
+ 158 |  OPT_m = 1 << OPTBIT_m,                  | True                                              | 
+ 159 |  OPT_w = 1 << OPTBIT_w,                  | True                                              | 
+ 160 |  OPT_x = 1 << OPTBIT_x,                  | True                                              | 
+ 161 |  OPT_A = IF_FEATURE_GREP_CONTEXT(    (1  | True                                              | 
+ 162 |  OPT_B = IF_FEATURE_GREP_CONTEXT(    (1  | True                                              | 
+ 163 |  OPT_C = IF_FEATURE_GREP_CONTEXT(    (1  | True                                              | 
+ 164 |  OPT_E = 1 << OPTBIT_E,                  | True                                              | 
+ 165 |  OPT_z = IF_EXTRA_COMPAT(            (1  | True                                              | 
+ 166 | };                                       | True                                              | 
+ 167 |                                          | True                                              | 
+ 168 | #define PRINT_LINE_NUM              (opt | True                                              | 
+ 169 | #define BE_QUIET                    (opt | True                                              | 
+ 170 | #define SUPPRESS_ERR_MSGS           (opt | True                                              | 
+ 171 | #define PRINT_MATCH_COUNTS          (opt | True                                              | 
+ 172 | #define FGREP_FLAG                  (opt | True                                              | 
+ 173 | #define NUL_DELIMITED               (opt | True                                              | 
+ 174 |                                          | True                                              | 
+ 175 | struct globals {                         | True                                              | 
+ 176 |  int max_matches;                        | True                                              | 
+ 177 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 178 |  int reflags;                            | !ENABLE_EXTRA_COMPAT                              | 
+ 179 | #else                                    | True                                              | 
+ 180 |  RE_TRANSLATE_TYPE case_fold; /* RE_TRAN | ENABLE_EXTRA_COMPAT                               | 
+ 181 | #endif                                   | True                                              | 
+ 182 |  smalluint invert_search;                | True                                              | 
+ 183 |  smalluint print_filename;               | True                                              | 
+ 184 |  smalluint open_errors;                  | True                                              | 
+ 185 | #if ENABLE_FEATURE_GREP_CONTEXT          | True                                              | 
+ 186 |  smalluint did_print_line;               | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 187 |  int lines_before;                       | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 188 |  int lines_after;                        | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 189 |  char **before_buf;                      | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 190 |  IF_EXTRA_COMPAT(size_t *before_buf_size | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 191 |  int last_line_printed;                  | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 192 | #endif                                   | True                                              | 
+ 193 |  /* globals used internally */           | True                                              | 
+ 194 |  llist_t *pattern_head;   /* growable li | True                                              | 
+ 195 |  const char *cur_file;    /* the current | True                                              | 
+ 196 | } FIX_ALIASING;                          | True                                              | 
+ 197 | #define G (*(struct globals*)bb_common_b | True                                              | 
+ 198 | #define INIT_G() do { \                  | True                                              | 
+ 199 |  setup_common_bufsiz(); \                | True                                              | 
+ 200 |  BUILD_BUG_ON(sizeof(G) > COMMON_BUFSIZE | True                                              | 
+ 201 | } while (0)                              | True                                              | 
+ 202 | #define max_matches       (G.max_matches | True                                              | 
+ 203 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 204 | # define reflags          (G.reflags     | !ENABLE_EXTRA_COMPAT                              | 
+ 205 | #else                                    | True                                              | 
+ 206 | # define case_fold        (G.case_fold   | ENABLE_EXTRA_COMPAT                               | 
+ 207 | /* http://www.delorie.com/gnu/docs/regex | ENABLE_EXTRA_COMPAT                               | 
+ 208 | # define reflags           re_syntax_opt | ENABLE_EXTRA_COMPAT                               | 
+ 209 | # undef REG_NOSUB                        | ENABLE_EXTRA_COMPAT                               | 
+ 210 | # undef REG_EXTENDED                     | ENABLE_EXTRA_COMPAT                               | 
+ 211 | # undef REG_ICASE                        | ENABLE_EXTRA_COMPAT                               | 
+ 212 | # define REG_NOSUB    bug:is:here /* sho | ENABLE_EXTRA_COMPAT                               | 
+ 213 | /* Just RE_SYNTAX_EGREP is not enough, n | ENABLE_EXTRA_COMPAT                               | 
+ 214 | # define REG_EXTENDED (RE_SYNTAX_EGREP | | ENABLE_EXTRA_COMPAT                               | 
+ 215 | # define REG_ICASE    bug:is:here /* sho | ENABLE_EXTRA_COMPAT                               | 
+ 216 | #endif                                   | True                                              | 
+ 217 | #define invert_search     (G.invert_sear | True                                              | 
+ 218 | #define print_filename    (G.print_filen | True                                              | 
+ 219 | #define open_errors       (G.open_errors | True                                              | 
+ 220 | #define did_print_line    (G.did_print_l | True                                              | 
+ 221 | #define lines_before      (G.lines_befor | True                                              | 
+ 222 | #define lines_after       (G.lines_after | True                                              | 
+ 223 | #define before_buf        (G.before_buf  | True                                              | 
+ 224 | #define before_buf_size   (G.before_buf_ | True                                              | 
+ 225 | #define last_line_printed (G.last_line_p | True                                              | 
+ 226 | #define pattern_head      (G.pattern_hea | True                                              | 
+ 227 | #define cur_file          (G.cur_file    | True                                              | 
+ 228 |                                          | True                                              | 
+ 229 |                                          | True                                              | 
+ 230 | typedef struct grep_list_data_t {        | True                                              | 
+ 231 |  char *pattern;                          | True                                              | 
+ 232 | /* for GNU regex, matched_range must be  | True                                              | 
+ 233 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 234 |  regex_t compiled_regex;                 | !ENABLE_EXTRA_COMPAT                              | 
+ 235 |  regmatch_t matched_range;               | !ENABLE_EXTRA_COMPAT                              | 
+ 236 | #else                                    | True                                              | 
+ 237 |  struct re_pattern_buffer compiled_regex | ENABLE_EXTRA_COMPAT                               | 
+ 238 |  struct re_registers matched_range;      | ENABLE_EXTRA_COMPAT                               | 
+ 239 | #endif                                   | True                                              | 
+ 240 | #define ALLOCATED 1                      | True                                              | 
+ 241 | #define COMPILED 2                       | True                                              | 
+ 242 |  int flg_mem_allocated_compiled;         | True                                              | 
+ 243 | } grep_list_data_t;                      | True                                              | 
+ 244 |                                          | True                                              | 
+ 245 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 246 | #define print_line(line, line_len, linen | !ENABLE_EXTRA_COMPAT                              | 
+ 247 |  print_line(line, linenum, decoration)   | !ENABLE_EXTRA_COMPAT                              | 
+ 248 | #endif                                   | True                                              | 
+ 249 | static void print_line(const char *line, | True                                              | 
+ 250 | {                                        | True                                              | 
+ 251 | #if ENABLE_FEATURE_GREP_CONTEXT          | True                                              | 
+ 252 |  /* Happens when we go to next file, imm | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 253 |   * and try to print prev context... fro | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 254 |  if (linenum < 1)                        | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 255 |   return;                                | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 256 |  /* possibly print the little '--' separ | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 257 |  if ((lines_before || lines_after) && di | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 258 |   && last_line_printed != linenum - 1    | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 259 |  ) {                                     | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 260 |   puts("--");                            | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 261 |  }                                       | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 262 |  /* guard against printing "--" before f | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 263 |  did_print_line = 1;                     | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 264 |  last_line_printed = linenum;            | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 265 | #endif                                   | True                                              | 
+ 266 |  if (print_filename)                     | True                                              | 
+ 267 |   printf("%s%c", cur_file, decoration);  | True                                              | 
+ 268 |  if (PRINT_LINE_NUM)                     | True                                              | 
+ 269 |   printf("%i%c", linenum, decoration);   | True                                              | 
+ 270 |  /* Emulate weird GNU grep behavior with | True                                              | 
+ 271 |  if ((option_mask32 & (OPT_v|OPT_o)) !=  | True                                              | 
+ 272 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 273 |   puts(line);                            | !ENABLE_EXTRA_COMPAT                              | 
+ 274 | #else                                    | True                                              | 
+ 275 |   fwrite(line, 1, line_len, stdout);     | ENABLE_EXTRA_COMPAT                               | 
+ 276 |   putchar(NUL_DELIMITED ? '\0' : '\n');  | ENABLE_EXTRA_COMPAT                               | 
+ 277 | #endif                                   | True                                              | 
+ 278 |  }                                       | True                                              | 
+ 279 | }                                        | True                                              | 
+ 280 |                                          | True                                              | 
+ 281 | #if ENABLE_EXTRA_COMPAT                  | True                                              | 
+ 282 | /* Unlike getline, this one removes trai | ENABLE_EXTRA_COMPAT                               | 
+ 283 | static ssize_t FAST_FUNC bb_getline(char | ENABLE_EXTRA_COMPAT                               | 
+ 284 | {                                        | ENABLE_EXTRA_COMPAT                               | 
+ 285 |  ssize_t res_sz;                         | ENABLE_EXTRA_COMPAT                               | 
+ 286 |  char *line;                             | ENABLE_EXTRA_COMPAT                               | 
+ 287 |  int delim = (NUL_DELIMITED ? '\0' : '\n | ENABLE_EXTRA_COMPAT                               | 
+ 288 |                                          | ENABLE_EXTRA_COMPAT                               | 
+ 289 |  res_sz = getdelim(line_ptr, line_alloc_ | ENABLE_EXTRA_COMPAT                               | 
+ 290 |  line = *line_ptr;                       | ENABLE_EXTRA_COMPAT                               | 
+ 291 |                                          | ENABLE_EXTRA_COMPAT                               | 
+ 292 |  if (res_sz > 0) {                       | ENABLE_EXTRA_COMPAT                               | 
+ 293 |   if (line[res_sz - 1] == delim)         | ENABLE_EXTRA_COMPAT                               | 
+ 294 |    line[--res_sz] = '\0';                | ENABLE_EXTRA_COMPAT                               | 
+ 295 |  } else {                                | ENABLE_EXTRA_COMPAT                               | 
+ 296 |   free(line); /* uclibc allocates a buff | ENABLE_EXTRA_COMPAT                               | 
+ 297 |  }                                       | ENABLE_EXTRA_COMPAT                               | 
+ 298 |  return res_sz;                          | ENABLE_EXTRA_COMPAT                               | 
+ 299 | }                                        | ENABLE_EXTRA_COMPAT                               | 
+ 300 | #endif                                   | True                                              | 
+ 301 |                                          | True                                              | 
+ 302 | static int grep_file(FILE *file)         | True                                              | 
+ 303 | {                                        | True                                              | 
+ 304 |  smalluint found;                        | True                                              | 
+ 305 |  int linenum = 0;                        | True                                              | 
+ 306 |  int nmatches = 0;                       | True                                              | 
+ 307 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 308 |  char *line;                             | !ENABLE_EXTRA_COMPAT                              | 
+ 309 | #else                                    | True                                              | 
+ 310 |  char *line = NULL;                      | ENABLE_EXTRA_COMPAT                               | 
+ 311 |  ssize_t line_len;                       | ENABLE_EXTRA_COMPAT                               | 
+ 312 |  size_t line_alloc_len;                  | ENABLE_EXTRA_COMPAT                               | 
+ 313 | # define rm_so start[0]                  | ENABLE_EXTRA_COMPAT                               | 
+ 314 | # define rm_eo end[0]                    | ENABLE_EXTRA_COMPAT                               | 
+ 315 | #endif                                   | True                                              | 
+ 316 | #if ENABLE_FEATURE_GREP_CONTEXT          | True                                              | 
+ 317 |  int print_n_lines_after = 0;            | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 318 |  int curpos = 0; /* track where we are i | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 319 |  int idx = 0; /* used for iteration thro | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 320 | #else                                    | True                                              | 
+ 321 |  enum { print_n_lines_after = 0 };       | !ENABLE_FEATURE_GREP_CONTEXT                      | 
+ 322 | #endif                                   | True                                              | 
+ 323 |                                          | True                                              | 
+ 324 |  while (                                 | True                                              | 
+ 325 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 326 |   (line = xmalloc_fgetline(file)) != NUL | !ENABLE_EXTRA_COMPAT                              | 
+ 327 | #else                                    | True                                              | 
+ 328 |   (line_len = bb_getline(&line, &line_al | ENABLE_EXTRA_COMPAT                               | 
+ 329 | #endif                                   | True                                              | 
+ 330 |  ) {                                     | True                                              | 
+ 331 |   llist_t *pattern_ptr = pattern_head;   | True                                              | 
+ 332 |   grep_list_data_t *gl = gl; /* for gcc  | True                                              | 
+ 333 |                                          | True                                              | 
+ 334 |   linenum++;                             | True                                              | 
+ 335 |   found = 0;                             | True                                              | 
+ 336 |   while (pattern_ptr) {                  | True                                              | 
+ 337 |    gl = (grep_list_data_t *)pattern_ptr- | True                                              | 
+ 338 |    if (FGREP_FLAG) {                     | True                                              | 
+ 339 |     char *match;                         | True                                              | 
+ 340 |     char *str = line;                    | True                                              | 
+ 341 |  opt_f_again:                            | True                                              | 
+ 342 |     match = ((option_mask32 & OPT_i)     | True                                              | 
+ 343 |      ? strcasestr(str, gl->pattern)      | True                                              | 
+ 344 |      : strstr(str, gl->pattern)          | True                                              | 
+ 345 |      );                                  | True                                              | 
+ 346 |     if (match) {                         | True                                              | 
+ 347 |      if (option_mask32 & OPT_x) {        | True                                              | 
+ 348 |       if (match != str)                  | True                                              | 
+ 349 |        goto opt_f_not_found;             | True                                              | 
+ 350 |       if (str[strlen(gl->pattern)] != '\ | True                                              | 
+ 351 |        goto opt_f_not_found;             | True                                              | 
+ 352 |      } else                              | True                                              | 
+ 353 |      if (option_mask32 & OPT_w) {        | True                                              | 
+ 354 |       char c = (match != line) ? match[- | True                                              | 
+ 355 |       if (!isalnum(c) && c != '_') {     | True                                              | 
+ 356 |        c = match[strlen(gl->pattern)];   | True                                              | 
+ 357 |        if (!c || (!isalnum(c) && c != '_ | True                                              | 
+ 358 |         goto opt_f_found;                | True                                              | 
+ 359 |       }                                  | True                                              | 
+ 360 |       str = match + 1;                   | True                                              | 
+ 361 |       goto opt_f_again;                  | True                                              | 
+ 362 |      }                                   | True                                              | 
+ 363 |  opt_f_found:                            | True                                              | 
+ 364 |      found = 1;                          | True                                              | 
+ 365 |  opt_f_not_found: ;                      | True                                              | 
+ 366 |     }                                    | True                                              | 
+ 367 |    } else {                              | True                                              | 
+ 368 | #if ENABLE_EXTRA_COMPAT                  | True                                              | 
+ 369 |     unsigned start_pos;                  | ENABLE_EXTRA_COMPAT                               | 
+ 370 | #else                                    | True                                              | 
+ 371 |     int match_flg;                       | !ENABLE_EXTRA_COMPAT                              | 
+ 372 | #endif                                   | True                                              | 
+ 373 |     char *match_at;                      | True                                              | 
+ 374 |                                          | True                                              | 
+ 375 |     if (!(gl->flg_mem_allocated_compiled | True                                              | 
+ 376 |      gl->flg_mem_allocated_compiled |= C | True                                              | 
+ 377 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 378 |      xregcomp(&gl->compiled_regex, gl->p | !ENABLE_EXTRA_COMPAT                              | 
+ 379 | #else                                    | True                                              | 
+ 380 |      memset(&gl->compiled_regex, 0, size | ENABLE_EXTRA_COMPAT                               | 
+ 381 |      gl->compiled_regex.translate = case | ENABLE_EXTRA_COMPAT                               | 
+ 382 |      if (re_compile_pattern(gl->pattern, | ENABLE_EXTRA_COMPAT                               | 
+ 383 |       bb_error_msg_and_die("bad regex '% | ENABLE_EXTRA_COMPAT                               | 
+ 384 | #endif                                   | True                                              | 
+ 385 |     }                                    | True                                              | 
+ 386 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 387 |     gl->matched_range.rm_so = 0;         | !ENABLE_EXTRA_COMPAT                              | 
+ 388 |     gl->matched_range.rm_eo = 0;         | !ENABLE_EXTRA_COMPAT                              | 
+ 389 |     match_flg = 0;                       | !ENABLE_EXTRA_COMPAT                              | 
+ 390 | #else                                    | True                                              | 
+ 391 |     start_pos = 0;                       | ENABLE_EXTRA_COMPAT                               | 
+ 392 | #endif                                   | True                                              | 
+ 393 |     match_at = line;                     | True                                              | 
+ 394 |  opt_w_again:                            | True                                              | 
+ 395 | //bb_error_msg("'%s' start_pos:%d line_l | True                                              | 
+ 396 |     if (                                 | True                                              | 
+ 397 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 398 |      regexec(&gl->compiled_regex, match_ | !ENABLE_EXTRA_COMPAT                              | 
+ 399 | #else                                    | True                                              | 
+ 400 |      re_search(&gl->compiled_regex, matc | ENABLE_EXTRA_COMPAT                               | 
+ 401 |        start_pos, /*range:*/ line_len,   | ENABLE_EXTRA_COMPAT                               | 
+ 402 |        &gl->matched_range) >= 0          | ENABLE_EXTRA_COMPAT                               | 
+ 403 | #endif                                   | True                                              | 
+ 404 |     ) {                                  | True                                              | 
+ 405 |      if (option_mask32 & OPT_x) {        | True                                              | 
+ 406 |       found |= (gl->matched_range.rm_so  | True                                              | 
+ 407 |                && match_at[gl->matched_r | True                                              | 
+ 408 |      } else                              | True                                              | 
+ 409 |      if (!(option_mask32 & OPT_w)) {     | True                                              | 
+ 410 |       found = 1;                         | True                                              | 
+ 411 |      } else {                            | True                                              | 
+ 412 |       char c = ' ';                      | True                                              | 
+ 413 |       if (match_at > line || gl->matched | True                                              | 
+ 414 |        c = match_at[gl->matched_range.rm | True                                              | 
+ 415 |       }                                  | True                                              | 
+ 416 |       if (!isalnum(c) && c != '_') {     | True                                              | 
+ 417 |        c = match_at[gl->matched_range.rm | True                                              | 
+ 418 |       }                                  | True                                              | 
+ 419 |       if (!isalnum(c) && c != '_') {     | True                                              | 
+ 420 |        found = 1;                        | True                                              | 
+ 421 |       } else {                           | True                                              | 
+ 422 |    /*                                    | True                                              | 
+ 423 |     * Why check gl->matched_range.rm_eo? | True                                              | 
+ 424 |     * Zero-length match makes -w skip th | True                                              | 
+ 425 |     * "echo foo | grep ^" prints "foo",  | True                                              | 
+ 426 |     * "echo foo | grep -w ^" prints noth | True                                              | 
+ 427 |     * Without such check, we can loop fo | True                                              | 
+ 428 |     */                                   | True                                              | 
+ 429 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 430 |        if (gl->matched_range.rm_eo != 0) | !ENABLE_EXTRA_COMPAT                              | 
+ 431 |         match_at += gl->matched_range.rm | !ENABLE_EXTRA_COMPAT                              | 
+ 432 |         match_flg |= REG_NOTBOL;         | !ENABLE_EXTRA_COMPAT                              | 
+ 433 |         goto opt_w_again;                | !ENABLE_EXTRA_COMPAT                              | 
+ 434 |        }                                 | !ENABLE_EXTRA_COMPAT                              | 
+ 435 | #else                                    | True                                              | 
+ 436 |        if (gl->matched_range.rm_eo > sta | ENABLE_EXTRA_COMPAT                               | 
+ 437 |         start_pos = gl->matched_range.rm | ENABLE_EXTRA_COMPAT                               | 
+ 438 |         goto opt_w_again;                | ENABLE_EXTRA_COMPAT                               | 
+ 439 |        }                                 | ENABLE_EXTRA_COMPAT                               | 
+ 440 | #endif                                   | True                                              | 
+ 441 |       }                                  | True                                              | 
+ 442 |      }                                   | True                                              | 
+ 443 |     }                                    | True                                              | 
+ 444 |    }                                     | True                                              | 
+ 445 |    /* If it's a non-inverted search, we  | True                                              | 
+ 446 |     * at first match and report it.      | True                                              | 
+ 447 |     * If it's an inverted search, we can | True                                              | 
+ 448 |     * to the next line of input, ignorin | True                                              | 
+ 449 |     * rest of the patterns.              | True                                              | 
+ 450 |     */                                   | True                                              | 
+ 451 |    if (found) {                          | True                                              | 
+ 452 |     //if (invert_search)                 | True                                              | 
+ 453 |     // goto do_not_found;                | True                                              | 
+ 454 |     //goto do_found;                     | True                                              | 
+ 455 |     break; // this accomplishes both     | True                                              | 
+ 456 |    }                                     | True                                              | 
+ 457 |    pattern_ptr = pattern_ptr->link;      | True                                              | 
+ 458 |   } /* while (pattern_ptr) */            | True                                              | 
+ 459 |                                          | True                                              | 
+ 460 |   if (found ^ invert_search) {           | True                                              | 
+ 461 |  //do_found:                             | True                                              | 
+ 462 |    /* keep track of matches */           | True                                              | 
+ 463 |    nmatches++;                           | True                                              | 
+ 464 |                                          | True                                              | 
+ 465 |    /* quiet/print (non)matching file nam | True                                              | 
+ 466 |    if (option_mask32 & (OPT_q|OPT_l|OPT_ | True                                              | 
+ 467 |     free(line); /* we don't need line an | True                                              | 
+ 468 |     if (BE_QUIET) {                      | True                                              | 
+ 469 |      /* manpage says about -q:           | True                                              | 
+ 470 |       * "exit immediately with zero stat | True                                              | 
+ 471 |       * if any match is found,           | True                                              | 
+ 472 |       * even if errors were detected" */ | True                                              | 
+ 473 |      exit_SUCCESS();                     | True                                              | 
+ 474 |     }                                    | True                                              | 
+ 475 |     /* -l "print filenames with matches" | True                                              | 
+ 476 |     if (option_mask32 & OPT_l) {         | True                                              | 
+ 477 |      puts(cur_file);                     | True                                              | 
+ 478 |      return 1;                           | True                                              | 
+ 479 |     }                                    | True                                              | 
+ 480 |     /* -L "print filenames without match | True                                              | 
+ 481 |     return 0; /* 0: we do not print fnam | True                                              | 
+ 482 |    }                                     | True                                              | 
+ 483 |                                          | True                                              | 
+ 484 | #if ENABLE_FEATURE_GREP_CONTEXT          | True                                              | 
+ 485 |    /* Were we printing context and saw n | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 486 |    if ((option_mask32 & OPT_m) && nmatch | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 487 |     break;                               | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 488 | #endif                                   | True                                              | 
+ 489 |                                          | True                                              | 
+ 490 |    /* print the matched line */          | True                                              | 
+ 491 |    if (PRINT_MATCH_COUNTS == 0) {        | True                                              | 
+ 492 | #if ENABLE_FEATURE_GREP_CONTEXT          | True                                              | 
+ 493 |     int prevpos = (curpos == 0) ? lines_ | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 494 |                                          | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 495 |     /* if we were told to print 'before' | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 496 |      * one line in the circular buffer,  | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 497 |     if (lines_before && before_buf[prevp | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 498 |      int first_buf_entry_line_num = line | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 499 |                                          | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 500 |      /* advance to the first entry in th | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 501 |       * figure out the line number is of | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 502 |       * buffer */                        | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 503 |      idx = curpos;                       | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 504 |      while (before_buf[idx] == NULL) {   | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 505 |       idx = (idx + 1) % lines_before;    | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 506 |       first_buf_entry_line_num++;        | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 507 |      }                                   | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 508 |                                          | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 509 |      /* now print each line in the buffe | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 510 |      while (before_buf[idx] != NULL) {   | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 511 |       print_line(before_buf[idx], before | !ENABLE_EXTRA_COMPAT&&ENABLE_FEATURE_GREP_CONTEXT | 
+ 512 |       free(before_buf[idx]);             | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 513 |       before_buf[idx] = NULL;            | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 514 |       idx = (idx + 1) % lines_before;    | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 515 |       first_buf_entry_line_num++;        | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 516 |      }                                   | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 517 |     }                                    | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 518 |                                          | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 519 |     /* make a note that we need to print | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 520 |     print_n_lines_after = lines_after;   | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 521 | #endif                                   | True                                              | 
+ 522 |     if (option_mask32 & OPT_o) {         | True                                              | 
+ 523 |      if (FGREP_FLAG) {                   | True                                              | 
+ 524 |       /* -Fo just prints the pattern     | True                                              | 
+ 525 |        * (unless -v: -Fov doesn't print  | True                                              | 
+ 526 |       if (found)                         | True                                              | 
+ 527 |        print_line(gl->pattern, strlen(gl | !ENABLE_EXTRA_COMPAT                              | 
+ 528 |      } else while (1) {                  | True                                              | 
+ 529 |       unsigned start = gl->matched_range | True                                              | 
+ 530 |       unsigned end = gl->matched_range.r | True                                              | 
+ 531 |       unsigned len = end - start;        | True                                              | 
+ 532 |       char old = line[end];              | True                                              | 
+ 533 |       line[end] = '\0';                  | True                                              | 
+ 534 |       /* Empty match is not printed: try | True                                              | 
+ 535 |       if (len != 0)                      | True                                              | 
+ 536 |        print_line(line + start, len, lin | !ENABLE_EXTRA_COMPAT                              | 
+ 537 |       if (old == '\0')                   | True                                              | 
+ 538 |        break;                            | True                                              | 
+ 539 |       line[end] = old;                   | True                                              | 
+ 540 |       if (len == 0)                      | True                                              | 
+ 541 |        end++;                            | True                                              | 
+ 542 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 543 |       if (regexec(&gl->compiled_regex, l | !ENABLE_EXTRA_COMPAT                              | 
+ 544 |         1, &gl->matched_range, REG_NOTBO | !ENABLE_EXTRA_COMPAT                              | 
+ 545 |        break;                            | !ENABLE_EXTRA_COMPAT                              | 
+ 546 |       gl->matched_range.rm_so += end;    | !ENABLE_EXTRA_COMPAT                              | 
+ 547 |       gl->matched_range.rm_eo += end;    | !ENABLE_EXTRA_COMPAT                              | 
+ 548 | #else                                    | True                                              | 
+ 549 |       if (re_search(&gl->compiled_regex, | ENABLE_EXTRA_COMPAT                               | 
+ 550 |         end, line_len - end,             | ENABLE_EXTRA_COMPAT                               | 
+ 551 |         &gl->matched_range) < 0)         | ENABLE_EXTRA_COMPAT                               | 
+ 552 |        break;                            | ENABLE_EXTRA_COMPAT                               | 
+ 553 | #endif                                   | True                                              | 
+ 554 |      }                                   | True                                              | 
+ 555 |     } else {                             | True                                              | 
+ 556 |      print_line(line, line_len, linenum, | !ENABLE_EXTRA_COMPAT                              | 
+ 557 |     }                                    | True                                              | 
+ 558 |    }                                     | True                                              | 
+ 559 |   }                                      | True                                              | 
+ 560 | #if ENABLE_FEATURE_GREP_CONTEXT          | True                                              | 
+ 561 |   else { /* no match */                  | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 562 |  //do_not_found:                         | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 563 |    /* if we need to print some context l | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 564 |    if (print_n_lines_after) {            | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 565 |     print_line(line, strlen(line), linen | !ENABLE_EXTRA_COMPAT&&ENABLE_FEATURE_GREP_CONTEXT | 
+ 566 |     print_n_lines_after--;               | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 567 |    } else if (lines_before) {            | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 568 |     /* Add the line to the circular 'bef | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 569 |     free(before_buf[curpos]);            | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 570 |     before_buf[curpos] = line;           | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 571 |     IF_EXTRA_COMPAT(before_buf_size[curp | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 572 |     curpos = (curpos + 1) % lines_before | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 573 |     /* avoid free(line) - we took the li | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 574 |     line = NULL;                         | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 575 |    }                                     | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 576 |   }                                      | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 577 |                                          | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 578 | #endif /* ENABLE_FEATURE_GREP_CONTEXT */ | True                                              | 
+ 579 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 580 |   free(line);                            | !ENABLE_EXTRA_COMPAT                              | 
+ 581 | #endif                                   | True                                              | 
+ 582 |   /* Did we print all context after last | True                                              | 
+ 583 |   if ((option_mask32 & OPT_m)            | True                                              | 
+ 584 |    && !print_n_lines_after               | True                                              | 
+ 585 |    && nmatches == max_matches            | True                                              | 
+ 586 |   ) {                                    | True                                              | 
+ 587 |    break;                                | True                                              | 
+ 588 |   }                                      | True                                              | 
+ 589 |  } /* while (read line) */               | True                                              | 
+ 590 |                                          | True                                              | 
+ 591 |  /* special-case file post-processing fo | True                                              | 
+ 592 |   * matches, just filenames and possibly | True                                              | 
+ 593 |                                          | True                                              | 
+ 594 |  /* grep -c: print [filename:]count, eve | True                                              | 
+ 595 |  if (PRINT_MATCH_COUNTS) {               | True                                              | 
+ 596 |   if (print_filename)                    | True                                              | 
+ 597 |    printf("%s:", cur_file);              | True                                              | 
+ 598 |   printf("%d\n", nmatches);              | True                                              | 
+ 599 |  }                                       | True                                              | 
+ 600 |                                          | True                                              | 
+ 601 |  /* grep -L: "print filenames without ma | True                                              | 
+ 602 |  if (option_mask32 & OPT_L) {            | True                                              | 
+ 603 |   /* nmatches is zero, no need to check  | True                                              | 
+ 604 |    * we return 0 early if -L and we dete | True                                              | 
+ 605 |    */                                    | True                                              | 
+ 606 |   puts(cur_file);                        | True                                              | 
+ 607 |   return 1; /* 1: we printed fname, henc | True                                              | 
+ 608 |  }                                       | True                                              | 
+ 609 |                                          | True                                              | 
+ 610 |  return nmatches != 0; /* we return not  | True                                              | 
+ 611 | }                                        | True                                              | 
+ 612 |                                          | True                                              | 
+ 613 | #if ENABLE_FEATURE_CLEAN_UP              | True                                              | 
+ 614 | #define new_grep_list_data(p, m) add_gre | ENABLE_FEATURE_CLEAN_UP                           | 
+ 615 | static char *add_grep_list_data(char *pa | ENABLE_FEATURE_CLEAN_UP                           | 
+ 616 | #else                                    | True                                              | 
+ 617 | #define new_grep_list_data(p, m) add_gre | !ENABLE_FEATURE_CLEAN_UP                          | 
+ 618 | static char *add_grep_list_data(char *pa | !ENABLE_FEATURE_CLEAN_UP                          | 
+ 619 | #endif                                   | True                                              | 
+ 620 | {                                        | True                                              | 
+ 621 |  grep_list_data_t *gl = xzalloc(sizeof(* | True                                              | 
+ 622 |  gl->pattern = pattern;                  | True                                              | 
+ 623 | #if ENABLE_FEATURE_CLEAN_UP              | True                                              | 
+ 624 |  gl->flg_mem_allocated_compiled = flg_us | ENABLE_FEATURE_CLEAN_UP                           | 
+ 625 | #else                                    | True                                              | 
+ 626 |  /*gl->flg_mem_allocated_compiled = 0;*/ | !ENABLE_FEATURE_CLEAN_UP                          | 
+ 627 | #endif                                   | True                                              | 
+ 628 |  return (char *)gl;                      | True                                              | 
+ 629 | }                                        | True                                              | 
+ 630 |                                          | True                                              | 
+ 631 | static void load_regexes_from_file(llist | True                                              | 
+ 632 | {                                        | True                                              | 
+ 633 |  while (fopt) {                          | True                                              | 
+ 634 |   char *line;                            | True                                              | 
+ 635 |   FILE *fp;                              | True                                              | 
+ 636 |   llist_t *cur = fopt;                   | True                                              | 
+ 637 |   char *ffile = cur->data;               | True                                              | 
+ 638 |                                          | True                                              | 
+ 639 |   fopt = cur->link;                      | True                                              | 
+ 640 |   free(cur);                             | True                                              | 
+ 641 |   fp = xfopen_stdin(ffile);              | True                                              | 
+ 642 |   while ((line = xmalloc_fgetline(fp)) ! | True                                              | 
+ 643 |    llist_add_to(&pattern_head,           | True                                              | 
+ 644 |     new_grep_list_data(line, ALLOCATED)) | ENABLE_FEATURE_CLEAN_UP                           | 
+ 645 |   }                                      | True                                              | 
+ 646 |   fclose_if_not_stdin(fp);               | True                                              | 
+ 647 |  }                                       | True                                              | 
+ 648 | }                                        | True                                              | 
+ 649 |                                          | True                                              | 
+ 650 | static void load_pattern_list(llist_t ** | True                                              | 
+ 651 | {                                        | True                                              | 
+ 652 |  char *p;                                | True                                              | 
+ 653 |  while ((p = strsep(&pattern, "\n")) !=  | True                                              | 
+ 654 |   llist_add_to(lst, new_grep_list_data(p | True                                              | 
+ 655 | }                                        | True                                              | 
+ 656 |                                          | True                                              | 
+ 657 | static int FAST_FUNC file_action_grep(st | True                                              | 
+ 658 |   const char *filename,                  | True                                              | 
+ 659 |   struct stat *statbuf)                  | True                                              | 
+ 660 | {                                        | True                                              | 
+ 661 |  FILE *file;                             | True                                              | 
+ 662 |                                          | True                                              | 
+ 663 |  /* If we are given a link to a director | True                                              | 
+ 664 |   * than trying to open the "file" and h | True                                              | 
+ 665 |   * since that is not portable across op | True                                              | 
+ 666 |   * example will return the raw director | True                                              | 
+ 667 |  if (S_ISLNK(statbuf->st_mode)) {        | True                                              | 
+ 668 |   struct stat sb;                        | True                                              | 
+ 669 |   if (stat(filename, &sb) != 0) {        | True                                              | 
+ 670 |    if (!SUPPRESS_ERR_MSGS)               | True                                              | 
+ 671 |     bb_simple_perror_msg(filename);      | True                                              | 
+ 672 |    return 0;                             | True                                              | 
+ 673 |   }                                      | True                                              | 
+ 674 |   if (S_ISDIR(sb.st_mode))               | True                                              | 
+ 675 |    return 1;                             | True                                              | 
+ 676 |  }                                       | True                                              | 
+ 677 |                                          | True                                              | 
+ 678 |  file = fopen_for_read(filename);        | True                                              | 
+ 679 |  if (file == NULL) {                     | True                                              | 
+ 680 |   if (!SUPPRESS_ERR_MSGS)                | True                                              | 
+ 681 |    bb_simple_perror_msg(filename);       | True                                              | 
+ 682 |   open_errors = 1;                       | True                                              | 
+ 683 |   return 0;                              | True                                              | 
+ 684 |  }                                       | True                                              | 
+ 685 |  cur_file = filename;                    | True                                              | 
+ 686 |  *(int*)state->userData |= grep_file(fil | True                                              | 
+ 687 |  fclose(file);                           | True                                              | 
+ 688 |  return 1;                               | True                                              | 
+ 689 | }                                        | True                                              | 
+ 690 |                                          | True                                              | 
+ 691 | static int grep_dir(const char *dir)     | True                                              | 
+ 692 | {                                        | True                                              | 
+ 693 |  int matched = 0;                        | True                                              | 
+ 694 |  recursive_action(dir, 0                 | True                                              | 
+ 695 |   | ACTION_RECURSE                       | True                                              | 
+ 696 |   | ((option_mask32 & OPT_R) ? ACTION_FO | True                                              | 
+ 697 |   | ACTION_FOLLOWLINKS_L0 /* grep -r ... | True                                              | 
+ 698 |   | ACTION_DEPTHFIRST                    | True                                              | 
+ 699 |   | 0,                                   | True                                              | 
+ 700 |   /* fileAction= */ file_action_grep,    | True                                              | 
+ 701 |   /* dirAction= */ NULL,                 | True                                              | 
+ 702 |   /* userData= */ &matched               | True                                              | 
+ 703 |  );                                      | True                                              | 
+ 704 |  return matched;                         | True                                              | 
+ 705 | }                                        | True                                              | 
+ 706 |                                          | True                                              | 
+ 707 | int grep_main(int argc, char **argv) MAI | True                                              | 
+ 708 | int grep_main(int argc UNUSED_PARAM, cha | True                                              | 
+ 709 | {                                        | True                                              | 
+ 710 |  FILE *file;                             | True                                              | 
+ 711 |  int matched;                            | True                                              | 
+ 712 |  llist_t *fopt = NULL;                   | True                                              | 
+ 713 | #if ENABLE_FEATURE_GREP_CONTEXT          | True                                              | 
+ 714 |  int Copt, opts;                         | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 715 | #endif                                   | True                                              | 
+ 716 |  INIT_G();                               | True                                              | 
+ 717 |                                          | True                                              | 
+ 718 |  /* For grep, exitcode of 1 is "not foun | True                                              | 
+ 719 |  xfunc_error_retval = 2;                 | True                                              | 
+ 720 |                                          | True                                              | 
+ 721 |  /* do normal option parsing */          | True                                              | 
+ 722 | #if ENABLE_FEATURE_GREP_CONTEXT          | True                                              | 
+ 723 |  /* -H unsets -h; -C unsets -A,-B */     | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 724 |  opts = getopt32long(argv, "^"           | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 725 |   OPTSTR_GREP                            | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 726 |    "\0"                                  | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 727 |    "H-h:C-AB",                           | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 728 |   "color\0" Optional_argument "\xff",    | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 729 |   &pattern_head, &fopt, &max_matches,    | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 730 |   &lines_after, &lines_before, &Copt     | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 731 |   , NULL                                 | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 732 |  );                                      | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 733 |                                          | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 734 |  if (opts & OPT_C) {                     | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 735 |   /* -C unsets prev -A and -B, but follo | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 736 |    * may override it */                  | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 737 |   if (!(opts & OPT_A)) /* not overridden | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 738 |    lines_after = Copt;                   | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 739 |   if (!(opts & OPT_B)) /* not overridden | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 740 |    lines_before = Copt;                  | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 741 |  }                                       | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 742 |  /* sanity checks */                     | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 743 |  if (opts & (OPT_c|OPT_q|OPT_l|OPT_L)) { | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 744 |   option_mask32 &= ~OPT_n;               | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 745 |   lines_before = 0;                      | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 746 |   lines_after = 0;                       | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 747 |  } else if (lines_before > 0) {          | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 748 |   if (lines_before > INT_MAX / sizeof(lo | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 749 |    lines_before = INT_MAX / sizeof(long  | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 750 |   /* overflow in (lines_before * sizeof( | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 751 |   before_buf = xzalloc(lines_before * si | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 752 |   IF_EXTRA_COMPAT(before_buf_size = xzal | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 753 |  }                                       | ENABLE_FEATURE_GREP_CONTEXT                       | 
+ 754 | #else                                    | True                                              | 
+ 755 |  /* with auto sanity checks */           | !ENABLE_FEATURE_GREP_CONTEXT                      | 
+ 756 |  getopt32(argv, "^" OPTSTR_GREP "\0" "H- | !ENABLE_FEATURE_GREP_CONTEXT                      | 
+ 757 |   &pattern_head, &fopt, &max_matches);   | !ENABLE_FEATURE_GREP_CONTEXT                      | 
+ 758 | #endif                                   | True                                              | 
+ 759 |  invert_search = ((option_mask32 & OPT_v | True                                              | 
+ 760 |                                          | True                                              | 
+ 761 |  { /* convert char **argv to pattern_lis | True                                              | 
+ 762 |   llist_t *cur, *new = NULL;             | True                                              | 
+ 763 |   for (cur = pattern_head; cur; cur = cu | True                                              | 
+ 764 |    load_pattern_list(&new, cur->data);   | True                                              | 
+ 765 |   llist_free(pattern_head, NULL);        | True                                              | 
+ 766 |   pattern_head = new;                    | True                                              | 
+ 767 |  }                                       | True                                              | 
+ 768 |  if (option_mask32 & OPT_f) {            | True                                              | 
+ 769 |   load_regexes_from_file(fopt);          | True                                              | 
+ 770 |   if (!pattern_head) { /* -f EMPTY_FILE? | True                                              | 
+ 771 |    /* GNU grep treats it as "nothing mat | True                                              | 
+ 772 |    const char *data = (option_mask32 & O | True                                              | 
+ 773 |    llist_add_to(&pattern_head, new_grep_ | True                                              | 
+ 774 |    invert_search ^= 1;                   | True                                              | 
+ 775 |   }                                      | True                                              | 
+ 776 |  }                                       | True                                              | 
+ 777 |                                          | True                                              | 
+ 778 |  if (ENABLE_FGREP && applet_name[0] == ' | True                                              | 
+ 779 |   option_mask32 |= OPT_F;                | True                                              | 
+ 780 |                                          | True                                              | 
+ 781 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 782 |  if (!(option_mask32 & (OPT_o | OPT_w |  | !ENABLE_EXTRA_COMPAT                              | 
+ 783 |   reflags = REG_NOSUB;                   | !ENABLE_EXTRA_COMPAT                              | 
+ 784 | #endif                                   | True                                              | 
+ 785 |                                          | True                                              | 
+ 786 |  if ((ENABLE_EGREP && applet_name[0] ==  | True                                              | 
+ 787 |   || (option_mask32 & OPT_E)             | True                                              | 
+ 788 |  ) {                                     | True                                              | 
+ 789 |   reflags |= REG_EXTENDED;               | True                                              | 
+ 790 |  }                                       | True                                              | 
+ 791 | #if ENABLE_EXTRA_COMPAT                  | True                                              | 
+ 792 |  else {                                  | ENABLE_EXTRA_COMPAT                               | 
+ 793 |   reflags = RE_SYNTAX_GREP;              | ENABLE_EXTRA_COMPAT                               | 
+ 794 |  }                                       | ENABLE_EXTRA_COMPAT                               | 
+ 795 | #endif                                   | True                                              | 
+ 796 |                                          | True                                              | 
+ 797 |  if (option_mask32 & OPT_i) {            | True                                              | 
+ 798 | #if !ENABLE_EXTRA_COMPAT                 | True                                              | 
+ 799 |   reflags |= REG_ICASE;                  | !ENABLE_EXTRA_COMPAT                              | 
+ 800 | #else                                    | True                                              | 
+ 801 |   int i;                                 | ENABLE_EXTRA_COMPAT                               | 
+ 802 |   case_fold = xmalloc(256);              | ENABLE_EXTRA_COMPAT                               | 
+ 803 |   for (i = 0; i < 256; i++)              | ENABLE_EXTRA_COMPAT                               | 
+ 804 |    case_fold[i] = (unsigned char)i;      | ENABLE_EXTRA_COMPAT                               | 
+ 805 |   for (i = 'a'; i <= 'z'; i++)           | ENABLE_EXTRA_COMPAT                               | 
+ 806 |    case_fold[i] = (unsigned char)(i - (' | ENABLE_EXTRA_COMPAT                               | 
+ 807 | #endif                                   | True                                              | 
+ 808 |  }                                       | True                                              | 
+ 809 |                                          | True                                              | 
+ 810 |  argv += optind;                         | True                                              | 
+ 811 |                                          | True                                              | 
+ 812 |  /* if we didn't get a pattern from -e a | True                                              | 
+ 813 |   * first parameter should be the patter | True                                              | 
+ 814 |  if (pattern_head == NULL) {             | True                                              | 
+ 815 |   if (*argv == NULL)                     | True                                              | 
+ 816 |    bb_show_usage();                      | True                                              | 
+ 817 |   load_pattern_list(&pattern_head, *argv | True                                              | 
+ 818 |  }                                       | True                                              | 
+ 819 |                                          | True                                              | 
+ 820 |  /* argv[0..(argc-1)] should be names of | True                                              | 
+ 821 |   * there is more than one file to grep, | True                                              | 
+ 822 |  if (argv[0] && argv[1])                 | True                                              | 
+ 823 |   print_filename = 1;                    | True                                              | 
+ 824 |  /* -H / -h of course override */        | True                                              | 
+ 825 |  if (option_mask32 & OPT_H)              | True                                              | 
+ 826 |   print_filename = 1;                    | True                                              | 
+ 827 |  if (option_mask32 & OPT_h)              | True                                              | 
+ 828 |   print_filename = 0;                    | True                                              | 
+ 829 |                                          | True                                              | 
+ 830 |  /* If no files were specified, or '-' w | True                                              | 
+ 831 |   * stdin. Otherwise, we grep through al | True                                              | 
+ 832 |  matched = 0;                            | True                                              | 
+ 833 |  do {                                    | True                                              | 
+ 834 |   cur_file = *argv;                      | True                                              | 
+ 835 |   file = stdin;                          | True                                              | 
+ 836 |   if (!cur_file || LONE_DASH(cur_file))  | True                                              | 
+ 837 |    cur_file = "(standard input)";        | True                                              | 
+ 838 |   } else {                               | True                                              | 
+ 839 |    if (option_mask32 & (OPT_r|OPT_R)) {  | True                                              | 
+ 840 |     struct stat st;                      | True                                              | 
+ 841 |     if (stat(cur_file, &st) == 0 && S_IS | True                                              | 
+ 842 |      if (!(option_mask32 & OPT_h))       | True                                              | 
+ 843 |       print_filename = 1;                | True                                              | 
+ 844 |      matched |= grep_dir(cur_file);      | True                                              | 
+ 845 |      goto grep_done;                     | True                                              | 
+ 846 |     }                                    | True                                              | 
+ 847 |    }                                     | True                                              | 
+ 848 |    /* else: fopen(dir) will succeed, but | True                                              | 
+ 849 |    file = fopen_for_read(cur_file);      | True                                              | 
+ 850 |    if (file == NULL) {                   | True                                              | 
+ 851 |     if (!SUPPRESS_ERR_MSGS)              | True                                              | 
+ 852 |      bb_simple_perror_msg(cur_file);     | True                                              | 
+ 853 |     open_errors = 1;                     | True                                              | 
+ 854 |     continue;                            | True                                              | 
+ 855 |    }                                     | True                                              | 
+ 856 |   }                                      | True                                              | 
+ 857 |   matched |= grep_file(file);            | True                                              | 
+ 858 |   fclose_if_not_stdin(file);             | True                                              | 
+ 859 |  grep_done: ;                            | True                                              | 
+ 860 |  } while (*argv && *++argv);             | True                                              | 
+ 861 |                                          | True                                              | 
+ 862 |  /* destroy all the elements in the patt | True                                              | 
+ 863 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                                              | 
+ 864 |   while (pattern_head) {                 | True                                              | 
+ 865 |    llist_t *pattern_head_ptr = pattern_h | True                                              | 
+ 866 |    grep_list_data_t *gl = (grep_list_dat | True                                              | 
+ 867 |                                          | True                                              | 
+ 868 |    pattern_head = pattern_head->link;    | True                                              | 
+ 869 |    if (gl->flg_mem_allocated_compiled &  | True                                              | 
+ 870 |     free(gl->pattern);                   | True                                              | 
+ 871 |    if (gl->flg_mem_allocated_compiled &  | True                                              | 
+ 872 |     regfree(&gl->compiled_regex);        | True                                              | 
+ 873 |    free(gl);                             | True                                              | 
+ 874 |    free(pattern_head_ptr);               | True                                              | 
+ 875 |   }                                      | True                                              | 
+ 876 |  }                                       | True                                              | 
+ 877 |  /* 0 = success, 1 = failed, 2 = error * | True                                              | 
+ 878 |  if (open_errors)                        | True                                              | 
+ 879 |   return 2;                              | True                                              | 
+ 880 |  return !matched; /* invert return value | True                                              | 
+ 881 | }                                        | True                                              | 
+-----+------------------------------------------+---------------------------------------------------+
+     |                                          | +133MB, 306ms                                     | 

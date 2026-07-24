@@ -1,0 +1,311 @@
+FILE: data/raw/busybox-1.38.0/editors/patch_bbox.c
+Resultado PCLocator:
+   # | line of code                             | Merge                            | 
+-----+------------------------------------------+----------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                             | 
+   2 | /*                                       | True                             | 
+   3 |  * busybox patch applet to handle the un | True                             | 
+   4 |  * Copyright (C) 2003 Glenn McGrath      | True                             | 
+   5 |  *                                       | True                             | 
+   6 |  * Licensed under GPLv2 or later, see fi | True                             | 
+   7 |  *                                       | True                             | 
+   8 |  * This applet is written to work with p | True                             | 
+   9 |  * where there is equivalent functionali | True                             | 
+  10 |  * as per GNU patch.                     | True                             | 
+  11 |  *                                       | True                             | 
+  12 |  * There is a SUSv3 specification for pa | True                             | 
+  13 |  * incomplete, it doesnt even mention un | True                             | 
+  14 |  * http://www.opengroup.org/onlinepubs/0 | True                             | 
+  15 |  *                                       | True                             | 
+  16 |  * Issues                                | True                             | 
+  17 |  * - Non-interactive                     | True                             | 
+  18 |  * - Patches must apply cleanly or patch | True                             | 
+  19 |  * - Reject file isnt saved              | True                             | 
+  20 |  */                                      | True                             | 
+  21 |                                          | True                             | 
+  22 | #include "libbb.h"                       | True                             | 
+  23 |                                          | True                             | 
+  24 | static unsigned copy_lines(FILE *src_str | True                             | 
+  25 | {                                        | True                             | 
+  26 |  while (src_stream && lines_count) {     | True                             | 
+  27 |   char *line;                            | True                             | 
+  28 |   line = xmalloc_fgets(src_stream);      | True                             | 
+  29 |   if (line == NULL) {                    | True                             | 
+  30 |    break;                                | True                             | 
+  31 |   }                                      | True                             | 
+  32 |   if (fputs(line, dst_stream) == EOF) {  | True                             | 
+  33 |    bb_simple_perror_msg_and_die("error w | True                             | 
+  34 |   }                                      | True                             | 
+  35 |   free(line);                            | True                             | 
+  36 |   lines_count--;                         | True                             | 
+  37 |  }                                       | True                             | 
+  38 |  return lines_count;                     | True                             | 
+  39 | }                                        | True                             | 
+  40 |                                          | True                             | 
+  41 | /* If patch_level is -1 it will remove a | True                             | 
+  42 |  * char *line must be greater than 4 cha | True                             | 
+  43 |  * returns NULL if the file doesnt exist | True                             | 
+  44 |  * returns malloc'ed filename            | True                             | 
+  45 |  * NB: frees 1st argument!               | True                             | 
+  46 |  */                                      | True                             | 
+  47 | static char *extract_filename(char *line | True                             | 
+  48 | {                                        | True                             | 
+  49 |  char *temp = NULL, *filename_start_ptr  | True                             | 
+  50 |                                          | True                             | 
+  51 |  if (strncmp(line, pat, 4) == 0) {       | True                             | 
+  52 |   /* Terminate string at end of source f | True                             | 
+  53 |   line[strcspn(line, "\t\n\r")] = '\0';  | True                             | 
+  54 |                                          | True                             | 
+  55 |   /* Skip over (patch_level) number of l | True                             | 
+  56 |   while (patch_level--) {                | True                             | 
+  57 |    temp = strchr(filename_start_ptr, '/' | True                             | 
+  58 |    if (!temp)                            | True                             | 
+  59 |     break;                               | True                             | 
+  60 |    filename_start_ptr = temp + 1;        | True                             | 
+  61 |   }                                      | True                             | 
+  62 |   temp = xstrdup(filename_start_ptr);    | True                             | 
+  63 |  }                                       | True                             | 
+  64 |  free(line);                             | True                             | 
+  65 |  return temp;                            | True                             | 
+  66 | }                                        | True                             | 
+  67 |                                          | True                             | 
+  68 | int patch_main(int argc, char **argv) MA | True                             | 
+  69 | int patch_main(int argc UNUSED_PARAM, ch | True                             | 
+  70 | {                                        | True                             | 
+  71 |  struct stat saved_stat;                 | True                             | 
+  72 |  char *patch_line;                       | True                             | 
+  73 |  FILE *patch_file;                       | True                             | 
+  74 |  int patch_level;                        | True                             | 
+  75 |  int ret = 0;                            | True                             | 
+  76 |  char plus = '+';                        | True                             | 
+  77 |  unsigned opt;                           | True                             | 
+  78 |  enum {                                  | True                             | 
+  79 |   OPT_R = (1 << 2),                      | True                             | 
+  80 |   OPT_N = (1 << 3),                      | True                             | 
+  81 |   /*OPT_f = (1 << 4), ignored */         | True                             | 
+  82 |   /*OPT_E = (1 << 5), ignored, this is t | True                             | 
+  83 |   /*OPT_g = (1 << 6), ignored */         | True                             | 
+  84 |   OPT_dry_run = (1 << 7) * ENABLE_LONG_O | True                             | 
+  85 |  };                                      | True                             | 
+  86 |                                          | True                             | 
+  87 |  xfunc_error_retval = 2;                 | True                             | 
+  88 |  {                                       | True                             | 
+  89 |   const char *p = "-1";                  | True                             | 
+  90 |   const char *i = "-"; /* compat */      | True                             | 
+  91 | #if ENABLE_LONG_OPTS                     | True                             | 
+  92 |   static const char patch_longopts[] ALI | ENABLE_LONG_OPTS                 | 
+  93 |    "strip\0"                 Required_ar | ENABLE_LONG_OPTS                 | 
+  94 |    "input\0"                 Required_ar | ENABLE_LONG_OPTS                 | 
+  95 |    "reverse\0"               No_argument | ENABLE_LONG_OPTS                 | 
+  96 |    "forward\0"               No_argument | ENABLE_LONG_OPTS                 | 
+  97 |   /* "Assume user knows what [s]he is do | ENABLE_LONG_OPTS                 | 
+  98 |    "force\0"                 No_argument | ENABLE_LONG_OPTS                 | 
+  99 | # if ENABLE_DESKTOP                      | ENABLE_LONG_OPTS                 | 
+ 100 |    "remove-empty-files\0"    No_argument | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 101 |   /* "Controls actions when a file is un | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 102 |    * and does not exist or is read-only  | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 103 |    * or when a file is under ClearCase c | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 104 |    * IOW: rather obscure option.         | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 105 |    * But Gentoo's portage does use -g0 * | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 106 |    "get\0"                   Required_ar | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 107 | # endif                                  | ENABLE_LONG_OPTS                 | 
+ 108 |    "dry-run\0"               No_argument | ENABLE_LONG_OPTS                 | 
+ 109 | # if ENABLE_DESKTOP                      | ENABLE_LONG_OPTS                 | 
+ 110 |    "backup-if-mismatch\0"    No_argument | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 111 |    "no-backup-if-mismatch\0" No_argument | ENABLE_LONG_OPTS&&ENABLE_DESKTOP | 
+ 112 | # endif                                  | ENABLE_LONG_OPTS                 | 
+ 113 |    ;                                     | ENABLE_LONG_OPTS                 | 
+ 114 | #endif                                   | True                             | 
+ 115 |   /* -f,-E,-g are ignored */             | True                             | 
+ 116 |   opt = getopt32long(argv, "p:i:RN""fEg: | True                             | 
+ 117 |   if (opt & OPT_R)                       | True                             | 
+ 118 |    plus = '-';                           | True                             | 
+ 119 |   patch_level = xatoi(p); /* can be nega | True                             | 
+ 120 |   patch_file = xfopen_stdin(i);          | True                             | 
+ 121 |  }                                       | True                             | 
+ 122 |                                          | True                             | 
+ 123 |  patch_line = xmalloc_fgetline(patch_fil | True                             | 
+ 124 |  while (patch_line) {                    | True                             | 
+ 125 |   FILE *src_stream;                      | True                             | 
+ 126 |   FILE *dst_stream;                      | True                             | 
+ 127 |   //char *old_filename;                  | True                             | 
+ 128 |   char *new_filename;                    | True                             | 
+ 129 |   char *backup_filename = NULL;          | True                             | 
+ 130 |   unsigned src_cur_line = 1;             | True                             | 
+ 131 |   unsigned dst_cur_line = 0;             | True                             | 
+ 132 |   unsigned dst_beg_line;                 | True                             | 
+ 133 |   unsigned bad_hunk_count = 0;           | True                             | 
+ 134 |   unsigned hunk_count = 0;               | True                             | 
+ 135 |   smallint copy_trailing_lines_flag = 0; | True                             | 
+ 136 |                                          | True                             | 
+ 137 |   /* Skip everything upto the "---" mark | True                             | 
+ 138 |    * No need to parse the lines "Only in | True                             | 
+ 139 |    */                                    | True                             | 
+ 140 |   do {                                   | True                             | 
+ 141 |    /* Extract the filename used before t | True                             | 
+ 142 |    new_filename = extract_filename(patch | True                             | 
+ 143 |    // was old_filename above             | True                             | 
+ 144 |    patch_line = xmalloc_fgetline(patch_f | True                             | 
+ 145 |    if (!patch_line) goto quit;           | True                             | 
+ 146 |   } while (!new_filename);               | True                             | 
+ 147 |   free(new_filename); // "source" filena | True                             | 
+ 148 |                                          | True                             | 
+ 149 |   new_filename = extract_filename(patch_ | True                             | 
+ 150 |   if (!new_filename) {                   | True                             | 
+ 151 |    bb_simple_error_msg_and_die("invalid  | True                             | 
+ 152 |   }                                      | True                             | 
+ 153 |                                          | True                             | 
+ 154 |   /* Get access rights from the file to  | True                             | 
+ 155 |   if (stat(new_filename, &saved_stat) != | True                             | 
+ 156 |    char *slash = strrchr(new_filename, ' | True                             | 
+ 157 |    if (slash) {                          | True                             | 
+ 158 |     /* Create leading directories */     | True                             | 
+ 159 |     *slash = '\0';                       | True                             | 
+ 160 |     bb_make_directory(new_filename, -1,  | True                             | 
+ 161 |     *slash = '/';                        | True                             | 
+ 162 |    }                                     | True                             | 
+ 163 |    src_stream = NULL;                    | True                             | 
+ 164 |    saved_stat.st_mode = 0644;            | True                             | 
+ 165 |   } else if (!(opt & OPT_dry_run)) {     | True                             | 
+ 166 |    backup_filename = xasprintf("%s.orig" | True                             | 
+ 167 |    xrename(new_filename, backup_filename | True                             | 
+ 168 |    src_stream = xfopen_for_read(backup_f | True                             | 
+ 169 |   } else                                 | True                             | 
+ 170 |    src_stream = xfopen_for_read(new_file | True                             | 
+ 171 |                                          | True                             | 
+ 172 |   if (opt & OPT_dry_run) {               | True                             | 
+ 173 |    dst_stream = xfopen_for_write("/dev/n | True                             | 
+ 174 |   } else {                               | True                             | 
+ 175 |    dst_stream = xfopen_for_write(new_fil | True                             | 
+ 176 |    fchmod(fileno(dst_stream), saved_stat | True                             | 
+ 177 |   }                                      | True                             | 
+ 178 |                                          | True                             | 
+ 179 |   printf("patching file %s\n", new_filen | True                             | 
+ 180 |                                          | True                             | 
+ 181 |   /* Handle all hunks for this file */   | True                             | 
+ 182 |   patch_line = xmalloc_fgets(patch_file) | True                             | 
+ 183 |   while (patch_line) {                   | True                             | 
+ 184 |    unsigned count;                       | True                             | 
+ 185 |    unsigned src_beg_line;                | True                             | 
+ 186 |    unsigned hunk_offset_start;           | True                             | 
+ 187 |    unsigned src_last_line = 1;           | True                             | 
+ 188 |    unsigned dst_last_line = 1;           | True                             | 
+ 189 |                                          | True                             | 
+ 190 |    if ((sscanf(patch_line, "@@ -%u,%u +% | True                             | 
+ 191 |     && (sscanf(patch_line, "@@ -%u +%u,% | True                             | 
+ 192 |    ) {                                   | True                             | 
+ 193 |     /* No more hunks for this file */    | True                             | 
+ 194 |     break;                               | True                             | 
+ 195 |    }                                     | True                             | 
+ 196 |    if (plus != '+') {                    | True                             | 
+ 197 |     /* reverse patch */                  | True                             | 
+ 198 |     unsigned tmp = src_last_line;        | True                             | 
+ 199 |     src_last_line = dst_last_line;       | True                             | 
+ 200 |     dst_last_line = tmp;                 | True                             | 
+ 201 |     tmp = src_beg_line;                  | True                             | 
+ 202 |     src_beg_line = dst_beg_line;         | True                             | 
+ 203 |     dst_beg_line = tmp;                  | True                             | 
+ 204 |    }                                     | True                             | 
+ 205 |    hunk_count++;                         | True                             | 
+ 206 |                                          | True                             | 
+ 207 |    if (src_beg_line && dst_beg_line) {   | True                             | 
+ 208 |     /* Copy unmodified lines upto start  | True                             | 
+ 209 |     /* src_beg_line will be 0 if it's a  | True                             | 
+ 210 |     count = src_beg_line - src_cur_line; | True                             | 
+ 211 |     if (copy_lines(src_stream, dst_strea | True                             | 
+ 212 |      bb_simple_error_msg_and_die("bad sr | True                             | 
+ 213 |     }                                    | True                             | 
+ 214 |     src_cur_line += count;               | True                             | 
+ 215 |     dst_cur_line += count;               | True                             | 
+ 216 |     copy_trailing_lines_flag = 1;        | True                             | 
+ 217 |    }                                     | True                             | 
+ 218 |    src_last_line += hunk_offset_start =  | True                             | 
+ 219 |    dst_last_line += dst_cur_line;        | True                             | 
+ 220 |                                          | True                             | 
+ 221 |    while (1) {                           | True                             | 
+ 222 |     free(patch_line);                    | True                             | 
+ 223 |     patch_line = xmalloc_fgets(patch_fil | True                             | 
+ 224 |     if (patch_line == NULL)              | True                             | 
+ 225 |      break; /* EOF */                    | True                             | 
+ 226 |     if (!*patch_line) {                  | True                             | 
+ 227 |      /* whitespace-damaged patch with "" | True                             | 
+ 228 |      free(patch_line);                   | True                             | 
+ 229 |      patch_line = xstrdup(" ");          | True                             | 
+ 230 |     }                                    | True                             | 
+ 231 |     if ((*patch_line != '-') && (*patch_ | True                             | 
+ 232 |      && (*patch_line != ' ')             | True                             | 
+ 233 |     ) {                                  | True                             | 
+ 234 |      break; /* End of hunk */            | True                             | 
+ 235 |     }                                    | True                             | 
+ 236 |     if (*patch_line != plus) { /* '-' or | True                             | 
+ 237 |      char *src_line = NULL;              | True                             | 
+ 238 |      if (src_cur_line == src_last_line)  | True                             | 
+ 239 |       break;                             | True                             | 
+ 240 |      if (src_stream) {                   | True                             | 
+ 241 |       src_line = xmalloc_fgets(src_strea | True                             | 
+ 242 |       if (src_line) {                    | True                             | 
+ 243 |        int diff = strcmp(src_line, patch | True                             | 
+ 244 |        src_cur_line++;                   | True                             | 
+ 245 |        free(src_line);                   | True                             | 
+ 246 |        if (diff)                         | True                             | 
+ 247 |         src_line = NULL;                 | True                             | 
+ 248 |       }                                  | True                             | 
+ 249 |      }                                   | True                             | 
+ 250 |      /* Do not patch an already patched  | True                             | 
+ 251 |      if (src_line == 0 && (opt & OPT_N)) | True                             | 
+ 252 |       continue;                          | True                             | 
+ 253 |      }                                   | True                             | 
+ 254 |      if (!src_line) {                    | True                             | 
+ 255 |       bb_error_msg("hunk #%u FAILED at % | True                             | 
+ 256 |       bad_hunk_count++;                  | True                             | 
+ 257 |       break;                             | True                             | 
+ 258 |      }                                   | True                             | 
+ 259 |      if (*patch_line != ' ') { /* '-' */ | True                             | 
+ 260 |       continue;                          | True                             | 
+ 261 |      }                                   | True                             | 
+ 262 |     }                                    | True                             | 
+ 263 |     if (dst_cur_line == dst_last_line)   | True                             | 
+ 264 |      break;                              | True                             | 
+ 265 |     fputs(patch_line + 1, dst_stream);   | True                             | 
+ 266 |     dst_cur_line++;                      | True                             | 
+ 267 |    } /* end of while loop handling one h | True                             | 
+ 268 |   } /* end of while loop handling one fi | True                             | 
+ 269 |                                          | True                             | 
+ 270 |   /* Cleanup last patched file */        | True                             | 
+ 271 |   if (copy_trailing_lines_flag) {        | True                             | 
+ 272 |    copy_lines(src_stream, dst_stream, (u | True                             | 
+ 273 |   }                                      | True                             | 
+ 274 |   if (src_stream) {                      | True                             | 
+ 275 |    fclose(src_stream);                   | True                             | 
+ 276 |   }                                      | True                             | 
+ 277 |   fclose(dst_stream);                    | True                             | 
+ 278 |   if (bad_hunk_count) {                  | True                             | 
+ 279 |    ret = 1;                              | True                             | 
+ 280 |    bb_error_msg("%u out of %u hunk FAILE | True                             | 
+ 281 |   } else {                               | True                             | 
+ 282 |    /* It worked, we can remove the backu | True                             | 
+ 283 |    if (backup_filename) {                | True                             | 
+ 284 |     unlink(backup_filename);             | True                             | 
+ 285 |    }                                     | True                             | 
+ 286 |    if (!(opt & OPT_dry_run)              | True                             | 
+ 287 |     && ((dst_cur_line == 0) || (dst_beg_ | True                             | 
+ 288 |    ) {                                   | True                             | 
+ 289 |     /* The new patched file is empty, re | True                             | 
+ 290 |     xunlink(new_filename);               | True                             | 
+ 291 |     // /* old_filename and new_filename  | True                             | 
+ 292 |     // unlink(old_filename);             | True                             | 
+ 293 |    }                                     | True                             | 
+ 294 |   }                                      | True                             | 
+ 295 |   free(backup_filename);                 | True                             | 
+ 296 |   //free(old_filename);                  | True                             | 
+ 297 |   free(new_filename);                    | True                             | 
+ 298 |  } /* end of "while there are patch line | True                             | 
+ 299 |  quit:                                   | True                             | 
+ 300 |  /* 0 = SUCCESS                          | True                             | 
+ 301 |   * 1 = Some hunks failed                | True                             | 
+ 302 |   * 2 = More serious problems (exited ea | True                             | 
+ 303 |   */                                     | True                             | 
+ 304 |  return ret;                             | True                             | 
+ 305 | }                                        | True                             | 
+-----+------------------------------------------+----------------------------------+
+     |                                          | +113MB, 245ms                    | 

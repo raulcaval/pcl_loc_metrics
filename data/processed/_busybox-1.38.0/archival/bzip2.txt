@@ -1,0 +1,253 @@
+FILE: data/raw/busybox-1.38.0/archival/bzip2.c
+Resultado PCLocator:
+   # | line of code                             | Merge                            | 
+-----+------------------------------------------+----------------------------------+
+   1 | /*                                       | True                             | 
+   2 |  * Copyright (C) 2007 Denys Vlasenko <vd | True                             | 
+   3 |  *                                       | True                             | 
+   4 |  * This file uses bzip2 library code whi | True                             | 
+   5 |  * by Julian Seward <jseward@bzip.org>.  | True                             | 
+   6 |  * See README and LICENSE files in bz/ d | True                             | 
+   7 |  * about bzip2 library code.             | True                             | 
+   8 |  */                                      | True                             | 
+   9 | //config:config BZIP2                    | True                             | 
+  10 | //config: bool "bzip2 (16 kb)"           | True                             | 
+  11 | //config: default y                      | True                             | 
+  12 | //config: help                           | True                             | 
+  13 | //config: bzip2 is a compression utility | True                             | 
+  14 | //config: sorting text compression algor | True                             | 
+  15 | //config: is generally considerably bett | True                             | 
+  16 | //config: conventional LZ77/LZ78-based c | True                             | 
+  17 | //config: performance of the PPM family  | True                             | 
+  18 | //config:                                | True                             | 
+  19 | //config: Unless you have a specific app | True                             | 
+  20 | //config: should probably say N here.    | True                             | 
+  21 | //config:                                | True                             | 
+  22 | //config:config BZIP2_SMALL              | True                             | 
+  23 | //config: int "Trade bytes for speed (0: | True                             | 
+  24 | //config: default 8  # all "fast or smal | True                             | 
+  25 | //config: range 0 9                      | True                             | 
+  26 | //config: depends on BZIP2               | True                             | 
+  27 | //config: help                           | True                             | 
+  28 | //config: Trade code size versus speed.  | True                             | 
+  29 | //config: Approximate values with gcc-6. | True                             | 
+  30 | //config: linux-4.15.tar were:           | True                             | 
+  31 | //config: value         time (sec)  code | True                             | 
+  32 | //config: 9 (smallest)       70.11       | True                             | 
+  33 | //config: 8                  67.93       | True                             | 
+  34 | //config: 7                  67.88       | True                             | 
+  35 | //config: 6                  67.78       | True                             | 
+  36 | //config: 5                  67.05       | True                             | 
+  37 | //config: 4-0 (fastest)      64.14       | True                             | 
+  38 | //config:                                | True                             | 
+  39 | //config:config FEATURE_BZIP2_DECOMPRESS | True                             | 
+  40 | //config: bool "Enable decompression"    | True                             | 
+  41 | //config: default y                      | True                             | 
+  42 | //config: depends on BZIP2 || BUNZIP2 || | True                             | 
+  43 | //config: help                           | True                             | 
+  44 | //config: Enable -d (--decompress) and - | True                             | 
+  45 | //config: This will be automatically sel | True                             | 
+  46 | //config: enabled.                       | True                             | 
+  47 |                                          | True                             | 
+  48 | //applet:IF_BZIP2(APPLET(bzip2, BB_DIR_U | True                             | 
+  49 |                                          | True                             | 
+  50 | //kbuild:lib-$(CONFIG_BZIP2) += bzip2.o  | True                             | 
+  51 |                                          | True                             | 
+  52 | //usage:#define bzip2_trivial_usage      | True                             | 
+  53 | //usage:       "[-cfk" IF_FEATURE_BZIP2_ | True                             | 
+  54 | //usage:#define bzip2_full_usage "\n\n"  | True                             | 
+  55 | //usage:       "Compress FILEs (or stdin | True                             | 
+  56 | //usage:     "\n -1..9 Compression level | True                             | 
+  57 | //usage: IF_FEATURE_BZIP2_DECOMPRESS(    | True                             | 
+  58 | //usage:     "\n -d Decompress"          | True                             | 
+  59 | //usage: )                               | True                             | 
+  60 | //usage:     "\n -c Write to stdout"     | True                             | 
+  61 | //usage:     "\n -f Force"               | True                             | 
+  62 | //usage:     "\n -k Keep input files"    | True                             | 
+  63 | //usage: IF_FEATURE_BZIP2_DECOMPRESS(    | True                             | 
+  64 | //usage:     "\n -t Test integrity"      | True                             | 
+  65 | //usage: )                               | True                             | 
+  66 |                                          | True                             | 
+  67 | #include "libbb.h"                       | True                             | 
+  68 | #include "bb_archive.h"                  | True                             | 
+  69 |                                          | True                             | 
+  70 | #if CONFIG_BZIP2_SMALL >= 4              | True                             | 
+  71 | #define BZIP2_SPEED (9 - CONFIG_BZIP2_SM | CONFIG_BZIP2_SMALL>=4            | 
+  72 | #else                                    | True                             | 
+  73 | #define BZIP2_SPEED 5                    | !(CONFIG_BZIP2_SMALL>=4)         | 
+  74 | #endif                                   | True                             | 
+  75 |                                          | True                             | 
+  76 | /* Speed test:                           | True                             | 
+  77 |  * Compiled with gcc 4.2.1, run on Athlo | True                             | 
+  78 |  * Stock bzip2 is 26.4% slower than bbox | True                             | 
+  79 |  * (time to compress gcc-4.2.1.tar is 12 | True                             | 
+  80 |  * At SPEED 5 difference is 32.7%.       | True                             | 
+  81 |  *                                       | True                             | 
+  82 |  * Test run of all BZIP2_SPEED values on | True                             | 
+  83 |  *     Size   Time (3 runs)              | True                             | 
+  84 |  * 0:  10828  4.145 4.146 4.148          | True                             | 
+  85 |  * 1:  11097  3.845 3.860 3.861          | True                             | 
+  86 |  * 2:  11392  3.763 3.767 3.768          | True                             | 
+  87 |  * 3:  11892  3.722 3.724 3.727          | True                             | 
+  88 |  * 4:  12740  3.637 3.640 3.644          | True                             | 
+  89 |  * 5:  17273  3.497 3.509 3.509          | True                             | 
+  90 |  */                                      | True                             | 
+  91 |                                          | True                             | 
+  92 |                                          | True                             | 
+  93 | #define BZ_DEBUG 0                       | True                             | 
+  94 | /* Takes ~300 bytes, detects corruption  | True                             | 
+  95 | #define BZ_LIGHT_DEBUG 0                 | True                             | 
+  96 |                                          | True                             | 
+  97 | #include "libarchive/bz/bzlib.h"         | True                             | 
+  98 |                                          | True                             | 
+  99 | #include "libarchive/bz/bzlib_private.h" | True                             | 
+ 100 |                                          | True                             | 
+ 101 | #include "libarchive/bz/blocksort.c"     | True                             | 
+ 102 | #include "libarchive/bz/bzlib.c"         | True                             | 
+ 103 | #include "libarchive/bz/compress.c"      | True                             | 
+ 104 | #include "libarchive/bz/huffman.c"       | True                             | 
+ 105 |                                          | True                             | 
+ 106 | /* No point in being shy and having very | True                             | 
+ 107 |  * bzip2 internal buffers are much bigge | True                             | 
+ 108 |  * If iobuf is several pages long, mallo | True                             | 
+ 109 |  * making iobuf page aligned and thus (m | True                             | 
+ 110 |  * if kernel is clever enough.           | True                             | 
+ 111 |  */                                      | True                             | 
+ 112 | enum {                                   | True                             | 
+ 113 |  IOBUF_SIZE = 8 * 1024                   | True                             | 
+ 114 | };                                       | True                             | 
+ 115 |                                          | True                             | 
+ 116 | /* NB: compressStream() has to return -1 | True                             | 
+ 117 |  * bbunpack() will correctly clean up in | True                             | 
+ 118 |  * (delete incomplete .bz2 file)         | True                             | 
+ 119 |  */                                      | True                             | 
+ 120 |                                          | True                             | 
+ 121 | /* Returns:                              | True                             | 
+ 122 |  * -1 on errors                          | True                             | 
+ 123 |  * total written bytes so far otherwise  | True                             | 
+ 124 |  */                                      | True                             | 
+ 125 | static                                   | True                             | 
+ 126 | IF_DESKTOP(long long) int bz_write(bz_st | True                             | 
+ 127 | {                                        | True                             | 
+ 128 |  int n, n2, ret;                         | True                             | 
+ 129 |                                          | True                             | 
+ 130 |  strm->avail_in = rlen;                  | True                             | 
+ 131 |  strm->next_in = rbuf;                   | True                             | 
+ 132 |  while (1) {                             | True                             | 
+ 133 |   strm->avail_out = IOBUF_SIZE;          | True                             | 
+ 134 |   strm->next_out = wbuf;                 | True                             | 
+ 135 |                                          | True                             | 
+ 136 |   ret = BZ2_bzCompress(strm, rlen ? BZ_R | True                             | 
+ 137 |   if (ret != BZ_RUN_OK /* BZ_RUNning */  | True                             | 
+ 138 |    && ret != BZ_FINISH_OK /* BZ_FINISHin | True                             | 
+ 139 |    && ret != BZ_STREAM_END /* BZ_FINISHe | True                             | 
+ 140 |   ) {                                    | True                             | 
+ 141 |    bb_error_msg_and_die("internal error  | True                             | 
+ 142 |   }                                      | True                             | 
+ 143 |                                          | True                             | 
+ 144 |   n = IOBUF_SIZE - strm->avail_out;      | True                             | 
+ 145 |   if (n) {                               | True                             | 
+ 146 |    n2 = full_write(STDOUT_FILENO, wbuf,  | True                             | 
+ 147 |    if (n2 != n) {                        | True                             | 
+ 148 |     if (n2 >= 0)                         | True                             | 
+ 149 |      errno = 0; /* prevent bogus error m | True                             | 
+ 150 |     bb_simple_perror_msg(n2 >= 0 ? "shor | True                             | 
+ 151 |     return -1;                           | True                             | 
+ 152 |    }                                     | True                             | 
+ 153 |   }                                      | True                             | 
+ 154 |                                          | True                             | 
+ 155 |   if (ret == BZ_STREAM_END)              | True                             | 
+ 156 |    break;                                | True                             | 
+ 157 |   if (rlen && strm->avail_in == 0)       | True                             | 
+ 158 |    break;                                | True                             | 
+ 159 |  }                                       | True                             | 
+ 160 |  return 0 IF_DESKTOP( + strm->total_out  | True                             | 
+ 161 | }                                        | True                             | 
+ 162 |                                          | True                             | 
+ 163 | static                                   | True                             | 
+ 164 | IF_DESKTOP(long long) int FAST_FUNC comp | True                             | 
+ 165 | {                                        | True                             | 
+ 166 |  IF_DESKTOP(long long) int total;        | True                             | 
+ 167 |  unsigned opt, level;                    | True                             | 
+ 168 |  ssize_t count;                          | True                             | 
+ 169 |  bz_stream bzs; /* it's small */         | True                             | 
+ 170 | #define strm (&bzs)                      | True                             | 
+ 171 |  char *iobuf;                            | True                             | 
+ 172 | #define rbuf iobuf                       | True                             | 
+ 173 | #define wbuf (iobuf + IOBUF_SIZE)        | True                             | 
+ 174 |                                          | True                             | 
+ 175 |  iobuf = xmalloc(2 * IOBUF_SIZE);        | True                             | 
+ 176 |                                          | True                             | 
+ 177 |  opt = option_mask32 >> (BBUNPK_OPTSTRLE | True                             | 
+ 178 |  /* skipped BBUNPK_OPTSTR, "dt" and "zs" | True                             | 
+ 179 |  opt |= 0x100; /* if nothing else, assum | True                             | 
+ 180 |  level = 0;                              | True                             | 
+ 181 |  for (;;) {                              | True                             | 
+ 182 |   level++;                               | True                             | 
+ 183 |   if (opt & 1) break;                    | True                             | 
+ 184 |   opt >>= 1;                             | True                             | 
+ 185 |  }                                       | True                             | 
+ 186 |                                          | True                             | 
+ 187 |  BZ2_bzCompressInit(strm, level);        | True                             | 
+ 188 |                                          | True                             | 
+ 189 |  while (1) {                             | True                             | 
+ 190 |   count = full_read(STDIN_FILENO, rbuf,  | True                             | 
+ 191 |   if (count < 0) {                       | True                             | 
+ 192 |    bb_simple_perror_msg(bb_msg_read_erro | True                             | 
+ 193 |    total = -1;                           | True                             | 
+ 194 |    break;                                | True                             | 
+ 195 |   }                                      | True                             | 
+ 196 |   /* if count == 0, bz_write finalizes c | True                             | 
+ 197 |   total = bz_write(strm, rbuf, count, wb | True                             | 
+ 198 |   if (count == 0 || total < 0)           | True                             | 
+ 199 |    break;                                | True                             | 
+ 200 |  }                                       | True                             | 
+ 201 |                                          | True                             | 
+ 202 |  /* Can't be conditional on ENABLE_FEATU | True                             | 
+ 203 |   * we are called repeatedly             | True                             | 
+ 204 |   */                                     | True                             | 
+ 205 |  BZ2_bzCompressEnd(strm);                | True                             | 
+ 206 |  free(iobuf);                            | True                             | 
+ 207 |                                          | True                             | 
+ 208 |  return total;                           | True                             | 
+ 209 | }                                        | True                             | 
+ 210 |                                          | True                             | 
+ 211 | int bzip2_main(int argc, char **argv) MA | True                             | 
+ 212 | int bzip2_main(int argc UNUSED_PARAM, ch | True                             | 
+ 213 | {                                        | True                             | 
+ 214 |  unsigned opt;                           | True                             | 
+ 215 |                                          | True                             | 
+ 216 |  /* standard bzip2 flags                 | True                             | 
+ 217 |   * -d --decompress force decompression  | True                             | 
+ 218 |   * -z --compress force compression      | True                             | 
+ 219 |   * -k --keep     keep (don't delete) in | True                             | 
+ 220 |   * -f --force    overwrite existing out | True                             | 
+ 221 |   * -t --test     test compressed file i | True                             | 
+ 222 |   * -c --stdout   output to standard out | True                             | 
+ 223 |   * -q --quiet    suppress noncritical e | True                             | 
+ 224 |   * -v --verbose  be verbose (a 2nd -v g | True                             | 
+ 225 |   * -s --small    use less memory (at mo | True                             | 
+ 226 |   * -1 .. -9      set block size to 100k | True                             | 
+ 227 |   * --fast        alias for -1           | True                             | 
+ 228 |   * --best        alias for -9           | True                             | 
+ 229 |   */                                     | True                             | 
+ 230 |                                          | True                             | 
+ 231 |  opt = getopt32(argv, "^"                | True                             | 
+ 232 |   /* Must match BBUNPK_foo constants! */ | True                             | 
+ 233 |   BBUNPK_OPTSTR IF_FEATURE_BZIP2_DECOMPR | True                             | 
+ 234 |   "\0" "s2" /* -s means -2 (compatibilit | True                             | 
+ 235 |  );                                      | True                             | 
+ 236 | #if ENABLE_FEATURE_BZIP2_DECOMPRESS /* b | True                             | 
+ 237 |  if (opt & (BBUNPK_OPT_DECOMPRESS|BBUNPK | ENABLE_FEATURE_BZIP2_DECOMPRESS  | 
+ 238 |   return bunzip2_main(argc, argv);       | ENABLE_FEATURE_BZIP2_DECOMPRESS  | 
+ 239 | #else                                    | True                             | 
+ 240 |  /* clear "decompress" and "test" bits ( | !ENABLE_FEATURE_BZIP2_DECOMPRESS | 
+ 241 |  /* in !BZIP2_DECOMPRESS config, these b | !ENABLE_FEATURE_BZIP2_DECOMPRESS | 
+ 242 |  option_mask32 = opt & ~(BBUNPK_OPT_DECO | !ENABLE_FEATURE_BZIP2_DECOMPRESS | 
+ 243 | #endif                                   | True                             | 
+ 244 |                                          | True                             | 
+ 245 |  argv += optind;                         | True                             | 
+ 246 |  return bbunpack(argv, compressStream, a | True                             | 
+ 247 | }                                        | True                             | 
+-----+------------------------------------------+----------------------------------+
+     |                                          | +116MB, 309ms                    | 

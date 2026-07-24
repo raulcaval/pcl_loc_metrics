@@ -1,0 +1,346 @@
+FILE: data/raw/busybox-1.38.0/libbb/update_passwd.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                                                                 | 
+-----+------------------------------------------+-------------------------------------------------------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                                                                  | 
+   2 | /*                                       | True                                                                                                  | 
+   3 |  * update_passwd                         | True                                                                                                  | 
+   4 |  *                                       | True                                                                                                  | 
+   5 |  * update_passwd is a common function fo | True                                                                                                  | 
+   6 |  * it is responsible for updating passwo | True                                                                                                  | 
+   7 |  * /etc/shadow) for a given user and pas | True                                                                                                  | 
+   8 |  *                                       | True                                                                                                  | 
+   9 |  * Moved from loginutils/passwd.c by Ale | True                                                                                                  | 
+  10 |  *                                       | True                                                                                                  | 
+  11 |  * Modified to be able to add or delete  | True                                                                                                  | 
+  12 |  * by Tito Ragusa <farmatito@tiscali.it> | True                                                                                                  | 
+  13 |  *                                       | True                                                                                                  | 
+  14 |  * Licensed under GPLv2, see file LICENS | True                                                                                                  | 
+  15 |  */                                      | True                                                                                                  | 
+  16 | #include "libbb.h"                       | True                                                                                                  | 
+  17 |                                          | True                                                                                                  | 
+  18 | #if ENABLE_SELINUX                       | True                                                                                                  | 
+  19 | static void check_selinux_update_passwd( | ENABLE_SELINUX                                                                                        | 
+  20 | {                                        | ENABLE_SELINUX                                                                                        | 
+  21 |  security_context_t seuser;              | ENABLE_SELINUX                                                                                        | 
+  22 |  char *p;                                | ENABLE_SELINUX                                                                                        | 
+  23 |                                          | ENABLE_SELINUX                                                                                        | 
+  24 |  if (getuid() != (uid_t)0 || is_selinux_ | ENABLE_SELINUX                                                                                        | 
+  25 |   return;  /* No need to check */        | ENABLE_SELINUX                                                                                        | 
+  26 |                                          | ENABLE_SELINUX                                                                                        | 
+  27 |  if (getprevcon_raw(&seuser) < 0)        | ENABLE_SELINUX                                                                                        | 
+  28 |   bb_simple_perror_msg_and_die("getprevc | ENABLE_SELINUX                                                                                        | 
+  29 |                                          | ENABLE_SELINUX                                                                                        | 
+  30 |  p = strchr(seuser, ':');                | ENABLE_SELINUX                                                                                        | 
+  31 |  if (!p)                                 | ENABLE_SELINUX                                                                                        | 
+  32 |   bb_error_msg_and_die("invalid context  | ENABLE_SELINUX                                                                                        | 
+  33 |  *p = '\0';                              | ENABLE_SELINUX                                                                                        | 
+  34 |                                          | ENABLE_SELINUX                                                                                        | 
+  35 |  if (strcmp(seuser, username) != 0) {    | ENABLE_SELINUX                                                                                        | 
+  36 |   security_class_t tclass;               | ENABLE_SELINUX                                                                                        | 
+  37 |   access_vector_t av;                    | ENABLE_SELINUX                                                                                        | 
+  38 |                                          | ENABLE_SELINUX                                                                                        | 
+  39 |   tclass = string_to_security_class("pas | ENABLE_SELINUX                                                                                        | 
+  40 |   if (tclass == 0)                       | ENABLE_SELINUX                                                                                        | 
+  41 |    goto die;                             | ENABLE_SELINUX                                                                                        | 
+  42 |   av = string_to_av_perm(tclass, "passwd | ENABLE_SELINUX                                                                                        | 
+  43 |   if (av == 0)                           | ENABLE_SELINUX                                                                                        | 
+  44 |    goto die;                             | ENABLE_SELINUX                                                                                        | 
+  45 |                                          | ENABLE_SELINUX                                                                                        | 
+  46 |   if (selinux_check_passwd_access(av) != | ENABLE_SELINUX                                                                                        | 
+  47 |  die:                                    | ENABLE_SELINUX                                                                                        | 
+  48 |    bb_simple_error_msg_and_die("SELinux: | ENABLE_SELINUX                                                                                        | 
+  49 |  }                                       | ENABLE_SELINUX                                                                                        | 
+  50 |  if (ENABLE_FEATURE_CLEAN_UP)            | ENABLE_SELINUX                                                                                        | 
+  51 |   freecon(seuser);                       | ENABLE_SELINUX                                                                                        | 
+  52 | }                                        | ENABLE_SELINUX                                                                                        | 
+  53 | #else                                    | True                                                                                                  | 
+  54 | # define check_selinux_update_passwd(use | !ENABLE_SELINUX                                                                                       | 
+  55 | #endif                                   | True                                                                                                  | 
+  56 |                                          | True                                                                                                  | 
+  57 | /*                                       | True                                                                                                  | 
+  58 |  1) add a user: update_passwd(FILE, USER | True                                                                                                  | 
+  59 |     only if CONFIG_ADDUSER=y and applet_ | True                                                                                                  | 
+  60 |                                          | True                                                                                                  | 
+  61 |  2) add a group: update_passwd(FILE, GRO | True                                                                                                  | 
+  62 |     only if CONFIG_ADDGROUP=y and applet | True                                                                                                  | 
+  63 |                                          | True                                                                                                  | 
+  64 |  3) add a user to a group: update_passwd | True                                                                                                  | 
+  65 |     only if CONFIG_FEATURE_ADDUSER_TO_GR | True                                                                                                  | 
+  66 |     like in addgroup and member != NULL  | True                                                                                                  | 
+  67 |                                          | True                                                                                                  | 
+  68 |  4) delete a user: update_passwd(FILE, U | True                                                                                                  | 
+  69 |                                          | True                                                                                                  | 
+  70 |  5) delete a group: update_passwd(FILE,  | True                                                                                                  | 
+  71 |                                          | True                                                                                                  | 
+  72 |  6) delete a user from a group: update_p | True                                                                                                  | 
+  73 |     only if CONFIG_FEATURE_DEL_USER_FROM | True                                                                                                  | 
+  74 |                                          | True                                                                                                  | 
+  75 |  7) change user's password: update_passw | True                                                                                                  | 
+  76 |     only if CONFIG_PASSWD=y and applet_n | True                                                                                                  | 
+  77 |     or if CONFIG_CHPASSWD=y and applet_n | True                                                                                                  | 
+  78 |                                          | True                                                                                                  | 
+  79 |  8) delete a user from all groups: updat | True                                                                                                  | 
+  80 |                                          | True                                                                                                  | 
+  81 |  This function does not validate the arg | True                                                                                                  | 
+  82 |  so the calling program should take care | True                                                                                                  | 
+  83 |                                          | True                                                                                                  | 
+  84 |  Returns number of lines changed, or -1  | True                                                                                                  | 
+  85 | */                                       | True                                                                                                  | 
+  86 | int FAST_FUNC update_passwd(const char * | True                                                                                                  | 
+  87 |   const char *name,                      | True                                                                                                  | 
+  88 |   const char *new_passwd,                | True                                                                                                  | 
+  89 |   const char *member)                    | True                                                                                                  | 
+  90 | {                                        | True                                                                                                  | 
+  91 | #if !(ENABLE_FEATURE_ADDUSER_TO_GROUP || | True                                                                                                  | 
+  92 | #define member NULL                      | !(ENABLE_FEATURE_ADDUSER_TO_GROUP||ENABLE_FEATURE_DEL_USER_FROM_GROUP)                                | 
+  93 | #endif                                   | True                                                                                                  | 
+  94 |  struct stat sb;                         | True                                                                                                  | 
+  95 |  struct flock lock;                      | True                                                                                                  | 
+  96 |  FILE *old_fp;                           | True                                                                                                  | 
+  97 |  FILE *new_fp;                           | True                                                                                                  | 
+  98 |  char *fnamesfx;                         | True                                                                                                  | 
+  99 |  char *sfx_char;                         | True                                                                                                  | 
+ 100 |  char *name_colon;                       | True                                                                                                  | 
+ 101 |  int old_fd;                             | True                                                                                                  | 
+ 102 |  int new_fd;                             | True                                                                                                  | 
+ 103 |  int i;                                  | True                                                                                                  | 
+ 104 |  int changed_lines;                      | True                                                                                                  | 
+ 105 |  int ret = -1; /* failure */             | True                                                                                                  | 
+ 106 |  /* used as a bool: "are we modifying /e | True                                                                                                  | 
+ 107 | #if ENABLE_FEATURE_SHADOWPASSWDS         | True                                                                                                  | 
+ 108 |  const char *shadow = strstr(filename, " | ENABLE_FEATURE_SHADOWPASSWDS                                                                          | 
+ 109 | #else                                    | True                                                                                                  | 
+ 110 | # define shadow NULL                     | !ENABLE_FEATURE_SHADOWPASSWDS                                                                         | 
+ 111 | #endif                                   | True                                                                                                  | 
+ 112 |                                          | True                                                                                                  | 
+ 113 |  filename = xmalloc_follow_symlinks(file | True                                                                                                  | 
+ 114 |  if (filename == NULL)                   | True                                                                                                  | 
+ 115 |   return ret;                            | True                                                                                                  | 
+ 116 |                                          | True                                                                                                  | 
+ 117 |  if (name)                               | True                                                                                                  | 
+ 118 |   check_selinux_update_passwd(name);     | ENABLE_SELINUX                                                                                        | 
+ 119 |                                          | True                                                                                                  | 
+ 120 |  /* New passwd file, "/etc/passwd+" for  | True                                                                                                  | 
+ 121 |  fnamesfx = xasprintf("%s+", filename);  | True                                                                                                  | 
+ 122 |  sfx_char = &fnamesfx[strlen(fnamesfx)-1 | True                                                                                                  | 
+ 123 |  name_colon = xasprintf("%s:", name ? na | True                                                                                                  | 
+ 124 |                                          | True                                                                                                  | 
+ 125 |  if (shadow)                             | True                                                                                                  | 
+ 126 |   old_fp = fopen(filename, "r+");        | True                                                                                                  | 
+ 127 |  else                                    | True                                                                                                  | 
+ 128 |   old_fp = fopen_or_warn(filename, "r+") | True                                                                                                  | 
+ 129 |  if (!old_fp) {                          | True                                                                                                  | 
+ 130 |   if (shadow)                            | True                                                                                                  | 
+ 131 |    ret = 0; /* missing shadow is not an  | True                                                                                                  | 
+ 132 |   goto free_mem;                         | True                                                                                                  | 
+ 133 |  }                                       | True                                                                                                  | 
+ 134 |  old_fd = fileno(old_fp);                | True                                                                                                  | 
+ 135 |                                          | True                                                                                                  | 
+ 136 |  selinux_preserve_fcontext(old_fd);      | True                                                                                                  | 
+ 137 |                                          | True                                                                                                  | 
+ 138 |  /* Try to create "/etc/passwd+". Wait i | True                                                                                                  | 
+ 139 |  i = 30;                                 | True                                                                                                  | 
+ 140 |  do {                                    | True                                                                                                  | 
+ 141 |   // FIXME: on last iteration try w/o O_ | True                                                                                                  | 
+ 142 |   new_fd = open(fnamesfx, O_WRONLY|O_CRE | True                                                                                                  | 
+ 143 |   if (new_fd >= 0) goto created;         | True                                                                                                  | 
+ 144 |   if (errno != EEXIST) break;            | True                                                                                                  | 
+ 145 |   usleep(100000); /* 0.1 sec */          | True                                                                                                  | 
+ 146 |  } while (--i);                          | True                                                                                                  | 
+ 147 |  bb_perror_msg("can't create '%s'", fnam | True                                                                                                  | 
+ 148 |  goto close_old_fp;                      | True                                                                                                  | 
+ 149 |                                          | True                                                                                                  | 
+ 150 |  created:                                | True                                                                                                  | 
+ 151 |  if (fstat(old_fd, &sb) == 0) {          | True                                                                                                  | 
+ 152 |   fchmod(new_fd, sb.st_mode & 0777); /*  | True                                                                                                  | 
+ 153 |   fchown(new_fd, sb.st_uid, sb.st_gid);  | True                                                                                                  | 
+ 154 |  }                                       | True                                                                                                  | 
+ 155 |  errno = 0;                              | True                                                                                                  | 
+ 156 |  new_fp = xfdopen_for_write(new_fd);     | True                                                                                                  | 
+ 157 |                                          | True                                                                                                  | 
+ 158 |  /* Backup file is "/etc/passwd-" */     | True                                                                                                  | 
+ 159 |  *sfx_char = '-';                        | True                                                                                                  | 
+ 160 |  /* Delete old backup */                 | True                                                                                                  | 
+ 161 |  i = (unlink(fnamesfx) && errno != ENOEN | True                                                                                                  | 
+ 162 |  /* Create backup as a hardlink to curre | True                                                                                                  | 
+ 163 |  if (i || link(filename, fnamesfx))      | True                                                                                                  | 
+ 164 |   bb_perror_msg("warning: can't create b | True                                                                                                  | 
+ 165 |     fnamesfx);                           | True                                                                                                  | 
+ 166 |  *sfx_char = '+';                        | True                                                                                                  | 
+ 167 |                                          | True                                                                                                  | 
+ 168 |  /* Lock the password file before updati | True                                                                                                  | 
+ 169 |  lock.l_type = F_WRLCK;                  | True                                                                                                  | 
+ 170 |  lock.l_whence = SEEK_SET;               | True                                                                                                  | 
+ 171 |  lock.l_start = 0;                       | True                                                                                                  | 
+ 172 |  lock.l_len = 0;                         | True                                                                                                  | 
+ 173 |  if (fcntl(old_fd, F_SETLK, &lock) < 0)  | True                                                                                                  | 
+ 174 |   bb_perror_msg("warning: can't lock '%s | True                                                                                                  | 
+ 175 |  lock.l_type = F_UNLCK;                  | True                                                                                                  | 
+ 176 |                                          | True                                                                                                  | 
+ 177 |  /* Read current password file, write up | True                                                                                                  | 
+ 178 |  changed_lines = 0;                      | True                                                                                                  | 
+ 179 |  while (1) {                             | True                                                                                                  | 
+ 180 |   char *cp, *line;                       | True                                                                                                  | 
+ 181 |                                          | True                                                                                                  | 
+ 182 |   line = xmalloc_fgetline(old_fp);       | True                                                                                                  | 
+ 183 |   if (!line) /* EOF/error */             | True                                                                                                  | 
+ 184 |    break;                                | True                                                                                                  | 
+ 185 |                                          | True                                                                                                  | 
+ 186 | #if ENABLE_FEATURE_ADDUSER_TO_GROUP || E | True                                                                                                  | 
+ 187 |   if (!name && member) {                 | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 188 |    /* Delete member from all groups */   | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 189 |    /* line is "GROUP:PASSWD:[member1[,me | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 190 |    unsigned member_len = strlen(member); | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 191 |    char *list = strrchr(line, ':');      | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 192 |    while (list) {                        | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 193 |     list++;                              | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 194 |  next_list_element:                      | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 195 |     if (is_prefixed_with(list, member))  | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 196 |      char c;                             | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 197 |      changed_lines++;                    | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 198 |      c = list[member_len];               | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 199 |      if (c == '\0') {                    | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 200 |       if (list[-1] == ',')               | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 201 |        list--;                           | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 202 |       *list = '\0';                      | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 203 |       break;                             | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 204 |      }                                   | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 205 |      if (c == ',') {                     | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 206 |       overlapping_strcpy(list, list + me | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 207 |       goto next_list_element;            | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 208 |      }                                   | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 209 |      changed_lines--;                    | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 210 |     }                                    | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 211 |     list = strchr(list, ',');            | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 212 |    }                                     | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 213 |    fprintf(new_fp, "%s\n", line);        | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 214 |    goto next;                            | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 215 |   }                                      | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 216 | #endif                                   | True                                                                                                  | 
+ 217 |                                          | True                                                                                                  | 
+ 218 |   cp = is_prefixed_with(line, name_colon | True                                                                                                  | 
+ 219 |   if (!cp) {                             | True                                                                                                  | 
+ 220 |    fprintf(new_fp, "%s\n", line);        | True                                                                                                  | 
+ 221 |    goto next;                            | True                                                                                                  | 
+ 222 |   }                                      | True                                                                                                  | 
+ 223 |                                          | True                                                                                                  | 
+ 224 |   /* We have a match with "name:"... */  | True                                                                                                  | 
+ 225 |   /* cp points past "name:" */           | True                                                                                                  | 
+ 226 |                                          | True                                                                                                  | 
+ 227 | #if ENABLE_FEATURE_ADDUSER_TO_GROUP || E | True                                                                                                  | 
+ 228 |   if (member) {                          | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 229 |    /* It's actually /etc/group+, not /et | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 230 |    if (ENABLE_FEATURE_ADDUSER_TO_GROUP   | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 231 |     && applet_name[0] == 'a'             | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 232 |    ) {                                   | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 233 |     /* Add user to group */              | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 234 |     fprintf(new_fp, "%s%s%s\n", line,    | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 235 |      last_char_is(line, ':') ? "" : ",", | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 236 |      member);                            | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 237 |     changed_lines++;                     | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 238 |    } else if (ENABLE_FEATURE_DEL_USER_FR | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 239 |    /* && applet_name[0] == 'd' */        | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 240 |    ) {                                   | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 241 |     /* Delete user from group */         | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 242 |     char *tmp;                           | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 243 |     const char *fmt = "%s";              | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 244 |                                          | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 245 |     /* find the start of the member list | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 246 |     cp = strrchr(line, ':');             | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 247 |     /* cut it */                         | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 248 |     *cp++ = '\0';                        | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 249 |     /* write the cut line name:passwd:gi | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 250 |      * or name:!:: */                    | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 251 |     fprintf(new_fp, "%s:", line);        | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 252 |     /* parse the tokens of the member li | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 253 |     tmp = cp;                            | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 254 |     while ((cp = strsep(&tmp, ",")) != N | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 255 |      if (strcmp(member, cp) != 0) {      | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 256 |       fprintf(new_fp, fmt, cp);          | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 257 |       fmt = ",%s";                       | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 258 |      } else {                            | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 259 |       /* found member, skip it */        | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 260 |       changed_lines++;                   | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 261 |      }                                   | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 262 |     }                                    | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 263 |     fprintf(new_fp, "\n");               | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 264 |    }                                     | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 265 |   } else                                 | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 266 | #endif                                   | True                                                                                                  | 
+ 267 |   if ((ENABLE_PASSWD && applet_name[0] = | True                                                                                                  | 
+ 268 |    || (ENABLE_CHPASSWD && applet_name[0] | True                                                                                                  | 
+ 269 |   ) {                                    | True                                                                                                  | 
+ 270 |    /* Change passwd */                   | True                                                                                                  | 
+ 271 |    cp = strchrnul(cp, ':'); /* move past | True                                                                                                  | 
+ 272 |                                          | True                                                                                                  | 
+ 273 |    if (shadow && *cp == ':') {           | True                                                                                                  | 
+ 274 |     /* /etc/shadow's field 3 (passwd cha | True                                                                                                  | 
+ 275 |     /* move past old change date */      | True                                                                                                  | 
+ 276 |     unsigned time_days = (unsigned long) | True                                                                                                  | 
+ 277 |                                          | True                                                                                                  | 
+ 278 |     if (time_days == 0) {                | True                                                                                                  | 
+ 279 |      /* 0 as change date has special mea | True                                                                                                  | 
+ 280 |      time_days = 1;                      | True                                                                                                  | 
+ 281 |     }                                    | True                                                                                                  | 
+ 282 |     cp = strchrnul(cp + 1, ':');         | True                                                                                                  | 
+ 283 |     /* "name:" + "new_passwd" + ":" + "c | True                                                                                                  | 
+ 284 |     fprintf(new_fp, "%s%s:%u%s\n", name_ | True                                                                                                  | 
+ 285 |      time_days, cp);                     | True                                                                                                  | 
+ 286 |    } else {                              | True                                                                                                  | 
+ 287 |     /* "name:" + "new_passwd" + ":rest o | True                                                                                                  | 
+ 288 |     fprintf(new_fp, "%s%s%s\n", name_col | True                                                                                                  | 
+ 289 |    }                                     | True                                                                                                  | 
+ 290 |    changed_lines++;                      | True                                                                                                  | 
+ 291 |   } /* else delete user or group: skip t | True                                                                                                  | 
+ 292 |  next:                                   | True                                                                                                  | 
+ 293 |   free(line);                            | True                                                                                                  | 
+ 294 |  }                                       | True                                                                                                  | 
+ 295 |                                          | True                                                                                                  | 
+ 296 |  if (changed_lines == 0) {               | True                                                                                                  | 
+ 297 | #if ENABLE_FEATURE_ADDUSER_TO_GROUP || E | True                                                                                                  | 
+ 298 |   if (member) {                          | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 299 |    if (ENABLE_ADDGROUP && applet_name[0] | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 300 |     bb_error_msg("can't find %s in %s",  | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 301 |    if (ENABLE_DELGROUP && applet_name[0] | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 302 |     bb_error_msg("can't find %s in %s",  | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 303 |   }                                      | !ENABLE_FEATURE_ADDUSER_TO_GROUP&&ENABLE_FEATURE_DEL_USER_FROM_GROUP||ENABLE_FEATURE_ADDUSER_TO_GROUP | 
+ 304 | #endif                                   | True                                                                                                  | 
+ 305 |   if ((ENABLE_ADDUSER || ENABLE_ADDGROUP | True                                                                                                  | 
+ 306 |    && applet_name[0] == 'a' && !member   | True                                                                                                  | 
+ 307 |   ) {                                    | True                                                                                                  | 
+ 308 |    /* add user or group */               | True                                                                                                  | 
+ 309 |    fprintf(new_fp, "%s%s\n", name_colon, | True                                                                                                  | 
+ 310 |    changed_lines++;                      | True                                                                                                  | 
+ 311 |   }                                      | True                                                                                                  | 
+ 312 |  }                                       | True                                                                                                  | 
+ 313 |                                          | True                                                                                                  | 
+ 314 |  fcntl(old_fd, F_SETLK, &lock);          | True                                                                                                  | 
+ 315 |                                          | True                                                                                                  | 
+ 316 |  /* We do want all of them to execute, t | True                                                                                                  | 
+ 317 |  errno = 0;                              | True                                                                                                  | 
+ 318 |  if ((ferror(old_fp) | fflush(new_fp) |  | True                                                                                                  | 
+ 319 |   || rename(fnamesfx, filename)          | True                                                                                                  | 
+ 320 |  ) {                                     | True                                                                                                  | 
+ 321 |   /* At least one of those failed */     | True                                                                                                  | 
+ 322 |   bb_perror_nomsg();                     | True                                                                                                  | 
+ 323 |   goto unlink_new;                       | True                                                                                                  | 
+ 324 |  }                                       | True                                                                                                  | 
+ 325 |  /* Success: ret >= 0 */                 | True                                                                                                  | 
+ 326 |  ret = changed_lines;                    | True                                                                                                  | 
+ 327 |                                          | True                                                                                                  | 
+ 328 |  unlink_new:                             | True                                                                                                  | 
+ 329 |  if (ret < 0)                            | True                                                                                                  | 
+ 330 |   unlink(fnamesfx);                      | True                                                                                                  | 
+ 331 |                                          | True                                                                                                  | 
+ 332 |  close_old_fp:                           | True                                                                                                  | 
+ 333 |  fclose(old_fp);                         | True                                                                                                  | 
+ 334 |                                          | True                                                                                                  | 
+ 335 |  free_mem:                               | True                                                                                                  | 
+ 336 |  free(fnamesfx);                         | True                                                                                                  | 
+ 337 |  free((char *)filename);                 | True                                                                                                  | 
+ 338 |  free(name_colon);                       | True                                                                                                  | 
+ 339 |  return ret;                             | True                                                                                                  | 
+ 340 | }                                        | True                                                                                                  | 
+-----+------------------------------------------+-------------------------------------------------------------------------------------------------------+
+     |                                          | +109MB, 241ms                                                                                         | 

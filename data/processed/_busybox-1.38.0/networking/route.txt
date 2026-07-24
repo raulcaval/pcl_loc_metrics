@@ -1,0 +1,728 @@
+FILE: data/raw/busybox-1.38.0/networking/route.c
+Resultado PCLocator:
+   # | line of code                             | Merge                                                                                                                              | 
+-----+------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                                                                                                                               | 
+   2 | /*                                       | True                                                                                                                               | 
+   3 |  * route                                 | True                                                                                                                               | 
+   4 |  *                                       | True                                                                                                                               | 
+   5 |  * Similar to the standard Unix route, b | True                                                                                                                               | 
+   6 |  * parts for AF_INET and AF_INET6        | True                                                                                                                               | 
+   7 |  *                                       | True                                                                                                                               | 
+   8 |  * Bjorn Wesen, Axis Communications AB   | True                                                                                                                               | 
+   9 |  *                                       | True                                                                                                                               | 
+  10 |  * Author of the original route:         | True                                                                                                                               | 
+  11 |  *              Fred N. van Kempen, <wal | True                                                                                                                               | 
+  12 |  *              (derived from FvK's 'rou | True                                                                                                                               | 
+  13 |  *                                       | True                                                                                                                               | 
+  14 |  * Licensed under GPLv2 or later, see fi | True                                                                                                                               | 
+  15 |  *                                       | True                                                                                                                               | 
+  16 |  *                                       | True                                                                                                                               | 
+  17 |  * displayroute() code added by Vladimir | True                                                                                                                               | 
+  18 |  * adjustments by Larry Doolittle  <LRDo | True                                                                                                                               | 
+  19 |  *                                       | True                                                                                                                               | 
+  20 |  * IPV6 support added by Bart Visscher < | True                                                                                                                               | 
+  21 |  */                                      | True                                                                                                                               | 
+  22 | /* 2004/03/09  Manuel Novoa III <mjn3@co | True                                                                                                                               | 
+  23 |  *                                       | True                                                                                                                               | 
+  24 |  * Rewritten to fix several bugs, add ad | True                                                                                                                               | 
+  25 |  * remove ridiculous amounts of bloat.   | True                                                                                                                               | 
+  26 |  */                                      | True                                                                                                                               | 
+  27 | //config:config ROUTE                    | True                                                                                                                               | 
+  28 | //config: bool "route (9 kb)"            | True                                                                                                                               | 
+  29 | //config: default y                      | True                                                                                                                               | 
+  30 | //config: help                           | True                                                                                                                               | 
+  31 | //config: Route displays or manipulates  | True                                                                                                                               | 
+  32 |                                          | True                                                                                                                               | 
+  33 | //applet:IF_ROUTE(APPLET(route, BB_DIR_S | True                                                                                                                               | 
+  34 |                                          | True                                                                                                                               | 
+  35 | //kbuild:lib-$(CONFIG_ROUTE) += route.o  | True                                                                                                                               | 
+  36 |                                          | True                                                                                                                               | 
+  37 | #include <net/route.h>                   | True                                                                                                                               | 
+  38 | #include <net/if.h>                      | True                                                                                                                               | 
+  39 |                                          | True                                                                                                                               | 
+  40 | #include "libbb.h"                       | True                                                                                                                               | 
+  41 | #include "inet_common.h"                 | True                                                                                                                               | 
+  42 |                                          | True                                                                                                                               | 
+  43 |                                          | True                                                                                                                               | 
+  44 | #ifndef RTF_UP                           | True                                                                                                                               | 
+  45 | /* Keep this in sync with /usr/src/linux | !(RTF_UP)                                                                                                                          | 
+  46 | #define RTF_UP          0x0001 /* route  | !(RTF_UP)                                                                                                                          | 
+  47 | #define RTF_GATEWAY     0x0002 /* destin | !(RTF_UP)                                                                                                                          | 
+  48 | #define RTF_HOST        0x0004 /* host e | !(RTF_UP)                                                                                                                          | 
+  49 | #define RTF_REINSTATE   0x0008 /* reinst | !(RTF_UP)                                                                                                                          | 
+  50 | #define RTF_DYNAMIC     0x0010 /* create | !(RTF_UP)                                                                                                                          | 
+  51 | #define RTF_MODIFIED    0x0020 /* modifi | !(RTF_UP)                                                                                                                          | 
+  52 | #define RTF_MTU         0x0040 /* specif | !(RTF_UP)                                                                                                                          | 
+  53 | #ifndef RTF_MSS                          | !(RTF_UP)                                                                                                                          | 
+  54 | #define RTF_MSS         RTF_MTU /* Compa | !(RTF_UP)&&!(RTF_MSS)                                                                                                              | 
+  55 | #endif                                   | !(RTF_UP)                                                                                                                          | 
+  56 | #define RTF_WINDOW      0x0080 /* per ro | !(RTF_UP)                                                                                                                          | 
+  57 | #define RTF_IRTT        0x0100 /* Initia | !(RTF_UP)                                                                                                                          | 
+  58 | #define RTF_REJECT      0x0200 /* Reject | !(RTF_UP)                                                                                                                          | 
+  59 | #define RTF_NONEXTHOP   0x00200000 /* ro | !(RTF_UP)                                                                                                                          | 
+  60 | #endif                                   | True                                                                                                                               | 
+  61 |                                          | True                                                                                                                               | 
+  62 | #if defined(SIOCADDRTOLD) || defined(RTF | True                                                                                                                               | 
+  63 | #define HAVE_NEW_ADDRT 1                 | (SIOCADDRTOLD)||(RTF_IRTT)                                                                                                         | 
+  64 | #endif                                   | True                                                                                                                               | 
+  65 |                                          | True                                                                                                                               | 
+  66 | #if HAVE_NEW_ADDRT                       | True                                                                                                                               | 
+  67 | #define mask_in_addr(x) (((struct sockad | HAVE_NEW_ADDRT                                                                                                                     | 
+  68 | #define full_mask(x) (x)                 | HAVE_NEW_ADDRT                                                                                                                     | 
+  69 | #else                                    | True                                                                                                                               | 
+  70 | #define mask_in_addr(x) ((x).rt_genmask) | !HAVE_NEW_ADDRT                                                                                                                    | 
+  71 | #define full_mask(x) (((struct sockaddr_ | !HAVE_NEW_ADDRT                                                                                                                    | 
+  72 | #endif                                   | True                                                                                                                               | 
+  73 |                                          | True                                                                                                                               | 
+  74 | /* The RTACTION entries must agree with  | True                                                                                                                               | 
+  75 | #define RTACTION_ADD 1                   | True                                                                                                                               | 
+  76 | #define RTACTION_DEL 2                   | True                                                                                                                               | 
+  77 |                                          | True                                                                                                                               | 
+  78 | /* For the various tbl_*[] arrays, the 1 | True                                                                                                                               | 
+  79 |                                          | True                                                                                                                               | 
+  80 | #define NET_FLAG  1                      | True                                                                                                                               | 
+  81 | #define HOST_FLAG 2                      | True                                                                                                                               | 
+  82 |                                          | True                                                                                                                               | 
+  83 | /* We remap '-' to '#' to avoid problems | True                                                                                                                               | 
+  84 | static const char tbl_hash_net_host[] AL | True                                                                                                                               | 
+  85 |  "\001#net\0"                            | True                                                                                                                               | 
+  86 |  "\002#host\0"                           | True                                                                                                                               | 
+  87 | ;                                        | True                                                                                                                               | 
+  88 |                                          | True                                                                                                                               | 
+  89 | #define KW_TAKES_ARG            020      | True                                                                                                                               | 
+  90 | #define KW_SETS_FLAG            040      | True                                                                                                                               | 
+  91 |                                          | True                                                                                                                               | 
+  92 | #define KW_IPVx_METRIC          020      | True                                                                                                                               | 
+  93 | #define KW_IPVx_NETMASK         021      | True                                                                                                                               | 
+  94 | #define KW_IPVx_GATEWAY         022      | True                                                                                                                               | 
+  95 | #define KW_IPVx_MSS             023      | True                                                                                                                               | 
+  96 | #define KW_IPVx_WINDOW          024      | True                                                                                                                               | 
+  97 | #define KW_IPVx_IRTT            025      | True                                                                                                                               | 
+  98 | #define KW_IPVx_DEVICE          026      | True                                                                                                                               | 
+  99 |                                          | True                                                                                                                               | 
+ 100 | #define KW_IPVx_FLAG_ONLY       040      | True                                                                                                                               | 
+ 101 | #define KW_IPVx_REJECT          040      | True                                                                                                                               | 
+ 102 | #define KW_IPVx_MOD             041      | True                                                                                                                               | 
+ 103 | #define KW_IPVx_DYN             042      | True                                                                                                                               | 
+ 104 | #define KW_IPVx_REINSTATE       043      | True                                                                                                                               | 
+ 105 |                                          | True                                                                                                                               | 
+ 106 | static const char tbl_ipvx[] ALIGN1 =    | True                                                                                                                               | 
+ 107 |  /* 020 is the "takes an arg" bit */     | True                                                                                                                               | 
+ 108 | #if HAVE_NEW_ADDRT                       | True                                                                                                                               | 
+ 109 |  "\020metric\0"                          | !(RTF_UP)||(RTF_UP)&&!(SIOCADDRTOLD)&&!(RTF_IRTT)&&HAVE_NEW_ADDRT||(RTF_UP)&&!(SIOCADDRTOLD)&&(RTF_IRTT)||(RTF_UP)&&(SIOCADDRTOLD) | 
+ 110 | #endif                                   | True                                                                                                                               | 
+ 111 |  "\021netmask\0"                         | True                                                                                                                               | 
+ 112 |  "\022gw\0"                              | True                                                                                                                               | 
+ 113 |  "\022gateway\0"                         | True                                                                                                                               | 
+ 114 |  "\023mss\0"                             | True                                                                                                                               | 
+ 115 |  "\024window\0"                          | True                                                                                                                               | 
+ 116 | #ifdef RTF_IRTT                          | True                                                                                                                               | 
+ 117 |  "\025irtt\0"                            | !(RTF_UP)||(RTF_UP)&&(RTF_IRTT)                                                                                                    | 
+ 118 | #endif                                   | True                                                                                                                               | 
+ 119 |  "\026dev\0"                             | True                                                                                                                               | 
+ 120 |  "\026device\0"                          | True                                                                                                                               | 
+ 121 |  /* 040 is the "sets a flag" bit - MUST  | True                                                                                                                               | 
+ 122 | #ifdef RTF_REJECT                        | True                                                                                                                               | 
+ 123 |  "\040reject\0"                          | !(RTF_UP)||(RTF_UP)&&(RTF_REJECT)                                                                                                  | 
+ 124 | #endif                                   | True                                                                                                                               | 
+ 125 |  "\041mod\0"                             | True                                                                                                                               | 
+ 126 |  "\042dyn\0"                             | True                                                                                                                               | 
+ 127 |  "\043reinstate\0"                       | True                                                                                                                               | 
+ 128 | ;                                        | True                                                                                                                               | 
+ 129 |                                          | True                                                                                                                               | 
+ 130 | static const uint16_t flags_ipvx[] ALIGN | True                                                                                                                               | 
+ 131 | #ifdef RTF_REJECT                        | True                                                                                                                               | 
+ 132 |  RTF_REJECT,                             | (RTF_UP)&&(RTF_REJECT)                                                                                                             | 
+ 133 | #endif                                   | True                                                                                                                               | 
+ 134 |  RTF_MODIFIED,                           | True                                                                                                                               | 
+ 135 |  RTF_DYNAMIC,                            | True                                                                                                                               | 
+ 136 |  RTF_REINSTATE                           | True                                                                                                                               | 
+ 137 | };                                       | True                                                                                                                               | 
+ 138 |                                          | True                                                                                                                               | 
+ 139 | static int kw_lookup(const char *kwtbl,  | True                                                                                                                               | 
+ 140 | {                                        | True                                                                                                                               | 
+ 141 |  if (**pargs) {                          | True                                                                                                                               | 
+ 142 |   do {                                   | True                                                                                                                               | 
+ 143 |    if (strcmp(kwtbl + 1, **pargs) == 0)  | True                                                                                                                               | 
+ 144 |     *pargs += 1;                         | True                                                                                                                               | 
+ 145 |     if (kwtbl[0] & KW_TAKES_ARG) {       | True                                                                                                                               | 
+ 146 |      if (!**pargs) { /* No more args! */ | True                                                                                                                               | 
+ 147 |       bb_show_usage();                   | True                                                                                                                               | 
+ 148 |      }                                   | True                                                                                                                               | 
+ 149 |      *pargs += 1; /* Calling routine wil | True                                                                                                                               | 
+ 150 |     }                                    | True                                                                                                                               | 
+ 151 |     return kwtbl[0];                     | True                                                                                                                               | 
+ 152 |    }                                     | True                                                                                                                               | 
+ 153 |    kwtbl += strlen(kwtbl) + 1;           | True                                                                                                                               | 
+ 154 |   } while (*kwtbl);                      | True                                                                                                                               | 
+ 155 |  }                                       | True                                                                                                                               | 
+ 156 |  return 0;                               | True                                                                                                                               | 
+ 157 | }                                        | True                                                                                                                               | 
+ 158 |                                          | True                                                                                                                               | 
+ 159 | /* Add or delete a route, depending on a | True                                                                                                                               | 
+ 160 |                                          | True                                                                                                                               | 
+ 161 | static NOINLINE void INET_setroute(int a | True                                                                                                                               | 
+ 162 | {                                        | True                                                                                                                               | 
+ 163 |  /* char buffer instead of bona-fide str | True                                                                                                                               | 
+ 164 |  char rt_buf[sizeof(struct rtentry)];    | True                                                                                                                               | 
+ 165 |  struct rtentry *const rt = (void *)rt_b | True                                                                                                                               | 
+ 166 |                                          | True                                                                                                                               | 
+ 167 |  const char *netmask = NULL;             | True                                                                                                                               | 
+ 168 |  int skfd, isnet, xflag;                 | True                                                                                                                               | 
+ 169 |                                          | True                                                                                                                               | 
+ 170 |  /* Grab the -net or -host options.  Rem | True                                                                                                                               | 
+ 171 |  xflag = kw_lookup(tbl_hash_net_host, &a | True                                                                                                                               | 
+ 172 |                                          | True                                                                                                                               | 
+ 173 |  /* If we did grab -net or -host, make s | True                                                                                                                               | 
+ 174 |  if (*args == NULL) {                    | True                                                                                                                               | 
+ 175 |   bb_show_usage();                       | True                                                                                                                               | 
+ 176 |  }                                       | True                                                                                                                               | 
+ 177 |                                          | True                                                                                                                               | 
+ 178 |  /* Clean out the RTREQ structure. */    | True                                                                                                                               | 
+ 179 |  memset(rt, 0, sizeof(*rt));             | True                                                                                                                               | 
+ 180 |                                          | True                                                                                                                               | 
+ 181 |  {                                       | True                                                                                                                               | 
+ 182 |   char *target = *args++;                | True                                                                                                                               | 
+ 183 |   char *prefix;                          | True                                                                                                                               | 
+ 184 |                                          | True                                                                                                                               | 
+ 185 |   /* recognize x.x.x.x/mask format. */   | True                                                                                                                               | 
+ 186 |   prefix = strchr(target, '/');          | True                                                                                                                               | 
+ 187 |   if (prefix) {                          | True                                                                                                                               | 
+ 188 |    int prefix_len;                       | True                                                                                                                               | 
+ 189 |                                          | True                                                                                                                               | 
+ 190 |    prefix_len = xatoul_range(prefix+1, 0 | True                                                                                                                               | 
+ 191 |    mask_in_addr(*rt) = htonl( ~(0xffffff | !(RTF_UP)||(RTF_UP)&&!(SIOCADDRTOLD)&&!(RTF_IRTT)&&HAVE_NEW_ADDRT||(RTF_UP)&&!(SIOCADDRTOLD)&&(RTF_IRTT)||(RTF_UP)&&(SIOCADDRTOLD) | 
+ 192 |    *prefix = '\0';                       | True                                                                                                                               | 
+ 193 | #if HAVE_NEW_ADDRT                       | True                                                                                                                               | 
+ 194 |    rt->rt_genmask.sa_family = AF_INET;   | !(RTF_UP)||(RTF_UP)&&!(SIOCADDRTOLD)&&!(RTF_IRTT)&&HAVE_NEW_ADDRT||(RTF_UP)&&!(SIOCADDRTOLD)&&(RTF_IRTT)||(RTF_UP)&&(SIOCADDRTOLD) | 
+ 195 | #endif                                   | True                                                                                                                               | 
+ 196 |   } else {                               | True                                                                                                                               | 
+ 197 |    /* Default netmask. */                | True                                                                                                                               | 
+ 198 |    netmask = "default";                  | True                                                                                                                               | 
+ 199 |   }                                      | True                                                                                                                               | 
+ 200 |   /* Prefer hostname lookup if -host fla | True                                                                                                                               | 
+ 201 |   isnet = INET_resolve(target, (struct s | True                                                                                                                               | 
+ 202 |         (xflag & HOST_FLAG));            | True                                                                                                                               | 
+ 203 |   if (isnet < 0) {                       | True                                                                                                                               | 
+ 204 |    bb_error_msg_and_die("resolving %s",  | True                                                                                                                               | 
+ 205 |   }                                      | True                                                                                                                               | 
+ 206 |   if (prefix) {                          | True                                                                                                                               | 
+ 207 |    /* do not destroy prefix for process  | True                                                                                                                               | 
+ 208 |    *prefix = '/';                        | True                                                                                                                               | 
+ 209 |   }                                      | True                                                                                                                               | 
+ 210 |  }                                       | True                                                                                                                               | 
+ 211 |                                          | True                                                                                                                               | 
+ 212 |  if (xflag) {  /* Reinit isnet if -net o | True                                                                                                                               | 
+ 213 |   isnet = (xflag & NET_FLAG);            | True                                                                                                                               | 
+ 214 |  }                                       | True                                                                                                                               | 
+ 215 |                                          | True                                                                                                                               | 
+ 216 |  /* Fill in the other fields. */         | True                                                                                                                               | 
+ 217 |  rt->rt_flags = ((isnet) ? RTF_UP : (RTF | True                                                                                                                               | 
+ 218 |                                          | True                                                                                                                               | 
+ 219 |  while (*args) {                         | True                                                                                                                               | 
+ 220 |   int k = kw_lookup(tbl_ipvx, &args);    | True                                                                                                                               | 
+ 221 |   const char *args_m1 = args[-1];        | True                                                                                                                               | 
+ 222 |                                          | True                                                                                                                               | 
+ 223 |   if (k & KW_IPVx_FLAG_ONLY) {           | True                                                                                                                               | 
+ 224 |    rt->rt_flags |= flags_ipvx[k & 3];    | True                                                                                                                               | 
+ 225 |    continue;                             | True                                                                                                                               | 
+ 226 |   }                                      | True                                                                                                                               | 
+ 227 |                                          | True                                                                                                                               | 
+ 228 | #if HAVE_NEW_ADDRT                       | True                                                                                                                               | 
+ 229 |   if (k == KW_IPVx_METRIC) {             | !(RTF_UP)||(RTF_UP)&&!(SIOCADDRTOLD)&&!(RTF_IRTT)&&HAVE_NEW_ADDRT||(RTF_UP)&&!(SIOCADDRTOLD)&&(RTF_IRTT)||(RTF_UP)&&(SIOCADDRTOLD) | 
+ 230 |    rt->rt_metric = xatoul(args_m1) + 1;  | !(RTF_UP)||(RTF_UP)&&!(SIOCADDRTOLD)&&!(RTF_IRTT)&&HAVE_NEW_ADDRT||(RTF_UP)&&!(SIOCADDRTOLD)&&(RTF_IRTT)||(RTF_UP)&&(SIOCADDRTOLD) | 
+ 231 |    continue;                             | !(RTF_UP)||(RTF_UP)&&!(SIOCADDRTOLD)&&!(RTF_IRTT)&&HAVE_NEW_ADDRT||(RTF_UP)&&!(SIOCADDRTOLD)&&(RTF_IRTT)||(RTF_UP)&&(SIOCADDRTOLD) | 
+ 232 |   }                                      | !(RTF_UP)||(RTF_UP)&&!(SIOCADDRTOLD)&&!(RTF_IRTT)&&HAVE_NEW_ADDRT||(RTF_UP)&&!(SIOCADDRTOLD)&&(RTF_IRTT)||(RTF_UP)&&(SIOCADDRTOLD) | 
+ 233 | #endif                                   | True                                                                                                                               | 
+ 234 |                                          | True                                                                                                                               | 
+ 235 |   if (k == KW_IPVx_NETMASK) {            | True                                                                                                                               | 
+ 236 |    struct sockaddr mask;                 | True                                                                                                                               | 
+ 237 |                                          | True                                                                                                                               | 
+ 238 |    if (mask_in_addr(*rt)) {              | True                                                                                                                               | 
+ 239 |     bb_show_usage();                     | True                                                                                                                               | 
+ 240 |    }                                     | True                                                                                                                               | 
+ 241 |                                          | True                                                                                                                               | 
+ 242 |    netmask = args_m1;                    | True                                                                                                                               | 
+ 243 |    isnet = INET_resolve(netmask, (struct | True                                                                                                                               | 
+ 244 |    if (isnet < 0) {                      | True                                                                                                                               | 
+ 245 |     bb_error_msg_and_die("resolving %s", | True                                                                                                                               | 
+ 246 |    }                                     | True                                                                                                                               | 
+ 247 |    rt->rt_genmask = full_mask(mask);     | True                                                                                                                               | 
+ 248 |    continue;                             | True                                                                                                                               | 
+ 249 |   }                                      | True                                                                                                                               | 
+ 250 |                                          | True                                                                                                                               | 
+ 251 |   if (k == KW_IPVx_GATEWAY) {            | True                                                                                                                               | 
+ 252 |    if (rt->rt_flags & RTF_GATEWAY) {     | True                                                                                                                               | 
+ 253 |     bb_show_usage();                     | True                                                                                                                               | 
+ 254 |    }                                     | True                                                                                                                               | 
+ 255 |                                          | True                                                                                                                               | 
+ 256 |    isnet = INET_resolve(args_m1,         | True                                                                                                                               | 
+ 257 |       (struct sockaddr_in *) &rt->rt_gat | True                                                                                                                               | 
+ 258 |    rt->rt_flags |= RTF_GATEWAY;          | True                                                                                                                               | 
+ 259 |                                          | True                                                                                                                               | 
+ 260 |    if (isnet) {                          | True                                                                                                                               | 
+ 261 |     if (isnet < 0) {                     | True                                                                                                                               | 
+ 262 |      bb_error_msg_and_die("resolving %s" | True                                                                                                                               | 
+ 263 |     }                                    | True                                                                                                                               | 
+ 264 |     bb_error_msg_and_die("gateway %s is  | True                                                                                                                               | 
+ 265 |    }                                     | True                                                                                                                               | 
+ 266 |    continue;                             | True                                                                                                                               | 
+ 267 |   }                                      | True                                                                                                                               | 
+ 268 |                                          | True                                                                                                                               | 
+ 269 |   if (k == KW_IPVx_MSS) { /* Check valid | True                                                                                                                               | 
+ 270 |    rt->rt_flags |= RTF_MSS;              | True                                                                                                                               | 
+ 271 |    rt->rt_mss = xatoul_range(args_m1, 64 | True                                                                                                                               | 
+ 272 |    continue;                             | True                                                                                                                               | 
+ 273 |   }                                      | True                                                                                                                               | 
+ 274 |                                          | True                                                                                                                               | 
+ 275 |   if (k == KW_IPVx_WINDOW) { /* Check va | True                                                                                                                               | 
+ 276 |    rt->rt_flags |= RTF_WINDOW;           | True                                                                                                                               | 
+ 277 |    rt->rt_window = xatoul_range(args_m1, | True                                                                                                                               | 
+ 278 |    continue;                             | True                                                                                                                               | 
+ 279 |   }                                      | True                                                                                                                               | 
+ 280 |                                          | True                                                                                                                               | 
+ 281 | #ifdef RTF_IRTT                          | True                                                                                                                               | 
+ 282 |   if (k == KW_IPVx_IRTT) {               | !(RTF_UP)||(RTF_UP)&&(RTF_IRTT)                                                                                                    | 
+ 283 |    rt->rt_flags |= RTF_IRTT;             | !(RTF_UP)||(RTF_UP)&&(RTF_IRTT)                                                                                                    | 
+ 284 |    rt->rt_irtt = xatoul(args_m1);        | !(RTF_UP)||(RTF_UP)&&(RTF_IRTT)                                                                                                    | 
+ 285 |    rt->rt_irtt *= (bb_clk_tck() / 100);  | !(RTF_UP)||(RTF_UP)&&(RTF_IRTT)                                                                                                    | 
+ 286 | #if 0     /* FIXME: do we need to check  | !(RTF_UP)||(RTF_UP)&&(RTF_IRTT)                                                                                                    | 
+ 287 |    if (rt->rt_irtt < 1 || rt->rt_irtt >  | (RTF_IRTT)&&0                                                                                                                      | 
+ 288 |     bb_error_msg_and_die("bad irtt");    | (RTF_IRTT)&&0                                                                                                                      | 
+ 289 |    }                                     | (RTF_IRTT)&&0                                                                                                                      | 
+ 290 | #endif                                   | !(RTF_UP)||(RTF_UP)&&(RTF_IRTT)                                                                                                    | 
+ 291 |    continue;                             | !(RTF_UP)||(RTF_UP)&&(RTF_IRTT)                                                                                                    | 
+ 292 |   }                                      | !(RTF_UP)||(RTF_UP)&&(RTF_IRTT)                                                                                                    | 
+ 293 | #endif                                   | True                                                                                                                               | 
+ 294 |                                          | True                                                                                                                               | 
+ 295 |   /* Device is special in that it can be | True                                                                                                                               | 
+ 296 |    * and doesn't require the dev/device  | True                                                                                                                               | 
+ 297 |   if (!rt->rt_dev && ((k == KW_IPVx_DEVI | True                                                                                                                               | 
+ 298 |    /* Don't use args_m1 here since args  | True                                                                                                                               | 
+ 299 |    rt->rt_dev = args[-1];                | True                                                                                                                               | 
+ 300 |    continue;                             | True                                                                                                                               | 
+ 301 |   }                                      | True                                                                                                                               | 
+ 302 |                                          | True                                                                                                                               | 
+ 303 |   /* Nothing matched. */                 | True                                                                                                                               | 
+ 304 |   bb_show_usage();                       | True                                                                                                                               | 
+ 305 |  }                                       | True                                                                                                                               | 
+ 306 |                                          | True                                                                                                                               | 
+ 307 | #ifdef RTF_REJECT                        | True                                                                                                                               | 
+ 308 |  if ((rt->rt_flags & RTF_REJECT) && !rt- | !(RTF_UP)||(RTF_UP)&&(RTF_REJECT)                                                                                                  | 
+ 309 |   rt->rt_dev = (char*)"lo";              | !(RTF_UP)||(RTF_UP)&&(RTF_REJECT)                                                                                                  | 
+ 310 |  }                                       | !(RTF_UP)||(RTF_UP)&&(RTF_REJECT)                                                                                                  | 
+ 311 | #endif                                   | True                                                                                                                               | 
+ 312 |                                          | True                                                                                                                               | 
+ 313 |  /* sanity checks.. */                   | True                                                                                                                               | 
+ 314 |  if (mask_in_addr(*rt)) {                | True                                                                                                                               | 
+ 315 |   uint32_t mask = mask_in_addr(*rt);     | True                                                                                                                               | 
+ 316 |                                          | True                                                                                                                               | 
+ 317 |   mask = ~ntohl(mask);                   | True                                                                                                                               | 
+ 318 |   if ((rt->rt_flags & RTF_HOST) && mask  | True                                                                                                                               | 
+ 319 |    bb_error_msg_and_die("netmask %.8x an | True                                                                                                                               | 
+ 320 |          (unsigned int) mask);           | True                                                                                                                               | 
+ 321 |   }                                      | True                                                                                                                               | 
+ 322 |   if (mask & (mask + 1)) {               | True                                                                                                                               | 
+ 323 |    bb_error_msg_and_die("bogus netmask % | True                                                                                                                               | 
+ 324 |   }                                      | True                                                                                                                               | 
+ 325 |   mask = ((struct sockaddr_in *) &rt->rt | True                                                                                                                               | 
+ 326 |   if (mask & ~(uint32_t)mask_in_addr(*rt | True                                                                                                                               | 
+ 327 |    bb_simple_error_msg_and_die("netmask  | True                                                                                                                               | 
+ 328 |   }                                      | True                                                                                                                               | 
+ 329 |  }                                       | True                                                                                                                               | 
+ 330 |                                          | True                                                                                                                               | 
+ 331 |  /* Fill out netmask if still unset */   | True                                                                                                                               | 
+ 332 |  if ((action == RTACTION_ADD) && (rt->rt | True                                                                                                                               | 
+ 333 |   mask_in_addr(*rt) = 0xffffffff;        | !(RTF_UP)||(RTF_UP)&&!(SIOCADDRTOLD)&&!(RTF_IRTT)&&HAVE_NEW_ADDRT||(RTF_UP)&&!(SIOCADDRTOLD)&&(RTF_IRTT)||(RTF_UP)&&(SIOCADDRTOLD) | 
+ 334 |  }                                       | True                                                                                                                               | 
+ 335 |                                          | True                                                                                                                               | 
+ 336 |  /* Create a socket to the INET kernel.  | True                                                                                                                               | 
+ 337 |  skfd = xsocket(AF_INET, SOCK_DGRAM, 0); | True                                                                                                                               | 
+ 338 |                                          | True                                                                                                                               | 
+ 339 |  if (action == RTACTION_ADD)             | True                                                                                                                               | 
+ 340 |   xioctl(skfd, SIOCADDRT, rt);           | True                                                                                                                               | 
+ 341 |  else                                    | True                                                                                                                               | 
+ 342 |   xioctl(skfd, SIOCDELRT, rt);           | True                                                                                                                               | 
+ 343 |                                          | True                                                                                                                               | 
+ 344 |  if (ENABLE_FEATURE_CLEAN_UP) close(skfd | True                                                                                                                               | 
+ 345 | }                                        | True                                                                                                                               | 
+ 346 |                                          | True                                                                                                                               | 
+ 347 | #if ENABLE_FEATURE_IPV6                  | True                                                                                                                               | 
+ 348 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 349 | static NOINLINE void INET6_setroute(int  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 350 | {                                        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 351 |  struct sockaddr_in6 sa6;                | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 352 |  struct in6_rtmsg rt;                    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 353 |  int prefix_len, skfd;                   | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 354 |  const char *devname;                    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 355 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 356 |  /* We know args isn't NULL from the che | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 357 |  char *target = *args++;                 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 358 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 359 |  if (strcmp(target, "default") == 0) {   | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 360 |   prefix_len = 0;                        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 361 |   memset(&sa6, 0, sizeof(sa6));          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 362 |  } else {                                | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 363 |   char *cp;                              | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 364 |   cp = strchr(target, '/'); /* Yes... co | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 365 |   if (cp) {                              | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 366 |    *cp = '\0';                           | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 367 |    prefix_len = xatoul_range(cp + 1, 0,  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 368 |   } else {                               | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 369 |    prefix_len = 128;                     | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 370 |   }                                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 371 |   if (INET6_resolve(target, (struct sock | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 372 |    bb_error_msg_and_die("resolving %s",  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 373 |   }                                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 374 |  }                                       | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 375 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 376 |  /* Clean out the RTREQ structure. */    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 377 |  memset(&rt, 0, sizeof(rt));             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 378 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 379 |  memcpy(&rt.rtmsg_dst, sa6.sin6_addr.s6_ | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 380 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 381 |  /* Fill in the other fields. */         | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 382 |  rt.rtmsg_dst_len = prefix_len;          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 383 |  rt.rtmsg_flags = ((prefix_len == 128) ? | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 384 |  rt.rtmsg_metric = 1;                    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 385 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 386 |  devname = NULL;                         | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 387 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 388 |  while (*args) {                         | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 389 |   int k = kw_lookup(tbl_ipvx, &args);    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 390 |   const char *args_m1 = args[-1];        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 391 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 392 |   if ((k == KW_IPVx_MOD) || (k == KW_IPV | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 393 |    rt.rtmsg_flags |= flags_ipvx[k & 3];  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 394 |    continue;                             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 395 |   }                                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 396 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 397 |   if (k == KW_IPVx_METRIC) {             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 398 |    rt.rtmsg_metric = xatoul(args_m1);    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 399 |    continue;                             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 400 |   }                                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 401 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 402 |   if (k == KW_IPVx_GATEWAY) {            | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 403 |    if (rt.rtmsg_flags & RTF_GATEWAY) {   | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 404 |     bb_show_usage();                     | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 405 |    }                                     | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 406 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 407 |    if (INET6_resolve(args_m1, (struct so | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 408 |     bb_error_msg_and_die("resolving %s", | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 409 |    }                                     | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 410 |    memcpy(&rt.rtmsg_gateway, sa6.sin6_ad | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 411 |      sizeof(struct in6_addr));           | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 412 |    rt.rtmsg_flags |= RTF_GATEWAY;        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 413 |    continue;                             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 414 |   }                                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 415 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 416 |   /* Device is special in that it can be | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 417 |    * and doesn't require the dev/device  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 418 |   if (!devname && ((k == KW_IPVx_DEVICE) | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 419 |    /* Don't use args_m1 here since args  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 420 |    devname = args[-1];                   | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 421 |    continue;                             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 422 |   }                                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 423 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 424 |   /* Nothing matched. */                 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 425 |   bb_show_usage();                       | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 426 |  }                                       | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 427 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 428 |  /* Create a socket to the INET6 kernel. | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 429 |  skfd = xsocket(AF_INET6, SOCK_DGRAM, 0) | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 430 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 431 |  rt.rtmsg_ifindex = 0;                   | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 432 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 433 |  if (devname) {                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 434 |   struct ifreq ifr;                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 435 |   /*memset(&ifr, 0, sizeof(ifr)); - SIOC | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 436 |   strncpy_IFNAMSIZ(ifr.ifr_name, devname | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 437 |   xioctl(skfd, SIOCGIFINDEX, &ifr);      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 438 |   rt.rtmsg_ifindex = ifr.ifr_ifindex;    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 439 |  }                                       | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 440 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 441 |  /* Tell the kernel to accept this route | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 442 |  if (action == RTACTION_ADD)             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 443 |   xioctl(skfd, SIOCADDRT, &rt);          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 444 |  else                                    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 445 |   xioctl(skfd, SIOCDELRT, &rt);          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 446 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 447 |  if (ENABLE_FEATURE_CLEAN_UP) close(skfd | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 448 | }                                        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 449 | #endif                                   | True                                                                                                                               | 
+ 450 |                                          | True                                                                                                                               | 
+ 451 | static const                             | True                                                                                                                               | 
+ 452 | IF_NOT_FEATURE_IPV6(uint16_t flagvals[]  | True                                                                                                                               | 
+ 453 | IF_FEATURE_IPV6(uint32_t flagvals[] ALIG | True                                                                                                                               | 
+ 454 | { /* Must agree with flagchars[]. */     | True                                                                                                                               | 
+ 455 |  RTF_UP,                                 | True                                                                                                                               | 
+ 456 |  RTF_GATEWAY,                            | True                                                                                                                               | 
+ 457 |  RTF_HOST,                               | True                                                                                                                               | 
+ 458 |  RTF_REINSTATE,                          | True                                                                                                                               | 
+ 459 |  RTF_DYNAMIC,                            | True                                                                                                                               | 
+ 460 |  RTF_MODIFIED,                           | True                                                                                                                               | 
+ 461 | #if ENABLE_FEATURE_IPV6                  | True                                                                                                                               | 
+ 462 |  RTF_DEFAULT,                            | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 463 |  RTF_ADDRCONF,                           | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 464 |  RTF_CACHE,                              | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 465 |  RTF_REJECT,                             | (RTF_UP)&&ENABLE_FEATURE_IPV6                                                                                                      | 
+ 466 |  RTF_NONEXTHOP, /* this one doesn't fit  | (RTF_UP)&&ENABLE_FEATURE_IPV6                                                                                                      | 
+ 467 | #endif                                   | True                                                                                                                               | 
+ 468 | };                                       | True                                                                                                                               | 
+ 469 | /* Must agree with flagvals[]. */        | True                                                                                                                               | 
+ 470 | static const char flagchars[] ALIGN1 =   | True                                                                                                                               | 
+ 471 |  "UGHRDM"                                | True                                                                                                                               | 
+ 472 | #if ENABLE_FEATURE_IPV6                  | True                                                                                                                               | 
+ 473 |  "DAC!n"                                 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 474 | #endif                                   | True                                                                                                                               | 
+ 475 | ;                                        | True                                                                                                                               | 
+ 476 | #define IPV4_MASK (RTF_UP|RTF_GATEWAY|RT | True                                                                                                                               | 
+ 477 | #define IPV6_MASK (RTF_UP|RTF_GATEWAY|RT | True                                                                                                                               | 
+ 478 |                                          | True                                                                                                                               | 
+ 479 | static void set_flags(char *flagstr, int | True                                                                                                                               | 
+ 480 | {                                        | True                                                                                                                               | 
+ 481 |  int i;                                  | True                                                                                                                               | 
+ 482 |                                          | True                                                                                                                               | 
+ 483 |  for (i = 0; (*flagstr = flagchars[i]) ! | True                                                                                                                               | 
+ 484 |   if (flags & flagvals[i]) {             | True                                                                                                                               | 
+ 485 |    ++flagstr;                            | True                                                                                                                               | 
+ 486 |   }                                      | True                                                                                                                               | 
+ 487 |  }                                       | True                                                                                                                               | 
+ 488 | }                                        | True                                                                                                                               | 
+ 489 |                                          | True                                                                                                                               | 
+ 490 | /* also used in netstat */               | True                                                                                                                               | 
+ 491 | void FAST_FUNC bb_displayroutes(int nore | True                                                                                                                               | 
+ 492 | {                                        | True                                                                                                                               | 
+ 493 |  char devname[64], flags[16], *sdest, *s | True                                                                                                                               | 
+ 494 |  unsigned long d, g, m;                  | True                                                                                                                               | 
+ 495 |  int r;                                  | True                                                                                                                               | 
+ 496 |  int flgs, ref, use, metric, mtu, win, i | True                                                                                                                               | 
+ 497 |  struct sockaddr_in s_addr;              | True                                                                                                                               | 
+ 498 |  struct in_addr mask;                    | True                                                                                                                               | 
+ 499 |                                          | True                                                                                                                               | 
+ 500 |  FILE *fp = xfopen_for_read("/proc/net/r | True                                                                                                                               | 
+ 501 |                                          | True                                                                                                                               | 
+ 502 |  printf("Kernel IP routing table\n"      | True                                                                                                                               | 
+ 503 |   "Destination     Gateway         Genma | True                                                                                                                               | 
+ 504 |    netstatfmt ? "  MSS Window  irtt" : " | True                                                                                                                               | 
+ 505 |                                          | True                                                                                                                               | 
+ 506 |  /* Skip the first line. */              | True                                                                                                                               | 
+ 507 |  r = fscanf(fp, "%*[^\n]\n");            | True                                                                                                                               | 
+ 508 |  if (r < 0) {                            | True                                                                                                                               | 
+ 509 |   /* Empty line, read error, or EOF. Yes | True                                                                                                                               | 
+ 510 |    * is completely empty, /proc/net/rout | True                                                                                                                               | 
+ 511 |    */                                    | True                                                                                                                               | 
+ 512 |   goto ERROR;                            | True                                                                                                                               | 
+ 513 |  }                                       | True                                                                                                                               | 
+ 514 |  while (1) {                             | True                                                                                                                               | 
+ 515 |   r = fscanf(fp, "%63s%lx%lx%X%d%d%d%lx% | True                                                                                                                               | 
+ 516 |     devname, &d, &g, &flgs, &ref, &use,  | True                                                                                                                               | 
+ 517 |     &mtu, &win, &ir);                    | True                                                                                                                               | 
+ 518 |   if (r != 11) {                         | True                                                                                                                               | 
+ 519 |  ERROR:                                  | True                                                                                                                               | 
+ 520 |    if ((r < 0) && feof(fp)) { /* EOF wit | True                                                                                                                               | 
+ 521 |     break;                               | True                                                                                                                               | 
+ 522 |    }                                     | True                                                                                                                               | 
+ 523 |    bb_simple_perror_msg_and_die(bb_msg_r | True                                                                                                                               | 
+ 524 |   }                                      | True                                                                                                                               | 
+ 525 |                                          | True                                                                                                                               | 
+ 526 |   if (!(flgs & RTF_UP)) { /* Skip interf | True                                                                                                                               | 
+ 527 |    continue;                             | True                                                                                                                               | 
+ 528 |   }                                      | True                                                                                                                               | 
+ 529 |                                          | True                                                                                                                               | 
+ 530 |   set_flags(flags, (flgs & IPV4_MASK));  | True                                                                                                                               | 
+ 531 | #ifdef RTF_REJECT                        | True                                                                                                                               | 
+ 532 |   if (flgs & RTF_REJECT) {               | !(RTF_UP)||(RTF_UP)&&(RTF_REJECT)                                                                                                  | 
+ 533 |    flags[0] = '!';                       | !(RTF_UP)||(RTF_UP)&&(RTF_REJECT)                                                                                                  | 
+ 534 |   }                                      | !(RTF_UP)||(RTF_UP)&&(RTF_REJECT)                                                                                                  | 
+ 535 | #endif                                   | True                                                                                                                               | 
+ 536 |   memset(&s_addr, 0, sizeof(struct socka | True                                                                                                                               | 
+ 537 |   s_addr.sin_family = AF_INET;           | True                                                                                                                               | 
+ 538 |   s_addr.sin_addr.s_addr = d;            | True                                                                                                                               | 
+ 539 |   sdest = INET_rresolve(&s_addr, (noreso | True                                                                                                                               | 
+ 540 |   s_addr.sin_addr.s_addr = g;            | True                                                                                                                               | 
+ 541 |   sgw = INET_rresolve(&s_addr, (noresolv | True                                                                                                                               | 
+ 542 |   mask.s_addr = m;                       | True                                                                                                                               | 
+ 543 |   /* "%15.15s" truncates hostnames, do w | True                                                                                                                               | 
+ 544 |   printf("%-15.15s %-15.15s %-16s%-6s",  | True                                                                                                                               | 
+ 545 |   free(sdest);                           | True                                                                                                                               | 
+ 546 |   free(sgw);                             | True                                                                                                                               | 
+ 547 |   if (netstatfmt) {                      | True                                                                                                                               | 
+ 548 |    printf("%5d %-5d %6d %s\n", mtu, win, | True                                                                                                                               | 
+ 549 |   } else {                               | True                                                                                                                               | 
+ 550 |    printf("%-6d %-2d %7d %s\n", metric,  | True                                                                                                                               | 
+ 551 |   }                                      | True                                                                                                                               | 
+ 552 |  }                                       | True                                                                                                                               | 
+ 553 |  fclose(fp);                             | True                                                                                                                               | 
+ 554 | }                                        | True                                                                                                                               | 
+ 555 |                                          | True                                                                                                                               | 
+ 556 | #if ENABLE_FEATURE_IPV6                  | True                                                                                                                               | 
+ 557 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 558 | static void INET6_displayroutes(void)    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 559 | {                                        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 560 |  char addr6[128], *naddr6;               | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 561 |  /* In addr6x, we store both 40-byte ':' | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 562 |   * We read the non-delimited strings in | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 563 |   * using fscanf and then modify the buf | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 564 |   * while inserting ':'s and the nul ter | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 565 |   * Hence the strings are at addr6x and  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 566 |   * _much_ less code than the previous ( | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 567 |  char addr6x[80];                        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 568 |  char iface[16], flags[16];              | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 569 |  int iflags, metric, refcnt, use, prefix | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 570 |  struct sockaddr_in6 snaddr6;            | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 571 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 572 |  FILE *fp = xfopen_for_read("/proc/net/i | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 573 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 574 |  printf("Kernel IPv6 routing table\n%-44 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 575 |    "Flags Metric Ref    Use Iface\n",    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 576 |    "Destination", "Next Hop");           | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 577 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 578 |  while (1) {                             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 579 |   int r;                                 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 580 |   r = fscanf(fp, "%32s%x%*s%x%32s%x%x%x% | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 581 |     addr6x+14, &prefix_len, &slen, addr6 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 582 |     &metric, &refcnt, &use, &iflags, ifa | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 583 |   if (r != 9) {                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 584 |    if ((r < 0) && feof(fp)) { /* EOF wit | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 585 |     break;                               | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 586 |    }                                     | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 587 |  ERROR:                                  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 588 |    bb_simple_perror_msg_and_die(bb_msg_r | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 589 |   }                                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 590 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 591 |   /* Do the addr6x shift-and-insert chan | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 592 |    * For now, always do this to validate | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 593 |    * if the interface is down. */        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 594 |   {                                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 595 |    int i = 0;                            | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 596 |    char *p = addr6x+14;                  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 597 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 598 |    do {                                  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 599 |     if (!*p) {                           | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 600 |      if (i == 40) { /* nul terminator fo | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 601 |       addr6x[39] = 0; /* Fixup... need 0 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 602 |       ++p; /* Skip and continue. */      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 603 |       continue;                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 604 |      }                                   | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 605 |      goto ERROR;                         | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 606 |     }                                    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 607 |     addr6x[i++] = *p++;                  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 608 |     if (!((i+1) % 5)) {                  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 609 |      addr6x[i++] = ':';                  | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 610 |     }                                    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 611 |    } while (i < 40+28+7);                | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 612 |   }                                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 613 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 614 |   set_flags(flags, (iflags & IPV6_MASK)) | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 615 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 616 |   r = 0;                                 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 617 |   while (1) {                            | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 618 |    memset(&snaddr6, 0, sizeof(snaddr6)); | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 619 |    inet_pton(AF_INET6, addr6x + r,       | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 620 |        (struct sockaddr *) &snaddr6.sin6 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 621 |    snaddr6.sin6_family = AF_INET6;       | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 622 |    naddr6 = INET6_rresolve((struct socka | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 623 |       0x0fff /* Apparently, upstream nev | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 624 |       );                                 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 625 |    if (!r) {   /* 1st pass */            | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 626 |     snprintf(addr6, sizeof(addr6), "%s/% | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 627 |     r += 40;                             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 628 |     free(naddr6);                        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 629 |    } else {   /* 2nd pass */             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 630 |     /* Print the info. */                | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 631 |     printf("%-43s %-39s %-5s %-6d %-2d % | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 632 |       addr6, naddr6, flags, metric, refc | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 633 |     free(naddr6);                        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 634 |     break;                               | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 635 |    }                                     | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 636 |   }                                      | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 637 |  }                                       | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 638 |  fclose(fp);                             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 639 | }                                        | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 640 |                                          | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 641 | #endif                                   | True                                                                                                                               | 
+ 642 |                                          | True                                                                                                                               | 
+ 643 | //usage:#define route_trivial_usage      | True                                                                                                                               | 
+ 644 | ///////:       "[-ne]"IF_FEATURE_IPV6("  | True                                                                                                                               | 
+ 645 | ///////too wordy                         | True                                                                                                                               | 
+ 646 | //usage:       "[-ne]"IF_FEATURE_IPV6("  | True                                                                                                                               | 
+ 647 | //usage:       " [gw GATEWAY] [metric N] | True                                                                                                                               | 
+ 648 | //usage:#define route_full_usage "\n\n"  | True                                                                                                                               | 
+ 649 | //usage:       "Show or edit kernel rout | True                                                                                                                               | 
+ 650 | //usage:     "\n -n Don't resolve names" | True                                                                                                                               | 
+ 651 | //usage:     "\n -e Display other/more i | True                                                                                                                               | 
+ 652 | //usage:     "\n -A inet" IF_FEATURE_IPV | True                                                                                                                               | 
+ 653 |                                          | True                                                                                                                               | 
+ 654 | #define ROUTE_OPT_A     0x01             | True                                                                                                                               | 
+ 655 | #define ROUTE_OPT_n     0x02             | True                                                                                                                               | 
+ 656 | #define ROUTE_OPT_e     0x04             | True                                                                                                                               | 
+ 657 | #define ROUTE_OPT_INET6 0x08 /* Not an a | True                                                                                                                               | 
+ 658 |                                          | True                                                                                                                               | 
+ 659 | /* 1st byte is return value, matches RTA | True                                                                                                                               | 
+ 660 | static const char tbl_verb[] ALIGN1 =    | True                                                                                                                               | 
+ 661 |  "\001add\0"                             | True                                                                                                                               | 
+ 662 |  "\002del\0"                             | True                                                                                                                               | 
+ 663 |  "\002delete\0"                          | True                                                                                                                               | 
+ 664 | ;                                        | True                                                                                                                               | 
+ 665 |                                          | True                                                                                                                               | 
+ 666 | int route_main(int argc, char **argv) MA | True                                                                                                                               | 
+ 667 | int route_main(int argc UNUSED_PARAM, ch | True                                                                                                                               | 
+ 668 | {                                        | True                                                                                                                               | 
+ 669 |  unsigned opt;                           | True                                                                                                                               | 
+ 670 |  int what;                               | True                                                                                                                               | 
+ 671 |  char *family;                           | True                                                                                                                               | 
+ 672 |  char **p;                               | True                                                                                                                               | 
+ 673 |                                          | True                                                                                                                               | 
+ 674 |  /* First, remap '-net' and '-host' to a | True                                                                                                                               | 
+ 675 |  p = argv;                               | True                                                                                                                               | 
+ 676 |  while (*++p) {                          | True                                                                                                                               | 
+ 677 |   if (strcmp(*p, "-net") == 0 || strcmp( | True                                                                                                                               | 
+ 678 |    p[0][0] = '#';                        | True                                                                                                                               | 
+ 679 |   }                                      | True                                                                                                                               | 
+ 680 |  }                                       | True                                                                                                                               | 
+ 681 |                                          | True                                                                                                                               | 
+ 682 |  opt = getopt32(argv, "A:ne", &family);  | True                                                                                                                               | 
+ 683 |                                          | True                                                                                                                               | 
+ 684 |  if ((opt & ROUTE_OPT_A) && strcmp(famil | True                                                                                                                               | 
+ 685 | #if ENABLE_FEATURE_IPV6                  | True                                                                                                                               | 
+ 686 |   if (strcmp(family, "inet6") == 0) {    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 687 |    opt |= ROUTE_OPT_INET6; /* Set flag f | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 688 |   } else                                 | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 689 | #endif                                   | True                                                                                                                               | 
+ 690 |   bb_show_usage();                       | True                                                                                                                               | 
+ 691 |  }                                       | True                                                                                                                               | 
+ 692 |                                          | True                                                                                                                               | 
+ 693 |  argv += optind;                         | True                                                                                                                               | 
+ 694 |                                          | True                                                                                                                               | 
+ 695 |  /* No more args means display the routi | True                                                                                                                               | 
+ 696 |  if (!*argv) {                           | True                                                                                                                               | 
+ 697 |   int noresolve = (opt & ROUTE_OPT_n) ?  | True                                                                                                                               | 
+ 698 | #if ENABLE_FEATURE_IPV6                  | True                                                                                                                               | 
+ 699 |   if (opt & ROUTE_OPT_INET6)             | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 700 |    INET6_displayroutes();                | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 701 |   else                                   | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 702 | #endif                                   | True                                                                                                                               | 
+ 703 |    bb_displayroutes(noresolve, opt & ROU | True                                                                                                                               | 
+ 704 |                                          | True                                                                                                                               | 
+ 705 |   fflush_stdout_and_exit_SUCCESS();      | True                                                                                                                               | 
+ 706 |  }                                       | True                                                                                                                               | 
+ 707 |                                          | True                                                                                                                               | 
+ 708 |  /* Check verb.  At the moment, must be  | True                                                                                                                               | 
+ 709 |  what = kw_lookup(tbl_verb, &argv);      | True                                                                                                                               | 
+ 710 |  if (!what || !*argv) {  /* Unknown verb | True                                                                                                                               | 
+ 711 |   bb_show_usage();                       | True                                                                                                                               | 
+ 712 |  }                                       | True                                                                                                                               | 
+ 713 |                                          | True                                                                                                                               | 
+ 714 | #if ENABLE_FEATURE_IPV6                  | True                                                                                                                               | 
+ 715 |  if (opt & ROUTE_OPT_INET6)              | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 716 |   INET6_setroute(what, argv);            | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 717 |  else                                    | ENABLE_FEATURE_IPV6                                                                                                                | 
+ 718 | #endif                                   | True                                                                                                                               | 
+ 719 |   INET_setroute(what, argv);             | True                                                                                                                               | 
+ 720 |                                          | True                                                                                                                               | 
+ 721 |  return EXIT_SUCCESS;                    | True                                                                                                                               | 
+ 722 | }                                        | True                                                                                                                               | 
+-----+------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+     |                                          | +130MB, 295ms                                                                                                                      | 

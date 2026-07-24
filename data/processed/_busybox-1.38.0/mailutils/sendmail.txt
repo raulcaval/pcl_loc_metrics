@@ -1,0 +1,548 @@
+FILE: data/raw/busybox-1.38.0/mailutils/sendmail.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * bare bones sendmail                   | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2008 by Vladimir Dronni | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config SENDMAIL                 | True                      | 
+  10 | //config: bool "sendmail (14 kb)"        | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Barebones sendmail.            | True                      | 
+  14 |                                          | True                      | 
+  15 | //applet:IF_SENDMAIL(APPLET(sendmail, BB | True                      | 
+  16 |                                          | True                      | 
+  17 | //kbuild:lib-$(CONFIG_SENDMAIL) += sendm | True                      | 
+  18 |                                          | True                      | 
+  19 | //usage:#define sendmail_trivial_usage   | True                      | 
+  20 | //usage:       "[-tv] [-f SENDER] [-amLO | True                      | 
+  21 | //usage:     "\n  [-w SECS] [-H 'PROG AR | True                      | 
+  22 | //usage:#define sendmail_full_usage "\n\ | True                      | 
+  23 | //usage:       "Read email from stdin an | True                      | 
+  24 | //usage:     "\nStandard options:"       | True                      | 
+  25 | //usage:     "\n -t  Read additional rec | True                      | 
+  26 | //usage:     "\n -f SENDER For use in MA | True                      | 
+  27 | //usage:     "\n   Default: -auUSER, or  | True                      | 
+  28 | //usage:     "\n -o OPTIONS Various opti | True                      | 
+  29 | //usage:     "\n -i  -oi synonym, implie | True                      | 
+  30 | //usage:     "\n"                        | True                      | 
+  31 | //usage:     "\nBusybox specific options | True                      | 
+  32 | //usage:     "\n -v  Verbose"            | True                      | 
+  33 | //usage:     "\n -w SECS  Network timeou | True                      | 
+  34 | //usage:     "\n -H 'PROG ARGS' Run conn | True                      | 
+  35 | //usage:     "\n  openssl s_client -quie | True                      | 
+  36 | //usage:     "\n  openssl s_client -quie | True                      | 
+  37 | //usage:     "\n   $SMTP_ANTISPAM_DELAY: | True                      | 
+  38 | //usage:     "\n -S HOST[:PORT] Server ( | True                      | 
+  39 | //usage:     "\n -amLOGIN Log in using A | True                      | 
+  40 | //usage:     "\n -amPLAIN or AUTH PLAIN" | True                      | 
+  41 | //usage:     "\n   (-amCRAM-MD5 not supp | True                      | 
+  42 | //usage:     "\n -auUSER  Username for A | True                      | 
+  43 | //usage:     "\n -apPASS  Password for A | True                      | 
+  44 | //usage:     "\n"                        | True                      | 
+  45 | //usage:     "\nIf no -a options are giv | True                      | 
+  46 | //usage:     "\nIf -amLOGIN is given but | True                      | 
+  47 | //usage:     "\nOther options are silent | True                      | 
+  48 | //usage: IF_MAKEMIME(                    | True                      | 
+  49 | //usage:     "\nUse makemime to create e | True                      | 
+  50 | //usage: )                               | True                      | 
+  51 |                                          | True                      | 
+  52 | /* Currently we don't sanitize or escape | True                      | 
+  53 |  * We may need to do so. For one, '.' in | True                      | 
+  54 |  *                                       | True                      | 
+  55 |  * From http://cr.yp.to/smtp/address.htm | True                      | 
+  56 |  *                                       | True                      | 
+  57 |  * SMTP offers three ways to encode a ch | True                      | 
+  58 |  *                                       | True                      | 
+  59 |  * "safe": the character, if it is not < | True                      | 
+  60 |  *  double-quote, space, or an ASCII con | True                      | 
+  61 |  * "quoted": the character, if it is not | True                      | 
+  62 |  *   or double-quote; or                 | True                      | 
+  63 |  * "slashed": backslash followed by the  | True                      | 
+  64 |  *                                       | True                      | 
+  65 |  * An encoded box part is either (1) a s | True                      | 
+  66 |  * or safe characters or (2) a double qu | True                      | 
+  67 |  * slashed or quoted characters, and a d | True                      | 
+  68 |  * the concatenation of the characters e | True                      | 
+  69 |  *                                       | True                      | 
+  70 |  * For example, the encoded box parts    | True                      | 
+  71 |  * angels                                | True                      | 
+  72 |  * \a\n\g\e\l\s                          | True                      | 
+  73 |  * "\a\n\g\e\l\s"                        | True                      | 
+  74 |  * "angels"                              | True                      | 
+  75 |  * "ang\els"                             | True                      | 
+  76 |  * all represent the 6-byte string "ange | True                      | 
+  77 |  * a\,comma                              | True                      | 
+  78 |  * \a\,\c\o\m\m\a                        | True                      | 
+  79 |  * "a,comma"                             | True                      | 
+  80 |  * all represent the 7-byte string "a,co | True                      | 
+  81 |  *                                       | True                      | 
+  82 |  * An encoded address contains           | True                      | 
+  83 |  * the byte <;                           | True                      | 
+  84 |  * optionally, a route followed by a col | True                      | 
+  85 |  * an encoded box part, the byte @, and  | True                      | 
+  86 |  * the byte >.                           | True                      | 
+  87 |  *                                       | True                      | 
+  88 |  * It represents an Internet mail addres | True                      | 
+  89 |  * the string represented by the encoded | True                      | 
+  90 |  * and the domain. For example, the enco | True                      | 
+  91 |  *     <God@heaven.af.mil>               | True                      | 
+  92 |  *     <\God@heaven.af.mil>              | True                      | 
+  93 |  *     <"God"@heaven.af.mil>             | True                      | 
+  94 |  *     <@gateway.af.mil,@uucp.local:"\G\ | True                      | 
+  95 |  * all represent the Internet mail addre | True                      | 
+  96 |  */                                      | True                      | 
+  97 |                                          | True                      | 
+  98 | #include "libbb.h"                       | True                      | 
+  99 | #include "mail.h"                        | True                      | 
+ 100 |                                          | True                      | 
+ 101 | // limit maximum allowed number of heade | True                      | 
+ 102 | // set to 0 to not limit                 | True                      | 
+ 103 | #define MAX_HEADERS 256                  | True                      | 
+ 104 |                                          | True                      | 
+ 105 | static int smtp_checkp(const char *fmt,  | True                      | 
+ 106 | {                                        | True                      | 
+ 107 |  char *answer;                           | True                      | 
+ 108 |  char *msg = send_mail_command(fmt, para | True                      | 
+ 109 |  // read stdin                           | True                      | 
+ 110 |  // if the string has a form NNN- -- rea | True                      | 
+ 111 |  // parse first bytes to a number        | True                      | 
+ 112 |  // if code = -1 then just return this n | True                      | 
+ 113 |  // if code != -1 then checks whether th | True                      | 
+ 114 |  // if not equal -> die saying msg       | True                      | 
+ 115 | //FIXME: limit max len!!!                | True                      | 
+ 116 |  while ((answer = xmalloc_fgetline(stdin | True                      | 
+ 117 |   if (G.verbose)                         | True                      | 
+ 118 |    bb_error_msg("recv:'%.*s'", (int)(str | True                      | 
+ 119 |   if (strlen(answer) <= 3 || '-' != answ | True                      | 
+ 120 |    break;                                | True                      | 
+ 121 |   free(answer);                          | True                      | 
+ 122 |  }                                       | True                      | 
+ 123 |  if (answer) {                           | True                      | 
+ 124 |   int n = atoi(answer);                  | True                      | 
+ 125 |   if (G.timeout)                         | True                      | 
+ 126 |    alarm(0);                             | True                      | 
+ 127 |   free(answer);                          | True                      | 
+ 128 |   if (-1 == code || n == code) {         | True                      | 
+ 129 |    free(msg);                            | True                      | 
+ 130 |    return n;                             | True                      | 
+ 131 |   }                                      | True                      | 
+ 132 |  }                                       | True                      | 
+ 133 |  bb_error_msg_and_die("%s failed", msg); | True                      | 
+ 134 | }                                        | True                      | 
+ 135 |                                          | True                      | 
+ 136 | static int smtp_check(const char *fmt, i | True                      | 
+ 137 | {                                        | True                      | 
+ 138 |  return smtp_checkp(fmt, NULL, code);    | True                      | 
+ 139 | }                                        | True                      | 
+ 140 |                                          | True                      | 
+ 141 | // strip argument of bad chars           | True                      | 
+ 142 | static char *sane_address(char *str)     | True                      | 
+ 143 | {                                        | True                      | 
+ 144 |  char *s;                                | True                      | 
+ 145 |                                          | True                      | 
+ 146 |  trim(str);                              | True                      | 
+ 147 |  s = str;                                | True                      | 
+ 148 |  while (*s) {                            | True                      | 
+ 149 |   /* Standard allows these chars in user | True                      | 
+ 150 |    * /!#$%&'*+-=?^_`{|}~                 | True                      | 
+ 151 |    * and allows dot (.) with some restri | True                      | 
+ 152 |    * I chose to only allow a saner subse | True                      | 
+ 153 |    * I propose to expand it only on user | True                      | 
+ 154 |    */                                    | True                      | 
+ 155 |   if (!isalnum(*s) && !strchr("=+_-.@",  | True                      | 
+ 156 |    bb_error_msg("bad address '%s'", str) | True                      | 
+ 157 |    /* returning "": */                   | True                      | 
+ 158 |    str[0] = '\0';                        | True                      | 
+ 159 |    return str;                           | True                      | 
+ 160 |   }                                      | True                      | 
+ 161 |   s++;                                   | True                      | 
+ 162 |  }                                       | True                      | 
+ 163 |  return str;                             | True                      | 
+ 164 | }                                        | True                      | 
+ 165 |                                          | True                      | 
+ 166 | // check for an address inside angle bra | True                      | 
+ 167 | static char *angle_address(char *str)    | True                      | 
+ 168 | {                                        | True                      | 
+ 169 |  char *s, *e;                            | True                      | 
+ 170 |                                          | True                      | 
+ 171 |  e = trim(str);                          | True                      | 
+ 172 |  if (e != str && *--e == '>') {          | True                      | 
+ 173 |   s = strrchr(str, '<');                 | True                      | 
+ 174 |   if (s) {                               | True                      | 
+ 175 |    *e = '\0';                            | True                      | 
+ 176 |    str = s + 1;                          | True                      | 
+ 177 |   }                                      | True                      | 
+ 178 |  }                                       | True                      | 
+ 179 |  return sane_address(str);               | True                      | 
+ 180 | }                                        | True                      | 
+ 181 |                                          | True                      | 
+ 182 | static void rcptto(const char *s)        | True                      | 
+ 183 | {                                        | True                      | 
+ 184 |  if (!*s)                                | True                      | 
+ 185 |   return;                                | True                      | 
+ 186 |  // N.B. we don't die if recipient is re | True                      | 
+ 187 |  if (250 != smtp_checkp("RCPT TO:<%s>",  | True                      | 
+ 188 |   bb_error_msg("Bad recipient: <%s>", s) | True                      | 
+ 189 | }                                        | True                      | 
+ 190 |                                          | True                      | 
+ 191 | // send to a list of comma separated add | True                      | 
+ 192 | static void rcptto_list(const char *list | True                      | 
+ 193 | {                                        | True                      | 
+ 194 |  char *free_me = xstrdup(list);          | True                      | 
+ 195 |  char *str = free_me;                    | True                      | 
+ 196 |  char *s = free_me;                      | True                      | 
+ 197 |  char prev = 0;                          | True                      | 
+ 198 |  int in_quote = 0;                       | True                      | 
+ 199 |                                          | True                      | 
+ 200 |  while (*s) {                            | True                      | 
+ 201 |   char ch = *s++;                        | True                      | 
+ 202 |                                          | True                      | 
+ 203 |   if (ch == '"' && prev != '\\') {       | True                      | 
+ 204 |    in_quote = !in_quote;                 | True                      | 
+ 205 |   } else if (!in_quote && ch == ',') {   | True                      | 
+ 206 |    s[-1] = '\0';                         | True                      | 
+ 207 |    rcptto(angle_address(str));           | True                      | 
+ 208 |    str = s;                              | True                      | 
+ 209 |   }                                      | True                      | 
+ 210 |   prev = ch;                             | True                      | 
+ 211 |  }                                       | True                      | 
+ 212 |  if (prev != ',')                        | True                      | 
+ 213 |   rcptto(angle_address(str));            | True                      | 
+ 214 |  free(free_me);                          | True                      | 
+ 215 | }                                        | True                      | 
+ 216 |                                          | True                      | 
+ 217 | int sendmail_main(int argc, char **argv) | True                      | 
+ 218 | int sendmail_main(int argc UNUSED_PARAM, | True                      | 
+ 219 | {                                        | True                      | 
+ 220 |  unsigned opts;                          | True                      | 
+ 221 |  char *opt_connect;                      | True                      | 
+ 222 |  char *opt_from = NULL;                  | True                      | 
+ 223 |  char *s;                                | True                      | 
+ 224 |  llist_t *list = NULL;                   | True                      | 
+ 225 |  char *host = sane_address(safe_gethostn | True                      | 
+ 226 |  unsigned nheaders = 0;                  | True                      | 
+ 227 |  int code;                               | True                      | 
+ 228 |  enum {                                  | True                      | 
+ 229 |   HDR_OTHER = 0,                         | True                      | 
+ 230 |   HDR_TOCC,                              | True                      | 
+ 231 |   HDR_BCC,                               | True                      | 
+ 232 |  } last_hdr = 0;                         | True                      | 
+ 233 |  int check_hdr;                          | True                      | 
+ 234 |  int has_to = 0;                         | True                      | 
+ 235 |                                          | True                      | 
+ 236 |  enum {                                  | True                      | 
+ 237 |  //--- standard options                  | True                      | 
+ 238 |   OPT_t = 1 << 0,         // read messag | True                      | 
+ 239 |   OPT_f = 1 << 1,         // sender addr | True                      | 
+ 240 |   OPT_o = 1 << 2,         // various opt | True                      | 
+ 241 |   OPT_i = 1 << 3,         // IMPLIED!    | True                      | 
+ 242 |  //--- BB specific options               | True                      | 
+ 243 |   OPT_w = 1 << 4,         // network tim | True                      | 
+ 244 |   OPT_H = 1 << 5,         // use externa | True                      | 
+ 245 |   OPT_S = 1 << 6,         // specify con | True                      | 
+ 246 |   OPT_a = 1 << 7,         // authenticat | True                      | 
+ 247 |   OPT_v = 1 << 8,         // verbosity   | True                      | 
+ 248 |  //--- for -amMETHOD                     | True                      | 
+ 249 |   OPT_am_plain = 1 << 9,  // AUTH PLAIN  | True                      | 
+ 250 |  };                                      | True                      | 
+ 251 |                                          | True                      | 
+ 252 |  // init global variables                | True                      | 
+ 253 |  INIT_G();                               | True                      | 
+ 254 |                                          | True                      | 
+ 255 |  // default HOST[:PORT] is $SMTPHOST, or | True                      | 
+ 256 |  opt_connect = getenv("SMTPHOST");       | True                      | 
+ 257 |  if (!opt_connect)                       | True                      | 
+ 258 |   opt_connect = (char *)"127.0.0.1";     | True                      | 
+ 259 |                                          | True                      | 
+ 260 |  // save initial stdin since body is pip | True                      | 
+ 261 |  xdup2(STDIN_FILENO, 3);                 | True                      | 
+ 262 |  G.fp0 = xfdopen_for_read(3);            | True                      | 
+ 263 |                                          | True                      | 
+ 264 |  // parse options                        | True                      | 
+ 265 |  // N.B. since -H and -S are mutually ex | True                      | 
+ 266 |  // -a is for ssmtp (http://downloads.op | True                      | 
+ 267 |  // it is still under development.       | True                      | 
+ 268 |  opts = getopt32(argv, "^"               | True                      | 
+ 269 |    "tf:o:iw:+H:S:a:*:v"                  | True                      | 
+ 270 |    "\0"                                  | True                      | 
+ 271 |    // -v is a counter, -H and -S are mut | True                      | 
+ 272 |    "vv:H--S:S--H",                       | True                      | 
+ 273 |    &opt_from, NULL,                      | True                      | 
+ 274 |    &G.timeout, &opt_connect, &opt_connec | True                      | 
+ 275 |  );                                      | True                      | 
+ 276 |  //argc -= optind;                       | True                      | 
+ 277 |  argv += optind;                         | True                      | 
+ 278 |                                          | True                      | 
+ 279 |  // process -a[upm]<token> options       | True                      | 
+ 280 |  if ((opts & OPT_a) && !list)            | True                      | 
+ 281 |   bb_show_usage();                       | True                      | 
+ 282 |  while (list) {                          | True                      | 
+ 283 |   char *a = (char *) llist_pop(&list);   | True                      | 
+ 284 |   if ('u' == a[0])                       | True                      | 
+ 285 |    G.user = xstrdup(a+1);                | True                      | 
+ 286 |   if ('p' == a[0])                       | True                      | 
+ 287 |    G.pass = xstrdup(a+1);                | True                      | 
+ 288 |   if ('m' == a[0]) {                     | True                      | 
+ 289 |    if ((a[1] | 0x20) == 'p') // PLAIN    | True                      | 
+ 290 |     opts |= OPT_am_plain;                | True                      | 
+ 291 |    else if ((a[1] | 0x20) == 'l') // LOG | True                      | 
+ 292 |     ; /* do nothing (this is the default | True                      | 
+ 293 |    else                                  | True                      | 
+ 294 |     bb_error_msg_and_die("unsupported AU | True                      | 
+ 295 |   }                                      | True                      | 
+ 296 |  }                                       | True                      | 
+ 297 |  // N.B. list == NULL here               | True                      | 
+ 298 |  //bb_error_msg("OPT[%x] AU[%s], AP[%s], | True                      | 
+ 299 |                                          | True                      | 
+ 300 |  // connect to server                    | True                      | 
+ 301 |                                          | True                      | 
+ 302 |  // connection helper ordered? ->        | True                      | 
+ 303 |  if (opts & OPT_H) {                     | True                      | 
+ 304 |   const char *delay;                     | True                      | 
+ 305 |   const char *args[] = { "sh", "-c", opt | True                      | 
+ 306 |   // plug it in                          | True                      | 
+ 307 |   launch_helper(args);                   | True                      | 
+ 308 |   // Now:                                | True                      | 
+ 309 |   // our stdout will go to helper's stdi | True                      | 
+ 310 |   // helper's stdout will be available o | True                      | 
+ 311 |                                          | True                      | 
+ 312 |   // Wait for initial server message.    | True                      | 
+ 313 |   // If helper (such as openssl) invokes | True                      | 
+ 314 |   // is swallowed by helper (and not rep | True                      | 
+ 315 |   // We will send NOOP cmd to server and | True                      | 
+ 316 |   // We should get 220+250 on plain conn | True                      | 
+ 317 |   //                                     | True                      | 
+ 318 |   // The problem here is some servers de | True                      | 
+ 319 |   // and consider client to be a spammer | True                      | 
+ 320 |   // before 220 reached it. The code bel | True                      | 
+ 321 |   // in non-STARTTLSed case, we potentia | True                      | 
+ 322 |   // is sent by server.                  | True                      | 
+ 323 |   //                                     | True                      | 
+ 324 |   // If $SMTP_ANTISPAM_DELAY is set, we  | True                      | 
+ 325 |   //                                     | True                      | 
+ 326 |   delay = getenv("SMTP_ANTISPAM_DELAY"); | True                      | 
+ 327 |   if (delay)                             | True                      | 
+ 328 |    sleep(atoi(delay));                   | True                      | 
+ 329 |   code = smtp_check("NOOP", -1);         | True                      | 
+ 330 |   if (code == 220)                       | True                      | 
+ 331 |    // we got 220 - this is not STARTTLSe | True                      | 
+ 332 |    // eat 250 response to our NOOP       | True                      | 
+ 333 |    smtp_check(NULL, 250);                | True                      | 
+ 334 |   else                                   | True                      | 
+ 335 |   if (code != 250)                       | True                      | 
+ 336 |    bb_simple_error_msg_and_die("SMTP ini | True                      | 
+ 337 |  } else {                                | True                      | 
+ 338 |   // vanilla connection                  | True                      | 
+ 339 |   int fd;                                | True                      | 
+ 340 |   fd = create_and_connect_stream_or_die( | True                      | 
+ 341 |   // and make ourselves a simple IO filt | True                      | 
+ 342 |   xmove_fd(fd, STDIN_FILENO);            | True                      | 
+ 343 |   xdup2(STDIN_FILENO, STDOUT_FILENO);    | True                      | 
+ 344 |                                          | True                      | 
+ 345 |   // Wait for initial server 220 message | True                      | 
+ 346 |   smtp_check(NULL, 220);                 | True                      | 
+ 347 |  }                                       | True                      | 
+ 348 |                                          | True                      | 
+ 349 |  // we should start with modern EHLO     | True                      | 
+ 350 |  if (250 != smtp_checkp("EHLO %s", host, | True                      | 
+ 351 |   smtp_checkp("HELO %s", host, 250);     | True                      | 
+ 352 |                                          | True                      | 
+ 353 |  // perform authentication               | True                      | 
+ 354 |  if (opts & OPT_a) {                     | True                      | 
+ 355 |   // read credentials unless they are gi | True                      | 
+ 356 |   if (!G.user || !G.pass)                | True                      | 
+ 357 |    get_cred_or_die(4);                   | True                      | 
+ 358 |   if (opts & OPT_am_plain) {             | True                      | 
+ 359 |    // C: AUTH PLAIN                      | True                      | 
+ 360 |    // S: 334                             | True                      | 
+ 361 |    // C: base64encoded(auth<NUL>user<NUL | True                      | 
+ 362 |    // S: 235 2.7.0 Authentication succes | True                      | 
+ 363 | //Note: a shorter format is allowed:     | True                      | 
+ 364 | // C: AUTH PLAIN base64encoded(auth<NUL> | True                      | 
+ 365 | // S: 235 2.7.0 Authentication successfu | True                      | 
+ 366 |    smtp_check("AUTH PLAIN", 334);        | True                      | 
+ 367 |    {                                     | True                      | 
+ 368 |     unsigned user_len = strlen(G.user);  | True                      | 
+ 369 |     unsigned pass_len = strlen(G.pass);  | True                      | 
+ 370 |     unsigned sz = 1 + user_len + 1 + pas | True                      | 
+ 371 |     char plain_auth[sz + 1];             | True                      | 
+ 372 |     // the format is:                    | True                      | 
+ 373 |     // "authorization identity<NUL>usern | True                      | 
+ 374 |     // authorization identity is empty.  | True                      | 
+ 375 |     plain_auth[0] = '\0';                | True                      | 
+ 376 |     strcpy(stpcpy(plain_auth + 1, G.user | True                      | 
+ 377 |     printbuf_base64(plain_auth, sz);     | True                      | 
+ 378 |    }                                     | True                      | 
+ 379 |   } else {                               | True                      | 
+ 380 |    // C: AUTH LOGIN                      | True                      | 
+ 381 |    // S: 334 VXNlcm5hbWU6                | True                      | 
+ 382 |    //        ^^^^^^^^^^^^ server says "U | True                      | 
+ 383 |    // C: base64encoded(user)             | True                      | 
+ 384 |    // S: 334 UGFzc3dvcmQ6                | True                      | 
+ 385 |    //        ^^^^^^^^^^^^ server says "P | True                      | 
+ 386 |    // C: base64encoded(pass)             | True                      | 
+ 387 |    // S: 235 2.7.0 Authentication succes | True                      | 
+ 388 |    smtp_check("AUTH LOGIN", 334);        | True                      | 
+ 389 |    printstr_base64(G.user);              | True                      | 
+ 390 |    smtp_check("", 334);                  | True                      | 
+ 391 |    printstr_base64(G.pass);              | True                      | 
+ 392 |   }                                      | True                      | 
+ 393 |   smtp_check("", 235);                   | True                      | 
+ 394 |  }                                       | True                      | 
+ 395 |                                          | True                      | 
+ 396 |  // set sender                           | True                      | 
+ 397 |  // N.B. we have here a very loosely def | True                      | 
+ 398 |  // since sendmail historically offers n | True                      | 
+ 399 |  // 1) server can require no authenticat | True                      | 
+ 400 |  // we must just provide a (possibly fak | True                      | 
+ 401 |  // 2) server can require AUTH ->        | True                      | 
+ 402 |  // we must provide valid username and p | True                      | 
+ 403 |  // For the sake of security username an | True                      | 
+ 404 |  // Since reading from console may defea | True                      | 
+ 405 |  // file descriptor (e.g. 4), or again f | True                      | 
+ 406 |                                          | True                      | 
+ 407 |  // got no sender address? use auth name | True                      | 
+ 408 |  if (!opt_from) {                        | True                      | 
+ 409 |   opt_from = xasprintf("%s@%s",          | True                      | 
+ 410 |                        G.user ? G.user : | True                      | 
+ 411 |                        xgethostbyname(ho | True                      | 
+ 412 |  }                                       | True                      | 
+ 413 |  free(host);                             | True                      | 
+ 414 |                                          | True                      | 
+ 415 |  smtp_checkp("MAIL FROM:<%s>", opt_from, | True                      | 
+ 416 |                                          | True                      | 
+ 417 |  // process message                      | True                      | 
+ 418 |                                          | True                      | 
+ 419 |  // read recipients from message and add | True                      | 
+ 420 |  // this means we scan stdin for To:, Cc | True                      | 
+ 421 |  // and then use the rest of stdin as me | True                      | 
+ 422 |  code = 0; // set "analyze headers" mode | True                      | 
+ 423 | //FIXME: limit max len!!!                | True                      | 
+ 424 |  while ((s = xmalloc_fgetline(G.fp0)) != | True                      | 
+ 425 |  dump:                                   | True                      | 
+ 426 |   // put message lines doubling leading  | True                      | 
+ 427 |   if (code) {                            | True                      | 
+ 428 |    // escape leading dots                | True                      | 
+ 429 |    // N.B. this feature is implied even  | True                      | 
+ 430 |    // N.B. we need to escape the leading | True                      | 
+ 431 |    // whether it is single or not charac | True                      | 
+ 432 |    if ('.' == s[0] /*&& '\0' == s[1] */) | True                      | 
+ 433 |     bb_putchar('.');                     | True                      | 
+ 434 |    // dump read line                     | True                      | 
+ 435 |    send_r_n(s);                          | True                      | 
+ 436 |    free(s);                              | True                      | 
+ 437 |    continue;                             | True                      | 
+ 438 |   }                                      | True                      | 
+ 439 |                                          | True                      | 
+ 440 |   // analyze headers                     | True                      | 
+ 441 |   // To: or Cc: headers add recipients   | True                      | 
+ 442 |   check_hdr = (0 == strncasecmp("To:", s | True                      | 
+ 443 |   has_to |= check_hdr;                   | True                      | 
+ 444 |   if (opts & OPT_t) {                    | True                      | 
+ 445 |    if (check_hdr || 0 == strncasecmp("Bc | True                      | 
+ 446 |     rcptto_list(s+3);                    | True                      | 
+ 447 |     last_hdr = HDR_TOCC;                 | True                      | 
+ 448 |     goto addheader;                      | True                      | 
+ 449 |    }                                     | True                      | 
+ 450 |    // Bcc: header adds blind copy (hidde | True                      | 
+ 451 |    if (0 == strncasecmp("Bcc:", s, 4)) { | True                      | 
+ 452 |     rcptto_list(s+4);                    | True                      | 
+ 453 |     free(s);                             | True                      | 
+ 454 |     last_hdr = HDR_BCC;                  | True                      | 
+ 455 |     continue; // N.B. Bcc: vanishes from | True                      | 
+ 456 |    }                                     | True                      | 
+ 457 |   }                                      | True                      | 
+ 458 |   check_hdr = (list && isspace(s[0]));   | True                      | 
+ 459 |   if (strchr(s, ':') || check_hdr) {     | True                      | 
+ 460 |    // other headers go verbatim          | True                      | 
+ 461 |    // N.B. RFC2822 2.2.3 "Long Header Fi | True                      | 
+ 462 |    // Continuation is denoted by prefixi | True                      | 
+ 463 |    // Thanks (stefan.seyfried at googlem | True                      | 
+ 464 |    if (check_hdr && last_hdr != HDR_OTHE | True                      | 
+ 465 |     rcptto_list(s+1);                    | True                      | 
+ 466 |     if (last_hdr == HDR_BCC)             | True                      | 
+ 467 |      continue;                           | True                      | 
+ 468 |      // N.B. Bcc: vanishes from headers! | True                      | 
+ 469 |    } else {                              | True                      | 
+ 470 |     last_hdr = HDR_OTHER;                | True                      | 
+ 471 |    }                                     | True                      | 
+ 472 |  addheader:                              | True                      | 
+ 473 |    // N.B. we allow MAX_HEADERS generic  | True                      | 
+ 474 |    if (MAX_HEADERS && ++nheaders >= MAX_ | True                      | 
+ 475 |     goto bail;                           | True                      | 
+ 476 |    llist_add_to_end(&list, s);           | True                      | 
+ 477 |   } else {                               | True                      | 
+ 478 |    // a line without ":" (an empty line  | True                      | 
+ 479 |    // so stop "analyze headers" mode     | True                      | 
+ 480 |  reenter:                                | True                      | 
+ 481 |    // put recipients specified on cmdlin | True                      | 
+ 482 |    check_hdr = 1;                        | True                      | 
+ 483 |    while (*argv) {                       | True                      | 
+ 484 |     char *t = sane_address(*argv);       | True                      | 
+ 485 |     rcptto(t);                           | True                      | 
+ 486 |     //if (MAX_HEADERS && ++nheaders >= M | True                      | 
+ 487 |     // goto bail;                        | True                      | 
+ 488 |     if (!has_to) {                       | True                      | 
+ 489 |      const char *hdr;                    | True                      | 
+ 490 |                                          | True                      | 
+ 491 |      if (check_hdr && argv[1])           | True                      | 
+ 492 |       hdr = "To: %s,";                   | True                      | 
+ 493 |      else if (check_hdr)                 | True                      | 
+ 494 |       hdr = "To: %s";                    | True                      | 
+ 495 |      else if (argv[1])                   | True                      | 
+ 496 |       hdr = "To: %s," + 3;               | True                      | 
+ 497 |      else                                | True                      | 
+ 498 |       hdr = "To: %s" + 3;                | True                      | 
+ 499 |      llist_add_to_end(&list,             | True                      | 
+ 500 |        xasprintf(hdr, t));               | True                      | 
+ 501 |      check_hdr = 0;                      | True                      | 
+ 502 |     }                                    | True                      | 
+ 503 |     argv++;                              | True                      | 
+ 504 |    }                                     | True                      | 
+ 505 |    // enter "put message" mode           | True                      | 
+ 506 |    // N.B. DATA fails iff no recipients  | True                      | 
+ 507 |    // in this case just bail out gracefu | True                      | 
+ 508 |    if (354 != smtp_check("DATA", -1))    | True                      | 
+ 509 |     goto bail;                           | True                      | 
+ 510 |    // dump the headers                   | True                      | 
+ 511 |    while (list) {                        | True                      | 
+ 512 |     send_r_n((char *) llist_pop(&list)); | True                      | 
+ 513 |    }                                     | True                      | 
+ 514 |    // stop analyzing headers             | True                      | 
+ 515 |    code++;                               | True                      | 
+ 516 |    // N.B. !s means: we read nothing, an | True                      | 
+ 517 |    // just dump empty line and break the | True                      | 
+ 518 |    if (!s) {                             | True                      | 
+ 519 |     send_r_n("");                        | True                      | 
+ 520 |     break;                               | True                      | 
+ 521 |    }                                     | True                      | 
+ 522 |    // go dump message body               | True                      | 
+ 523 |    // N.B. "s" already contains the firs | True                      | 
+ 524 |    goto dump;                            | True                      | 
+ 525 |   }                                      | True                      | 
+ 526 |  }                                       | True                      | 
+ 527 |  // odd case: we didn't stop "analyze he | True                      | 
+ 528 |  // N.B. after reenter code will be > 0  | True                      | 
+ 529 |  if (!code)                              | True                      | 
+ 530 |   goto reenter;                          | True                      | 
+ 531 |                                          | True                      | 
+ 532 |  // finalize the message                 | True                      | 
+ 533 |  smtp_check(".", 250);                   | True                      | 
+ 534 |  bail:                                   | True                      | 
+ 535 |  // ... and say goodbye                  | True                      | 
+ 536 |  smtp_check("QUIT", 221);                | True                      | 
+ 537 |  // cleanup                              | True                      | 
+ 538 |  if (ENABLE_FEATURE_CLEAN_UP)            | True                      | 
+ 539 |   fclose(G.fp0);                         | True                      | 
+ 540 |                                          | True                      | 
+ 541 |  return EXIT_SUCCESS;                    | True                      | 
+ 542 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +116MB, 286ms             | 

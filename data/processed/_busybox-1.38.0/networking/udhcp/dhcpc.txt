@@ -1,0 +1,1847 @@
+FILE: data/raw/busybox-1.38.0/networking/udhcp/dhcpc.c
+Resultado PCLocator:
+   # | line of code                             | Merge                              | 
+-----+------------------------------------------+------------------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                               | 
+   2 | /*                                       | True                               | 
+   3 |  * udhcp client                          | True                               | 
+   4 |  * Russ Dill <Russ.Dill@asu.edu> July 20 | True                               | 
+   5 |  *                                       | True                               | 
+   6 |  * This program is free software; you ca | True                               | 
+   7 |  * it under the terms of the GNU General | True                               | 
+   8 |  * the Free Software Foundation; either  | True                               | 
+   9 |  * (at your option) any later version.   | True                               | 
+  10 |  *                                       | True                               | 
+  11 |  * This program is distributed in the ho | True                               | 
+  12 |  * but WITHOUT ANY WARRANTY; without eve | True                               | 
+  13 |  * MERCHANTABILITY or FITNESS FOR A PART | True                               | 
+  14 |  * GNU General Public License for more d | True                               | 
+  15 |  *                                       | True                               | 
+  16 |  * You should have received a copy of th | True                               | 
+  17 |  * along with this program; if not, writ | True                               | 
+  18 |  * Foundation, Inc., 675 Mass Ave, Cambr | True                               | 
+  19 |  */                                      | True                               | 
+  20 | //applet:IF_UDHCPC(APPLET(udhcpc, BB_DIR | True                               | 
+  21 |                                          | True                               | 
+  22 | //kbuild:lib-$(CONFIG_UDHCPC) += common. | True                               | 
+  23 | //kbuild:lib-$(CONFIG_UDHCPC) += dhcpc.o | True                               | 
+  24 | //kbuild:lib-$(CONFIG_FEATURE_UDHCPC_ARP | True                               | 
+  25 | //kbuild:lib-$(CONFIG_FEATURE_UDHCP_RFC3 | True                               | 
+  26 |                                          | True                               | 
+  27 | #include <syslog.h>                      | True                               | 
+  28 | /* Override ENABLE_FEATURE_PIDFILE - ifu | True                               | 
+  29 | #define WANT_PIDFILE 1                   | True                               | 
+  30 | #include "common.h"                      | True                               | 
+  31 | #include "dhcpd.h"                       | True                               | 
+  32 | #include "dhcpc.h"                       | True                               | 
+  33 |                                          | True                               | 
+  34 | #include <netinet/if_ether.h>            | True                               | 
+  35 | #include <linux/filter.h>                | True                               | 
+  36 | #include <linux/if_packet.h>             | True                               | 
+  37 |                                          | True                               | 
+  38 | #ifndef PACKET_AUXDATA                   | True                               | 
+  39 | # define PACKET_AUXDATA 8                | !(PACKET_AUXDATA)                  | 
+  40 | struct tpacket_auxdata {                 | !(PACKET_AUXDATA)                  | 
+  41 |  uint32_t tp_status;                     | !(PACKET_AUXDATA)                  | 
+  42 |  uint32_t tp_len;                        | !(PACKET_AUXDATA)                  | 
+  43 |  uint32_t tp_snaplen;                    | !(PACKET_AUXDATA)                  | 
+  44 |  uint16_t tp_mac;                        | !(PACKET_AUXDATA)                  | 
+  45 |  uint16_t tp_net;                        | !(PACKET_AUXDATA)                  | 
+  46 |  uint16_t tp_vlan_tci;                   | !(PACKET_AUXDATA)                  | 
+  47 |  uint16_t tp_padding;                    | !(PACKET_AUXDATA)                  | 
+  48 | };                                       | !(PACKET_AUXDATA)                  | 
+  49 | #endif                                   | True                               | 
+  50 |                                          | True                               | 
+  51 |                                          | True                               | 
+  52 | /* "struct client_data_t client_data" is | True                               | 
+  53 |                                          | True                               | 
+  54 |                                          | True                               | 
+  55 | #if ENABLE_LONG_OPTS                     | True                               | 
+  56 | static const char udhcpc_longopts[] ALIG | ENABLE_LONG_OPTS                   | 
+  57 |  "clientid-none\0"  No_argument       "C | ENABLE_LONG_OPTS                   | 
+  58 |  "vendorclass\0"    Required_argument "V | ENABLE_LONG_OPTS                   | 
+  59 |  "fqdn\0"           Required_argument "F | ENABLE_LONG_OPTS                   | 
+  60 |  "interface\0"      Required_argument "i | ENABLE_LONG_OPTS                   | 
+  61 |  "now\0"            No_argument       "n | ENABLE_LONG_OPTS                   | 
+  62 |  "pidfile\0"        Required_argument "p | ENABLE_LONG_OPTS                   | 
+  63 |  "quit\0"           No_argument       "q | ENABLE_LONG_OPTS                   | 
+  64 |  "release\0"        No_argument       "R | ENABLE_LONG_OPTS                   | 
+  65 |  "request\0"        Required_argument "r | ENABLE_LONG_OPTS                   | 
+  66 |  "script\0"         Required_argument "s | ENABLE_LONG_OPTS                   | 
+  67 |  "timeout\0"        Required_argument "T | ENABLE_LONG_OPTS                   | 
+  68 |  "retries\0"        Required_argument "t | ENABLE_LONG_OPTS                   | 
+  69 |  "tryagain\0"       Required_argument "A | ENABLE_LONG_OPTS                   | 
+  70 |  "syslog\0"         No_argument       "S | ENABLE_LONG_OPTS                   | 
+  71 |  "request-option\0" Required_argument "O | ENABLE_LONG_OPTS                   | 
+  72 |  "no-default-options\0" No_argument   "o | ENABLE_LONG_OPTS                   | 
+  73 |  "foreground\0"     No_argument       "f | ENABLE_LONG_OPTS                   | 
+  74 |  USE_FOR_MMU(                            | ENABLE_LONG_OPTS                   | 
+  75 |  "background\0"     No_argument       "b | ENABLE_LONG_OPTS                   | 
+  76 |  )                                       | ENABLE_LONG_OPTS                   | 
+  77 |  "broadcast\0"      No_argument       "B | ENABLE_LONG_OPTS                   | 
+  78 |  IF_FEATURE_UDHCPC_ARPING("arping\0" Opt | ENABLE_LONG_OPTS                   | 
+  79 |  IF_FEATURE_UDHCP_PORT("client-port\0" R | ENABLE_LONG_OPTS                   | 
+  80 |  ;                                       | ENABLE_LONG_OPTS                   | 
+  81 | #endif                                   | True                               | 
+  82 | /* Must match getopt32 option string ord | True                               | 
+  83 | enum {                                   | True                               | 
+  84 |  OPT_C = 1 << 0,                         | True                               | 
+  85 |  OPT_V = 1 << 1,                         | True                               | 
+  86 |  OPT_F = 1 << 2,                         | True                               | 
+  87 |  OPT_i = 1 << 3,                         | True                               | 
+  88 |  OPT_n = 1 << 4,                         | True                               | 
+  89 |  OPT_p = 1 << 5,                         | True                               | 
+  90 |  OPT_q = 1 << 6,                         | True                               | 
+  91 |  OPT_R = 1 << 7,                         | True                               | 
+  92 |  OPT_r = 1 << 8,                         | True                               | 
+  93 |  OPT_s = 1 << 9,                         | True                               | 
+  94 |  OPT_T = 1 << 10,                        | True                               | 
+  95 |  OPT_t = 1 << 11,                        | True                               | 
+  96 |  OPT_S = 1 << 12,                        | True                               | 
+  97 |  OPT_A = 1 << 13,                        | True                               | 
+  98 |  OPT_O = 1 << 14,                        | True                               | 
+  99 |  OPT_o = 1 << 15,                        | True                               | 
+ 100 |  OPT_x = 1 << 16,                        | True                               | 
+ 101 |  OPT_f = 1 << 17,                        | True                               | 
+ 102 |  OPT_B = 1 << 18,                        | True                               | 
+ 103 | /* The rest has variable bit positions,  | True                               | 
+ 104 |  OPTBIT_B = 18,                          | True                               | 
+ 105 |  USE_FOR_MMU(             OPTBIT_b,)     | True                               | 
+ 106 |  IF_FEATURE_UDHCPC_ARPING(OPTBIT_a,)     | True                               | 
+ 107 |  IF_FEATURE_UDHCP_PORT(   OPTBIT_P,)     | True                               | 
+ 108 |  USE_FOR_MMU(             OPT_b = 1 << O | True                               | 
+ 109 |  IF_FEATURE_UDHCPC_ARPING(OPT_a = 1 << O | True                               | 
+ 110 |  IF_FEATURE_UDHCP_PORT(   OPT_P = 1 << O | True                               | 
+ 111 | };                                       | True                               | 
+ 112 |                                          | True                               | 
+ 113 |                                          | True                               | 
+ 114 | /*** Script execution code ***/          | True                               | 
+ 115 | struct dhcp_optitem {                    | True                               | 
+ 116 |  unsigned len;                           | True                               | 
+ 117 |  uint8_t code;                           | True                               | 
+ 118 |  uint8_t malloced;                       | True                               | 
+ 119 |  uint8_t *data;                          | True                               | 
+ 120 |  char *env;                              | True                               | 
+ 121 | };                                       | True                               | 
+ 122 |                                          | True                               | 
+ 123 | /* get a rough idea of how long an optio | True                               | 
+ 124 | static const uint8_t len_of_option_as_st | True                               | 
+ 125 |  [OPTION_IP              ] = sizeof("255 | True                               | 
+ 126 |  [OPTION_IP_PAIR         ] = sizeof("255 | True                               | 
+ 127 |  [OPTION_STATIC_ROUTES   ] = sizeof("255 | True                               | 
+ 128 |  [OPTION_6RD             ] = sizeof("132 | True                               | 
+ 129 |  [OPTION_STRING          ] = 1,          | True                               | 
+ 130 |  [OPTION_STRING_HOST     ] = 1,          | True                               | 
+ 131 | #if ENABLE_FEATURE_UDHCP_RFC3397         | True                               | 
+ 132 |  [OPTION_DNS_STRING      ] = 1, /* unuse | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 133 |  /* Hmmm, this severely overestimates si | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 134 |   * is in domain name form: N-byte optio | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 135 |   * mallocs ~16*N bytes. But it is freed | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 136 |   */                                     | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 137 |  [OPTION_SIP_SERVERS     ] = sizeof("255 | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 138 | #endif                                   | True                               | 
+ 139 | // [OPTION_BOOLEAN         ] = sizeof("y | True                               | 
+ 140 |  [OPTION_U8              ] = sizeof("255 | True                               | 
+ 141 |  [OPTION_U16             ] = sizeof("655 | True                               | 
+ 142 | // [OPTION_S16             ] = sizeof("- | True                               | 
+ 143 |  [OPTION_U32             ] = sizeof("429 | True                               | 
+ 144 |  [OPTION_S32             ] = sizeof("-21 | True                               | 
+ 145 | };                                       | True                               | 
+ 146 |                                          | True                               | 
+ 147 | /* note: ip is a pointer to an IP in net | True                               | 
+ 148 | static int sprint_nip(char *dest, const  | True                               | 
+ 149 | {                                        | True                               | 
+ 150 |  return sprintf(dest, "%s%u.%u.%u.%u", p | True                               | 
+ 151 | }                                        | True                               | 
+ 152 |                                          | True                               | 
+ 153 | #if ENABLE_FEATURE_UDHCPC_SANITIZEOPT    | True                               | 
+ 154 | /* Check if a given name represents a va | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 155 | /* See RFC1035, 2.3.1 */                 | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 156 | /* We don't need to be particularly anal | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 157 |  * at the end, or leading and trailing d | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 158 |  * can't be used for attacks. (Leading h | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 159 |  * in the script: then hostname may be t | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 160 |  */                                      | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 161 | static int good_hostname(const char *nam | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 162 | {                                        | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 163 |  if (*name == '-') /* Can't start with ' | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 164 |   return 0;                              | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 165 |                                          | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 166 |  while (*name) {                         | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 167 |   unsigned char ch = *name++;            | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 168 |   if (!isalnum(ch))                      | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 169 |    /* DNS allows only '-', but we are mo | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 170 |    if (ch != '-' && ch != '_' && ch != ' | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 171 |     return 0;                            | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 172 |   // TODO: do we want to validate length | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 173 |  }                                       | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 174 |  return 1;                               | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 175 | }                                        | ENABLE_FEATURE_UDHCPC_SANITIZEOPT  | 
+ 176 | #else                                    | True                               | 
+ 177 | # define good_hostname(name) 1           | !ENABLE_FEATURE_UDHCPC_SANITIZEOPT | 
+ 178 | #endif                                   | True                               | 
+ 179 |                                          | True                               | 
+ 180 | /* Create "opt_name=opt_value" string */ | True                               | 
+ 181 | static NOINLINE char *xmalloc_optname_op | True                               | 
+ 182 | {                                        | True                               | 
+ 183 |  unsigned upper_length;                  | True                               | 
+ 184 |  int len, type, optlen;                  | True                               | 
+ 185 |  char *dest, *ret;                       | True                               | 
+ 186 |  uint8_t *option;                        | True                               | 
+ 187 |                                          | True                               | 
+ 188 |  option = opt_item->data;                | True                               | 
+ 189 |  len = opt_item->len;                    | True                               | 
+ 190 |  type = optflag->flags & OPTION_TYPE_MAS | True                               | 
+ 191 |  optlen = dhcp_option_lengths[type];     | True                               | 
+ 192 |  upper_length = len_of_option_as_string[ | True                               | 
+ 193 |   * ((unsigned)(len + optlen) / (unsigne | True                               | 
+ 194 |                                          | True                               | 
+ 195 |  dest = ret = xmalloc(upper_length + str | True                               | 
+ 196 |  dest += sprintf(ret, "%s=", opt_name);  | True                               | 
+ 197 |                                          | True                               | 
+ 198 |  while (len >= optlen) {                 | True                               | 
+ 199 |   switch (type) {                        | True                               | 
+ 200 |   case OPTION_IP:                        | True                               | 
+ 201 |   case OPTION_IP_PAIR:                   | True                               | 
+ 202 |    dest += sprint_nip(dest, "", option); | True                               | 
+ 203 |    if (type == OPTION_IP_PAIR)           | True                               | 
+ 204 |     dest += sprint_nip(dest, "/", option | True                               | 
+ 205 |    break;                                | True                               | 
+ 206 | //  case OPTION_BOOLEAN:                 | True                               | 
+ 207 | //   dest += sprintf(dest, *option ? "ye | True                               | 
+ 208 | //   break;                              | True                               | 
+ 209 |   case OPTION_U8:                        | True                               | 
+ 210 |    dest += sprintf(dest, "%u", *option); | True                               | 
+ 211 |    break;                                | True                               | 
+ 212 | //  case OPTION_S16:                     | True                               | 
+ 213 |   case OPTION_U16: {                     | True                               | 
+ 214 |    uint16_t val_u16;                     | True                               | 
+ 215 |    move_from_unaligned16(val_u16, option | True                               | 
+ 216 |    dest += sprintf(dest, "%u", ntohs(val | True                               | 
+ 217 |    break;                                | True                               | 
+ 218 |   }                                      | True                               | 
+ 219 |   case OPTION_S32:                       | True                               | 
+ 220 |   case OPTION_U32: {                     | True                               | 
+ 221 |    uint32_t val_u32;                     | True                               | 
+ 222 |    move_from_unaligned32(val_u32, option | True                               | 
+ 223 |    dest += sprintf(dest, type == OPTION_ | True                               | 
+ 224 |    break;                                | True                               | 
+ 225 |   }                                      | True                               | 
+ 226 |   /* Note: options which use 'return' in | True                               | 
+ 227 |    * (for example, OPTION_STRING) skip t | True                               | 
+ 228 |    * the case of list of options.        | True                               | 
+ 229 |    */                                    | True                               | 
+ 230 |   case OPTION_STRING:                    | True                               | 
+ 231 |   case OPTION_STRING_HOST:               | True                               | 
+ 232 |    memcpy(dest, option, len);            | True                               | 
+ 233 |    dest[len] = '\0';                     | True                               | 
+ 234 | //TODO: it appears option 15 DHCP_DOMAIN | True                               | 
+ 235 | //by DHCP admins to contain a space-sepa | True                               | 
+ 236 | //not one domain name (presumably, to wo | True                               | 
+ 237 | //instead of using proper option 119 DHC | True                               | 
+ 238 | //Currently, good_hostname() balks on st | True                               | 
+ 239 | //Do we need to allow it? Only for DHCP_ | True                               | 
+ 240 |    if (type == OPTION_STRING_HOST && !go | True                               | 
+ 241 |     safe_strncpy(dest, "bad", len);      | True                               | 
+ 242 |    return ret;                           | True                               | 
+ 243 |   case OPTION_STATIC_ROUTES: {           | True                               | 
+ 244 |    /* Option binary format:              | True                               | 
+ 245 |     * mask [one byte, 0..32]             | True                               | 
+ 246 |     * ip [big endian, 0..4 bytes dependi | True                               | 
+ 247 |     * router [big endian, 4 bytes]       | True                               | 
+ 248 |     * may be repeated                    | True                               | 
+ 249 |     *                                    | True                               | 
+ 250 |     * We convert it to a string "IP/MASK | True                               | 
+ 251 |     */                                   | True                               | 
+ 252 |    const char *pfx = "";                 | True                               | 
+ 253 |                                          | True                               | 
+ 254 |    while (len >= 1 + 4) { /* mask + 0-by | True                               | 
+ 255 |     uint32_t nip;                        | True                               | 
+ 256 |     uint8_t *p;                          | True                               | 
+ 257 |     unsigned mask;                       | True                               | 
+ 258 |     int bytes;                           | True                               | 
+ 259 |                                          | True                               | 
+ 260 |     mask = *option++;                    | True                               | 
+ 261 |     if (mask > 32)                       | True                               | 
+ 262 |      break;                              | True                               | 
+ 263 |     len--;                               | True                               | 
+ 264 |                                          | True                               | 
+ 265 |     nip = 0;                             | True                               | 
+ 266 |     p = (void*) &nip;                    | True                               | 
+ 267 |     bytes = (mask + 7) / 8; /* 0 -> 0, 1 | True                               | 
+ 268 |     while (--bytes >= 0) {               | True                               | 
+ 269 |      *p++ = *option++;                   | True                               | 
+ 270 |      len--;                              | True                               | 
+ 271 |     }                                    | True                               | 
+ 272 |     if (len < 4)                         | True                               | 
+ 273 |      break;                              | True                               | 
+ 274 |                                          | True                               | 
+ 275 |     /* print ip/mask */                  | True                               | 
+ 276 |     dest += sprint_nip(dest, pfx, (void* | True                               | 
+ 277 |     pfx = " ";                           | True                               | 
+ 278 |     dest += sprintf(dest, "/%u ", mask); | True                               | 
+ 279 |     /* print router */                   | True                               | 
+ 280 |     dest += sprint_nip(dest, "", option) | True                               | 
+ 281 |     option += 4;                         | True                               | 
+ 282 |     len -= 4;                            | True                               | 
+ 283 |    }                                     | True                               | 
+ 284 |                                          | True                               | 
+ 285 |    return ret;                           | True                               | 
+ 286 |   }                                      | True                               | 
+ 287 |   case OPTION_6RD:                       | True                               | 
+ 288 |    /* Option binary format (see RFC 5969 | True                               | 
+ 289 |     *  0                   1             | True                               | 
+ 290 |     *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 | True                               | 
+ 291 |     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                               | 
+ 292 |     * |  OPTION_6RD   | option-length |  | True                               | 
+ 293 |     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                               | 
+ 294 |     * |                           6rdPre | True                               | 
+ 295 |     * ...                        (16 oct | True                               | 
+ 296 |     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                               | 
+ 297 |     * ...                   6rdBRIPv4Add | True                               | 
+ 298 |     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- | True                               | 
+ 299 |     * We convert it to a string          | True                               | 
+ 300 |     * "IPv4MaskLen 6rdPrefixLen 6rdPrefi | True                               | 
+ 301 |     *                                    | True                               | 
+ 302 |     * Sanity check: ensure that our leng | True                               | 
+ 303 |     * IPv4MaskLen <= 32,                 | True                               | 
+ 304 |     * 6rdPrefixLen <= 128,               | True                               | 
+ 305 |     * 6rdPrefixLen + (32 - IPv4MaskLen)  | True                               | 
+ 306 |     * (2nd condition needs no check - it | True                               | 
+ 307 |     * Else, return envvar with empty val | True                               | 
+ 308 |     */                                   | True                               | 
+ 309 |    if (len >= (1 + 1 + 16 + 4)           | True                               | 
+ 310 |     && option[0] <= 32                   | True                               | 
+ 311 |     && (option[1] + 32 - option[0]) <= 1 | True                               | 
+ 312 |    ) {                                   | True                               | 
+ 313 |     /* IPv4MaskLen */                    | True                               | 
+ 314 |     dest += sprintf(dest, "%u ", *option | True                               | 
+ 315 |     /* 6rdPrefixLen */                   | True                               | 
+ 316 |     dest += sprintf(dest, "%u ", *option | True                               | 
+ 317 |     /* 6rdPrefix */                      | True                               | 
+ 318 |     dest += sprint_nip6(dest, /* "", */  | True                               | 
+ 319 |     option += 16;                        | True                               | 
+ 320 |     len -= 1 + 1 + 16;                   | True                               | 
+ 321 |     *dest++ = ' ';                       | True                               | 
+ 322 |     /* 6rdBRIPv4Address(es), use common  | True                               | 
+ 323 |     type = OPTION_IP;                    | True                               | 
+ 324 |     optlen = 4;                          | True                               | 
+ 325 |     continue;                            | True                               | 
+ 326 |    }                                     | True                               | 
+ 327 |                                          | True                               | 
+ 328 |    return ret;                           | True                               | 
+ 329 | #if ENABLE_FEATURE_UDHCP_RFC3397         | True                               | 
+ 330 |   case OPTION_DNS_STRING:                | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 331 |    /* unpack option into dest; use ret f | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 332 |    dest = dname_dec(option, len, ret);   | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 333 |    if (dest) {                           | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 334 |     free(ret);                           | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 335 |     return dest;                         | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 336 |    }                                     | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 337 |    /* error. return "optname=" string */ | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 338 |    return ret;                           | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 339 |   case OPTION_SIP_SERVERS:               | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 340 |    /* Option binary format:              | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 341 |     * type: byte                         | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 342 |     * type=0: domain names, dns-compress | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 343 |     * type=1: IP addrs                   | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 344 |     */                                   | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 345 |    option++;                             | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 346 |    len--;                                | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 347 |    if (option[-1] == 1) {                | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 348 |     /* use common IPv4 logic to process  | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 349 |     type = OPTION_IP;                    | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 350 |     optlen = 4;                          | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 351 |     continue;                            | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 352 |    }                                     | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 353 |    if (option[-1] == 0) {                | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 354 |     dest = dname_dec(option, len, ret);  | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 355 |     if (dest) {                          | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 356 |      free(ret);                          | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 357 |      return dest;                        | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 358 |     }                                    | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 359 |    }                                     | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 360 |    return ret;                           | ENABLE_FEATURE_UDHCP_RFC3397       | 
+ 361 | #endif                                   | True                               | 
+ 362 |   } /* switch */                         | True                               | 
+ 363 |                                          | True                               | 
+ 364 |   /* If we are here, try to format any r | True                               | 
+ 365 |    * in the option as another, similarly | True                               | 
+ 366 |    */                                    | True                               | 
+ 367 |   option += optlen;                      | True                               | 
+ 368 |   len -= optlen;                         | True                               | 
+ 369 | // TODO: it can be a list only if (optfl | True                               | 
+ 370 | // Should we bail out/warn if we see mul | True                               | 
+ 371 | // not allowed to be such (for example,  | True                               | 
+ 372 |   if (len < optlen /* || !(optflag->flag | True                               | 
+ 373 |    break;                                | True                               | 
+ 374 |   *dest++ = ' ';                         | True                               | 
+ 375 |   *dest = '\0';                          | True                               | 
+ 376 |  } /* while */                           | True                               | 
+ 377 |                                          | True                               | 
+ 378 |  return ret;                             | True                               | 
+ 379 | }                                        | True                               | 
+ 380 |                                          | True                               | 
+ 381 | static void optitem_unset_env_and_free(v | True                               | 
+ 382 | {                                        | True                               | 
+ 383 |  struct dhcp_optitem *opt_item = item;   | True                               | 
+ 384 |  bb_unsetenv_and_free(opt_item->env);    | True                               | 
+ 385 |  if (opt_item->malloced)                 | True                               | 
+ 386 |   free(opt_item->data);                  | True                               | 
+ 387 |  free(opt_item);                         | True                               | 
+ 388 | }                                        | True                               | 
+ 389 |                                          | True                               | 
+ 390 | /* Used by static options (interface, si | True                               | 
+ 391 | static void putenvp(char *new_opt)       | True                               | 
+ 392 | {                                        | True                               | 
+ 393 |  struct dhcp_optitem *opt_item;          | True                               | 
+ 394 |                                          | True                               | 
+ 395 |  opt_item = xzalloc(sizeof(*opt_item));  | True                               | 
+ 396 |  /* opt_item->code = 0, so it won't appe | True                               | 
+ 397 |  /* opt_item->malloced = 0 */            | True                               | 
+ 398 |  /* opt_item->data = NULL */             | True                               | 
+ 399 |  opt_item->env = new_opt;                | True                               | 
+ 400 |  llist_add_to(&client_data.envp, opt_ite | True                               | 
+ 401 |  log2(" %s", new_opt);                   | 1                                  | 
+ 402 |  putenv(new_opt);                        | True                               | 
+ 403 | }                                        | True                               | 
+ 404 |                                          | True                               | 
+ 405 | /* Support RFC3396 Long Encoded Options  | True                               | 
+ 406 | static struct dhcp_optitem *concat_optio | True                               | 
+ 407 | {                                        | True                               | 
+ 408 |  llist_t *item;                          | True                               | 
+ 409 |  struct dhcp_optitem *opt_item;          | True                               | 
+ 410 |                                          | True                               | 
+ 411 |  /* Check if an option with the code alr | True                               | 
+ 412 |   * A possible optimization is to create | True                               | 
+ 413 |   * and iterate over the option list onl | True                               | 
+ 414 |   * This will result in bigger code, and | True                               | 
+ 415 |   * shouldn't have a big impact on perfo | True                               | 
+ 416 |   */                                     | True                               | 
+ 417 |  for (item = client_data.envp; item != N | True                               | 
+ 418 |   opt_item = (struct dhcp_optitem *)item | True                               | 
+ 419 |   if (opt_item->code == code) {          | True                               | 
+ 420 |    /* This option was seen already, conc | True                               | 
+ 421 |    uint8_t *new_data;                    | True                               | 
+ 422 |                                          | True                               | 
+ 423 |    new_data = xmalloc(len + opt_item->le | True                               | 
+ 424 |    memcpy(                               | True                               | 
+ 425 |     mempcpy(new_data, opt_item->data, op | True                               | 
+ 426 |     data, len                            | True                               | 
+ 427 |    );                                    | True                               | 
+ 428 |    opt_item->len += len;                 | True                               | 
+ 429 |    if (opt_item->malloced)               | True                               | 
+ 430 |     free(opt_item->data);                | True                               | 
+ 431 |    opt_item->malloced = 1;               | True                               | 
+ 432 |    opt_item->data = new_data;            | True                               | 
+ 433 |    return opt_item;                      | True                               | 
+ 434 |   }                                      | True                               | 
+ 435 |  }                                       | True                               | 
+ 436 |                                          | True                               | 
+ 437 |  /* This is a new option, add a new dhcp | True                               | 
+ 438 |  opt_item = xzalloc(sizeof(*opt_item));  | True                               | 
+ 439 |  opt_item->code = code;                  | True                               | 
+ 440 |  /* opt_item->malloced = 0 */            | True                               | 
+ 441 |  opt_item->data = data;                  | True                               | 
+ 442 |  opt_item->len = len;                    | True                               | 
+ 443 |  llist_add_to(&client_data.envp, opt_ite | True                               | 
+ 444 |  return opt_item;                        | True                               | 
+ 445 | }                                        | True                               | 
+ 446 |                                          | True                               | 
+ 447 | static const char* get_optname(uint8_t c | True                               | 
+ 448 | {                                        | True                               | 
+ 449 |  /* Find the option:                     | True                               | 
+ 450 |   * dhcp_optflags is sorted so we stop s | True                               | 
+ 451 |   * than iterating over the entire array | True                               | 
+ 452 |   * Options which don't have a match in  | True                               | 
+ 453 |   * are located after the sorted array,  | True                               | 
+ 454 |   * and they'll count as unknown options | True                               | 
+ 455 |   */                                     | True                               | 
+ 456 |  for (*dh = dhcp_optflags; (*dh)->code & | True                               | 
+ 457 |   continue;                              | True                               | 
+ 458 |                                          | True                               | 
+ 459 |  if ((*dh)->code == code)                | True                               | 
+ 460 |   return nth_string(dhcp_option_strings, | True                               | 
+ 461 |                                          | True                               | 
+ 462 |  return NULL;                            | True                               | 
+ 463 | }                                        | True                               | 
+ 464 |                                          | True                               | 
+ 465 | /* put all the parameters into the envir | True                               | 
+ 466 | static void fill_envp(struct dhcp_packet | True                               | 
+ 467 | {                                        | True                               | 
+ 468 |  uint8_t *optptr;                        | True                               | 
+ 469 |  struct dhcp_scan_state scan_state;      | True                               | 
+ 470 |  char *new_opt;                          | True                               | 
+ 471 |                                          | True                               | 
+ 472 |  putenvp(xasprintf("interface=%s", clien | True                               | 
+ 473 |                                          | True                               | 
+ 474 |  if (!packet)                            | True                               | 
+ 475 |   return;                                | True                               | 
+ 476 |                                          | True                               | 
+ 477 |  init_scan_state(packet, &scan_state);   | True                               | 
+ 478 |                                          | True                               | 
+ 479 |  /* Iterate over the packet options.     | True                               | 
+ 480 |   * Handle each option based on whether  | True                               | 
+ 481 |   * Long options are supported in compli | True                               | 
+ 482 |   */                                     | True                               | 
+ 483 |  while ((optptr = udhcp_scan_options(pac | True                               | 
+ 484 |   const struct dhcp_optflag *dh;         | True                               | 
+ 485 |   const char *opt_name;                  | True                               | 
+ 486 |   struct dhcp_optitem *opt_item;         | True                               | 
+ 487 |   uint8_t code = optptr[OPT_CODE];       | True                               | 
+ 488 |   uint8_t len = optptr[OPT_LEN];         | True                               | 
+ 489 |   uint8_t *data = optptr + OPT_DATA;     | True                               | 
+ 490 |                                          | True                               | 
+ 491 |   opt_item = concat_option(data, len, co | True                               | 
+ 492 |   opt_name = get_optname(code, &dh);     | True                               | 
+ 493 |   if (opt_name) {                        | True                               | 
+ 494 |    new_opt = xmalloc_optname_optval(opt_ | True                               | 
+ 495 |    if (opt_item->code == DHCP_SUBNET &&  | True                               | 
+ 496 |     /* Generate extra envvar for DHCP_SU | True                               | 
+ 497 |     uint32_t subnet;                     | True                               | 
+ 498 |     move_from_unaligned32(subnet, opt_it | True                               | 
+ 499 | //FIXME: we do not check that subnet has | True                               | 
+ 500 |     putenvp(xasprintf("mask=%u", bb_popc | True                               | 
+ 501 |    }                                     | True                               | 
+ 502 |   } else {                               | True                               | 
+ 503 |    unsigned ofs;                         | True                               | 
+ 504 |    new_opt = xmalloc(sizeof("optNNN=") + | True                               | 
+ 505 |    ofs = sprintf(new_opt, "opt%u=", opt_ | True                               | 
+ 506 |    bin2hex(new_opt + ofs, (char *)opt_it | True                               | 
+ 507 |   }                                      | True                               | 
+ 508 |   log2(" %s", new_opt);                  | 1                                  | 
+ 509 |   putenv(new_opt);                       | True                               | 
+ 510 |   /* putenv will replace the existing en | True                               | 
+ 511 |    * Free the previous occurrence (NULL  | True                               | 
+ 512 |    */                                    | True                               | 
+ 513 |   free(opt_item->env);                   | True                               | 
+ 514 |   opt_item->env = new_opt;               | True                               | 
+ 515 |  }                                       | True                               | 
+ 516 |                                          | True                               | 
+ 517 |  /* Export BOOTP fields. Fields we don't | True                               | 
+ 518 |   * uint8_t op;      // always BOOTREPLY | True                               | 
+ 519 |   * uint8_t htype;   // hardware address | True                               | 
+ 520 |   * uint8_t hlen;    // hardware address | True                               | 
+ 521 |   * uint8_t hops;    // used by relay ag | True                               | 
+ 522 |   * uint32_t xid;                        | True                               | 
+ 523 |   * uint16_t secs;   // elapsed since cl | True                               | 
+ 524 |   * uint16_t flags;  // only one flag so | True                               | 
+ 525 |   * uint32_t ciaddr; // client IP (usual | True                               | 
+ 526 |   *                  // if during renew  | True                               | 
+ 527 |   * uint8_t chaddr[16]; // link-layer cl | True                               | 
+ 528 |   */                                     | True                               | 
+ 529 |  /* Most important one: yiaddr as $ip */ | True                               | 
+ 530 |  new_opt = xmalloc(sizeof("ip=255.255.25 | True                               | 
+ 531 |  sprint_nip(new_opt, "ip=", (uint8_t *)  | True                               | 
+ 532 |  putenvp(new_opt);                       | True                               | 
+ 533 |                                          | True                               | 
+ 534 |  if (packet->siaddr_nip) {               | True                               | 
+ 535 |   /* IP address of next server to use in | True                               | 
+ 536 |   new_opt = xmalloc(sizeof("siaddr=255.2 | True                               | 
+ 537 |   sprint_nip(new_opt, "siaddr=", (uint8_ | True                               | 
+ 538 |   putenvp(new_opt);                      | True                               | 
+ 539 |  }                                       | True                               | 
+ 540 |  if (packet->gateway_nip) {              | True                               | 
+ 541 |   /* IP address of DHCP relay agent */   | True                               | 
+ 542 |   new_opt = xmalloc(sizeof("giaddr=255.2 | True                               | 
+ 543 |   sprint_nip(new_opt, "giaddr=", (uint8_ | True                               | 
+ 544 |   putenvp(new_opt);                      | True                               | 
+ 545 |  }                                       | True                               | 
+ 546 |  if (!(scan_state.overload & FILE_FIELD) | True                               | 
+ 547 |   /* watch out for invalid packets */    | True                               | 
+ 548 |   new_opt = xasprintf("boot_file=%."DHCP | True                               | 
+ 549 |   putenvp(new_opt);                      | True                               | 
+ 550 |  }                                       | True                               | 
+ 551 |  if (!(scan_state.overload & SNAME_FIELD | True                               | 
+ 552 |   /* watch out for invalid packets */    | True                               | 
+ 553 |   new_opt = xasprintf("sname=%."DHCP_PKT | True                               | 
+ 554 |   putenvp(new_opt);                      | True                               | 
+ 555 |  }                                       | True                               | 
+ 556 | }                                        | True                               | 
+ 557 |                                          | True                               | 
+ 558 | /* Call a script with env vars */        | True                               | 
+ 559 | static void d4_run_script(struct dhcp_pa | True                               | 
+ 560 | {                                        | True                               | 
+ 561 |  char *argv[3];                          | True                               | 
+ 562 |                                          | True                               | 
+ 563 |  fill_envp(packet);                      | True                               | 
+ 564 |                                          | True                               | 
+ 565 |  /* call script */                       | True                               | 
+ 566 |  log1("executing %s %s", client_data.scr | 1                                  | 
+ 567 |  argv[0] = (char*) client_data.script;   | True                               | 
+ 568 |  argv[1] = (char*) name;                 | True                               | 
+ 569 |  argv[2] = NULL;                         | True                               | 
+ 570 |  spawn_and_wait(argv);                   | True                               | 
+ 571 |                                          | True                               | 
+ 572 |  /* Free all allocated environment varia | True                               | 
+ 573 |  llist_free(client_data.envp, optitem_un | True                               | 
+ 574 |  client_data.envp = NULL;                | True                               | 
+ 575 | }                                        | True                               | 
+ 576 |                                          | True                               | 
+ 577 | static void d4_run_script_deconfig(void) | True                               | 
+ 578 | {                                        | True                               | 
+ 579 |  d4_run_script(NULL, "deconfig");        | True                               | 
+ 580 | }                                        | True                               | 
+ 581 |                                          | True                               | 
+ 582 | /*** Sending/receiving packets ***/      | True                               | 
+ 583 |                                          | True                               | 
+ 584 | static ALWAYS_INLINE uint32_t random_xid | True                               | 
+ 585 | {                                        | True                               | 
+ 586 |  return rand();                          | True                               | 
+ 587 | }                                        | True                               | 
+ 588 |                                          | True                               | 
+ 589 | /* Initialize the packet with the proper | True                               | 
+ 590 | static void init_packet(struct dhcp_pack | True                               | 
+ 591 | {                                        | True                               | 
+ 592 |  unsigned secs;                          | True                               | 
+ 593 |                                          | True                               | 
+ 594 |  /* Fill in: op, htype, hlen, cookie fie | True                               | 
+ 595 |  udhcp_init_header(packet, type);        | True                               | 
+ 596 |                                          | True                               | 
+ 597 |  packet->xid = client_data.xid;          | True                               | 
+ 598 |                                          | True                               | 
+ 599 |  client_data.last_secs = monotonic_sec() | True                               | 
+ 600 |  if (client_data.first_secs == 0)        | True                               | 
+ 601 |   client_data.first_secs = client_data.l | True                               | 
+ 602 |  secs = client_data.last_secs - client_d | True                               | 
+ 603 |  packet->secs = (secs < 0xffff) ? htons( | True                               | 
+ 604 |                                          | True                               | 
+ 605 |  memcpy(packet->chaddr, client_data.clie | True                               | 
+ 606 | }                                        | True                               | 
+ 607 |                                          | True                               | 
+ 608 | static void add_client_options(struct dh | True                               | 
+ 609 | {                                        | True                               | 
+ 610 |  int i, end, len;                        | True                               | 
+ 611 |                                          | True                               | 
+ 612 |  udhcp_add_simple_option(packet, DHCP_MA | True                               | 
+ 613 |                                          | True                               | 
+ 614 |  /* Add a "param req" option with the li | True                               | 
+ 615 |   * from stubborn DHCP servers. Pull the | True                               | 
+ 616 |   * No bounds checking because it goes t | True                               | 
+ 617 |  end = udhcp_end_option(packet->options) | True                               | 
+ 618 |  len = 0;                                | True                               | 
+ 619 |  for (i = 1; i < DHCP_END; i++) {        | True                               | 
+ 620 |   if (client_data.opt_mask[i >> 3] & (1  | True                               | 
+ 621 |    packet->options[end + OPT_DATA + len] | True                               | 
+ 622 |    len++;                                | True                               | 
+ 623 |   }                                      | True                               | 
+ 624 |  }                                       | True                               | 
+ 625 |  if (len) {                              | True                               | 
+ 626 |   packet->options[end + OPT_CODE] = DHCP | True                               | 
+ 627 |   packet->options[end + OPT_LEN] = len;  | True                               | 
+ 628 |   packet->options[end + OPT_DATA + len]  | True                               | 
+ 629 |  }                                       | True                               | 
+ 630 |                                          | True                               | 
+ 631 |  /* Request broadcast replies if we have | True                               | 
+ 632 |  if ((option_mask32 & OPT_B) && packet-> | True                               | 
+ 633 |   packet->flags |= htons(BROADCAST_FLAG) | True                               | 
+ 634 |                                          | True                               | 
+ 635 |  /* Add -x options if any */             | True                               | 
+ 636 |  {                                       | True                               | 
+ 637 |   struct option_set *curr = client_data. | True                               | 
+ 638 |   while (curr) {                         | True                               | 
+ 639 |    udhcp_add_binary_option(packet, curr- | True                               | 
+ 640 |    curr = curr->next;                    | True                               | 
+ 641 |   }                                      | True                               | 
+ 642 | //  if (client_data.sname)               | True                               | 
+ 643 | //   strncpy((char*)packet->sname, clien | True                               | 
+ 644 | //  if (client_data.boot_file)           | True                               | 
+ 645 | //   strncpy((char*)packet->file, client | True                               | 
+ 646 |  }                                       | True                               | 
+ 647 |                                          | True                               | 
+ 648 |  // This will be needed if we remove -V  | True                               | 
+ 649 |  // -x vendor:VENDOR_STR                 | True                               | 
+ 650 |  //if (!udhcp_find_option(packet.options | True                               | 
+ 651 |  // /* not set, set the default vendor I | True                               | 
+ 652 |  // ...add (DHCP_VENDOR, "udhcp "BB_VER) | True                               | 
+ 653 | }                                        | True                               | 
+ 654 |                                          | True                               | 
+ 655 | static void add_serverid_and_clientid_op | True                               | 
+ 656 | {                                        | True                               | 
+ 657 |  struct option_set *ci;                  | True                               | 
+ 658 |                                          | True                               | 
+ 659 |  udhcp_add_simple_option(packet, DHCP_SE | True                               | 
+ 660 |                                          | True                               | 
+ 661 |  /* RFC 2131 section 2:                  | True                               | 
+ 662 |   * If the client uses a 'client identif | True                               | 
+ 663 |   * it MUST use that same identifier in  | True                               | 
+ 664 |   * section 3.1.6:                       | True                               | 
+ 665 |   * If the client used a 'client identif | True                               | 
+ 666 |   * it MUST use the same 'client identif | True                               | 
+ 667 |   */                                     | True                               | 
+ 668 |  ci = udhcp_find_option(client_data.opti | True                               | 
+ 669 |  if (ci)                                 | True                               | 
+ 670 |   udhcp_add_binary_option(packet, ci->da | True                               | 
+ 671 | }                                        | True                               | 
+ 672 |                                          | True                               | 
+ 673 | /* RFC 2131                              | True                               | 
+ 674 |  * 4.4.4 Use of broadcast and unicast    | True                               | 
+ 675 |  *                                       | True                               | 
+ 676 |  * The DHCP client broadcasts DHCPDISCOV | True                               | 
+ 677 |  * messages, unless the client knows the | True                               | 
+ 678 |  * The client unicasts DHCPRELEASE messa | True                               | 
+ 679 |  * the client is declining the use of th | True                               | 
+ 680 |  * the client broadcasts DHCPDECLINE mes | True                               | 
+ 681 |  *                                       | True                               | 
+ 682 |  * When the DHCP client knows the addres | True                               | 
+ 683 |  * INIT or REBOOTING state, the client m | True                               | 
+ 684 |  * in the DHCPDISCOVER or DHCPREQUEST ra | True                               | 
+ 685 |  * The client may also use unicast to se | True                               | 
+ 686 |  * to a known DHCP server. If the client | True                               | 
+ 687 |  * messages sent to the IP address of a  | True                               | 
+ 688 |  * client reverts to using the IP broadc | True                               | 
+ 689 |  */                                      | True                               | 
+ 690 |                                          | True                               | 
+ 691 | static int raw_bcast_from_client_data_if | True                               | 
+ 692 | {                                        | True                               | 
+ 693 |  return udhcp_send_raw_packet(packet,    | True                               | 
+ 694 |   /*src*/ src_nip, CLIENT_PORT,          | True                               | 
+ 695 |   /*dst*/ INADDR_BROADCAST, SERVER_PORT, | True                               | 
+ 696 |   client_data.ifindex);                  | True                               | 
+ 697 | }                                        | True                               | 
+ 698 |                                          | True                               | 
+ 699 | static int bcast_or_ucast(struct dhcp_pa | True                               | 
+ 700 | {                                        | True                               | 
+ 701 |  if (server)                             | True                               | 
+ 702 |   return udhcp_send_kernel_packet(packet | True                               | 
+ 703 |    ciaddr, CLIENT_PORT,                  | True                               | 
+ 704 |    server, SERVER_PORT,                  | True                               | 
+ 705 |    client_data.interface);               | True                               | 
+ 706 |  return raw_bcast_from_client_data_ifind | True                               | 
+ 707 | }                                        | True                               | 
+ 708 |                                          | True                               | 
+ 709 | /* Broadcast a DHCP discover packet to t | True                               | 
+ 710 | /* NOINLINE: limit stack usage in caller | True                               | 
+ 711 | static NOINLINE int send_discover(uint32 | True                               | 
+ 712 | {                                        | True                               | 
+ 713 |  struct dhcp_packet packet;              | True                               | 
+ 714 |                                          | True                               | 
+ 715 |  /* Fill in: op, htype, hlen, cookie, ch | True                               | 
+ 716 |   * xid field, message type option:      | True                               | 
+ 717 |   */                                     | True                               | 
+ 718 |  init_packet(&packet, DHCPDISCOVER);     | True                               | 
+ 719 |                                          | True                               | 
+ 720 |  if (requested)                          | True                               | 
+ 721 |   udhcp_add_simple_option(&packet, DHCP_ | True                               | 
+ 722 |                                          | True                               | 
+ 723 |  /* Add options: maxsize,                | True                               | 
+ 724 |   * "param req" option according to -O,  | True                               | 
+ 725 |   */                                     | True                               | 
+ 726 |  add_client_options(&packet);            | True                               | 
+ 727 |                                          | True                               | 
+ 728 |  bb_simple_info_msg("broadcasting discov | True                               | 
+ 729 |  return raw_bcast_from_client_data_ifind | True                               | 
+ 730 | }                                        | True                               | 
+ 731 |                                          | True                               | 
+ 732 | /* Broadcast a DHCP request message */   | True                               | 
+ 733 | /* RFC 2131 3.1 paragraph 3:             | True                               | 
+ 734 |  * "The client _broadcasts_ a DHCPREQUES | True                               | 
+ 735 |  */                                      | True                               | 
+ 736 | /* NOINLINE: limit stack usage in caller | True                               | 
+ 737 | static NOINLINE int send_select(uint32_t | True                               | 
+ 738 | {                                        | True                               | 
+ 739 |  struct dhcp_packet packet;              | True                               | 
+ 740 |  struct in_addr temp_addr;               | True                               | 
+ 741 |  char server_str[sizeof("255.255.255.255 | True                               | 
+ 742 |                                          | True                               | 
+ 743 | /*                                       | True                               | 
+ 744 |  * RFC 2131 4.3.2 DHCPREQUEST message    | True                               | 
+ 745 |  * ...                                   | True                               | 
+ 746 |  * If the DHCPREQUEST message contains a | True                               | 
+ 747 |  * option, the message is in response to | True                               | 
+ 748 |  * Otherwise, the message is a request t | True                               | 
+ 749 |  * existing lease. If the client uses a  | True                               | 
+ 750 |  * in a DHCPREQUEST message, it MUST use | True                               | 
+ 751 |  * in all subsequent messages. If the cl | True                               | 
+ 752 |  * of requested parameters in a DHCPDISC | True                               | 
+ 753 |  * include that list in all subsequent m | True                               | 
+ 754 |  */                                      | True                               | 
+ 755 |  /* Fill in: op, htype, hlen, cookie, ch | True                               | 
+ 756 |   * xid field, message type option:      | True                               | 
+ 757 |   */                                     | True                               | 
+ 758 |  init_packet(&packet, DHCPREQUEST);      | True                               | 
+ 759 |                                          | True                               | 
+ 760 |  udhcp_add_simple_option(&packet, DHCP_R | True                               | 
+ 761 |                                          | True                               | 
+ 762 |  udhcp_add_simple_option(&packet, DHCP_S | True                               | 
+ 763 |                                          | True                               | 
+ 764 |  /* Add options: maxsize,                | True                               | 
+ 765 |   * "param req" option according to -O,  | True                               | 
+ 766 |   */                                     | True                               | 
+ 767 |  add_client_options(&packet);            | True                               | 
+ 768 |                                          | True                               | 
+ 769 |  temp_addr.s_addr = server;              | True                               | 
+ 770 |  strcpy(server_str, inet_ntoa(temp_addr) | True                               | 
+ 771 |  temp_addr.s_addr = requested;           | True                               | 
+ 772 |  bb_info_msg("broadcasting select for %s | True                               | 
+ 773 |    inet_ntoa(temp_addr),                 | True                               | 
+ 774 |    server_str                            | True                               | 
+ 775 |  );                                      | True                               | 
+ 776 |  return raw_bcast_from_client_data_ifind | True                               | 
+ 777 | }                                        | True                               | 
+ 778 |                                          | True                               | 
+ 779 | /* Unicast or broadcast a DHCP renew mes | True                               | 
+ 780 | /* NOINLINE: limit stack usage in caller | True                               | 
+ 781 | static NOINLINE int send_renew(uint32_t  | True                               | 
+ 782 | {                                        | True                               | 
+ 783 |  struct dhcp_packet packet;              | True                               | 
+ 784 |                                          | True                               | 
+ 785 | /*                                       | True                               | 
+ 786 |  * RFC 2131 4.3.2 DHCPREQUEST message    | True                               | 
+ 787 |  * ...                                   | True                               | 
+ 788 |  * DHCPREQUEST generated during RENEWING | True                               | 
+ 789 |  *                                       | True                               | 
+ 790 |  * 'server identifier' MUST NOT be fille | True                               | 
+ 791 |  * option MUST NOT be filled in, 'ciaddr | True                               | 
+ 792 |  * client's IP address. In this situatio | True                               | 
+ 793 |  * configured, and is trying to extend i | True                               | 
+ 794 |  * be unicast, so no relay agents will b | True                               | 
+ 795 |  * transmission.  Because 'giaddr' is th | True                               | 
+ 796 |  * DHCP server will trust the value in ' | True                               | 
+ 797 |  * replying to the client.               | True                               | 
+ 798 |  */                                      | True                               | 
+ 799 |  /* Fill in: op, htype, hlen, cookie, ch | True                               | 
+ 800 |   * xid field, message type option:      | True                               | 
+ 801 |   */                                     | True                               | 
+ 802 |  init_packet(&packet, DHCPREQUEST);      | True                               | 
+ 803 |                                          | True                               | 
+ 804 |  packet.ciaddr = ciaddr;                 | True                               | 
+ 805 |                                          | True                               | 
+ 806 |  /* Add options: maxsize,                | True                               | 
+ 807 |   * "param req" option according to -O,  | True                               | 
+ 808 |   */                                     | True                               | 
+ 809 |  add_client_options(&packet);            | True                               | 
+ 810 |                                          | True                               | 
+ 811 |  if (server) {                           | True                               | 
+ 812 |   struct in_addr temp_addr;              | True                               | 
+ 813 |   temp_addr.s_addr = server;             | True                               | 
+ 814 |   bb_info_msg("sending renew to server % | True                               | 
+ 815 |  } else {                                | True                               | 
+ 816 |   bb_simple_info_msg("broadcasting renew | True                               | 
+ 817 |  }                                       | True                               | 
+ 818 |                                          | True                               | 
+ 819 |  return bcast_or_ucast(&packet, ciaddr,  | True                               | 
+ 820 | }                                        | True                               | 
+ 821 |                                          | True                               | 
+ 822 | #if ENABLE_FEATURE_UDHCPC_ARPING         | True                               | 
+ 823 | /* Broadcast a DHCP decline message */   | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 824 | /* NOINLINE: limit stack usage in caller | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 825 | static NOINLINE int send_decline(uint32_ | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 826 | {                                        | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 827 |  struct dhcp_packet packet;              | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 828 |                                          | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 829 |  /* Fill in: op, htype, hlen, cookie, ch | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 830 |   * message type option:                 | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 831 |   */                                     | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 832 |  init_packet(&packet, DHCPDECLINE);      | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 833 |                                          | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 834 |  /* DHCPDECLINE uses "requested ip", not | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 835 |  udhcp_add_simple_option(&packet, DHCP_R | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 836 |                                          | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 837 |  add_serverid_and_clientid_options(&pack | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 838 |                                          | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 839 |  bb_simple_info_msg("broadcasting declin | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 840 |  return raw_bcast_from_client_data_ifind | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 841 | }                                        | ENABLE_FEATURE_UDHCPC_ARPING       | 
+ 842 | #endif                                   | True                               | 
+ 843 |                                          | True                               | 
+ 844 | /* Unicast a DHCP release message */     | True                               | 
+ 845 | static                                   | True                               | 
+ 846 | ALWAYS_INLINE /* one caller, help compil | True                               | 
+ 847 | int send_release(uint32_t server, uint32 | True                               | 
+ 848 | {                                        | True                               | 
+ 849 |  struct dhcp_packet packet;              | True                               | 
+ 850 |                                          | True                               | 
+ 851 |  /* Fill in: op, htype, hlen, cookie, ch | True                               | 
+ 852 |   * message type option:                 | True                               | 
+ 853 |   */                                     | True                               | 
+ 854 |  init_packet(&packet, DHCPRELEASE);      | True                               | 
+ 855 |                                          | True                               | 
+ 856 |  /* DHCPRELEASE uses ciaddr, not "reques | True                               | 
+ 857 |  packet.ciaddr = ciaddr;                 | True                               | 
+ 858 |                                          | True                               | 
+ 859 |  add_serverid_and_clientid_options(&pack | True                               | 
+ 860 |                                          | True                               | 
+ 861 |  bb_info_msg("sending %s", "release");   | True                               | 
+ 862 |  /* Note: normally we unicast here since | True                               | 
+ 863 |   * However, there _are_ people who run  | True                               | 
+ 864 |   * and reportedly ISC dhcp client and W | True                               | 
+ 865 |   */                                     | True                               | 
+ 866 |  return bcast_or_ucast(&packet, ciaddr,  | True                               | 
+ 867 | }                                        | True                               | 
+ 868 |                                          | True                               | 
+ 869 | /* Returns -1 on errors that are fatal f | True                               | 
+ 870 | /* NOINLINE: limit stack usage in caller | True                               | 
+ 871 | static NOINLINE int d4_recv_raw_packet(s | True                               | 
+ 872 | {                                        | True                               | 
+ 873 |  int bytes;                              | True                               | 
+ 874 |  struct ip_udp_dhcp_packet packet;       | True                               | 
+ 875 |  uint16_t check;                         | True                               | 
+ 876 |  unsigned char cmsgbuf[CMSG_LEN(sizeof(s | True                               | 
+ 877 |  struct iovec iov;                       | True                               | 
+ 878 |  struct msghdr msg;                      | True                               | 
+ 879 |  struct cmsghdr *cmsg;                   | True                               | 
+ 880 |                                          | True                               | 
+ 881 |  /* used to use just safe_read(fd, &pack | True                               | 
+ 882 |   * but we need to check for TP_STATUS_C | True                               | 
+ 883 |   */                                     | True                               | 
+ 884 |  iov.iov_base = &packet;                 | True                               | 
+ 885 |  iov.iov_len = sizeof(packet);           | True                               | 
+ 886 |  memset(&msg, 0, sizeof(msg));           | True                               | 
+ 887 |  msg.msg_iov = &iov;                     | True                               | 
+ 888 |  msg.msg_iovlen = 1;                     | True                               | 
+ 889 |  msg.msg_control = cmsgbuf;              | True                               | 
+ 890 |  msg.msg_controllen = sizeof(cmsgbuf);   | True                               | 
+ 891 |  for (;;) {                              | True                               | 
+ 892 |   bytes = recvmsg(fd, &msg, 0);          | True                               | 
+ 893 |   if (bytes < 0) {                       | True                               | 
+ 894 |    if (errno == EINTR)                   | True                               | 
+ 895 |     continue;                            | True                               | 
+ 896 |    log1s("packet read error, ignoring"); | 1                                  | 
+ 897 |    /* NB: possible down interface, etc.  | True                               | 
+ 898 |    return bytes; /* returns -1 */        | True                               | 
+ 899 |   }                                      | True                               | 
+ 900 |   break;                                 | True                               | 
+ 901 |  }                                       | True                               | 
+ 902 |                                          | True                               | 
+ 903 |  if (bytes < (int) (sizeof(packet.ip) +  | True                               | 
+ 904 |   log1s("packet is too short, ignoring") | 1                                  | 
+ 905 |   return -2;                             | True                               | 
+ 906 |  }                                       | True                               | 
+ 907 |                                          | True                               | 
+ 908 |  if (bytes < ntohs(packet.ip.tot_len)) { | True                               | 
+ 909 |   /* packet is bigger than sizeof(packet | True                               | 
+ 910 |   log1s("oversized packet, ignoring");   | 1                                  | 
+ 911 |   return -2;                             | True                               | 
+ 912 |  }                                       | True                               | 
+ 913 |                                          | True                               | 
+ 914 |  /* ignore any extra garbage bytes */    | True                               | 
+ 915 |  bytes = ntohs(packet.ip.tot_len);       | True                               | 
+ 916 |                                          | True                               | 
+ 917 |  /* make sure its the right packet for u | True                               | 
+ 918 |  if (packet.ip.protocol != IPPROTO_UDP   | True                               | 
+ 919 |   || packet.ip.version != IPVERSION      | True                               | 
+ 920 |   || packet.ip.ihl != (sizeof(packet.ip) | True                               | 
+ 921 |   || packet.udp.dest != htons(CLIENT_POR | True                               | 
+ 922 |  /* || bytes > (int) sizeof(packet) - ca | True                               | 
+ 923 |   || ntohs(packet.udp.len) != (uint16_t) | True                               | 
+ 924 |  ) {                                     | True                               | 
+ 925 |   log1s("unrelated/bogus packet, ignorin | 1                                  | 
+ 926 |   return -2;                             | True                               | 
+ 927 |  }                                       | True                               | 
+ 928 |                                          | True                               | 
+ 929 |  /* verify IP checksum */                | True                               | 
+ 930 |  check = packet.ip.check;                | True                               | 
+ 931 |  packet.ip.check = 0;                    | True                               | 
+ 932 |  if (check != inet_cksum(&packet.ip, siz | True                               | 
+ 933 |   log1s("bad IP header checksum, ignorin | 1                                  | 
+ 934 |   return -2;                             | True                               | 
+ 935 |  }                                       | True                               | 
+ 936 |                                          | True                               | 
+ 937 |  for (cmsg = CMSG_FIRSTHDR(&msg); cmsg;  | True                               | 
+ 938 |   if (cmsg->cmsg_level == SOL_PACKET     | True                               | 
+ 939 |    && cmsg->cmsg_type == PACKET_AUXDATA  | True                               | 
+ 940 |   ) {                                    | True                               | 
+ 941 |    /* some VMs don't checksum UDP and TC | True                               | 
+ 942 |     * they send to the same physical mac | True                               | 
+ 943 |     * here we detect this case:          | True                               | 
+ 944 |     */                                   | True                               | 
+ 945 |    struct tpacket_auxdata *aux = (void * | True                               | 
+ 946 |    if (aux->tp_status & TP_STATUS_CSUMNO | True                               | 
+ 947 |     goto skip_udp_sum_check;             | True                               | 
+ 948 |   }                                      | True                               | 
+ 949 |  }                                       | True                               | 
+ 950 |                                          | True                               | 
+ 951 |  /* verify UDP checksum. IP header has t | True                               | 
+ 952 |  memset(&packet.ip, 0, offsetof(struct i | True                               | 
+ 953 |  /* ip.xx fields which are not memset: p | True                               | 
+ 954 |  packet.ip.tot_len = packet.udp.len; /*  | True                               | 
+ 955 |  check = packet.udp.check;               | True                               | 
+ 956 |  packet.udp.check = 0;                   | True                               | 
+ 957 |  if (check && check != inet_cksum(&packe | True                               | 
+ 958 |   log1s("packet with bad UDP checksum, i | 1                                  | 
+ 959 |   return -2;                             | True                               | 
+ 960 |  }                                       | True                               | 
+ 961 |  skip_udp_sum_check:                     | True                               | 
+ 962 |                                          | True                               | 
+ 963 |  if (packet.data.cookie != htonl(RFC1048 | True                               | 
+ 964 |   log1s("packet with bad magic, ignoring | 1                                  | 
+ 965 |   return -2;                             | True                               | 
+ 966 |  }                                       | True                               | 
+ 967 |                                          | True                               | 
+ 968 |  log2("received %s", "a packet");        | 1                                  | 
+ 969 |  /* log2 because more informative msg fo | True                               | 
+ 970 |  udhcp_dump_packet(&packet.data);        | 1                                  | 
+ 971 |                                          | True                               | 
+ 972 |  bytes -= sizeof(packet.ip) + sizeof(pac | True                               | 
+ 973 |  memset(dhcp_pkt, 0, sizeof(*dhcp_pkt)); | True                               | 
+ 974 |  memcpy(dhcp_pkt, &packet.data, bytes);  | True                               | 
+ 975 |  return bytes;                           | True                               | 
+ 976 | }                                        | True                               | 
+ 977 |                                          | True                               | 
+ 978 |                                          | True                               | 
+ 979 | /*** Main ***/                           | True                               | 
+ 980 |                                          | True                               | 
+ 981 | /* Values for client_data.listen_mode */ | True                               | 
+ 982 | #define LISTEN_NONE   0                  | True                               | 
+ 983 | #define LISTEN_KERNEL 1                  | True                               | 
+ 984 | #define LISTEN_RAW    2                  | True                               | 
+ 985 |                                          | True                               | 
+ 986 | /* Values for client_data.state */       | True                               | 
+ 987 | /* initial state: (re)start DHCP negotia | True                               | 
+ 988 | #define INIT_SELECTING  0                | True                               | 
+ 989 | /* discover was sent, DHCPOFFER reply re | True                               | 
+ 990 | #define REQUESTING      1                | True                               | 
+ 991 | /* select/renew was sent, DHCPACK reply  | True                               | 
+ 992 | #define BOUND           2                | True                               | 
+ 993 | /* half of lease passed, want to renew i | True                               | 
+ 994 | #define RENEWING        3                | True                               | 
+ 995 | /* renew requests were not answered, lea | True                               | 
+ 996 | #define REBINDING       4                | True                               | 
+ 997 | /* manually requested renew (SIGUSR1) */ | True                               | 
+ 998 | #define RENEW_REQUESTED 5                | True                               | 
+ 999 | /* release, possibly manually requested  | True                               | 
+1000 | #define RELEASED        6                | True                               | 
+1001 |                                          | True                               | 
+1002 | static int udhcp_raw_socket(int ifindex) | True                               | 
+1003 | {                                        | True                               | 
+1004 |  int fd;                                 | True                               | 
+1005 |  struct sockaddr_ll sock;                | True                               | 
+1006 |                                          | True                               | 
+1007 |  log2("opening raw socket on ifindex %d" | 1                                  | 
+1008 |                                          | True                               | 
+1009 |  fd = xsocket(PF_PACKET, SOCK_DGRAM, hto | True                               | 
+1010 |  /* ^^^^^                                | True                               | 
+1011 |   * SOCK_DGRAM: remove link-layer header | True                               | 
+1012 |   * ETH_P_IP: want to receive only packe | True                               | 
+1013 |   */                                     | True                               | 
+1014 |                                          | True                               | 
+1015 |  memset(&sock, 0, sizeof(sock)); /* let' | True                               | 
+1016 |  sock.sll_family = AF_PACKET;            | True                               | 
+1017 |  sock.sll_protocol = htons(ETH_P_IP);    | True                               | 
+1018 |  sock.sll_ifindex = ifindex;             | True                               | 
+1019 |  /*sock.sll_hatype = ARPHRD_???;*/       | True                               | 
+1020 |  /*sock.sll_pkttype = PACKET_???;*/      | True                               | 
+1021 |  /*sock.sll_halen = ???;*/               | True                               | 
+1022 |  /*sock.sll_addr[8] = ???;*/             | True                               | 
+1023 |  xbind(fd, (struct sockaddr *) &sock, si | True                               | 
+1024 |                                          | True                               | 
+1025 | #if 0 /* Several users reported breakage | True                               | 
+1026 |  if (CLIENT_PORT == 68) {                | 0                                  | 
+1027 |   /* Use only if standard port is in use | 0                                  | 
+1028 |   /*                                     | 0                                  | 
+1029 |    * I've selected not to see LL header, | 0                                  | 
+1030 |    * The filter may also pass non-IP and | 0                                  | 
+1031 |    * a more complete check when receivin | 0                                  | 
+1032 |    *                                     | 0                                  | 
+1033 |    * and filter shamelessly stolen from: | 0                                  | 
+1034 |    *                                     | 0                                  | 
+1035 |    * http://www.flamewarmaster.de/softwa | 0                                  | 
+1036 |    *                                     | 0                                  | 
+1037 |    * There are a few other interesting i | 0                                  | 
+1038 |    * "Motivation").  Use of netlink even | 0                                  | 
+1039 |    * of various network servers listenin | 0                                  | 
+1040 |    * That would obsolete sending HUP sig | 0                                  | 
+1041 |    *                                     | 0                                  | 
+1042 |    * Copyright: 2006, 2007 Stefan Rompf  | 0                                  | 
+1043 |    * License: GPL v2.                    | 0                                  | 
+1044 |    */                                    | 0                                  | 
+1045 |   static const struct sock_filter filter | 0                                  | 
+1046 |    /* load 9th byte (protocol) */        | 0                                  | 
+1047 |    BPF_STMT(BPF_LD|BPF_B|BPF_ABS, 9),    | 0                                  | 
+1048 |    /* jump to L1 if it is IPPROTO_UDP, e | 0                                  | 
+1049 |    BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, IPPRO | 0                                  | 
+1050 |    /* L1: load halfword from offset 6 (f | 0                                  | 
+1051 |    BPF_STMT(BPF_LD|BPF_H|BPF_ABS, 6),    | 0                                  | 
+1052 |    /* jump to L4 if any bits in frag off | 0                                  | 
+1053 |    BPF_JUMP(BPF_JMP|BPF_JSET|BPF_K, 0x1f | 0                                  | 
+1054 |    /* L2: skip IP header (load index reg | 0                                  | 
+1055 |    BPF_STMT(BPF_LDX|BPF_B|BPF_MSH, 0),   | 0                                  | 
+1056 |    /* load udp destination port from hal | 0                                  | 
+1057 |    BPF_STMT(BPF_LD|BPF_H|BPF_IND, 2),    | 0                                  | 
+1058 |    /* jump to L3 if udp dport is CLIENT_ | 0                                  | 
+1059 |    BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, 68, 0 | 0                                  | 
+1060 |    /* L3: accept packet ("accept 0x7ffff | 0                                  | 
+1061 |    /* Accepting 0xffffffff works too but | 0                                  | 
+1062 |    BPF_STMT(BPF_RET|BPF_K, 0x7fffffff),  | 0                                  | 
+1063 |    /* L4: discard packet ("accept zero b | 0                                  | 
+1064 |    BPF_STMT(BPF_RET|BPF_K, 0),           | 0                                  | 
+1065 |   };                                     | 0                                  | 
+1066 |   static const struct sock_fprog filter_ | 0                                  | 
+1067 |    .len = sizeof(filter_instr) / sizeof( | 0                                  | 
+1068 |    /* casting const away: */             | 0                                  | 
+1069 |    .filter = (struct sock_filter *) filt | 0                                  | 
+1070 |   };                                     | 0                                  | 
+1071 |   /* Ignoring error (kernel may lack sup | 0                                  | 
+1072 |   if (setsockopt(fd, SOL_SOCKET, SO_ATTA | 0                                  | 
+1073 |     sizeof(filter_prog)) >= 0)           | 0                                  | 
+1074 |    log1("attached filter to raw socket f | 0                                  | 
+1075 |  }                                       | 0                                  | 
+1076 | #endif                                   | True                               | 
+1077 |                                          | True                               | 
+1078 |  if (setsockopt_1(fd, SOL_PACKET, PACKET | True                               | 
+1079 |   if (errno != ENOPROTOOPT)              | True                               | 
+1080 |    log1s("can't set PACKET_AUXDATA on ra | 1                                  | 
+1081 |  }                                       | True                               | 
+1082 |                                          | True                               | 
+1083 |  return fd;                              | True                               | 
+1084 | }                                        | True                               | 
+1085 |                                          | True                               | 
+1086 | static void change_listen_mode(int new_m | True                               | 
+1087 | {                                        | True                               | 
+1088 |  log1("entering listen mode: %s",        | 1                                  | 
+1089 |   new_mode != LISTEN_NONE                | 1                                  | 
+1090 |    ? (new_mode == LISTEN_KERNEL ? "kerne | 1                                  | 
+1091 |    : "none"                              | 1                                  | 
+1092 |  );                                      | True                               | 
+1093 |                                          | True                               | 
+1094 |  client_data.listen_mode = new_mode;     | True                               | 
+1095 |  if (client_data.sockfd >= 0) {          | True                               | 
+1096 |   close(client_data.sockfd);             | True                               | 
+1097 |   client_data.sockfd = -1;               | True                               | 
+1098 |  }                                       | True                               | 
+1099 |  if (new_mode == LISTEN_KERNEL)          | True                               | 
+1100 |   client_data.sockfd = udhcp_listen_sock | True                               | 
+1101 |  else if (new_mode != LISTEN_NONE)       | True                               | 
+1102 |   client_data.sockfd = udhcp_raw_socket( | True                               | 
+1103 |  /* else LISTEN_NONE: client_data.sockfd | True                               | 
+1104 | }                                        | True                               | 
+1105 |                                          | True                               | 
+1106 | static void perform_release(uint32_t ser | True                               | 
+1107 | {                                        | True                               | 
+1108 |  char buffer[sizeof("255.255.255.255")]; | True                               | 
+1109 |  struct in_addr temp_addr;               | True                               | 
+1110 |                                          | True                               | 
+1111 |  change_listen_mode(LISTEN_NONE);        | True                               | 
+1112 |                                          | True                               | 
+1113 |  /* send release packet */               | True                               | 
+1114 |  if (client_data.state == BOUND          | True                               | 
+1115 |   || client_data.state == RENEWING       | True                               | 
+1116 |   || client_data.state == REBINDING      | True                               | 
+1117 |   || client_data.state == RENEW_REQUESTE | True                               | 
+1118 |  ) {                                     | True                               | 
+1119 |   temp_addr.s_addr = server_id;          | True                               | 
+1120 |   strcpy(buffer, inet_ntoa(temp_addr));  | True                               | 
+1121 |   temp_addr.s_addr = requested_ip;       | True                               | 
+1122 |   bb_info_msg("unicasting a release of % | True                               | 
+1123 |     inet_ntoa(temp_addr), buffer);       | True                               | 
+1124 |   client_data.xid = random_xid(); //TODO | True                               | 
+1125 |   send_release(server_id, requested_ip); | True                               | 
+1126 |  }                                       | True                               | 
+1127 |  bb_simple_info_msg("entering released s | True                               | 
+1128 | /*                                       | True                               | 
+1129 |  * We can be here on: SIGUSR2,           | True                               | 
+1130 |  * or on exit (SIGTERM) and -R "release  | True                               | 
+1131 |  * Users requested to be notified in all | True                               | 
+1132 |  * of the states above.                  | True                               | 
+1133 |  */                                      | True                               | 
+1134 |  d4_run_script_deconfig();               | True                               | 
+1135 |  client_data.state = RELEASED;           | True                               | 
+1136 | }                                        | True                               | 
+1137 |                                          | True                               | 
+1138 | #if BB_MMU                               | True                               | 
+1139 | static void client_background(void)      | BB_MMU                             | 
+1140 | {                                        | BB_MMU                             | 
+1141 |  bb_daemonize(0);                        | BB_MMU                             | 
+1142 |  logmode &= ~LOGMODE_STDIO;              | BB_MMU                             | 
+1143 |  /* rewrite pidfile, as our pid is diffe | BB_MMU                             | 
+1144 |  write_pidfile(client_data.pidfile);     | BB_MMU                             | 
+1145 | }                                        | BB_MMU                             | 
+1146 | #endif                                   | True                               | 
+1147 |                                          | True                               | 
+1148 | //usage:#if defined CONFIG_UDHCP_DEBUG & | True                               | 
+1149 | //usage:# define IF_UDHCP_VERBOSE(...) _ | True                               | 
+1150 | //usage:#else                            | True                               | 
+1151 | //usage:# define IF_UDHCP_VERBOSE(...)   | True                               | 
+1152 | //usage:#endif                           | True                               | 
+1153 | //usage:#define udhcpc_trivial_usage     | True                               | 
+1154 | //usage:       "[-fbq"IF_UDHCP_VERBOSE(" | True                               | 
+1155 | //usage:       " [-i IFACE]"IF_FEATURE_U | True                               | 
+1156 | //usage:       " [-oC] [-r IP] [-V VENDO | True                               | 
+1157 | //usage:#define udhcpc_full_usage "\n"   | True                               | 
+1158 | //usage:     "\n -i IFACE Interface to u | True                               | 
+1159 | //usage: IF_FEATURE_UDHCP_PORT(          | True                               | 
+1160 | //usage:     "\n -P PORT  Use PORT (defa | True                               | 
+1161 | //usage: )                               | True                               | 
+1162 | //usage:     "\n -s PROG  Run PROG at DH | True                               | 
+1163 | //usage:     "\n -p FILE  Create pidfile | True                               | 
+1164 | //usage:     "\n -B  Request broadcast r | True                               | 
+1165 | //usage:     "\n -t N  Send up to N disc | True                               | 
+1166 | //usage:     "\n -T SEC  Pause between p | True                               | 
+1167 | //usage:     "\n -A SEC  Wait if lease i | True                               | 
+1168 | //usage: USE_FOR_MMU(                    | True                               | 
+1169 | //usage:     "\n -b  Background if lease | True                               | 
+1170 | //usage: )                               | True                               | 
+1171 | //usage:     "\n -n  Exit if lease is no | True                               | 
+1172 | //usage:     "\n -q  Exit after obtainin | True                               | 
+1173 | //usage:     "\n -R  Release IP on exit" | True                               | 
+1174 | //usage:     "\n -f  Run in foreground"  | True                               | 
+1175 | //usage:     "\n -S  Log to syslog too"  | True                               | 
+1176 | //usage: IF_FEATURE_UDHCPC_ARPING(       | True                               | 
+1177 | //usage:     "\n -a[MSEC] Validate offer | True                               | 
+1178 | //usage: )                               | True                               | 
+1179 | //usage:     "\n -r IP  Request this IP  | True                               | 
+1180 | //usage:     "\n -o  Don't request any o | True                               | 
+1181 | //usage:     "\n -O OPT  Request option  | True                               | 
+1182 | //usage:     "\n -x OPT:VAL Include opti | True                               | 
+1183 | //usage:     "\n   Examples of string, n | True                               | 
+1184 | //usage:     "\n   -x hostname:bbox - op | True                               | 
+1185 | //usage:     "\n   -x lease:3600 - optio | True                               | 
+1186 | //usage:     "\n   -x 0x3d:0100BEEFC0FFE | True                               | 
+1187 | //usage:     "\n   -x 14:'\"dumpfile\"'  | True                               | 
+1188 | //usage:     "\n -F NAME  Ask server to  | True                               | 
+1189 | //usage:     "\n -V VENDOR Vendor identi | True                               | 
+1190 | //usage:     "\n -C  Don't send MAC as c | True                               | 
+1191 | //usage: IF_UDHCP_VERBOSE(               | True                               | 
+1192 | //usage:     "\n -v  Verbose"            | True                               | 
+1193 | //usage: )                               | True                               | 
+1194 | //usage:     "\nSignals:"                | True                               | 
+1195 | //usage:     "\n USR1 Renew lease"       | True                               | 
+1196 | //usage:     "\n USR2 Release lease"     | True                               | 
+1197 |                                          | True                               | 
+1198 | int udhcpc_main(int argc, char **argv) M | True                               | 
+1199 | int udhcpc_main(int argc UNUSED_PARAM, c | True                               | 
+1200 | {                                        | True                               | 
+1201 |  uint8_t *message;                       | True                               | 
+1202 |  const char *str_V, *str_F, *str_r;      | True                               | 
+1203 |  IF_FEATURE_UDHCPC_ARPING(const char *st | True                               | 
+1204 |  IF_FEATURE_UDHCP_PORT(char *str_P;)     | True                               | 
+1205 |  uint8_t *clientid_mac_ptr;              | True                               | 
+1206 |  llist_t *list_O = NULL;                 | True                               | 
+1207 |  llist_t *list_x = NULL;                 | True                               | 
+1208 |  int tryagain_timeout = 20;              | True                               | 
+1209 |  int discover_timeout = 3;               | True                               | 
+1210 |  int discover_retries = 3;               | True                               | 
+1211 |  uint32_t server_id = server_id; /* for  | True                               | 
+1212 |  uint32_t requested_ip = 0;              | True                               | 
+1213 |  int packet_num;                         | True                               | 
+1214 |  int timeout; /* must be signed */       | True                               | 
+1215 |  int lease_remaining; /* must be signed  | True                               | 
+1216 |  unsigned opt;                           | True                               | 
+1217 |  IF_FEATURE_UDHCPC_ARPING(unsigned arppi | True                               | 
+1218 |  int retval;                             | True                               | 
+1219 |                                          | True                               | 
+1220 |  setup_common_bufsiz();                  | True                               | 
+1221 |                                          | True                               | 
+1222 |  /* Default options */                   | True                               | 
+1223 |  IF_FEATURE_UDHCP_PORT(SERVER_PORT = 67; | True                               | 
+1224 |  IF_FEATURE_UDHCP_PORT(CLIENT_PORT = 68; | True                               | 
+1225 |  client_data.interface = CONFIG_UDHCPC_D | True                               | 
+1226 |  client_data.script = CONFIG_UDHCPC_DEFA | True                               | 
+1227 |  client_data.sockfd = -1;                | True                               | 
+1228 |  str_V = "udhcp "BB_VER;                 | True                               | 
+1229 |                                          | True                               | 
+1230 |  /* Make sure fd 0,1,2 are open */       | True                               | 
+1231 |  /* Set up the signal pipe on fds 3,4 -  | True                               | 
+1232 |  udhcp_sp_setup();                       | True                               | 
+1233 |                                          | True                               | 
+1234 |  /* Parse command line */                | True                               | 
+1235 |  opt = getopt32long(argv, "^"            | True                               | 
+1236 |   /* O,x: list; -T,-t,-A take numeric pa | True                               | 
+1237 |   "CV:F:i:np:qRr:s:T:+t:+SA:+O:*ox:*fB"  | True                               | 
+1238 |   USE_FOR_MMU("b")                       | True                               | 
+1239 |   IF_FEATURE_UDHCPC_ARPING("a::")        | True                               | 
+1240 |   IF_FEATURE_UDHCP_PORT("P:")            | True                               | 
+1241 |   "v"                                    | True                               | 
+1242 |   "\0" IF_UDHCP_VERBOSE("vv") /* -v is a | True                               | 
+1243 |   , udhcpc_longopts                      | True                               | 
+1244 |   , &str_V, &str_F                       | True                               | 
+1245 |   , &client_data.interface, &client_data | True                               | 
+1246 |   , &str_r /* r */                       | True                               | 
+1247 |   , &client_data.script /* s */          | True                               | 
+1248 |   , &discover_timeout, &discover_retries | True                               | 
+1249 |   , &list_O                              | True                               | 
+1250 |   , &list_x                              | True                               | 
+1251 |   IF_FEATURE_UDHCPC_ARPING(, &str_a)     | True                               | 
+1252 |   IF_FEATURE_UDHCP_PORT(, &str_P)        | True                               | 
+1253 |   IF_UDHCP_VERBOSE(, &dhcp_verbose)      | 1                                  | 
+1254 |  );                                      | True                               | 
+1255 |  if (opt & OPT_F) {                      | True                               | 
+1256 |   char *p;                               | True                               | 
+1257 |   unsigned len;                          | True                               | 
+1258 |   /* FQDN option format: [0x51][len][fla | True                               | 
+1259 |   len = strlen(str_F);                   | True                               | 
+1260 |   p = udhcp_insert_new_option(           | True                               | 
+1261 |     &client_data.options, DHCP_FQDN,     | !ENABLE_UDHCPC6                    | 
+1262 |     len + 3, /*dhcp6:*/ 0);              | !ENABLE_UDHCPC6                    | 
+1263 |   /* Flag bits: 0000NEOS                 | True                               | 
+1264 |    * S: 1 = Client requests server to up | True                               | 
+1265 |    * O: 1 = Server indicates to client t | True                               | 
+1266 |    * E: 1 = Name is in DNS format, i.e.  | True                               | 
+1267 |    *    not "host.domain.com". Format 0  | True                               | 
+1268 |    * N: 1 = Client requests server to no | True                               | 
+1269 |    * Two [0] bytes which follow are depr | True                               | 
+1270 |    */                                    | True                               | 
+1271 |   p[OPT_DATA + 0] = 0x1;                 | True                               | 
+1272 |   /*p[OPT_DATA + 1] = 0; - xzalloc did i | True                               | 
+1273 |   /*p[OPT_DATA + 2] = 0; */              | True                               | 
+1274 |   memcpy(p + OPT_DATA + 3, str_F, len);  | True                               | 
+1275 |  }                                       | True                               | 
+1276 |  if (opt & OPT_r)                        | True                               | 
+1277 |   if (!inet_aton(str_r, (void*)&requeste | True                               | 
+1278 |    bb_show_usage();                      | True                               | 
+1279 | #if ENABLE_FEATURE_UDHCP_PORT            | True                               | 
+1280 |  if (opt & OPT_P) {                      | ENABLE_FEATURE_UDHCP_PORT          | 
+1281 |   CLIENT_PORT = xatou16(str_P);          | ENABLE_FEATURE_UDHCP_PORT          | 
+1282 |   SERVER_PORT = CLIENT_PORT - 1;         | ENABLE_FEATURE_UDHCP_PORT          | 
+1283 |  }                                       | ENABLE_FEATURE_UDHCP_PORT          | 
+1284 | #endif                                   | True                               | 
+1285 |  IF_FEATURE_UDHCPC_ARPING(arpping_ms = x | True                               | 
+1286 |  while (list_O) {                        | True                               | 
+1287 |   char *optstr = llist_pop(&list_O);     | True                               | 
+1288 |   unsigned n = bb_strtou(optstr, NULL, 0 | True                               | 
+1289 |   if (errno || n > 254) {                | True                               | 
+1290 |    n = udhcp_option_idx(optstr, dhcp_opt | True                               | 
+1291 |    n = dhcp_optflags[n].code;            | True                               | 
+1292 |   }                                      | True                               | 
+1293 |   client_data.opt_mask[n >> 3] |= 1 << ( | True                               | 
+1294 |  }                                       | True                               | 
+1295 |  if (!(opt & OPT_o)) {                   | True                               | 
+1296 |   unsigned i, n;                         | True                               | 
+1297 |   for (i = 0; (n = dhcp_optflags[i].code | True                               | 
+1298 |    if (dhcp_optflags[i].flags & OPTION_R | True                               | 
+1299 |     client_data.opt_mask[n >> 3] |= 1 << | True                               | 
+1300 |    }                                     | True                               | 
+1301 |   }                                      | True                               | 
+1302 |  }                                       | True                               | 
+1303 |  while (list_x) {                        | True                               | 
+1304 |   char *optstr = xstrdup(llist_pop(&list | True                               | 
+1305 |   udhcp_str2optset(optstr, &client_data. | !ENABLE_UDHCPC6                    | 
+1306 |     dhcp_optflags, dhcp_option_strings,  | !ENABLE_UDHCPC6                    | 
+1307 |     /*dhcpv6:*/ 0                        | ENABLE_UDHCPC6                     | 
+1308 |   );                                     | ENABLE_UDHCPC6                     | 
+1309 |   free(optstr);                          | True                               | 
+1310 |  }                                       | True                               | 
+1311 |  if (str_V[0] != '\0') {                 | True                               | 
+1312 |   char *p;                               | True                               | 
+1313 |   unsigned len = strnlen(str_V, 254);    | True                               | 
+1314 |   p = udhcp_insert_new_option(           | True                               | 
+1315 |     &client_data.options, DHCP_VENDOR,   | !ENABLE_UDHCPC6                    | 
+1316 |     len, /*dhcp6:*/ 0);                  | !ENABLE_UDHCPC6                    | 
+1317 |   memcpy(p + OPT_DATA, str_V, len); /* d | True                               | 
+1318 |  }                                       | True                               | 
+1319 |                                          | True                               | 
+1320 |  clientid_mac_ptr = NULL;                | True                               | 
+1321 |  if (!(opt & OPT_C) && !udhcp_find_optio | True                               | 
+1322 |   /* not suppressed and not set, create  | True                               | 
+1323 |   clientid_mac_ptr = udhcp_insert_new_op | True                               | 
+1324 |     &client_data.options, DHCP_CLIENT_ID | !ENABLE_UDHCPC6                    | 
+1325 |     1 + 6, /*dhcp6:*/ 0);                | !ENABLE_UDHCPC6                    | 
+1326 |   clientid_mac_ptr[OPT_DATA] = 1; /* typ | True                               | 
+1327 |   clientid_mac_ptr += OPT_DATA + 1; /* s | True                               | 
+1328 |  }                                       | True                               | 
+1329 |                                          | True                               | 
+1330 |  /* Not really necessary (we redo it on  | True                               | 
+1331 |   * but allows early (before daemonizati | True                               | 
+1332 |   * of bad interface name.               | True                               | 
+1333 |   */                                     | True                               | 
+1334 |  if (udhcp_read_interface(client_data.in | True                               | 
+1335 |    &client_data.ifindex,                 | True                               | 
+1336 |    NULL,                                 | True                               | 
+1337 |    client_data.client_mac)               | True                               | 
+1338 |  ) {                                     | True                               | 
+1339 |   return 1;                              | True                               | 
+1340 |  }                                       | True                               | 
+1341 |                                          | True                               | 
+1342 | #if !BB_MMU                              | True                               | 
+1343 |  /* on NOMMU reexec (i.e., background) e | !BB_MMU                            | 
+1344 |  if (!(opt & OPT_f)) {                   | !BB_MMU                            | 
+1345 |   bb_daemonize_or_rexec(0 /* flags */, a | !BB_MMU                            | 
+1346 |   logmode = LOGMODE_NONE;                | !BB_MMU                            | 
+1347 |  }                                       | !BB_MMU                            | 
+1348 | #endif                                   | True                               | 
+1349 |  if (opt & OPT_S) {                      | True                               | 
+1350 |   openlog(applet_name, LOG_PID, LOG_DAEM | True                               | 
+1351 |   logmode |= LOGMODE_SYSLOG;             | True                               | 
+1352 |  }                                       | True                               | 
+1353 |                                          | True                               | 
+1354 |  /* Create pidfile */                    | True                               | 
+1355 |  write_pidfile(client_data.pidfile);     | True                               | 
+1356 |  /* Goes to stdout (unless NOMMU) and po | True                               | 
+1357 |  bb_simple_info_msg("started, v"BB_VER); | True                               | 
+1358 |  /* We want random_xid to be random... * | True                               | 
+1359 |  srand(monotonic_us());                  | True                               | 
+1360 |                                          | True                               | 
+1361 |  client_data.state = INIT_SELECTING;     | True                               | 
+1362 |  d4_run_script_deconfig();               | True                               | 
+1363 |  packet_num = 0;                         | True                               | 
+1364 |  timeout = 0;                            | True                               | 
+1365 |  lease_remaining = 0;                    | True                               | 
+1366 |                                          | True                               | 
+1367 |  /* Main event loop. select() waits on s | True                               | 
+1368 |   * on sockfd.                           | True                               | 
+1369 |   * "continue" statements in code below  | True                               | 
+1370 |   */                                     | True                               | 
+1371 |  for (;;) {                              | True                               | 
+1372 |   struct pollfd pfds[2];                 | True                               | 
+1373 |   struct dhcp_packet packet;             | True                               | 
+1374 |                                          | True                               | 
+1375 |   //bb_error_msg("sockfd:%d, listen_mode | True                               | 
+1376 |                                          | True                               | 
+1377 |   /* Was opening raw or udp socket here  | True                               | 
+1378 |    * if (client_data.listen_mode != LIST | True                               | 
+1379 |    * but on fast network renew responses | True                               | 
+1380 |    * than we open sockets. Thus this cod | True                               | 
+1381 |    * to change_listen_mode(). Thus we op | True                               | 
+1382 |    * BEFORE we send renew request (see " | True                               | 
+1383 |                                          | True                               | 
+1384 |   udhcp_sp_fd_set(pfds, client_data.sock | True                               | 
+1385 |                                          | True                               | 
+1386 |   retval = 0;                            | True                               | 
+1387 |   /* If we already timed out, fall throu | True                               | 
+1388 |   if (timeout > 0) {                     | True                               | 
+1389 |    unsigned diff;                        | True                               | 
+1390 |                                          | True                               | 
+1391 |    if (timeout > INT_MAX/1000)           | True                               | 
+1392 |     timeout = INT_MAX/1000;              | True                               | 
+1393 |    log1("waiting %u seconds", timeout);  | 1                                  | 
+1394 |    diff = (unsigned)monotonic_sec();     | True                               | 
+1395 |    retval = poll(pfds, 2, timeout * 1000 | True                               | 
+1396 |    diff = (unsigned)monotonic_sec() - di | True                               | 
+1397 |    lease_remaining -= diff;              | True                               | 
+1398 |    if (lease_remaining < 0)              | True                               | 
+1399 |     lease_remaining = 0;                 | True                               | 
+1400 |    timeout -= diff;                      | True                               | 
+1401 |    if (timeout < 0)                      | True                               | 
+1402 |     timeout = 0;                         | True                               | 
+1403 |                                          | True                               | 
+1404 |    if (retval < 0) {                     | True                               | 
+1405 |     /* EINTR? A signal was caught, don't | True                               | 
+1406 |     if (errno == EINTR) {                | True                               | 
+1407 |      continue;                           | True                               | 
+1408 |     }                                    | True                               | 
+1409 |     /* Else: an error occurred, panic! * | True                               | 
+1410 |     bb_simple_perror_msg_and_die("poll") | True                               | 
+1411 |    }                                     | True                               | 
+1412 |   }                                      | True                               | 
+1413 |                                          | True                               | 
+1414 |   /* If timeout dropped to zero, time to | True                               | 
+1415 |    * resend discover/renew/whatever      | True                               | 
+1416 |    */                                    | True                               | 
+1417 |   if (retval == 0) {                     | True                               | 
+1418 |    /* When running on a bridge, the ifin | True                               | 
+1419 |     * (e.g. if member interfaces were ad | True                               | 
+1420 |     * or if the status of the bridge cha | True                               | 
+1421 |     * Refresh ifindex and client_mac:    | True                               | 
+1422 |     */                                   | True                               | 
+1423 |    if (udhcp_read_interface(client_data. | True                               | 
+1424 |      &client_data.ifindex,               | True                               | 
+1425 |      NULL,                               | True                               | 
+1426 |      client_data.client_mac)             | True                               | 
+1427 |    ) {                                   | True                               | 
+1428 |     goto ret0; /* iface is gone? */      | True                               | 
+1429 |    }                                     | True                               | 
+1430 |    if (clientid_mac_ptr)                 | True                               | 
+1431 |     memcpy(clientid_mac_ptr, client_data | True                               | 
+1432 |                                          | True                               | 
+1433 |    switch (client_data.state) {          | True                               | 
+1434 |    case INIT_SELECTING:                  | True                               | 
+1435 |     if (!discover_retries || packet_num  | True                               | 
+1436 |      if (packet_num == 0) {              | True                               | 
+1437 |       change_listen_mode(LISTEN_RAW);    | True                               | 
+1438 |       client_data.xid = random_xid();    | True                               | 
+1439 |      }                                   | True                               | 
+1440 |      /* broadcast */                     | True                               | 
+1441 |      send_discover(requested_ip);        | True                               | 
+1442 |      timeout = discover_timeout;         | True                               | 
+1443 |      packet_num++;                       | True                               | 
+1444 |      continue;                           | True                               | 
+1445 |     }                                    | True                               | 
+1446 |  leasefail:                              | True                               | 
+1447 |     change_listen_mode(LISTEN_NONE);     | True                               | 
+1448 |     d4_run_script(NULL, "leasefail");    | True                               | 
+1449 | #if BB_MMU /* -b is not supported on NOM | True                               | 
+1450 |     if (opt & OPT_b) { /* background if  | BB_MMU                             | 
+1451 |      bb_simple_info_msg("no lease, forki | BB_MMU                             | 
+1452 |      client_background();                | BB_MMU                             | 
+1453 |      /* do not background again! */      | BB_MMU                             | 
+1454 |      opt = ((opt & ~(OPT_b|OPT_n)) | OPT | BB_MMU                             | 
+1455 |      /* ^^^ also disables -n (-b takes p | BB_MMU                             | 
+1456 |       * ifup's default udhcpc options ar | BB_MMU                             | 
+1457 |       * and users want to be able to add | BB_MMU                             | 
+1458 |       * (in a config file) to make it ba | BB_MMU                             | 
+1459 |       * _and not exit_.                  | BB_MMU                             | 
+1460 |       */                                 | BB_MMU                             | 
+1461 |     } else                               | BB_MMU                             | 
+1462 | #endif                                   | True                               | 
+1463 |     if (opt & OPT_n) { /* abort if no le | True                               | 
+1464 |      bb_simple_info_msg("no lease, faili | True                               | 
+1465 |      retval = 1;                         | True                               | 
+1466 |      goto ret;                           | True                               | 
+1467 |     }                                    | True                               | 
+1468 |     /* Wait before trying again */       | True                               | 
+1469 |     timeout = tryagain_timeout;          | True                               | 
+1470 |     packet_num = 0;                      | True                               | 
+1471 |     continue;                            | True                               | 
+1472 |    case REQUESTING:                      | True                               | 
+1473 |     if (packet_num < 3) {                | True                               | 
+1474 |      /* send broadcast select packet */  | True                               | 
+1475 |      send_select(server_id, requested_ip | True                               | 
+1476 |      timeout = discover_timeout;         | True                               | 
+1477 |      packet_num++;                       | True                               | 
+1478 |      continue;                           | True                               | 
+1479 |     }                                    | True                               | 
+1480 |     /* Timed out, go back to init state. | True                               | 
+1481 |      * "discover...select...discover..." | True                               | 
+1482 |      * were seen in the wild. Treat them | True                               | 
+1483 |      * to "no response to discover" case | True                               | 
+1484 |     client_data.state = INIT_SELECTING;  | True                               | 
+1485 |     goto leasefail;                      | True                               | 
+1486 |    case BOUND:                           | True                               | 
+1487 |     /* 1/2 lease passed, enter renewing  | True                               | 
+1488 |     client_data.state = RENEWING;        | True                               | 
+1489 |     client_data.first_secs = 0; /* make  | True                               | 
+1490 |    got_SIGUSR1:                          | True                               | 
+1491 |     log1s("entering renew state");       | 1                                  | 
+1492 |     change_listen_mode(LISTEN_KERNEL);   | True                               | 
+1493 |     /* fall right through */             | True                               | 
+1494 |    case RENEW_REQUESTED: /* in manual (S | True                               | 
+1495 |    case RENEWING:                        | True                               | 
+1496 |     if (packet_num == 0) {               | True                               | 
+1497 |      /* Send an unicast renew request */ | True                               | 
+1498 |    /* Sometimes observed to fail (EADDRN | True                               | 
+1499 |     * a new UDP socket for sending insid | True                               | 
+1500 |     * I hazard to guess existing listeni | True                               | 
+1501 |     * is somehow conflicting with it, bu | True                               | 
+1502 |     * not deterministic then?! Strange.  | True                               | 
+1503 |     * Anyway, it does recover by eventua | True                               | 
+1504 |     * into INIT_SELECTING state.         | True                               | 
+1505 |     */                                   | True                               | 
+1506 |      if (send_renew(server_id, requested | True                               | 
+1507 |       timeout = discover_timeout;        | True                               | 
+1508 |       packet_num++;                      | True                               | 
+1509 |       continue;                          | True                               | 
+1510 |      }                                   | True                               | 
+1511 |      /* else: error sending.             | True                               | 
+1512 |       * example: ENETUNREACH seen with s | True                               | 
+1513 |       * which gave us bogus server ID 1. | True                               | 
+1514 |       * which wasn't reachable (and prob | True                               | 
+1515 |       */                                 | True                               | 
+1516 |     } /* else: we had sent one packet, b | True                               | 
+1517 |     log1s("no response to renew");       | 1                                  | 
+1518 |     if (lease_remaining > 30) {          | True                               | 
+1519 |      /* Some lease time remains, try to  | True                               | 
+1520 |      change_listen_mode(LISTEN_NONE);    | True                               | 
+1521 |      goto BOUND_for_half_lease;          | True                               | 
+1522 |     }                                    | True                               | 
+1523 |     /* Enter rebinding state */          | True                               | 
+1524 |     client_data.state = REBINDING;       | True                               | 
+1525 |     log1s("entering rebinding state");   | 1                                  | 
+1526 |     /* Switch to bcast receive */        | True                               | 
+1527 |     change_listen_mode(LISTEN_RAW);      | True                               | 
+1528 |     packet_num = 0;                      | True                               | 
+1529 |     /* fall right through */             | True                               | 
+1530 |    case REBINDING:                       | True                               | 
+1531 |     /* Lease is *really* about to run ou | True                               | 
+1532 |      * try to find DHCP server using bro | True                               | 
+1533 |     if (lease_remaining > 0 && packet_nu | True                               | 
+1534 |      /* send a broadcast renew request * | True                               | 
+1535 |      send_renew(0 /*INADDR_ANY*/, reques | True                               | 
+1536 |      timeout = discover_timeout;         | True                               | 
+1537 |      packet_num++;                       | True                               | 
+1538 |      continue;                           | True                               | 
+1539 |     }                                    | True                               | 
+1540 |     /* Timed out, enter init state */    | True                               | 
+1541 |     change_listen_mode(LISTEN_NONE);     | True                               | 
+1542 |     bb_simple_info_msg("lease lost, ente | True                               | 
+1543 |     d4_run_script_deconfig();            | True                               | 
+1544 |     client_data.state = INIT_SELECTING;  | True                               | 
+1545 |     client_data.first_secs = 0; /* make  | True                               | 
+1546 |     timeout = 0;                         | True                               | 
+1547 |     packet_num = 0;                      | True                               | 
+1548 |     continue;                            | True                               | 
+1549 |    /* case RELEASED: */                  | True                               | 
+1550 |    }                                     | True                               | 
+1551 |    /* RELEASED state (when we got SIGUSR | True                               | 
+1552 |     * (wait for SIGUSR1 to re-init, or f | True                               | 
+1553 |     */                                   | True                               | 
+1554 |    timeout = INT_MAX;                    | True                               | 
+1555 |    continue; /* back to main loop */     | True                               | 
+1556 |   } /* if poll timed out */              | True                               | 
+1557 |                                          | True                               | 
+1558 |   /* poll() didn't timeout, something ha | True                               | 
+1559 |                                          | True                               | 
+1560 |   /* Is it a signal? */                  | True                               | 
+1561 |   switch (udhcp_sp_read()) {             | True                               | 
+1562 |   case SIGUSR1:                          | True                               | 
+1563 |    if (client_data.state <= REQUESTING)  | True                               | 
+1564 |     /* Initial negotiations in progress, | True                               | 
+1565 |     break;                               | True                               | 
+1566 |    if (client_data.state == REBINDING)   | True                               | 
+1567 |     /* Do not go back from rebind to ren | True                               | 
+1568 |     break;                               | True                               | 
+1569 |                                          | True                               | 
+1570 |    if (lease_remaining > 30) /* if renew | True                               | 
+1571 |     lease_remaining = 30;                | True                               | 
+1572 |    client_data.first_secs = 0; /* make s | True                               | 
+1573 |    packet_num = 0;                       | True                               | 
+1574 |                                          | True                               | 
+1575 |    switch (client_data.state) {          | True                               | 
+1576 |    case BOUND:                           | True                               | 
+1577 |    case RENEWING:                        | True                               | 
+1578 |     /* Try to renew/rebind */            | True                               | 
+1579 |     client_data.state = RENEW_REQUESTED; | True                               | 
+1580 |     goto got_SIGUSR1;                    | True                               | 
+1581 |                                          | True                               | 
+1582 |    case RENEW_REQUESTED:                 | True                               | 
+1583 |     /* Two SIGUSR1 received, start thing | True                               | 
+1584 |     change_listen_mode(LISTEN_NONE);     | True                               | 
+1585 |     d4_run_script_deconfig();            | True                               | 
+1586 |                                          | True                               | 
+1587 |    default:                              | True                               | 
+1588 |    /* case RELEASED: */                  | True                               | 
+1589 |     /* Wake from SIGUSR2-induced deconfi | True                               | 
+1590 |     change_listen_mode(LISTEN_NONE);     | True                               | 
+1591 |    }                                     | True                               | 
+1592 |    client_data.state = INIT_SELECTING;   | True                               | 
+1593 |    /* Kill any timeouts, user wants this | True                               | 
+1594 |    timeout = 0;                          | True                               | 
+1595 |    continue;                             | True                               | 
+1596 |   case SIGUSR2:                          | True                               | 
+1597 |    perform_release(server_id, requested_ | True                               | 
+1598 |    /* ^^^ switches to LISTEN_NONE */     | True                               | 
+1599 |    timeout = INT_MAX;                    | True                               | 
+1600 |    continue;                             | True                               | 
+1601 |   case SIGTERM:                          | True                               | 
+1602 |    bb_info_msg("received %s", "SIGTERM") | True                               | 
+1603 |    goto ret0;                            | True                               | 
+1604 |   }                                      | True                               | 
+1605 |                                          | True                               | 
+1606 |   /* Is it a packet? */                  | True                               | 
+1607 |   if (!pfds[1].revents)                  | True                               | 
+1608 |    continue; /* no */                    | True                               | 
+1609 |                                          | True                               | 
+1610 |   {                                      | True                               | 
+1611 |    int len;                              | True                               | 
+1612 |                                          | True                               | 
+1613 |    /* A packet is ready, read it */      | True                               | 
+1614 |    if (client_data.listen_mode == LISTEN | True                               | 
+1615 |     len = udhcp_recv_kernel_packet(&pack | True                               | 
+1616 |    else                                  | True                               | 
+1617 |     len = d4_recv_raw_packet(&packet, cl | True                               | 
+1618 |    if (len == -1) {                      | True                               | 
+1619 |     /* Error is severe, reopen socket */ | True                               | 
+1620 |     bb_error_msg("read error: "STRERROR_ | True                               | 
+1621 |     sleep(discover_timeout); /* 3 second | True                               | 
+1622 |     change_listen_mode(client_data.liste | True                               | 
+1623 |    }                                     | True                               | 
+1624 |    if (len < 0)                          | True                               | 
+1625 |     continue;                            | True                               | 
+1626 |   }                                      | True                               | 
+1627 |                                          | True                               | 
+1628 |   if (packet.xid != client_data.xid) {   | True                               | 
+1629 |    log1("xid %x (our is %x)%s",          | 1                                  | 
+1630 |     (unsigned)packet.xid, (unsigned)clie | 1                                  | 
+1631 |     ", ignoring packet"                  | 1                                  | 
+1632 |    );                                    | True                               | 
+1633 |    continue;                             | True                               | 
+1634 |   }                                      | True                               | 
+1635 |                                          | True                               | 
+1636 |   /* Ignore packets that aren't for us * | True                               | 
+1637 |   if (packet.hlen != 6                   | True                               | 
+1638 |    || memcmp(packet.chaddr, client_data. | True                               | 
+1639 |   ) {                                    | True                               | 
+1640 | //FIXME: need to also check that last 10 | True                               | 
+1641 |    log1("chaddr does not match%s", ", ig | 1                                  | 
+1642 |    continue;                             | True                               | 
+1643 |   }                                      | True                               | 
+1644 |                                          | True                               | 
+1645 |   message = udhcp_get_option(&packet, DH | True                               | 
+1646 |   if (message == NULL) {                 | True                               | 
+1647 |    log1("no message type option%s", ", i | 1                                  | 
+1648 |    continue;                             | True                               | 
+1649 |   }                                      | True                               | 
+1650 |                                          | True                               | 
+1651 |   switch (client_data.state) {           | True                               | 
+1652 |   case INIT_SELECTING:                   | True                               | 
+1653 |    /* Must be a DHCPOFFER */             | True                               | 
+1654 |    if (*message == DHCPOFFER) {          | True                               | 
+1655 |     struct in_addr temp_addr;            | True                               | 
+1656 |     uint8_t *temp;                       | True                               | 
+1657 |                                          | True                               | 
+1658 | /* What exactly is server's IP? There ar | True                               | 
+1659 |  * Example DHCP offer captured with tchd | True                               | 
+1660 |  *                                       | True                               | 
+1661 |  * 10.34.25.254:67 > 10.34.25.202:68 //  | True                               | 
+1662 |  * BOOTP fields:                         | True                               | 
+1663 |  * Your-IP 10.34.25.202                  | True                               | 
+1664 |  * Server-IP 10.34.32.125   // "next ser | True                               | 
+1665 |  * Gateway-IP 10.34.25.254  // relay's a | True                               | 
+1666 |  * DHCP options:                         | True                               | 
+1667 |  * DHCP-Message Option 53, length 1: Off | True                               | 
+1668 |  * Server-ID Option 54, length 4: 10.34. | True                               | 
+1669 |  * Default-Gateway Option 3, length 4: 1 | True                               | 
+1670 |  *                                       | True                               | 
+1671 |  * We think that real server IP (one to  | True                               | 
+1672 |  * is one in Server-ID option. But I am  | True                               | 
+1673 |  * IP header's src and Gateway-IP (same  | True                               | 
+1674 |  * might work too.                       | True                               | 
+1675 |  * "Next server" and router are definite | True                               | 
+1676 |  */                                      | True                               | 
+1677 | /* We used to ignore packets without DHC | True                               | 
+1678 |  * I've got user reports from people who | True                               | 
+1679 |  * They either supply DHCP_SERVER_ID of  | True                               | 
+1680 |  * They say ISC DHCP client supports thi | True                               | 
+1681 |  */                                      | True                               | 
+1682 |     server_id = 0;                       | True                               | 
+1683 |     temp = udhcp_get_option32(&packet, D | True                               | 
+1684 |     if (!temp) {                         | True                               | 
+1685 |      bb_simple_info_msg("no server ID, u | True                               | 
+1686 |     } else {                             | True                               | 
+1687 |      /* it IS unaligned sometimes, don't | True                               | 
+1688 |      move_from_unaligned32(server_id, te | True                               | 
+1689 |     }                                    | True                               | 
+1690 |     /*xid = packet.xid; - already is */  | True                               | 
+1691 |     temp_addr.s_addr = requested_ip = pa | True                               | 
+1692 |     log1("received offer of %s", inet_nt | 1                                  | 
+1693 |                                          | True                               | 
+1694 |     /* enter requesting state */         | True                               | 
+1695 |     client_data.state = REQUESTING;      | True                               | 
+1696 |     timeout = 0;                         | True                               | 
+1697 |     packet_num = 0;                      | True                               | 
+1698 |    }                                     | True                               | 
+1699 |    continue;                             | True                               | 
+1700 |   case REQUESTING:                       | True                               | 
+1701 |   case RENEWING:                         | True                               | 
+1702 |   case RENEW_REQUESTED:                  | True                               | 
+1703 |   case REBINDING:                        | True                               | 
+1704 |    if (*message == DHCPACK) {            | True                               | 
+1705 |     unsigned start;                      | True                               | 
+1706 |     struct in_addr temp_addr;            | True                               | 
+1707 |     char server_str[sizeof("255.255.255. | True                               | 
+1708 |     uint8_t *temp;                       | True                               | 
+1709 |                                          | True                               | 
+1710 |     change_listen_mode(LISTEN_NONE);     | True                               | 
+1711 |                                          | True                               | 
+1712 |     temp_addr.s_addr = server_id;        | True                               | 
+1713 |     strcpy(server_str, inet_ntoa(temp_ad | True                               | 
+1714 |     temp_addr.s_addr = packet.yiaddr;    | True                               | 
+1715 |                                          | True                               | 
+1716 |     lease_remaining = 60 * 60;           | True                               | 
+1717 |     temp = udhcp_get_option32(&packet, D | True                               | 
+1718 |     if (temp) {                          | True                               | 
+1719 |      uint32_t lease;                     | True                               | 
+1720 |      /* it IS unaligned sometimes, don't | True                               | 
+1721 |      move_from_unaligned32(lease, temp); | True                               | 
+1722 |      lease_remaining = ntohl(lease);     | True                               | 
+1723 |     }                                    | True                               | 
+1724 |     /* Log message _before_ we sanitize  | True                               | 
+1725 |     bb_info_msg("lease of %s obtained fr | True                               | 
+1726 |      inet_ntoa(temp_addr), server_str, ( | True                               | 
+1727 |      temp ? "" : " (default)"            | True                               | 
+1728 |     );                                   | True                               | 
+1729 |     /* paranoia: must not be too small a | True                               | 
+1730 |     /* NB: 60s leases _are_ used in real | True                               | 
+1731 |      * (temporary IPs while ISP modem in | True                               | 
+1732 |      * do not break this case by bumping | True                               | 
+1733 |      */                                  | True                               | 
+1734 |     if (lease_remaining < 0) /* signed o | True                               | 
+1735 |      lease_remaining = INT_MAX;          | True                               | 
+1736 |     if (lease_remaining < 30)            | True                               | 
+1737 |      lease_remaining = 30;               | True                               | 
+1738 |     requested_ip = packet.yiaddr;        | True                               | 
+1739 | #if ENABLE_FEATURE_UDHCPC_ARPING         | True                               | 
+1740 |     if (opt & OPT_a) {                   | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1741 | /* RFC 2131 3.1 paragraph 5:             | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1742 |  * "The client receives the DHCPACK mess | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1743 |  * parameters. The client SHOULD perform | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1744 |  * parameters (e.g., ARP for allocated n | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1745 |  * the duration of the lease specified i | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1746 |  * point, the client is configured. If t | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1747 |  * address is already in use (e.g., thro | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1748 |  * the client MUST send a DHCPDECLINE me | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1749 |  * the configuration process..." */      | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1750 |      if (!arpping(requested_ip,          | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1751 |        NULL,                             | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1752 |        (uint32_t) 0,                     | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1753 |        client_data.client_mac,           | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1754 |        client_data.interface,            | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1755 |        arpping_ms)                       | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1756 |      ) {                                 | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1757 |       bb_simple_info_msg("offered addres | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1758 |        "(got ARP reply), declining");    | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1759 |       client_data.xid = random_xid(); // | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1760 |       send_decline(server_id, packet.yia | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1761 |                                          | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1762 |       if (client_data.state != REQUESTIN | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1763 |        d4_run_script_deconfig();         | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1764 |       client_data.state = INIT_SELECTING | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1765 |       client_data.first_secs = 0; /* mak | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1766 |       requested_ip = 0;                  | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1767 |       timeout = tryagain_timeout;        | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1768 |       packet_num = 0;                    | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1769 |       continue; /* back to main loop */  | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1770 |      }                                   | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1771 |     }                                    | ENABLE_FEATURE_UDHCPC_ARPING       | 
+1772 | #endif                                   | True                               | 
+1773 |     /* enter bound state */              | True                               | 
+1774 |     start = monotonic_sec();             | True                               | 
+1775 |     d4_run_script(&packet, client_data.s | True                               | 
+1776 |     lease_remaining -= (unsigned)monoton | True                               | 
+1777 |     if (lease_remaining < 0)             | True                               | 
+1778 |      lease_remaining = 0;                | True                               | 
+1779 |     if (opt & OPT_q) { /* quit after lea | True                               | 
+1780 |      goto ret0;                          | True                               | 
+1781 |     }                                    | True                               | 
+1782 |     /* future renew failures should not  | True                               | 
+1783 |     opt &= ~OPT_n;                       | True                               | 
+1784 | #if BB_MMU /* NOMMU case backgrounded ea | True                               | 
+1785 |     if (!(opt & OPT_f)) {                | BB_MMU                             | 
+1786 |      client_background();                | BB_MMU                             | 
+1787 |      /* do not background again! */      | BB_MMU                             | 
+1788 |      opt = ((opt & ~OPT_b) | OPT_f);     | BB_MMU                             | 
+1789 |     }                                    | BB_MMU                             | 
+1790 | #endif                                   | True                               | 
+1791 |  BOUND_for_half_lease:                   | True                               | 
+1792 |     timeout = (unsigned)lease_remaining  | True                               | 
+1793 |     client_data.state = BOUND;           | True                               | 
+1794 |     /* make future renew packets use dif | True                               | 
+1795 |     /* client_data.xid = random_xid(); . | True                               | 
+1796 |     packet_num = 0;                      | True                               | 
+1797 |     continue; /* back to main loop */    | True                               | 
+1798 |    }                                     | True                               | 
+1799 |    if (*message == DHCPNAK) {            | True                               | 
+1800 |     /* If network has more than one DHCP | True                               | 
+1801 |      * "wrong" server can reply first, w | True                               | 
+1802 |      * Do not interpret it as a NAK from | True                               | 
+1803 |      */                                  | True                               | 
+1804 |     uint32_t svid = 0; /* we treat no se | True                               | 
+1805 |     uint8_t *temp = udhcp_get_option32(& | True                               | 
+1806 |     if (temp)                            | True                               | 
+1807 |      move_from_unaligned32(svid, temp);  | True                               | 
+1808 |     if (svid != server_id) {             | True                               | 
+1809 |      log1("received DHCP NAK with wrong" | 1                                  | 
+1810 |       " server ID%s", ", ignoring packet | 1                                  | 
+1811 |      continue;                           | True                               | 
+1812 |     }                                    | True                               | 
+1813 |     /* return to init state */           | True                               | 
+1814 |     change_listen_mode(LISTEN_NONE);     | True                               | 
+1815 |     bb_info_msg("received %s", "DHCP NAK | True                               | 
+1816 |     d4_run_script(&packet, "nak");       | True                               | 
+1817 |     if (client_data.state != REQUESTING) | True                               | 
+1818 |      d4_run_script_deconfig();           | True                               | 
+1819 |     sleep(3); /* avoid excessive network | True                               | 
+1820 |     client_data.state = INIT_SELECTING;  | True                               | 
+1821 |     client_data.first_secs = 0; /* make  | True                               | 
+1822 |     requested_ip = 0;                    | True                               | 
+1823 |     timeout = 0;                         | True                               | 
+1824 |     packet_num = 0;                      | True                               | 
+1825 |    }                                     | True                               | 
+1826 |    continue;                             | True                               | 
+1827 |   /* case BOUND: - ignore all packets */ | True                               | 
+1828 |   /* case RELEASED: - ignore all packets | True                               | 
+1829 |   }                                      | True                               | 
+1830 |   /* back to main loop */                | True                               | 
+1831 |  } /* for (;;) - main loop ends */       | True                               | 
+1832 |                                          | True                               | 
+1833 |  ret0:                                   | True                               | 
+1834 |  if (opt & OPT_R) /* release on quit */  | True                               | 
+1835 |   perform_release(server_id, requested_i | True                               | 
+1836 |  retval = 0;                             | True                               | 
+1837 |  ret:                                    | True                               | 
+1838 |  /*if (client_data.pidfile) - remove_pid | True                               | 
+1839 |   remove_pidfile(client_data.pidfile);   | True                               | 
+1840 |  return retval;                          | True                               | 
+1841 | }                                        | True                               | 
+-----+------------------------------------------+------------------------------------+
+     |                                          | +222MB, 525ms                      | 

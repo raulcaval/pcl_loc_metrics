@@ -1,0 +1,587 @@
+FILE: data/raw/busybox-1.38.0/procps/vmstat.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Report virtual memory statistics.     | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2025 David Leonard      | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config VMSTAT                   | True                      | 
+  10 | //config: bool "vmstat (2 kb)"           | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Report virtual memory statisti | True                      | 
+  14 |                                          | True                      | 
+  15 | //applet:IF_VMSTAT(APPLET(vmstat, BB_DIR | True                      | 
+  16 |                                          | True                      | 
+  17 | //kbuild:lib-$(CONFIG_VMSTAT) += vmstat. | True                      | 
+  18 |                                          | True                      | 
+  19 | #include "libbb.h"                       | True                      | 
+  20 | #include "common_bufsiz.h"               | True                      | 
+  21 |                                          | True                      | 
+  22 | /* Must match option string! */          | True                      | 
+  23 | enum {                                   | True                      | 
+  24 |  OPT_n = 1 << 0,                         | True                      | 
+  25 | };                                       | True                      | 
+  26 |                                          | True                      | 
+  27 | #define FROM_PROC_STAT          "\1"     | True                      | 
+  28 | #define FROM_PROC_STAT_CPU      "\2"     | True                      | 
+  29 | #define FROM_PROC_VMSTAT        "\3"     | True                      | 
+  30 | #define FROM_PROC_MEMINFO       "\4"     | True                      | 
+  31 | #define M_DELTA                 "\x81"   | True                      | 
+  32 | #define M_DPERCENT              "\x83"   | True                      | 
+  33 | #define M_DECREMENT             "\x84"   | True                      | 
+  34 | #define PSEUDO_SWPD             "_1"     | True                      | 
+  35 | #define PSEUDO_CACHE            "_2"     | True                      | 
+  36 |                                          | True                      | 
+  37 | #if 1                                    | True                      | 
+  38 | #define FIXED_HEADER 1                   | 1                         | 
+  39 | #define L(a) /*nothing*/                 | 1                         | 
+  40 | #else                                    | True                      | 
+  41 | #define FIXED_HEADER 0                   | !1                        | 
+  42 | #define L(a) a                           | !1                        | 
+  43 | #endif                                   | True                      | 
+  44 |                                          | True                      | 
+  45 | /* Column descriptors */                 | True                      | 
+  46 | static const char coldescs[] =           | True                      | 
+  47 | /* [grplabel\0] \width   label\0  from   | True                      | 
+  48 | L("procs\0")   "\2"   L("r\0"    )FROM_P | True                      | 
+  49 |                "\2"   L("b\0"    )FROM_P | True                      | 
+  50 | L("memory\0")  "\6"   L("swpd\0" )FROM_P | True                      | 
+  51 |                "\6"   L("free\0" )FROM_P | True                      | 
+  52 | //TODO? "MemAvailable" in newer kernels  | True                      | 
+  53 | //in the sense of being immediately avai | True                      | 
+  54 |                "\6"   L("buff\0" )FROM_P | True                      | 
+  55 |                "\6"   L("cache\0")FROM_P | True                      | 
+  56 | L("swap\0")    "\4"   L("si\0"   )FROM_P | True                      | 
+  57 |                "\4"   L("so\0"   )FROM_P | True                      | 
+  58 | L("io\0")      "\5"   L("bi\0"   )FROM_P | True                      | 
+  59 |                "\5"   L("bo\0"   )FROM_P | True                      | 
+  60 | L("system\0")  "\4"   L("in\0"   )FROM_P | True                      | 
+  61 |                "\4"   L("cs\0"   )FROM_P | True                      | 
+  62 | L("cpu\0")     "\2"   L("us\0"   )FROM_P | True                      | 
+  63 |                "\2"   L("sy\0"   )FROM_P | True                      | 
+  64 |                "\2"   L("id\0"   )FROM_P | True                      | 
+  65 |                "\2"   L("wa\0"   )FROM_P | True                      | 
+  66 |                "\2"   L("st\0"   )FROM_P | True                      | 
+  67 | // "gu"est columnt seems to be added in  | True                      | 
+  68 |                "\2"   L("gu\0"   )FROM_P | True                      | 
+  69 | ;                                        | True                      | 
+  70 | /* Number of columns defined in coldescs | True                      | 
+  71 | #define NCOLS (2+4+2+2+2+6)              | True                      | 
+  72 | /* Packed row data from coldescs[] is de | True                      | 
+  73 | struct col {                             | True                      | 
+  74 |  L(const char *grplabel;)                | True                      | 
+  75 |  L(const char *label;)                   | True                      | 
+  76 |  const char *fromspec;                   | True                      | 
+  77 |  unsigned char from;                     | True                      | 
+  78 |  unsigned char width;                    | True                      | 
+  79 |  unsigned char mod;                      | True                      | 
+  80 | #define MOD_DELTA     0x01               | True                      | 
+  81 | #define MOD_PERCENT   0x02               | True                      | 
+  82 | #define MOD_DECREMENT 0x04               | True                      | 
+  83 | };                                       | True                      | 
+  84 |                                          | True                      | 
+  85 | /* There is no "support huge memory" opt | True                      | 
+  86 | #if ENABLE_LFS                           | True                      | 
+  87 | typedef unsigned long long data_t;       | ENABLE_LFS                | 
+  88 | # define SPU " %llu"                     | ENABLE_LFS                | 
+  89 | # define U   "llu"                       | ENABLE_LFS                | 
+  90 | #else                                    | True                      | 
+  91 | /* this mishandles memory sizes if >4TB  | !ENABLE_LFS               | 
+  92 | typedef unsigned data_t;                 | !ENABLE_LFS               | 
+  93 | # define SPU " %u"                       | !ENABLE_LFS               | 
+  94 | # define U   "u"                         | !ENABLE_LFS               | 
+  95 | #endif                                   | True                      | 
+  96 | #define DEBUG_SHOW_5T_MEMFREE 0          | True                      | 
+  97 |                                          | True                      | 
+  98 | struct globals {                         | True                      | 
+  99 |  data_t data[NCOLS];                     | True                      | 
+ 100 |  data_t prev[NCOLS];                     | True                      | 
+ 101 |  unsigned interval;                      | True                      | 
+ 102 | };                                       | True                      | 
+ 103 | #define G (*(struct globals*)bb_common_b | True                      | 
+ 104 | #define INIT_G() do { \                  | True                      | 
+ 105 |  memset(&G, 0, sizeof G); \              | True                      | 
+ 106 | } while (0)                              | True                      | 
+ 107 |                                          | True                      | 
+ 108 |                                          | True                      | 
+ 109 | //usage:#define vmstat_trivial_usage     | True                      | 
+ 110 | //usage:       "[-n] [INTERVAL [COUNT]]" | True                      | 
+ 111 | //usage:#define vmstat_full_usage "\n\n" | True                      | 
+ 112 | //usage:       "Show virtual memory stat | True                      | 
+ 113 | //usage:     "\n -n Show header once"    | True                      | 
+ 114 | // From 4.0.4 manpage:                   | True                      | 
+ 115 | // -a, --active         Display active a | True                      | 
+ 116 | // -f, --forks          The  -f switch d | True                      | 
+ 117 | // -m, --slabs          Displays slabinf | True                      | 
+ 118 | // -s, --stats          Displays a table | True                      | 
+ 119 | // -d, --disk           Report disk stat | True                      | 
+ 120 | // -D, --disk-sum       Report some summ | True                      | 
+ 121 | // -p, --partition device  Detailed stat | True                      | 
+ 122 | // -S, --unit character Switches outputs | True                      | 
+ 123 | // -t, --timestamp      Append timestamp | True                      | 
+ 124 | // -w, --wide           Wide output mode | True                      | 
+ 125 | // -y, --no-first       Omits first repo | True                      | 
+ 126 | // "since system boot" is false: 4.0.4 h | True                      | 
+ 127 |                                          | True                      | 
+ 128 | /*                                       | True                      | 
+ 129 |  * Advance an iterator over the coldescs | True                      | 
+ 130 |  *   col_return - pointer to storage to  | True                      | 
+ 131 |  *   cp - pointer to iterator storage; s | True                      | 
+ 132 |  * Returns 1 when *cp has been advanced, | True                      | 
+ 133 |  * (i.e. col_return->label will not be N | True                      | 
+ 134 |  * Returns 0 when coldescs[] has been ex | True                      | 
+ 135 |  * and col_return->grplabel to NULL.     | True                      | 
+ 136 |  */                                      | True                      | 
+ 137 | static bool next_col(struct col *col_ret | True                      | 
+ 138 | {                                        | True                      | 
+ 139 |  const char *cp = *cpp;                  | True                      | 
+ 140 |  L(col_return->grplabel = NULL;)         | True                      | 
+ 141 |  if (*cp == '\0') {                      | True                      | 
+ 142 |   L(col_return->label = NULL;)           | True                      | 
+ 143 |   return 0;                              | True                      | 
+ 144 |  }                                       | True                      | 
+ 145 | #if !FIXED_HEADER                        | True                      | 
+ 146 |  if (*cp > ' ') {                        | !FIXED_HEADER             | 
+ 147 |   /* Only the first column of a group ge | !FIXED_HEADER             | 
+ 148 |   col_return->grplabel = cp;             | !FIXED_HEADER             | 
+ 149 |   while (*cp++)                          | !FIXED_HEADER             | 
+ 150 |    continue; /* Skip over the grplabel * | !FIXED_HEADER             | 
+ 151 |  }                                       | !FIXED_HEADER             | 
+ 152 | #endif                                   | True                      | 
+ 153 |  col_return->width = *cp++;              | True                      | 
+ 154 | #if !FIXED_HEADER                        | True                      | 
+ 155 |  col_return->label = cp;                 | !FIXED_HEADER             | 
+ 156 |  while (*cp++)                           | !FIXED_HEADER             | 
+ 157 |   continue; /* Skip over the label */    | !FIXED_HEADER             | 
+ 158 | #endif                                   | True                      | 
+ 159 |  col_return->from = *cp++;               | True                      | 
+ 160 |  col_return->mod = 0;                    | True                      | 
+ 161 |  if (*cp & 0x80)                         | True                      | 
+ 162 |   col_return->mod = *cp++;               | True                      | 
+ 163 |  col_return->fromspec = cp;              | True                      | 
+ 164 |  while (*cp++ >= ' ')                    | True                      | 
+ 165 |   continue; /* Skip over the fromspec */ | True                      | 
+ 166 |  *cpp = cp;                              | True                      | 
+ 167 |  return 1;                               | True                      | 
+ 168 | }                                        | True                      | 
+ 169 |                                          | True                      | 
+ 170 | /* Compares two fromspec strings for equ | True                      | 
+ 171 |  * A fromspec can be a C string, or be t | True                      | 
+ 172 |  * a byte 1..31. */                      | True                      | 
+ 173 | static bool fromspec_equal(const char *f | True                      | 
+ 174 | {                                        | True                      | 
+ 175 |  while (*fs1 == *fs2) {                  | True                      | 
+ 176 |   if (*fs1 < ' ')                        | True                      | 
+ 177 |    return 1;                             | True                      | 
+ 178 |   fs1++;                                 | True                      | 
+ 179 |   fs2++;                                 | True                      | 
+ 180 |  }                                       | True                      | 
+ 181 |  return 0;                               | True                      | 
+ 182 | }                                        | True                      | 
+ 183 |                                          | True                      | 
+ 184 | /*                                       | True                      | 
+ 185 |  * Finds a column in coldescs[] that has | True                      | 
+ 186 |  * Returns the index if found, otherwise | True                      | 
+ 187 |  */                                      | True                      | 
+ 188 | static int find_col(unsigned char from,  | True                      | 
+ 189 | {                                        | True                      | 
+ 190 |  const char *coli;                       | True                      | 
+ 191 |  struct col col;                         | True                      | 
+ 192 |  int i;                                  | True                      | 
+ 193 |                                          | True                      | 
+ 194 |  for (i = 0, coli = coldescs; next_col(& | True                      | 
+ 195 |   if (col.from == from                   | True                      | 
+ 196 |    && fromspec_equal(col.fromspec, froms | True                      | 
+ 197 |   ) {                                    | True                      | 
+ 198 |    return i;                             | True                      | 
+ 199 |   }                                      | True                      | 
+ 200 |  }                                       | True                      | 
+ 201 |  return -1;                              | True                      | 
+ 202 | }                                        | True                      | 
+ 203 |                                          | True                      | 
+ 204 | /*                                       | True                      | 
+ 205 |  * Reads current system state into the d | True                      | 
+ 206 |  * to coldescs[] columns.                | True                      | 
+ 207 |  */                                      | True                      | 
+ 208 | static void load_row(data_t data[NCOLS]) | True                      | 
+ 209 | {                                        | True                      | 
+ 210 |  FILE *fp;                               | True                      | 
+ 211 |  char label[32];                         | True                      | 
+ 212 |  char line[256];                         | True                      | 
+ 213 |  int colnum;                             | True                      | 
+ 214 |  data_t SwapFree = 0;                    | True                      | 
+ 215 |  data_t SwapTotal = 0;                   | True                      | 
+ 216 |  data_t Cached = 0;                      | True                      | 
+ 217 |  data_t SReclaimable = 0;                | True                      | 
+ 218 |                                          | True                      | 
+ 219 |  memset(data, 0, NCOLS * sizeof(data[0]) | True                      | 
+ 220 |                                          | True                      | 
+ 221 |  /*                                      | True                      | 
+ 222 |   * Open each FROM_* source and read all | True                      | 
+ 223 |   * generally labeled integer items. As  | True                      | 
+ 224 |   * through coldescs[] to see if a colum | True                      | 
+ 225 |   * store the item's value in the corres | True                      | 
+ 226 |   */                                     | True                      | 
+ 227 |                                          | True                      | 
+ 228 |  /* FROM_PROC_STAT and FROM_PROC_STAT_CP | True                      | 
+ 229 |  fp = xfopen_for_read("/proc/stat");     | True                      | 
+ 230 |  while (fgets(line, sizeof(line), fp)) { | True                      | 
+ 231 |   enum stat_cpu {                        | True                      | 
+ 232 |    STAT_CPU_user = 1,                    | True                      | 
+ 233 |    STAT_CPU_nice = 2,                    | True                      | 
+ 234 |    STAT_CPU_system = 3,                  | True                      | 
+ 235 |    STAT_CPU_idle = 4,                    | True                      | 
+ 236 |    STAT_CPU_iowait = 5,                  | True                      | 
+ 237 |    STAT_CPU_irq = 6,                     | True                      | 
+ 238 |    STAT_CPU_softirq = 7,                 | True                      | 
+ 239 |    STAT_CPU_steal = 8,                   | True                      | 
+ 240 |    STAT_CPU_guest = 9,   /* included in  | True                      | 
+ 241 |    STAT_CPU_guest_nice = 10, /* included | True                      | 
+ 242 |    /* computed columns */                | True                      | 
+ 243 |    STAT_CPU_pseudo_sy = 0xb, /* system + | True                      | 
+ 244 |    STAT_CPU_pseudo_gu = 0xc, /* guest +  | True                      | 
+ 245 |    STAT_CPU_pseudo_us = 0xd, /* user + n | True                      | 
+ 246 |    _STAT_CPU_max                         | True                      | 
+ 247 |   };                                     | True                      | 
+ 248 |   data_t num[_STAT_CPU_max];             | True                      | 
+ 249 |   int n = sscanf(line,                   | True                      | 
+ 250 |    "%31s"SPU SPU SPU SPU SPU SPU SPU SPU | True                      | 
+ 251 |    label,                                | True                      | 
+ 252 |    &num[STAT_CPU_user],                  | True                      | 
+ 253 | # define _STAT_CPU_first STAT_CPU_user   | True                      | 
+ 254 |    &num[STAT_CPU_nice],                  | True                      | 
+ 255 |    &num[STAT_CPU_system],                | True                      | 
+ 256 |    &num[STAT_CPU_idle],                  | True                      | 
+ 257 |    &num[STAT_CPU_iowait],                | True                      | 
+ 258 |    &num[STAT_CPU_irq],                   | True                      | 
+ 259 |    &num[STAT_CPU_softirq],               | True                      | 
+ 260 |    &num[STAT_CPU_steal],                 | True                      | 
+ 261 |    &num[STAT_CPU_guest],                 | True                      | 
+ 262 |    &num[STAT_CPU_guest_nice]);           | True                      | 
+ 263 |   if (n == 11 && strcmp(label, "cpu") == | True                      | 
+ 264 |    const char *coli;                     | True                      | 
+ 265 |    struct col col;                       | True                      | 
+ 266 |    int i;                                | True                      | 
+ 267 |                                          | True                      | 
+ 268 |    num[STAT_CPU_pseudo_sy] = num[STAT_CP | True                      | 
+ 269 |       + num[STAT_CPU_irq]                | True                      | 
+ 270 |       + num[STAT_CPU_softirq]            | True                      | 
+ 271 |       ;                                  | True                      | 
+ 272 |    num[STAT_CPU_pseudo_gu] = num[STAT_CP | True                      | 
+ 273 |       + num[STAT_CPU_guest_nice]         | True                      | 
+ 274 |       ;                                  | True                      | 
+ 275 |    num[STAT_CPU_pseudo_us] = num[STAT_CP | True                      | 
+ 276 |       + num[STAT_CPU_nice]               | True                      | 
+ 277 |       - num[STAT_CPU_pseudo_gu]          | True                      | 
+ 278 |       ;                                  | True                      | 
+ 279 |    for (i = 0, coli = coldescs; next_col | True                      | 
+ 280 |     if (col.from == *FROM_PROC_STAT_CPU) | True                      | 
+ 281 |      data[i] = num[(int)*col.fromspec];  | True                      | 
+ 282 |   }                                      | True                      | 
+ 283 |   else if (n >= 2) {                     | True                      | 
+ 284 |    colnum = find_col(*FROM_PROC_STAT, la | True                      | 
+ 285 |    if (colnum != -1)                     | True                      | 
+ 286 |     data[colnum] = num[_STAT_CPU_first]; | True                      | 
+ 287 |   }                                      | True                      | 
+ 288 |  }                                       | True                      | 
+ 289 |  fclose(fp);                             | True                      | 
+ 290 |                                          | True                      | 
+ 291 |  /* FROM_PROC_VMSTAT */                  | True                      | 
+ 292 |  fp = xfopen_for_read("/proc/vmstat");   | True                      | 
+ 293 |  while (fgets(line, sizeof(line), fp)) { | True                      | 
+ 294 |   data_t num;                            | True                      | 
+ 295 |                                          | True                      | 
+ 296 |   if (sscanf(line, "%31s"SPU, label, &nu | True                      | 
+ 297 |    colnum = find_col(*FROM_PROC_VMSTAT,  | True                      | 
+ 298 |    if (colnum != -1)                     | True                      | 
+ 299 |     data[colnum] = num;                  | True                      | 
+ 300 |   }                                      | True                      | 
+ 301 |  }                                       | True                      | 
+ 302 |  fclose(fp);                             | True                      | 
+ 303 |                                          | True                      | 
+ 304 |  /* FROM_PROC_MEMINFO */                 | True                      | 
+ 305 |  fp = xfopen_for_read("/proc/meminfo");  | True                      | 
+ 306 |  while (fgets(line, sizeof(line), fp)) { | True                      | 
+ 307 |   data_t num;                            | True                      | 
+ 308 | #if DEBUG_SHOW_5T_MEMFREE                | True                      | 
+ 309 |   if (is_prefixed_with(line, "MemFree:") | DEBUG_SHOW_5T_MEMFREE     | 
+ 310 |    strcpy(line, "MemFree:      444444444 | DEBUG_SHOW_5T_MEMFREE     | 
+ 311 | #endif                                   | True                      | 
+ 312 |   if (sscanf(line, "%31[^:]:"SPU, label, | True                      | 
+ 313 |    /* Store some values for computed (ps | True                      | 
+ 314 |    if (strcmp(label, "SwapTotal") == 0)  | True                      | 
+ 315 |     SwapTotal = num;                     | True                      | 
+ 316 |    else if (strcmp(label, "SwapFree") == | True                      | 
+ 317 |     SwapFree = num;                      | True                      | 
+ 318 |    else if (strcmp(label, "Cached") == 0 | True                      | 
+ 319 |     Cached = num;                        | True                      | 
+ 320 |    else if (strcmp(label, "SReclaimable" | True                      | 
+ 321 |     SReclaimable = num;                  | True                      | 
+ 322 |                                          | True                      | 
+ 323 |    colnum = find_col(*FROM_PROC_MEMINFO, | True                      | 
+ 324 |    if (colnum != -1)                     | True                      | 
+ 325 |     data[colnum] = num;                  | True                      | 
+ 326 |   }                                      | True                      | 
+ 327 |  }                                       | True                      | 
+ 328 |  fclose(fp);                             | True                      | 
+ 329 |                                          | True                      | 
+ 330 |  /* "Pseudo" items computed from other i | True                      | 
+ 331 | #if 0                                    | True                      | 
+ 332 |  colnum = find_col(*FROM_PROC_MEMINFO, P | 0                         | 
+ 333 |  if (colnum != -1) {                     | 0                         | 
+ 334 |   bb_error_msg("PSEUDO_SWPD %d", colnum) | 0                         | 
+ 335 |   data[colnum] = SwapTotal - SwapFree;   | 0                         | 
+ 336 |  }                                       | 0                         | 
+ 337 |  colnum = find_col(*FROM_PROC_MEMINFO, P | 0                         | 
+ 338 |  if (colnum != -1) {                     | 0                         | 
+ 339 |   bb_error_msg("PSEUDO_CACHE %d", colnum | 0                         | 
+ 340 |   data[colnum] = Cached + SReclaimable;  | 0                         | 
+ 341 |  }                                       | 0                         | 
+ 342 | #else // indexes are constant (modulo ch | True                      | 
+ 343 |  data[2] = SwapTotal - SwapFree;         | True                      | 
+ 344 |  data[5] = Cached + SReclaimable;        | True                      | 
+ 345 | #endif                                   | True                      | 
+ 346 | }                                        | True                      | 
+ 347 |                                          | True                      | 
+ 348 | /* Modify, format and print a row of dat | True                      | 
+ 349 | static void print_row(const data_t data[ | True                      | 
+ 350 |         const data_t old_data[NCOLS])    | True                      | 
+ 351 | {                                        | True                      | 
+ 352 |  const char *coli;                       | True                      | 
+ 353 |  struct col col;                         | True                      | 
+ 354 |  unsigned i;                             | True                      | 
+ 355 |  bool is_first;                          | True                      | 
+ 356 |  int overrun;                            | True                      | 
+ 357 |  /* Note: all DELTA counters are truncat | True                      | 
+ 358 |   * Imagine small embedded arch. Kernel  | True                      | 
+ 359 |   * to maintain 64-bit cpu stats, they w | True                      | 
+ 360 |   * when they overflow: userspace is exp | True                      | 
+ 361 |   * Therefore we must not assume they ar | True                      | 
+ 362 |   * (doing so would cause bugs at the mo | True                      | 
+ 363 |   */                                     | True                      | 
+ 364 |  uint32_t percent_sum = 0;               | True                      | 
+ 365 |  uint32_t delta32[NCOLS];                | True                      | 
+ 366 |  unsigned vshift;                        | True                      | 
+ 367 |                                          | True                      | 
+ 368 |  vshift = 0;                             | True                      | 
+ 369 |  for (coli = coldescs, i = 0; next_col(& | True                      | 
+ 370 |   if (col.mod & MOD_DELTA) {             | True                      | 
+ 371 |    uint32_t value = data[i];             | True                      | 
+ 372 |    value -= old_data[i];                 | True                      | 
+ 373 | //For some counters, kernel does not gua | True                      | 
+ 374 | //Either due to bugs, or sometimes it's  | True                      | 
+ 375 | //(imagine the horrors of reliably and l | True                      | 
+ 376 | //The idea is that _userspace_ can semi- | True                      | 
+ 377 |    if ((int32_t)value < 0)               | True                      | 
+ 378 |     value = 0;                           | True                      | 
+ 379 |    delta32[i] = value;                   | True                      | 
+ 380 |    if (col.mod & MOD_PERCENT) {          | True                      | 
+ 381 |     /* Ensure deltas < 2^32 / 128 (0x200 | True                      | 
+ 382 | //If we don't do this, if running "vmsta | True                      | 
+ 383 | //on 100-cpu machine, at ~400 second-lon | True                      | 
+ 384 |     while ((value >> vshift) >= 0x200000 | True                      | 
+ 385 |      percent_sum >>= 1;                  | True                      | 
+ 386 |      vshift++;                           | True                      | 
+ 387 |     }                                    | True                      | 
+ 388 |     percent_sum += (value >> vshift);    | True                      | 
+ 389 |    }                                     | True                      | 
+ 390 |   }                                      | True                      | 
+ 391 |  }                                       | True                      | 
+ 392 | //debug: reduce 0x2000000 to 0x2000 and  | True                      | 
+ 393 | //bb_error_msg("percent_sum:%u vshift:%u | True                      | 
+ 394 |                                          | True                      | 
+ 395 |  overrun = 0;                            | True                      | 
+ 396 |  is_first = 1;                           | True                      | 
+ 397 |  for (coli = coldescs, i = 0; next_col(& | True                      | 
+ 398 |   data_t value = (col.mod & MOD_DELTA) ? | True                      | 
+ 399 |                                          | True                      | 
+ 400 |   /* the !0 check is needed in MOD_DECRE | True                      | 
+ 401 |   if (value != 0) {                      | True                      | 
+ 402 |    if ((col.mod & MOD_PERCENT) && percen | True                      | 
+ 403 |     value = 100 * ((uint32_t)value >> vs | True                      | 
+ 404 |     /* narrow 32x32->32 multiply is ok s | True                      | 
+ 405 |     if (value >= 100) /* sanity check +  | True                      | 
+ 406 |      value = 99;                         | True                      | 
+ 407 |    } /* else: if percent_sum = 0, all va | True                      | 
+ 408 |                                          | True                      | 
+ 409 |    if (col.mod & MOD_DECREMENT)          | True                      | 
+ 410 |     value--;                             | True                      | 
+ 411 |   }                                      | True                      | 
+ 412 |                                          | True                      | 
+ 413 |   if (!is_first)                         | True                      | 
+ 414 |    bb_putchar(' ');                      | True                      | 
+ 415 |   is_first = 0;                          | True                      | 
+ 416 |   /* memory can easily overflow the colu | True                      | 
+ 417 |    * r  b   swpd   free   buff  cache    | True                      | 
+ 418 |    * 3  0      0 2019152 1029788 8602060 | True                      | 
+ 419 |    *                     ^-------^------ | True                      | 
+ 420 |    * To improve this, shorten the next f | True                      | 
+ 421 |    */                                    | True                      | 
+ 422 | //TODO: more improvements:               | True                      | 
+ 423 | //Shift left entire set of memory fields | True                      | 
+ 424 | //as in the example above (zero bytes in | True                      | 
+ 425 |   {                                      | True                      | 
+ 426 |    int chars_printed, width;             | True                      | 
+ 427 |    width = (col.width - overrun >= 0 ? c | True                      | 
+ 428 |    /* For large intervals such as "vmsta | True                      | 
+ 429 |     * for cases with a lot of block I/O  | True                      | 
+ 430 |     * can use smart_ulltoa4() to format  | True                      | 
+ 431 |     * smart_ulltoa5() to format "bi" and | True                      | 
+ 432 |     * This way, we can show arbitrarily  | True                      | 
+ 433 |     *  r  b   swpd   free   buff  cache  | True                      | 
+ 434 |     *  1  0      0 947636  76548 1537324 | True                      | 
+ 435 |     * Downside: incompatible output form | True                      | 
+ 436 |     */                                   | True                      | 
+ 437 |    if ((col.width>>1) == 4/2) {          | True                      | 
+ 438 |     char buf45[6];                       | True                      | 
+ 439 |     /* si/so/bi/bo/in/cs display rate pe | True                      | 
+ 440 |     if (G.interval != 0)                 | True                      | 
+ 441 |      value /= G.interval;                | True                      | 
+ 442 |     if (col.width == 4)                  | True                      | 
+ 443 |      smart_ulltoa4(value, buf45, " kmgtp | True                      | 
+ 444 |     else                                 | True                      | 
+ 445 |      smart_ulltoa5(value, buf45, " kmgtp | True                      | 
+ 446 |     chars_printed = printf("%*s", width, | True                      | 
+ 447 |    } else {                              | True                      | 
+ 448 |     chars_printed = printf("%*"U, width, | True                      | 
+ 449 |    }                                     | True                      | 
+ 450 |    overrun += (chars_printed - col.width | True                      | 
+ 451 |   }                                      | True                      | 
+ 452 |  }                                       | True                      | 
+ 453 |                                          | True                      | 
+ 454 |  bb_putchar('\n');                       | True                      | 
+ 455 | }                                        | True                      | 
+ 456 |                                          | True                      | 
+ 457 | /* Print column header rows */           | True                      | 
+ 458 | static void print_header(void)           | True                      | 
+ 459 | {                                        | True                      | 
+ 460 | #if FIXED_HEADER                         | True                      | 
+ 461 |  /* The header is constant yet and can b | True                      | 
+ 462 |   * but adding options such as -wtd to m | True                      | 
+ 463 |  puts(                                   | True                      | 
+ 464 | "procs -----------memory---------- ---sw | True                      | 
+ 465 | " r  b   swpd   free   buff  cache   si  | True                      | 
+ 466 |  );                                      | True                      | 
+ 467 | #else                                    | True                      | 
+ 468 |  const char *coli;                       | !FIXED_HEADER             | 
+ 469 |  struct col col;                         | !FIXED_HEADER             | 
+ 470 |  bool is_first;                          | !FIXED_HEADER             | 
+ 471 |                                          | !FIXED_HEADER             | 
+ 472 |  /* First header row is the group labels | !FIXED_HEADER             | 
+ 473 |  coli = coldescs;                        | !FIXED_HEADER             | 
+ 474 |  next_col(&col, &coli);                  | !FIXED_HEADER             | 
+ 475 |  is_first = 1;                           | !FIXED_HEADER             | 
+ 476 |  while (col.label) {                     | !FIXED_HEADER             | 
+ 477 |   const char *grplabel = col.grplabel;   | !FIXED_HEADER             | 
+ 478 |   unsigned gllen = strlen(grplabel);     | !FIXED_HEADER             | 
+ 479 |   unsigned grpwidth = col.width;         | !FIXED_HEADER             | 
+ 480 |   unsigned nhy = 0;                      | !FIXED_HEADER             | 
+ 481 |                                          | !FIXED_HEADER             | 
+ 482 |   /* Sum the column widths */            | !FIXED_HEADER             | 
+ 483 |   next_col(&col, &coli);                 | !FIXED_HEADER             | 
+ 484 |   while (col.label && !col.grplabel) {   | !FIXED_HEADER             | 
+ 485 |    grpwidth += 1 + col.width;            | !FIXED_HEADER             | 
+ 486 |    next_col(&col, &coli);                | !FIXED_HEADER             | 
+ 487 |   }                                      | !FIXED_HEADER             | 
+ 488 |                                          | !FIXED_HEADER             | 
+ 489 |   if (is_first)                          | !FIXED_HEADER             | 
+ 490 |    is_first = 0;                         | !FIXED_HEADER             | 
+ 491 |   else                                   | !FIXED_HEADER             | 
+ 492 |    bb_putchar(' ');                      | !FIXED_HEADER             | 
+ 493 |                                          | !FIXED_HEADER             | 
+ 494 |   /* Centre the grplabel within grpwidth | !FIXED_HEADER             | 
+ 495 |   while (gllen < grpwidth) {             | !FIXED_HEADER             | 
+ 496 |    bb_putchar('-');                      | !FIXED_HEADER             | 
+ 497 |    grpwidth--;                           | !FIXED_HEADER             | 
+ 498 |    if (gllen < grpwidth)                 | !FIXED_HEADER             | 
+ 499 |     grpwidth--, nhy++;                   | !FIXED_HEADER             | 
+ 500 |   }                                      | !FIXED_HEADER             | 
+ 501 |   while (*grplabel)                      | !FIXED_HEADER             | 
+ 502 |    bb_putchar(*grplabel++);              | !FIXED_HEADER             | 
+ 503 |   while (nhy--)                          | !FIXED_HEADER             | 
+ 504 |    bb_putchar('-');                      | !FIXED_HEADER             | 
+ 505 |  }                                       | !FIXED_HEADER             | 
+ 506 |  bb_putchar('\n');                       | !FIXED_HEADER             | 
+ 507 |                                          | !FIXED_HEADER             | 
+ 508 |  /* Second header row is right-justified | !FIXED_HEADER             | 
+ 509 |  coli = coldescs;                        | !FIXED_HEADER             | 
+ 510 |  is_first = 1;                           | !FIXED_HEADER             | 
+ 511 |  while (next_col(&col, &coli)) {         | !FIXED_HEADER             | 
+ 512 |   printf(" %*s" + is_first, col.width, c | !FIXED_HEADER             | 
+ 513 |   is_first = 0;                          | !FIXED_HEADER             | 
+ 514 |  }                                       | !FIXED_HEADER             | 
+ 515 |  bb_putchar('\n');                       | !FIXED_HEADER             | 
+ 516 | #endif                                   | True                      | 
+ 517 | }                                        | True                      | 
+ 518 |                                          | True                      | 
+ 519 | int vmstat_main(int argc, char **argv) M | True                      | 
+ 520 | int vmstat_main(int argc UNUSED_PARAM, c | True                      | 
+ 521 | {                                        | True                      | 
+ 522 |  int opt;                                | True                      | 
+ 523 |  int count;                              | True                      | 
+ 524 |  unsigned height;                        | True                      | 
+ 525 |  int row;                                | True                      | 
+ 526 |                                          | True                      | 
+ 527 |  INIT_G();                               | True                      | 
+ 528 |                                          | True                      | 
+ 529 |  /* Parse and process arguments */       | True                      | 
+ 530 |  opt = getopt32(argv, "n");              | True                      | 
+ 531 |  argv += optind;                         | True                      | 
+ 532 |                                          | True                      | 
+ 533 |  /*G.interval = 0;*/                     | True                      | 
+ 534 |  count = 1;                              | True                      | 
+ 535 |  if (*argv) {                            | True                      | 
+ 536 |   G.interval = xatoi_positive(*argv); /* | True                      | 
+ 537 |   count = 0; /* "infinity" */            | True                      | 
+ 538 |   argv++;                                | True                      | 
+ 539 |   if (*argv) {                           | True                      | 
+ 540 |    count = xatoi_positive(*argv);        | True                      | 
+ 541 |    /* 4.0.4 (unless -y) treats explicit  | True                      | 
+ 542 |    count += (count == 0);                | True                      | 
+ 543 |   }                                      | True                      | 
+ 544 |  }                                       | True                      | 
+ 545 |                                          | True                      | 
+ 546 |  /* Prepare to re-print the header row a | True                      | 
+ 547 |  height = 0;                             | True                      | 
+ 548 |  if (!(opt & OPT_n)) {                   | True                      | 
+ 549 |   get_terminal_width_height(STDOUT_FILEN | True                      | 
+ 550 |   /* match 4.0.4 behavior: re-print head | True                      | 
+ 551 |   height -= 3; /* can become zero or neg | True                      | 
+ 552 |  }                                       | True                      | 
+ 553 |                                          | True                      | 
+ 554 |  load_row(G.prev); /* prevents incorrect | True                      | 
+ 555 |  row = 0;                                | True                      | 
+ 556 |  /* Main loop */                         | True                      | 
+ 557 |  for (;;) {                              | True                      | 
+ 558 |   if (row == 0) {                        | True                      | 
+ 559 |    print_header();                       | True                      | 
+ 560 |    row = (int)height;                    | True                      | 
+ 561 |   }                                      | True                      | 
+ 562 |   row--;                                 | True                      | 
+ 563 |   //if (row < 0) /* height <= 0: -n, or  | True                      | 
+ 564 |   // row = -1; /* do not count down, nev | True                      | 
+ 565 |   /* equivalent to above: */             | True                      | 
+ 566 |   row |= (row >> (sizeof(row)*8 - 1));   | True                      | 
+ 567 |                                          | True                      | 
+ 568 |   load_row(G.data);                      | True                      | 
+ 569 |   print_row(G.data, G.prev);             | True                      | 
+ 570 |                                          | True                      | 
+ 571 |   count--;                               | True                      | 
+ 572 |   count |= (count >> (sizeof(count)*8 -  | True                      | 
+ 573 |   if (count == 0) /* count was >0 and be | True                      | 
+ 574 |    break;                                | True                      | 
+ 575 |                                          | True                      | 
+ 576 |   memcpy(G.prev, G.data, sizeof(G.prev)) | True                      | 
+ 577 |   sleep(G.interval);                     | True                      | 
+ 578 |  }                                       | True                      | 
+ 579 |                                          | True                      | 
+ 580 |  return EXIT_SUCCESS;                    | True                      | 
+ 581 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +116MB, 272ms             | 

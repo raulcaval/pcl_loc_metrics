@@ -1,0 +1,266 @@
+FILE: data/raw/busybox-1.38.0/e2fsprogs/chattr.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * chattr.c  - Change file attributes on | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 1993, 1994  Remy Card < | True                      | 
+   6 |  *                           Laboratoire | True                      | 
+   7 |  *                           Universite  | True                      | 
+   8 |  *                                       | True                      | 
+   9 |  * This file can be redistributed under  | True                      | 
+  10 |  * Public License                        | True                      | 
+  11 |  */                                      | True                      | 
+  12 | //config:config CHATTR                   | True                      | 
+  13 | //config: bool "chattr (4.1 kb)"         | True                      | 
+  14 | //config: default y                      | True                      | 
+  15 | //config: help                           | True                      | 
+  16 | //config: chattr changes the file attrib | True                      | 
+  17 |                                          | True                      | 
+  18 | //applet:IF_CHATTR(APPLET_NOEXEC(chattr, | True                      | 
+  19 |                                          | True                      | 
+  20 | //kbuild:lib-$(CONFIG_CHATTR) += chattr. | True                      | 
+  21 |                                          | True                      | 
+  22 | //usage:#define chattr_trivial_usage     | True                      | 
+  23 | //usage:       "[-R] [-v VERSION] [-p PR | True                      | 
+  24 | //usage:#define chattr_full_usage "\n\n" | True                      | 
+  25 | //usage:       "Change ext2 file attribu | True                      | 
+  26 | //usage:     "\n -R Recurse"             | True                      | 
+  27 | //usage:     "\n -v NUM Set version/gene | True                      | 
+  28 | //usage:     "\n -p NUM Set project numb | True                      | 
+  29 | //-V, -f accepted but ignored            | True                      | 
+  30 | //usage:     "\nModifiers:"              | True                      | 
+  31 | //usage:     "\n -,+,= Remove/add/set at | True                      | 
+  32 | //usage:     "\nAttributes:"             | True                      | 
+  33 | //usage:     "\n A No atime"             | True                      | 
+  34 | //usage:     "\n a Append only"          | True                      | 
+  35 | //usage:     "\n C No copy-on-write"     | True                      | 
+  36 | //usage:     "\n c Compressed"           | True                      | 
+  37 | //usage:     "\n D Synchronous dir updat | True                      | 
+  38 | //usage:     "\n d Don't backup with dum | True                      | 
+  39 | //usage:     "\n E Encrypted"            | True                      | 
+  40 | //usage:     "\n e File uses extents"    | True                      | 
+  41 | //usage:     "\n F Case-insensitive dir" | True                      | 
+  42 | //usage:     "\n I Indexed dir"          | True                      | 
+  43 | //usage:     "\n i Immutable"            | True                      | 
+  44 | //usage:     "\n j Write data to journal | True                      | 
+  45 | //usage:     "\n N File is stored in ino | True                      | 
+  46 | //usage:     "\n P Hierarchical project  | True                      | 
+  47 | //usage:     "\n S Synchronous file upda | True                      | 
+  48 | //usage:     "\n s Zero storage when del | True                      | 
+  49 | //usage:     "\n T Top of dir hierarchy" | True                      | 
+  50 | //usage:     "\n t Don't tail-merge with | True                      | 
+  51 | //usage:     "\n u Allow undelete"       | True                      | 
+  52 | //usage:     "\n V Verity"               | True                      | 
+  53 |                                          | True                      | 
+  54 | #include "libbb.h"                       | True                      | 
+  55 | #include "e2fs_lib.h"                    | True                      | 
+  56 |                                          | True                      | 
+  57 | #define OPT_ADD      (1 << 0)            | True                      | 
+  58 | #define OPT_REM      (1 << 1)            | True                      | 
+  59 | #define OPT_SET      (1 << 2)            | True                      | 
+  60 | #define OPT_SET_VER  (1 << 3)            | True                      | 
+  61 | #define OPT_SET_PROJ (1 << 4)            | True                      | 
+  62 |                                          | True                      | 
+  63 | struct globals {                         | True                      | 
+  64 |  unsigned version;                       | True                      | 
+  65 |  unsigned af;                            | True                      | 
+  66 |  unsigned rf;                            | True                      | 
+  67 |  int flags;                              | True                      | 
+  68 |  uint32_t projid;                        | True                      | 
+  69 |  smallint recursive;                     | True                      | 
+  70 | };                                       | True                      | 
+  71 |                                          | True                      | 
+  72 | static unsigned long get_flag(char c)    | True                      | 
+  73 | {                                        | True                      | 
+  74 |  const char *fp = strchr(e2attr_flags_sn | True                      | 
+  75 |  if (fp)                                 | True                      | 
+  76 |   return e2attr_flags_value_chattr[fp -  | True                      | 
+  77 |  bb_show_usage();                        | True                      | 
+  78 | }                                        | True                      | 
+  79 |                                          | True                      | 
+  80 | static char** decode_arg(char **argv, st | True                      | 
+  81 | {                                        | True                      | 
+  82 |  unsigned *fl;                           | True                      | 
+  83 |  const char *arg = *argv;                | True                      | 
+  84 |  char opt = *arg;                        | True                      | 
+  85 |                                          | True                      | 
+  86 |  fl = &gp->af;                           | True                      | 
+  87 |  if (opt == '-') {                       | True                      | 
+  88 |   /* gp->flags |= OPT_REM; - WRONG, it c | True                      | 
+  89 |   /* testcase: chattr =ae -R FILE should | True                      | 
+  90 |   /* (and should not read flags, with =F | True                      | 
+  91 |   fl = &gp->rf;                          | True                      | 
+  92 |  } else if (opt == '+') {                | True                      | 
+  93 |   gp->flags |= OPT_ADD;                  | True                      | 
+  94 |  } else { /* if (opt == '=') */          | True                      | 
+  95 |   gp->flags |= OPT_SET;                  | True                      | 
+  96 |  }                                       | True                      | 
+  97 |                                          | True                      | 
+  98 |  while (*++arg) {                        | True                      | 
+  99 |   if (opt == '-') {                      | True                      | 
+ 100 | //e2fsprogs-1.43.1 accepts:              | True                      | 
+ 101 | // "-RRR", "-RRRv VER" and even "-ARRRva | True                      | 
+ 102 | // but not "-vVER".                      | True                      | 
+ 103 | // IOW: options are parsed as part of "r | True                      | 
+ 104 | // if "v" is seen, next argv[] is VER, e | True                      | 
+ 105 |    if (*arg == 'R') {                    | True                      | 
+ 106 |     gp->recursive = 1;                   | True                      | 
+ 107 |     continue;                            | True                      | 
+ 108 |    }                                     | True                      | 
+ 109 |    if (*arg == 'V') {                    | True                      | 
+ 110 |     /*"verbose and print program version | True                      | 
+ 111 |     continue;                            | True                      | 
+ 112 |    }                                     | True                      | 
+ 113 |    if (*arg == 'f') {                    | True                      | 
+ 114 |     /*"suppress most error messages" (no | True                      | 
+ 115 |     continue;                            | True                      | 
+ 116 |    }                                     | True                      | 
+ 117 |    if (*arg == 'v') {                    | True                      | 
+ 118 |     if (!*++argv)                        | True                      | 
+ 119 |      bb_show_usage();                    | True                      | 
+ 120 |     gp->version = xatou(*argv);          | True                      | 
+ 121 |     gp->flags |= OPT_SET_VER;            | True                      | 
+ 122 |     continue;                            | True                      | 
+ 123 |    }                                     | True                      | 
+ 124 |    if (*arg == 'p') {                    | True                      | 
+ 125 |     if (!*++argv)                        | True                      | 
+ 126 |      bb_show_usage();                    | True                      | 
+ 127 |     gp->projid = xatou32(*argv);         | True                      | 
+ 128 |     gp->flags |= OPT_SET_PROJ;           | True                      | 
+ 129 |     continue;                            | True                      | 
+ 130 |    }                                     | True                      | 
+ 131 |    /* not a known option, try as an attr | True                      | 
+ 132 |    gp->flags |= OPT_REM;                 | True                      | 
+ 133 |   }                                      | True                      | 
+ 134 |   *fl |= get_flag(*arg); /* aborts on ba | True                      | 
+ 135 |  }                                       | True                      | 
+ 136 |                                          | True                      | 
+ 137 |  return argv;                            | True                      | 
+ 138 | }                                        | True                      | 
+ 139 |                                          | True                      | 
+ 140 | static void change_attributes(const char | True                      | 
+ 141 |                                          | True                      | 
+ 142 | static int FAST_FUNC chattr_dir_proc(con | True                      | 
+ 143 | {                                        | True                      | 
+ 144 | //TODO: use de->d_type (if it's not DT_U | True                      | 
+ 145 |                                          | True                      | 
+ 146 |  char *path = concat_subpath_file(dir_na | True                      | 
+ 147 |  /* path is NULL if de->d_name is "." or | True                      | 
+ 148 |  if (path) {                             | True                      | 
+ 149 |   change_attributes(path, gp);           | True                      | 
+ 150 |   free(path);                            | True                      | 
+ 151 |  }                                       | True                      | 
+ 152 |  return 0;                               | True                      | 
+ 153 | }                                        | True                      | 
+ 154 |                                          | True                      | 
+ 155 | static void change_attributes(const char | True                      | 
+ 156 | {                                        | True                      | 
+ 157 |  unsigned fsflags;                       | True                      | 
+ 158 |  int fd;                                 | True                      | 
+ 159 |  struct stat st;                         | True                      | 
+ 160 |                                          | True                      | 
+ 161 |  if (lstat(name, &st) != 0) {            | True                      | 
+ 162 |   bb_perror_msg("can't stat '%s'", name) | True                      | 
+ 163 |   return;                                | True                      | 
+ 164 |  }                                       | True                      | 
+ 165 |                                          | True                      | 
+ 166 |  /* Don't try to open device files, fifo | True                      | 
+ 167 |   * ought to display an error if the fil | True                      | 
+ 168 |   * on the command line (whether or not  | True                      | 
+ 169 |   * requested).  */                      | True                      | 
+ 170 |  if (!S_ISREG(st.st_mode) && !S_ISLNK(st | True                      | 
+ 171 |   return;                                | True                      | 
+ 172 |                                          | True                      | 
+ 173 |  /* There is no way to run needed ioctls | True                      | 
+ 174 |   * open(O_PATH | O_NOFOLLOW) _can_ be u | True                      | 
+ 175 |   * but ioctls fail on such a fd (tried  | True                      | 
+ 176 |   * e2fsprogs-1.46.2 uses open(O_NOFOLLO | True                      | 
+ 177 |   */                                     | True                      | 
+ 178 |  fd = open_or_warn(name, O_RDONLY | O_NO | True                      | 
+ 179 |  if (fd >= 0) {                          | True                      | 
+ 180 |   int r;                                 | True                      | 
+ 181 |                                          | True                      | 
+ 182 |   if (gp->flags & OPT_SET_VER) {         | True                      | 
+ 183 |    r = ioctl(fd, EXT2_IOC_SETVERSION, &g | True                      | 
+ 184 |    if (r != 0)                           | True                      | 
+ 185 |     bb_perror_msg("setting %s on %s", "v | True                      | 
+ 186 |   }                                      | True                      | 
+ 187 |                                          | True                      | 
+ 188 |   if (gp->flags & OPT_SET_PROJ) {        | True                      | 
+ 189 |    struct ext2_fsxattr fsxattr;          | True                      | 
+ 190 |    r = ioctl(fd, EXT2_IOC_FSGETXATTR, &f | True                      | 
+ 191 |    /* note: ^^^ may fail in 32-bit users | True                      | 
+ 192 |    if (r != 0) {                         | True                      | 
+ 193 |     bb_perror_msg("getting %s on %s", "p | True                      | 
+ 194 |    } else {                              | True                      | 
+ 195 |     fsxattr.fsx_projid = gp->projid;     | True                      | 
+ 196 |     r = ioctl(fd, EXT2_IOC_FSSETXATTR, & | True                      | 
+ 197 |     if (r != 0)                          | True                      | 
+ 198 |      bb_perror_msg("setting %s on %s", " | True                      | 
+ 199 |    }                                     | True                      | 
+ 200 |   }                                      | True                      | 
+ 201 |                                          | True                      | 
+ 202 |   if (gp->flags & OPT_SET) {             | True                      | 
+ 203 |    fsflags = gp->af;                     | True                      | 
+ 204 |   } else {                               | True                      | 
+ 205 |    r = ioctl(fd, EXT2_IOC_GETFLAGS, &fsf | True                      | 
+ 206 |    if (r != 0) {                         | True                      | 
+ 207 |     bb_perror_msg("getting %s on %s", "f | True                      | 
+ 208 |     goto skip_setflags;                  | True                      | 
+ 209 |    }                                     | True                      | 
+ 210 |    /*if (gp->flags & OPT_REM) - not need | True                      | 
+ 211 |     fsflags &= ~gp->rf;                  | True                      | 
+ 212 |    /*if (gp->flags & OPT_ADD) - not need | True                      | 
+ 213 |     fsflags |= gp->af;                   | True                      | 
+ 214 | // What is this? And why it's not done f | True                      | 
+ 215 |    if (!S_ISDIR(st.st_mode))             | True                      | 
+ 216 |     fsflags &= ~EXT2_DIRSYNC_FL;         | True                      | 
+ 217 |   }                                      | True                      | 
+ 218 |   r = ioctl(fd, EXT2_IOC_SETFLAGS, &fsfl | True                      | 
+ 219 |   if (r != 0)                            | True                      | 
+ 220 |    bb_perror_msg("setting %s on %s", "fl | True                      | 
+ 221 |  skip_setflags:                          | True                      | 
+ 222 |   close(fd);                             | True                      | 
+ 223 |  }                                       | True                      | 
+ 224 |                                          | True                      | 
+ 225 |  if (gp->recursive && S_ISDIR(st.st_mode | True                      | 
+ 226 |   iterate_on_dir(name, chattr_dir_proc,  | True                      | 
+ 227 | }                                        | True                      | 
+ 228 |                                          | True                      | 
+ 229 | int chattr_main(int argc, char **argv) M | True                      | 
+ 230 | int chattr_main(int argc UNUSED_PARAM, c | True                      | 
+ 231 | {                                        | True                      | 
+ 232 |  struct globals g;                       | True                      | 
+ 233 |                                          | True                      | 
+ 234 |  memset(&g, 0, sizeof(g));               | True                      | 
+ 235 |                                          | True                      | 
+ 236 |  /* parse the args */                    | True                      | 
+ 237 |  for (;;) {                              | True                      | 
+ 238 |   char *arg = *++argv;                   | True                      | 
+ 239 |   if (!arg)                              | True                      | 
+ 240 |    bb_show_usage();                      | True                      | 
+ 241 |   if (arg[0] != '-' && arg[0] != '+' &&  | True                      | 
+ 242 |    break;                                | True                      | 
+ 243 |                                          | True                      | 
+ 244 |   argv = decode_arg(argv, &g);           | True                      | 
+ 245 |  }                                       | True                      | 
+ 246 |  /* note: on loop exit, remaining argv[] | True                      | 
+ 247 |                                          | True                      | 
+ 248 |  /* run sanity checks on all the argumen | True                      | 
+ 249 |  if ((g.flags & OPT_SET) && (g.flags & ( | True                      | 
+ 250 |   bb_simple_error_msg_and_die("= is inco | True                      | 
+ 251 |  if (g.rf & g.af)                        | True                      | 
+ 252 |   bb_simple_error_msg_and_die("can't set | True                      | 
+ 253 |  if (!g.flags)                           | True                      | 
+ 254 |   bb_simple_error_msg_and_die("must use  | True                      | 
+ 255 |                                          | True                      | 
+ 256 |  /* now run chattr on all the files pass | True                      | 
+ 257 |  do change_attributes(*argv, &g); while  | True                      | 
+ 258 |                                          | True                      | 
+ 259 |  return EXIT_SUCCESS;                    | True                      | 
+ 260 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +112MB, 267ms             | 

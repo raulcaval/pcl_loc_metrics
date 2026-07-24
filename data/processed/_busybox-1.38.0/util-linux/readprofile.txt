@@ -1,0 +1,279 @@
+FILE: data/raw/busybox-1.38.0/util-linux/readprofile.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * readprofile.c - used to read /proc/pr | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 1994,1996 Alessandro Ru | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   8 |  */                                      | True                      | 
+   9 |                                          | True                      | 
+  10 | /*                                       | True                      | 
+  11 |  * 1999-02-22 Arkadiusz Mickiewicz <misi | True                      | 
+  12 |  * - added Native Language Support       | True                      | 
+  13 |  * 1999-09-01 Stephane Eranian <eranian@ | True                      | 
+  14 |  * - 64bit clean patch                   | True                      | 
+  15 |  * 3Feb2001 Andrew Morton <andrewm@uow.e | True                      | 
+  16 |  * - -M option to write profile multipli | True                      | 
+  17 |  * 2001-11-07 Werner Almesberger <wa@alm | True                      | 
+  18 |  * - byte order auto-detection and -n op | True                      | 
+  19 |  * 2001-11-09 Werner Almesberger <wa@alm | True                      | 
+  20 |  * - skip step size (index 0)            | True                      | 
+  21 |  * 2002-03-09 John Levon <moz@compsoc.ma | True                      | 
+  22 |  * - make maplineno do something         | True                      | 
+  23 |  * 2002-11-28 Mads Martin Joergensen +   | True                      | 
+  24 |  * - also try /boot/System.map-`uname -r | True                      | 
+  25 |  * 2003-04-09 Werner Almesberger <wa@alm | True                      | 
+  26 |  * - fixed off-by eight error and improv | True                      | 
+  27 |  * 2003-08-12 Nikita Danilov <Nikita@Nam | True                      | 
+  28 |  * - added -s option; example of use:    | True                      | 
+  29 |  * "readprofile -s -m /boot/System.map-t | True                      | 
+  30 |  *                                       | True                      | 
+  31 |  * Taken from util-linux and adapted for | True                      | 
+  32 |  * Paul Mundt <lethal@linux-sh.org>.     | True                      | 
+  33 |  */                                      | True                      | 
+  34 | //config:config READPROFILE              | True                      | 
+  35 | //config: bool "readprofile (7.5 kb)"    | True                      | 
+  36 | //config: default y                      | True                      | 
+  37 | //config: help                           | True                      | 
+  38 | //config: This allows you to parse /proc | True                      | 
+  39 |                                          | True                      | 
+  40 | //applet:IF_READPROFILE(APPLET(readprofi | True                      | 
+  41 |                                          | True                      | 
+  42 | //kbuild:lib-$(CONFIG_READPROFILE) += re | True                      | 
+  43 |                                          | True                      | 
+  44 | //usage:#define readprofile_trivial_usag | True                      | 
+  45 | //usage:       "[OPTIONS]"               | True                      | 
+  46 | //usage:#define readprofile_full_usage " | True                      | 
+  47 | //usage:       " -m MAPFILE (Default: /b | True                      | 
+  48 | //usage:     "\n -p PROFILE (Default: /p | True                      | 
+  49 | //usage:     "\n -M NUM  Set the profili | True                      | 
+  50 | //usage:     "\n -i  Print only info abo | True                      | 
+  51 | //usage:     "\n -v  Verbose"            | True                      | 
+  52 | //usage:     "\n -a  Print all symbols,  | True                      | 
+  53 | //usage:     "\n -b  Print individual hi | True                      | 
+  54 | //usage:     "\n -s  Print individual co | True                      | 
+  55 | //usage:     "\n -r  Reset all the count | True                      | 
+  56 | //usage:     "\n -n  Disable byte order  | True                      | 
+  57 |                                          | True                      | 
+  58 | #include "libbb.h"                       | True                      | 
+  59 | #include <sys/utsname.h>                 | True                      | 
+  60 |                                          | True                      | 
+  61 | #define S_LEN 128                        | True                      | 
+  62 |                                          | True                      | 
+  63 | int readprofile_main(int argc, char **ar | True                      | 
+  64 | int readprofile_main(int argc UNUSED_PAR | True                      | 
+  65 | {                                        | True                      | 
+  66 |  FILE *map;                              | True                      | 
+  67 |  const char *mapFile, *proFile;          | True                      | 
+  68 |  unsigned long indx;                     | True                      | 
+  69 |  size_t len;                             | True                      | 
+  70 |  uint64_t add0;                          | True                      | 
+  71 |  unsigned int step;                      | True                      | 
+  72 |  unsigned int *buf, total, fn_len;       | True                      | 
+  73 |  unsigned long long fn_add, next_add;    | True                      | 
+  74 |  char fn_name[S_LEN], next_name[S_LEN];  | True                      | 
+  75 |  char mapline[S_LEN];                    | True                      | 
+  76 |  char mode[8];                           | True                      | 
+  77 |  int maplineno;                          | True                      | 
+  78 |  int multiplier;                         | True                      | 
+  79 |  unsigned opt;                           | True                      | 
+  80 |  enum {                                  | True                      | 
+  81 |   OPT_M = (1 << 0),                      | True                      | 
+  82 |   OPT_m = (1 << 1),                      | True                      | 
+  83 |   OPT_p = (1 << 2),                      | True                      | 
+  84 |   OPT_n = (1 << 3),                      | True                      | 
+  85 |   OPT_a = (1 << 4),                      | True                      | 
+  86 |   OPT_b = (1 << 5),                      | True                      | 
+  87 |   OPT_s = (1 << 6),                      | True                      | 
+  88 |   OPT_i = (1 << 7),                      | True                      | 
+  89 |   OPT_r = (1 << 8),                      | True                      | 
+  90 |   OPT_v = (1 << 9),                      | True                      | 
+  91 |  };                                      | True                      | 
+  92 | #define optMult    (opt & OPT_M)         | True                      | 
+  93 | #define optNative  (opt & OPT_n)         | True                      | 
+  94 | #define optAll     (opt & OPT_a)         | True                      | 
+  95 | #define optBins    (opt & OPT_b)         | True                      | 
+  96 | #define optSub     (opt & OPT_s)         | True                      | 
+  97 | #define optInfo    (opt & OPT_i)         | True                      | 
+  98 | #define optReset   (opt & OPT_r)         | True                      | 
+  99 | #define optVerbose (opt & OPT_v)         | True                      | 
+ 100 |                                          | True                      | 
+ 101 | #define next (current^1)                 | True                      | 
+ 102 |                                          | True                      | 
+ 103 |  proFile = "/proc/profile";              | True                      | 
+ 104 |  mapFile = "/boot/System.map";           | True                      | 
+ 105 |  multiplier = 0;                         | True                      | 
+ 106 |                                          | True                      | 
+ 107 |  opt = getopt32(argv, "M:+m:p:nabsirv",  | True                      | 
+ 108 |                                          | True                      | 
+ 109 |  if (opt & (OPT_M|OPT_r)) { /* mult or r | True                      | 
+ 110 |   int fd, to_write;                      | True                      | 
+ 111 |                                          | True                      | 
+ 112 |   /*                                     | True                      | 
+ 113 |    * When writing the multiplier, if the | True                      | 
+ 114 |    * not sizeof(int), the multiplier is  | True                      | 
+ 115 |    */                                    | True                      | 
+ 116 |   to_write = sizeof(int);                | True                      | 
+ 117 |   if (!optMult)                          | True                      | 
+ 118 |    to_write = 1;  /* sth different from  | True                      | 
+ 119 |                                          | True                      | 
+ 120 |   fd = xopen("/proc/profile", O_WRONLY); | True                      | 
+ 121 |   xwrite(fd, &multiplier, to_write);     | True                      | 
+ 122 |   close(fd);                             | True                      | 
+ 123 |   return EXIT_SUCCESS;                   | True                      | 
+ 124 |  }                                       | True                      | 
+ 125 |                                          | True                      | 
+ 126 |  /*                                      | True                      | 
+ 127 |   * Use an fd for the profiling buffer,  | True                      | 
+ 128 |   */                                     | True                      | 
+ 129 |  len = MAXINT(ssize_t);                  | True                      | 
+ 130 |  buf = xmalloc_xopen_read_close(proFile, | True                      | 
+ 131 |  len /= sizeof(*buf);                    | True                      | 
+ 132 |                                          | True                      | 
+ 133 |  if (!optNative) {                       | True                      | 
+ 134 |   int big = 0, small = 0;                | True                      | 
+ 135 |   unsigned *p;                           | True                      | 
+ 136 |                                          | True                      | 
+ 137 |   for (p = buf+1; p < buf+len; p++) {    | True                      | 
+ 138 |    if (*p & ~0U << (sizeof(*buf)*4))     | True                      | 
+ 139 |     big++;                               | True                      | 
+ 140 |    if (*p & ((1 << (sizeof(*buf)*4))-1)) | True                      | 
+ 141 |     small++;                             | True                      | 
+ 142 |   }                                      | True                      | 
+ 143 |   if (big > small) {                     | True                      | 
+ 144 |    bb_simple_error_msg("assuming reverse | True                      | 
+ 145 |     "use -n to force native byte order") | True                      | 
+ 146 |    BUILD_BUG_ON(sizeof(*p) > 8);         | True                      | 
+ 147 |    for (p = buf; p < buf+len; p++) {     | True                      | 
+ 148 |     if (sizeof(*p) == 2)                 | True                      | 
+ 149 |      *p = bswap_16(*p);                  | True                      | 
+ 150 |     if (sizeof(*p) == 4)                 | True                      | 
+ 151 |      *p = bswap_32(*p);                  | True                      | 
+ 152 |     if (sizeof(*p) == 8)                 | True                      | 
+ 153 |      *p = bb_bswap_64(*p);               | True                      | 
+ 154 |    }                                     | True                      | 
+ 155 |   }                                      | True                      | 
+ 156 |  }                                       | True                      | 
+ 157 |                                          | True                      | 
+ 158 |  step = buf[0];                          | True                      | 
+ 159 |  if (optInfo) {                          | True                      | 
+ 160 |   printf("Sampling_step: %u\n", step);   | True                      | 
+ 161 |   return EXIT_SUCCESS;                   | True                      | 
+ 162 |  }                                       | True                      | 
+ 163 |                                          | True                      | 
+ 164 |  map = xfopen_for_read(mapFile);         | True                      | 
+ 165 |  add0 = 0;                               | True                      | 
+ 166 |  maplineno = 1;                          | True                      | 
+ 167 |  while (fgets(mapline, S_LEN, map)) {    | True                      | 
+ 168 |   if (sscanf(mapline, "%llx %s %s", &fn_ | True                      | 
+ 169 |    bb_error_msg_and_die("%s(%i): wrong m | True                      | 
+ 170 |      mapFile, maplineno);                | True                      | 
+ 171 |                                          | True                      | 
+ 172 |   if (strcmp(fn_name, "_stext") == 0) /* | True                      | 
+ 173 |    add0 = fn_add;                        | True                      | 
+ 174 |    break;                                | True                      | 
+ 175 |   }                                      | True                      | 
+ 176 |   maplineno++;                           | True                      | 
+ 177 |  }                                       | True                      | 
+ 178 |                                          | True                      | 
+ 179 |  if (!add0)                              | True                      | 
+ 180 |   bb_error_msg_and_die("can't find \"_st | True                      | 
+ 181 |                                          | True                      | 
+ 182 |  /*                                      | True                      | 
+ 183 |   * Main loop.                           | True                      | 
+ 184 |   */                                     | True                      | 
+ 185 |  total = 0;                              | True                      | 
+ 186 |  indx = 1;                               | True                      | 
+ 187 |  while (fgets(mapline, S_LEN, map)) {    | True                      | 
+ 188 |   bool header_printed;                   | True                      | 
+ 189 |   unsigned int this;                     | True                      | 
+ 190 |                                          | True                      | 
+ 191 |   if (sscanf(mapline, "%llx %s %s", &nex | True                      | 
+ 192 |    bb_error_msg_and_die("%s(%i): wrong m | True                      | 
+ 193 |      mapFile, maplineno);                | True                      | 
+ 194 |                                          | True                      | 
+ 195 |   header_printed = 0;                    | True                      | 
+ 196 |                                          | True                      | 
+ 197 |   /* ignore any LEADING (before a '[tT]' | True                      | 
+ 198 |      Absolute symbols */                 | True                      | 
+ 199 |   if ((mode[0] == 'A' || mode[0] == '?') | True                      | 
+ 200 |    continue;                             | True                      | 
+ 201 |   if ((mode[0]|0x20) != 't' && (mode[0]| | True                      | 
+ 202 |    break;  /* only text is profiled */   | True                      | 
+ 203 |   }                                      | True                      | 
+ 204 |                                          | True                      | 
+ 205 |   if (indx >= len)                       | True                      | 
+ 206 |    bb_simple_error_msg_and_die("profile  | True                      | 
+ 207 |      "Wrong map file?");                 | True                      | 
+ 208 |                                          | True                      | 
+ 209 |   this = 0;                              | True                      | 
+ 210 |   while (indx < (next_add-add0)/step) {  | True                      | 
+ 211 |    if (optBins && (buf[indx] || optAll)) | True                      | 
+ 212 |     if (!header_printed) {               | True                      | 
+ 213 |      printf("%s:\n", fn_name);           | True                      | 
+ 214 |      header_printed = 1;                 | True                      | 
+ 215 |     }                                    | True                      | 
+ 216 |     printf("\t%"PRIx64"\t%u\n", (indx -  | True                      | 
+ 217 |    }                                     | True                      | 
+ 218 |    this += buf[indx++];                  | True                      | 
+ 219 |   }                                      | True                      | 
+ 220 |   total += this;                         | True                      | 
+ 221 |                                          | True                      | 
+ 222 |   if (optBins) {                         | True                      | 
+ 223 |    if (optVerbose || this > 0)           | True                      | 
+ 224 |     printf("  total\t\t\t\t%u\n", this); | True                      | 
+ 225 |   } else                                 | True                      | 
+ 226 |   if ((this || optAll)                   | True                      | 
+ 227 |    && (fn_len = next_add-fn_add) != 0    | True                      | 
+ 228 |   ) {                                    | True                      | 
+ 229 |    if (optVerbose)                       | True                      | 
+ 230 |     printf("%016llx %-40s %6u %8.4f\n",  | True                      | 
+ 231 |      fn_name, this, this/(double)fn_len) | True                      | 
+ 232 |    else                                  | True                      | 
+ 233 |     printf("%6u %-40s %8.4f\n",          | True                      | 
+ 234 |      this, fn_name, this/(double)fn_len) | True                      | 
+ 235 |    if (optSub) {                         | True                      | 
+ 236 |     unsigned long long scan;             | True                      | 
+ 237 |                                          | True                      | 
+ 238 |     for (scan = (fn_add-add0)/step + 1;  | True                      | 
+ 239 |          scan < (next_add-add0)/step; sc | True                      | 
+ 240 |      unsigned long long addr;            | True                      | 
+ 241 |                                          | True                      | 
+ 242 |      addr = (scan - 1)*step + add0;      | True                      | 
+ 243 |      printf("\t%#llx\t%s+%#llx\t%u\n",   | True                      | 
+ 244 |       addr, fn_name, addr - fn_add,      | True                      | 
+ 245 |       buf[scan]);                        | True                      | 
+ 246 |     }                                    | True                      | 
+ 247 |    }                                     | True                      | 
+ 248 |   }                                      | True                      | 
+ 249 |                                          | True                      | 
+ 250 |   fn_add = next_add;                     | True                      | 
+ 251 |   strcpy(fn_name, next_name);            | True                      | 
+ 252 |                                          | True                      | 
+ 253 |   maplineno++;                           | True                      | 
+ 254 |  }                                       | True                      | 
+ 255 |                                          | True                      | 
+ 256 |  /* clock ticks, out of kernel text - pr | True                      | 
+ 257 |  printf("%6u *unknown*\n", buf[len-1]);  | True                      | 
+ 258 |                                          | True                      | 
+ 259 |  /* trailer */                           | True                      | 
+ 260 |  if (optVerbose)                         | True                      | 
+ 261 |   printf("%016x %-40s %6u %8.4f\n",      | True                      | 
+ 262 |    0, "total", total, total/(double)(fn_ | True                      | 
+ 263 |  else                                    | True                      | 
+ 264 |   printf("%6u %-40s %8.4f\n",            | True                      | 
+ 265 |    total, "total", total/(double)(fn_add | True                      | 
+ 266 |                                          | True                      | 
+ 267 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 268 |   fclose(map);                           | True                      | 
+ 269 |   free(buf);                             | True                      | 
+ 270 |  }                                       | True                      | 
+ 271 |                                          | True                      | 
+ 272 |  return EXIT_SUCCESS;                    | True                      | 
+ 273 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +110MB, 247ms             | 

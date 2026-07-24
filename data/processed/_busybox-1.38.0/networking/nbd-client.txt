@@ -1,0 +1,308 @@
+FILE: data/raw/busybox-1.38.0/networking/nbd-client.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * Copyright 2010 Rob Landley <rob@landl | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   5 |  */                                      | True                      | 
+   6 | //config:config NBDCLIENT                | True                      | 
+   7 | //config: bool "nbd-client (6.3 kb)"     | True                      | 
+   8 | //config: default y                      | True                      | 
+   9 | //config: help                           | True                      | 
+  10 | //config: Network block device client    | True                      | 
+  11 |                                          | True                      | 
+  12 | //applet:IF_NBDCLIENT(APPLET_NOEXEC(nbd- | True                      | 
+  13 |                                          | True                      | 
+  14 | //kbuild:lib-$(CONFIG_NBDCLIENT) += nbd- | True                      | 
+  15 |                                          | True                      | 
+  16 | #include "libbb.h"                       | True                      | 
+  17 | #include <netinet/tcp.h>                 | True                      | 
+  18 | #include <linux/fs.h>                    | True                      | 
+  19 | #include <getopt.h>                      | True                      | 
+  20 |                                          | True                      | 
+  21 | #define NBD_SET_SOCK          _IO(0xab,  | True                      | 
+  22 | #define NBD_SET_BLKSIZE       _IO(0xab,  | True                      | 
+  23 | #define NBD_SET_SIZE          _IO(0xab,  | True                      | 
+  24 | #define NBD_DO_IT             _IO(0xab,  | True                      | 
+  25 | #define NBD_CLEAR_SOCK        _IO(0xab,  | True                      | 
+  26 | #define NBD_CLEAR_QUEUE       _IO(0xab,  | True                      | 
+  27 | #define NBD_PRINT_DEBUG       _IO(0xab,  | True                      | 
+  28 | #define NBD_SET_SIZE_BLOCKS   _IO(0xab,  | True                      | 
+  29 | #define NBD_DISCONNECT        _IO(0xab,  | True                      | 
+  30 | #define NBD_SET_TIMEOUT       _IO(0xab,  | True                      | 
+  31 | #define NBD_SET_FLAGS         _IO(0xab,  | True                      | 
+  32 |                                          | True                      | 
+  33 | //usage:#define nbdclient_trivial_usage  | True                      | 
+  34 | //usage:       "{ [-b BLKSIZE] [-N NAME] | True                      | 
+  35 | //usage:#define nbdclient_full_usage "\n | True                      | 
+  36 | //usage:       "Connect to HOST and prov | True                      | 
+  37 |                                          | True                      | 
+  38 | //TODO: more compat with nbd-client vers | True                      | 
+  39 | //nbd-client host [ port ] nbd-device [  | True                      | 
+  40 | // [ -persist ] [ -nofork ] [ -nonetlink | True                      | 
+  41 | // [ -block-size block size ] [ -timeout | True                      | 
+  42 | // [ -certfile certfile ] [ -keyfile key | True                      | 
+  43 | // [ -tlshostname hostname ]             | True                      | 
+  44 | //nbd-client -unix path nbd-device [ -co | True                      | 
+  45 | // [ -persist ] [ -nofork ] [ -nonetlink | True                      | 
+  46 | // [ -block-size block size ] [ -timeout | True                      | 
+  47 | //nbd-client nbd-device                  | True                      | 
+  48 | //nbd-client -d nbd-device               | True                      | 
+  49 | //nbd-client -c nbd-device               | True                      | 
+  50 | //nbd-client -l host [ port ]            | True                      | 
+  51 | //nbd-client [ -netlink ] -l host        | True                      | 
+  52 | //                                       | True                      | 
+  53 | //Default value for blocksize is 4096    | True                      | 
+  54 | //Allowed values for blocksize are 512,1 | True                      | 
+  55 |                                          | True                      | 
+  56 | int nbdclient_main(int argc, char **argv | True                      | 
+  57 | int nbdclient_main(int argc, char **argv | True                      | 
+  58 | {                                        | True                      | 
+  59 | #if BB_MMU                               | True                      | 
+  60 |  bool nofork;                            | BB_MMU                    | 
+  61 | #endif                                   | True                      | 
+  62 |  bool opt_d;                             | True                      | 
+  63 |  bool opt_p;                             | True                      | 
+  64 |  const char *host, *port, *device;       | True                      | 
+  65 |  const char *name;                       | True                      | 
+  66 |  unsigned blksize, size_blocks;          | True                      | 
+  67 |  unsigned timeout;                       | True                      | 
+  68 |  int ch;                                 | True                      | 
+  69 |  struct nbd_header_t {                   | True                      | 
+  70 |   uint64_t magic1; // "NBDMAGIC"         | True                      | 
+  71 |   uint64_t magic2; // old style: 0x42028 | True                      | 
+  72 |   //               // new style: 0x49484 | True                      | 
+  73 |  } nbd_header;                           | True                      | 
+  74 |  struct old_nbd_header_t {               | True                      | 
+  75 |   uint64_t devsize;                      | True                      | 
+  76 |   uint32_t flags;                        | True                      | 
+  77 |   char data[124];                        | True                      | 
+  78 |  } old_nbd_header;                       | True                      | 
+  79 |  struct new_nbd_header_t {               | True                      | 
+  80 |   uint64_t devsize;                      | True                      | 
+  81 |   uint16_t transmission_flags;           | True                      | 
+  82 |   char data[124];                        | True                      | 
+  83 |  } new_nbd_header;                       | True                      | 
+  84 |  struct nbd_opt_t {                      | True                      | 
+  85 |   uint64_t magic;                        | True                      | 
+  86 |   uint32_t opt;                          | True                      | 
+  87 |   uint32_t len;                          | True                      | 
+  88 |  } nbd_opts;                             | True                      | 
+  89 |                                          | True                      | 
+  90 |  static const struct option long_options | True                      | 
+  91 |   { "block-size", required_argument, NUL | True                      | 
+  92 |   { "timeout"   , required_argument, NUL | True                      | 
+  93 |   { "name"      , required_argument, NUL | True                      | 
+  94 |   { "persist"   , no_argument      , NUL | True                      | 
+  95 |   { NULL }                               | True                      | 
+  96 |  };                                      | True                      | 
+  97 |                                          | True                      | 
+  98 |  BUILD_BUG_ON(offsetof(struct old_nbd_he | True                      | 
+  99 |  BUILD_BUG_ON(offsetof(struct new_nbd_he | True                      | 
+ 100 |                                          | True                      | 
+ 101 | #if !BB_MMU                              | True                      | 
+ 102 |  bb_daemonize_or_rexec(DAEMON_CLOSE_EXTR | !BB_MMU                   | 
+ 103 | #endif                                   | True                      | 
+ 104 |                                          | True                      | 
+ 105 |  // Parse args. nbd-client uses stupid " | True                      | 
+ 106 |  // Even though short forms (-b,-t,-N,-p | True                      | 
+ 107 |  // older manpages only contained long f | True                      | 
+ 108 |  // in many scripts using them.          | True                      | 
+ 109 |  blksize = 4096;                         | True                      | 
+ 110 |  timeout = 0;                            | True                      | 
+ 111 |  name = ""; // use of "" instead of NULL | True                      | 
+ 112 |  opt_d = opt_p = 0;                      | True                      | 
+ 113 |  while ((ch = getopt_long_only(argc, arg | True                      | 
+ 114 |   switch (ch) {                          | True                      | 
+ 115 |   case 'p': // -persist                  | True                      | 
+ 116 |    opt_p = 1;                            | True                      | 
+ 117 |    break;                                | True                      | 
+ 118 |   case 'd': // -d                        | True                      | 
+ 119 |    opt_d = 1;                            | True                      | 
+ 120 |    break;                                | True                      | 
+ 121 |   case 'b': // -block-size               | True                      | 
+ 122 |    blksize = xatou(optarg);              | True                      | 
+ 123 |    break;                                | True                      | 
+ 124 |   case 't': // -timeout                  | True                      | 
+ 125 |    timeout = xatou(optarg);              | True                      | 
+ 126 |    break;                                | True                      | 
+ 127 |   case 'N': // -N                        | True                      | 
+ 128 |   case 'n': // -name                     | True                      | 
+ 129 |    name = optarg;                        | True                      | 
+ 130 |    break;                                | True                      | 
+ 131 |   default:                               | True                      | 
+ 132 |    bb_show_usage();                      | True                      | 
+ 133 |   }                                      | True                      | 
+ 134 |  }                                       | True                      | 
+ 135 |  argv += optind;                         | True                      | 
+ 136 |                                          | True                      | 
+ 137 |  if (opt_d) { // -d                      | True                      | 
+ 138 |   if (argv[0] && !argv[1]) {             | True                      | 
+ 139 |    int nbd = xopen(argv[0], O_RDWR);     | True                      | 
+ 140 |    ioctl(nbd, NBD_DISCONNECT);           | True                      | 
+ 141 |    ioctl(nbd, NBD_CLEAR_SOCK);           | True                      | 
+ 142 |    if (ENABLE_FEATURE_CLEAN_UP)          | True                      | 
+ 143 |     close(nbd);                          | True                      | 
+ 144 |    return 0;                             | True                      | 
+ 145 |   }                                      | True                      | 
+ 146 |   bb_show_usage();                       | True                      | 
+ 147 |  }                                       | True                      | 
+ 148 |                                          | True                      | 
+ 149 |  // Allow only argv[] of: HOST [PORT] BL | True                      | 
+ 150 |  if (!argv[0] || !argv[1] || (argv[2] && | True                      | 
+ 151 |   bb_show_usage();                       | True                      | 
+ 152 |  }                                       | True                      | 
+ 153 |                                          | True                      | 
+ 154 |  host = argv[0];                         | True                      | 
+ 155 |  port = argv[2] ? argv[1] : "10809";     | True                      | 
+ 156 |  device = argv[2] ? argv[2] : argv[1];   | True                      | 
+ 157 |                                          | True                      | 
+ 158 |  // Repeat until spanked if -persist     | True                      | 
+ 159 | #if BB_MMU                               | True                      | 
+ 160 |  nofork = 0;                             | BB_MMU                    | 
+ 161 | #endif                                   | True                      | 
+ 162 |  do {                                    | True                      | 
+ 163 |   int sock, nbd;                         | True                      | 
+ 164 |   int ro;                                | True                      | 
+ 165 |   int proto_new; // 0 for old, 1 for new | True                      | 
+ 166 | #if BB_MMU                               | True                      | 
+ 167 |   char *data;                            | BB_MMU                    | 
+ 168 | #endif                                   | True                      | 
+ 169 |                                          | True                      | 
+ 170 |   // Make sure BLOCKDEV exists           | True                      | 
+ 171 |   nbd = xopen(device, O_RDWR);           | True                      | 
+ 172 |                                          | True                      | 
+ 173 |   // Find and connect to server          | True                      | 
+ 174 |   sock = create_and_connect_stream_or_di | True                      | 
+ 175 |   setsockopt_1(sock, IPPROTO_TCP, TCP_NO | True                      | 
+ 176 |                                          | True                      | 
+ 177 |   // Log on to the server                | True                      | 
+ 178 |   xread(sock, &nbd_header, 8 + 8);       | True                      | 
+ 179 |   if (memcmp(&nbd_header.magic1, "NBDMAG | True                      | 
+ 180 |     sizeof(nbd_header.magic1)) != 0      | True                      | 
+ 181 |   ) {                                    | True                      | 
+ 182 |    bb_simple_error_msg_and_die("login fa | True                      | 
+ 183 |   }                                      | True                      | 
+ 184 |   if (memcmp(&nbd_header.magic2,         | True                      | 
+ 185 |     "\x00\x00\x42\x02\x81\x86\x12\x53",  | True                      | 
+ 186 |     sizeof(nbd_header.magic2)) == 0      | True                      | 
+ 187 |   ) {                                    | True                      | 
+ 188 |    proto_new = 0;                        | True                      | 
+ 189 |   } else if (memcmp(&nbd_header.magic2,  | True                      | 
+ 190 |    proto_new = 1;                        | True                      | 
+ 191 |   } else {                               | True                      | 
+ 192 |    bb_simple_error_msg_and_die("login fa | True                      | 
+ 193 |   }                                      | True                      | 
+ 194 |                                          | True                      | 
+ 195 |   if (!proto_new) {                      | True                      | 
+ 196 |    xread(sock, &old_nbd_header,          | True                      | 
+ 197 |      sizeof(old_nbd_header.devsize) +    | True                      | 
+ 198 |      sizeof(old_nbd_header.flags) +      | True                      | 
+ 199 |      sizeof(old_nbd_header.data));       | True                      | 
+ 200 |    size_blocks = SWAP_BE64(old_nbd_heade | True                      | 
+ 201 |    ioctl(nbd, NBD_SET_BLKSIZE, (unsigned | True                      | 
+ 202 |    ioctl(nbd, NBD_SET_SIZE_BLOCKS, size_ | True                      | 
+ 203 |    ioctl(nbd, NBD_CLEAR_SOCK);           | True                      | 
+ 204 |    ro = !!(old_nbd_header.flags & htons( | True                      | 
+ 205 | #if BB_MMU                               | True                      | 
+ 206 |    data = old_nbd_header.data;           | BB_MMU                    | 
+ 207 | #endif                                   | True                      | 
+ 208 |   } else {                               | True                      | 
+ 209 |    unsigned namelen;                     | True                      | 
+ 210 |    uint16_t handshake_flags;             | True                      | 
+ 211 |                                          | True                      | 
+ 212 |    xread(sock, &handshake_flags, sizeof( | True                      | 
+ 213 |    xwrite(sock, &const_int_0, sizeof(con | True                      | 
+ 214 |                                          | True                      | 
+ 215 |    memcpy(&nbd_opts.magic, "IHAVEOPT",   | True                      | 
+ 216 |      sizeof(nbd_opts.magic));            | True                      | 
+ 217 |    nbd_opts.opt = htonl(1); // NBD_OPT_E | True                      | 
+ 218 |    namelen = strlen(name);               | True                      | 
+ 219 |    nbd_opts.len = htonl(namelen);        | True                      | 
+ 220 |    xwrite(sock, &nbd_opts,               | True                      | 
+ 221 |      sizeof(nbd_opts.magic) +            | True                      | 
+ 222 |      sizeof(nbd_opts.opt) +              | True                      | 
+ 223 |      sizeof(nbd_opts.len));              | True                      | 
+ 224 |    xwrite(sock, name, namelen);          | True                      | 
+ 225 |                                          | True                      | 
+ 226 |    xread(sock, &new_nbd_header,          | True                      | 
+ 227 |      sizeof(new_nbd_header.devsize) +    | True                      | 
+ 228 |      sizeof(new_nbd_header.transmission_ | True                      | 
+ 229 |      sizeof(new_nbd_header.data));       | True                      | 
+ 230 |    size_blocks = SWAP_BE64(new_nbd_heade | True                      | 
+ 231 |    ioctl(nbd, NBD_SET_BLKSIZE, (unsigned | True                      | 
+ 232 |    ioctl(nbd, NBD_SET_SIZE_BLOCKS, size_ | True                      | 
+ 233 |    ioctl(nbd, NBD_CLEAR_SOCK);           | True                      | 
+ 234 |    ioctl(nbd, NBD_SET_FLAGS,             | True                      | 
+ 235 |      ntohs(new_nbd_header.transmission_f | True                      | 
+ 236 |    ro = !!(new_nbd_header.transmission_f | True                      | 
+ 237 | #if BB_MMU                               | True                      | 
+ 238 |    data = new_nbd_header.data;           | BB_MMU                    | 
+ 239 | #endif                                   | True                      | 
+ 240 |   }                                      | True                      | 
+ 241 |                                          | True                      | 
+ 242 |   if (ioctl(nbd, BLKROSET, &ro) < 0) {   | True                      | 
+ 243 |    bb_simple_perror_msg_and_die("BLKROSE | True                      | 
+ 244 |   }                                      | True                      | 
+ 245 |                                          | True                      | 
+ 246 |   if (timeout) {                         | True                      | 
+ 247 |    if (ioctl(nbd, NBD_SET_TIMEOUT, (unsi | True                      | 
+ 248 |     bb_simple_perror_msg_and_die("NBD_SE | True                      | 
+ 249 |    }                                     | True                      | 
+ 250 |   }                                      | True                      | 
+ 251 |                                          | True                      | 
+ 252 |   if (ioctl(nbd, NBD_SET_SOCK, sock)) {  | True                      | 
+ 253 |    bb_simple_perror_msg_and_die("NBD_SET | True                      | 
+ 254 |   }                                      | True                      | 
+ 255 |                                          | True                      | 
+ 256 |   //if (swap) mlockall(MCL_CURRENT|MCL_F | True                      | 
+ 257 | #if BB_MMU                               | True                      | 
+ 258 |   // Open the device to force reread of  | BB_MMU                    | 
+ 259 |   // Need to do it in a separate process | BB_MMU                    | 
+ 260 |   // needs some other process to sit in  | BB_MMU                    | 
+ 261 |   if (fork() == 0) {                     | BB_MMU                    | 
+ 262 |    /* child */                           | BB_MMU                    | 
+ 263 |    const char *s = strrchr(device, '/'); | BB_MMU                    | 
+ 264 |    sprintf(data, "/sys/block/%.32s/pid", | BB_MMU                    | 
+ 265 |    // Is it up yet?                      | BB_MMU                    | 
+ 266 |    for (;;) {                            | BB_MMU                    | 
+ 267 |     int fd = open(data, O_RDONLY);       | BB_MMU                    | 
+ 268 |     if (fd >= 0) {                       | BB_MMU                    | 
+ 269 |      if (ENABLE_FEATURE_CLEAN_UP)        | BB_MMU                    | 
+ 270 |       close(fd);                         | BB_MMU                    | 
+ 271 |      break;                              | BB_MMU                    | 
+ 272 |     }                                    | BB_MMU                    | 
+ 273 |     sleep1();                            | BB_MMU                    | 
+ 274 |    }                                     | BB_MMU                    | 
+ 275 |    open(device, O_RDONLY);               | BB_MMU                    | 
+ 276 |    return 0;                             | BB_MMU                    | 
+ 277 |   }                                      | BB_MMU                    | 
+ 278 |                                          | BB_MMU                    | 
+ 279 |   // Daemonize here                      | BB_MMU                    | 
+ 280 |   if (!nofork) {                         | BB_MMU                    | 
+ 281 |    daemon(0, 0);                         | BB_MMU                    | 
+ 282 |    nofork = 1;                           | BB_MMU                    | 
+ 283 |   }                                      | BB_MMU                    | 
+ 284 | #endif                                   | True                      | 
+ 285 |   // This turns us (the process that cal | True                      | 
+ 286 |   // into a dedicated NBD request handle | True                      | 
+ 287 |   // We block here for a long time.      | True                      | 
+ 288 |   // When exactly ioctl returns? On a si | True                      | 
+ 289 |   // or if someone does ioctl(NBD_DISCON | True                      | 
+ 290 |   if (ioctl(nbd, NBD_DO_IT) >= 0 || errn | True                      | 
+ 291 |    // Flush queue and exit               | True                      | 
+ 292 |    ioctl(nbd, NBD_CLEAR_QUEUE);          | True                      | 
+ 293 |    ioctl(nbd, NBD_CLEAR_SOCK);           | True                      | 
+ 294 |    break;                                | True                      | 
+ 295 |   }                                      | True                      | 
+ 296 |                                          | True                      | 
+ 297 |   close(sock);                           | True                      | 
+ 298 |   close(nbd);                            | True                      | 
+ 299 |  } while (opt_p);                        | True                      | 
+ 300 |                                          | True                      | 
+ 301 |  return 0;                               | True                      | 
+ 302 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +114MB, 266ms             | 

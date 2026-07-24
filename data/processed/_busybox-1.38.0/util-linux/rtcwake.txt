@@ -1,0 +1,239 @@
+FILE: data/raw/busybox-1.38.0/util-linux/rtcwake.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /*                                       | True                      | 
+   2 |  * rtcwake -- enter a system sleep state | True                      | 
+   3 |  *                                       | True                      | 
+   4 |  * This version was taken from util-linu | True                      | 
+   5 |  *                                       | True                      | 
+   6 |  * Licensed under GPLv2, see file LICENS | True                      | 
+   7 |  *                                       | True                      | 
+   8 |  * This uses cross-platform Linux interf | True                      | 
+   9 |  * and leave it no later than a specifie | True                      | 
+  10 |  * driver that supports standard driver  | True                      | 
+  11 |  *                                       | True                      | 
+  12 |  * This is normally used like the old "a | True                      | 
+  13 |  * suspend state like ACPI S1 (standby)  | True                      | 
+  14 |  * platforms can implement those without | True                      | 
+  15 |  *                                       | True                      | 
+  16 |  * On some systems, this can also be use | True                      | 
+  17 |  * from states like ACPI S4 (suspend to  | True                      | 
+  18 |  * persistent media that are appropriate | True                      | 
+  19 |  *                                       | True                      | 
+  20 |  * The best way to set the system's RTC  | True                      | 
+  21 |  * time in UTC.  Use the "-l" flag to te | True                      | 
+  22 |  * RTC uses a local timezone instead (ma | True                      | 
+  23 |  * That flag should not be needed on sys | True                      | 
+  24 |  */                                      | True                      | 
+  25 | //config:config RTCWAKE                  | True                      | 
+  26 | //config: bool "rtcwake (7.5 kb)"        | True                      | 
+  27 | //config: default y                      | True                      | 
+  28 | //config: help                           | True                      | 
+  29 | //config: Enter a system sleep state unt | True                      | 
+  30 |                                          | True                      | 
+  31 | //applet:IF_RTCWAKE(APPLET(rtcwake, BB_D | True                      | 
+  32 |                                          | True                      | 
+  33 | //kbuild:lib-$(CONFIG_RTCWAKE) += rtcwak | True                      | 
+  34 |                                          | True                      | 
+  35 | //usage:#define rtcwake_trivial_usage    | True                      | 
+  36 | //usage:       "[-a | -l | -u] [-d DEV]  | True                      | 
+  37 | //usage:#define rtcwake_full_usage "\n\n | True                      | 
+  38 | //usage:       "Enter a system sleep sta | True                      | 
+  39 | //usage:     "\n -a Read clock mode from | True                      | 
+  40 | //usage:     "\n -l Clock is set to loca | True                      | 
+  41 | //usage:     "\n -u Clock is set to UTC  | True                      | 
+  42 | //usage:     "\n -d DEV Specify the RTC  | True                      | 
+  43 | //usage:     "\n -m MODE Set sleep state | True                      | 
+  44 | //usage:     "\n -s SEC Set timeout in S | True                      | 
+  45 | //usage:     "\n -t TIME Set timeout to  | True                      | 
+  46 |                                          | True                      | 
+  47 | #include "libbb.h"                       | True                      | 
+  48 | #include "rtc_.h"                        | True                      | 
+  49 |                                          | True                      | 
+  50 | #define SYS_RTC_PATH   "/sys/class/rtc/% | True                      | 
+  51 | #define SYS_POWER_PATH "/sys/power/state | True                      | 
+  52 |                                          | True                      | 
+  53 | static NOINLINE bool may_wakeup(const ch | True                      | 
+  54 | {                                        | True                      | 
+  55 |  ssize_t ret;                            | True                      | 
+  56 |  char buf[128];                          | True                      | 
+  57 |                                          | True                      | 
+  58 |  /* strip "/dev/" from the rtcname here  | True                      | 
+  59 |  rtcname = skip_dev_pfx(rtcname);        | True                      | 
+  60 |                                          | True                      | 
+  61 |  snprintf(buf, sizeof(buf), SYS_RTC_PATH | True                      | 
+  62 |  ret = open_read_close(buf, buf, sizeof( | True                      | 
+  63 |  if (ret < 0)                            | True                      | 
+  64 |   return false;                          | True                      | 
+  65 |                                          | True                      | 
+  66 |  /* wakeup events could be disabled or n | True                      | 
+  67 |  return is_prefixed_with(buf, "enabled\n | True                      | 
+  68 | }                                        | True                      | 
+  69 |                                          | True                      | 
+  70 | static NOINLINE void setup_alarm(int fd, | True                      | 
+  71 | {                                        | True                      | 
+  72 |  struct tm *ptm;                         | True                      | 
+  73 |  struct linux_rtc_wkalrm wake;           | True                      | 
+  74 |                                          | True                      | 
+  75 |  /* The wakeup time is in POSIX time (mo | True                      | 
+  76 |   * Ideally RTCs use that same time; but | True                      | 
+  77 |   * if they need to boot MS-Windows.  Me | True                      | 
+  78 |   *                                      | True                      | 
+  79 |   * When running in utc mode this proces | True                      | 
+  80 |   * so we'll pass a UTC date to the RTC. | True                      | 
+  81 |   *                                      | True                      | 
+  82 |   * Else mode is local so the time given | True                      | 
+  83 |   * will instead use the local time zone | True                      | 
+  84 |   */                                     | True                      | 
+  85 |  ptm = localtime(wakeup);                | True                      | 
+  86 |                                          | True                      | 
+  87 |  wake.time.tm_sec = ptm->tm_sec;         | True                      | 
+  88 |  wake.time.tm_min = ptm->tm_min;         | True                      | 
+  89 |  wake.time.tm_hour = ptm->tm_hour;       | True                      | 
+  90 |  wake.time.tm_mday = ptm->tm_mday;       | True                      | 
+  91 |  wake.time.tm_mon = ptm->tm_mon;         | True                      | 
+  92 |  wake.time.tm_year = ptm->tm_year;       | True                      | 
+  93 |  /* wday, yday, and isdst fields are unu | True                      | 
+  94 |  wake.time.tm_wday = -1;                 | True                      | 
+  95 |  wake.time.tm_yday = -1;                 | True                      | 
+  96 |  wake.time.tm_isdst = -1;                | True                      | 
+  97 |                                          | True                      | 
+  98 |  /* many rtc alarms only support up to 2 | True                      | 
+  99 |   * so use the "more than 24 hours" requ | True                      | 
+ 100 |   */                                     | True                      | 
+ 101 |  if ((rtc_time + (24 * 60 * 60)) > *wake | True                      | 
+ 102 |   xioctl(fd, RTC_ALM_SET, &wake.time);   | True                      | 
+ 103 |   xioctl(fd, RTC_AIE_ON, 0);             | True                      | 
+ 104 |  } else {                                | True                      | 
+ 105 |   /* avoid an extra AIE_ON call */       | True                      | 
+ 106 |   wake.enabled = 1;                      | True                      | 
+ 107 |   xioctl(fd, RTC_WKALM_SET, &wake);      | True                      | 
+ 108 |  }                                       | True                      | 
+ 109 | }                                        | True                      | 
+ 110 |                                          | True                      | 
+ 111 | #define RTCWAKE_OPT_AUTO         0x01    | True                      | 
+ 112 | #define RTCWAKE_OPT_LOCAL        0x02    | True                      | 
+ 113 | #define RTCWAKE_OPT_UTC          0x04    | True                      | 
+ 114 | #define RTCWAKE_OPT_DEVICE       0x08    | True                      | 
+ 115 | #define RTCWAKE_OPT_SUSPEND_MODE 0x10    | True                      | 
+ 116 | #define RTCWAKE_OPT_SECONDS      0x20    | True                      | 
+ 117 | #define RTCWAKE_OPT_TIME         0x40    | True                      | 
+ 118 |                                          | True                      | 
+ 119 | int rtcwake_main(int argc, char **argv)  | True                      | 
+ 120 | int rtcwake_main(int argc UNUSED_PARAM,  | True                      | 
+ 121 | {                                        | True                      | 
+ 122 |  unsigned opt;                           | True                      | 
+ 123 |  const char *rtcname = NULL;             | True                      | 
+ 124 |  const char *suspend = "standby";        | True                      | 
+ 125 |  const char *opt_seconds;                | True                      | 
+ 126 |  const char *opt_time;                   | True                      | 
+ 127 |                                          | True                      | 
+ 128 |  time_t rtc_time;                        | True                      | 
+ 129 |  time_t sys_time;                        | True                      | 
+ 130 |  time_t alarm_time = alarm_time;         | True                      | 
+ 131 |  unsigned seconds = seconds; /* for comp | True                      | 
+ 132 |  int utc = -1;                           | True                      | 
+ 133 |  int fd;                                 | True                      | 
+ 134 |                                          | True                      | 
+ 135 | #if ENABLE_LONG_OPTS                     | True                      | 
+ 136 |  static const char rtcwake_longopts[] AL | ENABLE_LONG_OPTS          | 
+ 137 |   "auto\0"    No_argument "a"            | ENABLE_LONG_OPTS          | 
+ 138 |   "local\0"   No_argument "l"            | ENABLE_LONG_OPTS          | 
+ 139 |   "utc\0"     No_argument "u"            | ENABLE_LONG_OPTS          | 
+ 140 |   "device\0"  Required_argument "d"      | ENABLE_LONG_OPTS          | 
+ 141 |   "mode\0"    Required_argument "m"      | ENABLE_LONG_OPTS          | 
+ 142 |   "seconds\0" Required_argument "s"      | ENABLE_LONG_OPTS          | 
+ 143 |   "time\0"    Required_argument "t"      | ENABLE_LONG_OPTS          | 
+ 144 |   ;                                      | ENABLE_LONG_OPTS          | 
+ 145 | #endif                                   | True                      | 
+ 146 |  opt = getopt32long(argv,                | True                      | 
+ 147 |    /* Must have -s or -t, exclusive */   | True                      | 
+ 148 |    "^alud:m:s:t:" "\0" "s:t:s--t:t--s",  | True                      | 
+ 149 |    &rtcname, &suspend, &opt_seconds, &op | True                      | 
+ 150 |                                          | True                      | 
+ 151 |  /* this is the default                  | True                      | 
+ 152 |  if (opt & RTCWAKE_OPT_AUTO)             | True                      | 
+ 153 |   utc = -1;                              | True                      | 
+ 154 |  */                                      | True                      | 
+ 155 |  if (opt & (RTCWAKE_OPT_UTC | RTCWAKE_OP | True                      | 
+ 156 |   utc = opt & RTCWAKE_OPT_UTC;           | True                      | 
+ 157 |  if (opt & RTCWAKE_OPT_SECONDS) {        | True                      | 
+ 158 |   /* alarm time, seconds-to-sleep (relat | True                      | 
+ 159 |   seconds = xatou(opt_seconds);          | True                      | 
+ 160 |  } else {                                | True                      | 
+ 161 |   /* RTCWAKE_OPT_TIME */                 | True                      | 
+ 162 |   /* alarm time, time_t (absolute, secon | True                      | 
+ 163 |   if (sizeof(alarm_time) <= sizeof(long) | True                      | 
+ 164 |    alarm_time = xatol(opt_time);         | True                      | 
+ 165 |   else                                   | True                      | 
+ 166 |    alarm_time = xatoll(opt_time);        | True                      | 
+ 167 |  }                                       | True                      | 
+ 168 |                                          | True                      | 
+ 169 |  if (utc == -1)                          | True                      | 
+ 170 |   utc = rtc_adjtime_is_utc();            | True                      | 
+ 171 |                                          | True                      | 
+ 172 |  /* the rtcname is relative to /dev */   | True                      | 
+ 173 |  xchdir("/dev");                         | True                      | 
+ 174 |                                          | True                      | 
+ 175 |  /* this RTC must exist and (if we'll sl | True                      | 
+ 176 |  fd = rtc_xopen(&rtcname, O_RDONLY);     | True                      | 
+ 177 |                                          | True                      | 
+ 178 |  if (strcmp(suspend, "on") != 0)         | True                      | 
+ 179 |   if (!may_wakeup(rtcname))              | True                      | 
+ 180 |    bb_error_msg_and_die("%s not enabled  | True                      | 
+ 181 |                                          | True                      | 
+ 182 |  /* relative or absolute alarm time, nor | True                      | 
+ 183 |  sys_time = time(NULL);                  | True                      | 
+ 184 |  {                                       | True                      | 
+ 185 |   struct tm tm_time;                     | True                      | 
+ 186 |   rtc_read_tm(&tm_time, fd);             | True                      | 
+ 187 |   rtc_time = rtc_tm2time(&tm_time, utc); | True                      | 
+ 188 |  }                                       | True                      | 
+ 189 |                                          | True                      | 
+ 190 |  if (opt & RTCWAKE_OPT_TIME) {           | True                      | 
+ 191 |   /* Correct for RTC<->system clock diff | True                      | 
+ 192 |   alarm_time += rtc_time - sys_time;     | True                      | 
+ 193 |   if (alarm_time < rtc_time)             | True                      | 
+ 194 |    /*                                    | True                      | 
+ 195 |     * Compat message text.               | True                      | 
+ 196 |     * I'd say "RTC time is already ahead | True                      | 
+ 197 |     */                                   | True                      | 
+ 198 |    bb_error_msg_and_die("time doesn't go | True                      | 
+ 199 |  } else                                  | True                      | 
+ 200 |   alarm_time = rtc_time + seconds + 1;   | True                      | 
+ 201 |                                          | True                      | 
+ 202 |  setup_alarm(fd, &alarm_time, rtc_time); | True                      | 
+ 203 |  sync();                                 | True                      | 
+ 204 | #if 0 /*debug*/                          | True                      | 
+ 205 |  printf("sys_time: %s", ctime(&sys_time) | 0                         | 
+ 206 |  printf("rtc_time: %s", ctime(&rtc_time) | 0                         | 
+ 207 | #endif                                   | True                      | 
+ 208 |  printf("wakeup from \"%s\" at %s", susp | True                      | 
+ 209 |  fflush_all();                           | True                      | 
+ 210 |  usleep(10 * 1000);                      | True                      | 
+ 211 |                                          | True                      | 
+ 212 |  if (strcmp(suspend, "on") != 0)         | True                      | 
+ 213 |   xopen_xwrite_close(SYS_POWER_PATH, sus | True                      | 
+ 214 |  else {                                  | True                      | 
+ 215 |   /* "fake" suspend ... we'll do the del | True                      | 
+ 216 |   unsigned long data;                    | True                      | 
+ 217 |                                          | True                      | 
+ 218 |   do {                                   | True                      | 
+ 219 |    ssize_t ret = safe_read(fd, &data, si | True                      | 
+ 220 |    if (ret < 0) {                        | True                      | 
+ 221 |     bb_simple_perror_msg("rtc read");    | True                      | 
+ 222 |     break;                               | True                      | 
+ 223 |    }                                     | True                      | 
+ 224 |   } while (!(data & RTC_AF));            | True                      | 
+ 225 |  }                                       | True                      | 
+ 226 |                                          | True                      | 
+ 227 |  xioctl(fd, RTC_AIE_OFF, 0);             | True                      | 
+ 228 |                                          | True                      | 
+ 229 |  if (ENABLE_FEATURE_CLEAN_UP)            | True                      | 
+ 230 |   close(fd);                             | True                      | 
+ 231 |                                          | True                      | 
+ 232 |  return EXIT_SUCCESS;                    | True                      | 
+ 233 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +114MB, 254ms             | 

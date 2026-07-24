@@ -1,0 +1,192 @@
+FILE: data/raw/busybox-1.38.0/util-linux/losetup.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Mini losetup implementation for busyb | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Copyright (C) 2002  Matt Kraai.       | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config LOSETUP                  | True                      | 
+  10 | //config: bool "losetup (6.2 kb)"        | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: losetup is used to associate o | True                      | 
+  14 | //config: file or block device, and to q | True                      | 
+  15 | //config: version does not currently sup | True                      | 
+  16 |                                          | True                      | 
+  17 | //applet:IF_LOSETUP(APPLET_NOEXEC(losetu | True                      | 
+  18 |                                          | True                      | 
+  19 | //kbuild:lib-$(CONFIG_LOSETUP) += losetu | True                      | 
+  20 |                                          | True                      | 
+  21 | //usage:#define losetup_trivial_usage    | True                      | 
+  22 | //usage:       "[-rP] [-o OFS] {-f|LOOPD | True                      | 
+  23 | //usage:       " losetup -c LOOPDEV: rer | True                      | 
+  24 | //usage:       " losetup -d LOOPDEV: dis | True                      | 
+  25 | //usage:       " losetup -a: show status | True                      | 
+  26 | //usage:       " losetup -f: show next f | True                      | 
+  27 | //usage:#define losetup_full_usage "\n\n | True                      | 
+  28 | //usage:       " -o OFS Start OFS bytes  | True                      | 
+  29 | //usage:     "\n -P Scan for partitions" | True                      | 
+  30 | //usage:     "\n -r Read-only"           | True                      | 
+  31 | //usage:     "\n -f Show/use next free l | True                      | 
+  32 | //usage:                                 | True                      | 
+  33 | //usage:#define losetup_notes_usage      | True                      | 
+  34 | //usage:       "One argument (losetup /d | True                      | 
+  35 | //usage:       "(if any), or disassociat | True                      | 
+  36 | //usage:       "and filename of the file | True                      | 
+  37 | //usage:       "Two arguments (losetup / | True                      | 
+  38 | //usage:       "with optional partition  | True                      | 
+  39 | //usage:       "etc. with -P) and with a | True                      | 
+  40 | //usage:       "not yet supported. loset | True                      | 
+  41 |                                          | True                      | 
+  42 | #include "libbb.h"                       | True                      | 
+  43 |                                          | True                      | 
+  44 | /* 1048575 is a max possible minor numbe | True                      | 
+  45 | /* for now use something less extreme */ | True                      | 
+  46 | #define MAX_LOOP_NUM 1023                | True                      | 
+  47 |                                          | True                      | 
+  48 | int losetup_main(int argc, char **argv)  | True                      | 
+  49 | int losetup_main(int argc UNUSED_PARAM,  | True                      | 
+  50 | {                                        | True                      | 
+  51 |  unsigned opt;                           | True                      | 
+  52 |  char *opt_o;                            | True                      | 
+  53 |  char dev[LOOP_NAMESIZE];                | True                      | 
+  54 |  enum {                                  | True                      | 
+  55 |   OPT_c = (1 << 0),                      | True                      | 
+  56 |   OPT_d = (1 << 1),                      | True                      | 
+  57 |   OPT_P = (1 << 2),                      | True                      | 
+  58 |   OPT_o = (1 << 3),                      | True                      | 
+  59 |   OPT_f = (1 << 4),                      | True                      | 
+  60 |   OPT_a = (1 << 5),                      | True                      | 
+  61 |   OPT_r = (1 << 6),                      | True                      | 
+  62 |  };                                      | True                      | 
+  63 |                                          | True                      | 
+  64 |  opt = getopt32(argv, "^" "cdPo:far" "\0 | True                      | 
+  65 |  argv += optind;                         | True                      | 
+  66 |                                          | True                      | 
+  67 |  /* LOOPDEV */                           | True                      | 
+  68 |  if (!opt && argv[0] && !argv[1]) {      | True                      | 
+  69 |   char *s;                               | True                      | 
+  70 |                                          | True                      | 
+  71 |   s = query_loop(argv[0]);               | True                      | 
+  72 |   if (!s)                                | True                      | 
+  73 |    bb_simple_perror_msg_and_die(argv[0]) | True                      | 
+  74 |   printf("%s: %s\n", argv[0], s);        | True                      | 
+  75 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                      | 
+  76 |    free(s);                              | True                      | 
+  77 |   return EXIT_SUCCESS;                   | True                      | 
+  78 |  }                                       | True                      | 
+  79 |                                          | True                      | 
+  80 |  /* -c LOOPDEV */                        | True                      | 
+  81 |  if (opt == OPT_c && argv[0]) {          | True                      | 
+  82 |   int fd = xopen(argv[0], O_RDONLY);     | True                      | 
+  83 | #ifndef LOOP_SET_CAPACITY                | True                      | 
+  84 | # define LOOP_SET_CAPACITY 0x4C07        | !(LOOP_SET_CAPACITY)      | 
+  85 | #endif                                   | True                      | 
+  86 |   xioctl(fd, LOOP_SET_CAPACITY, /*ignore | True                      | 
+  87 |   return EXIT_SUCCESS;                   | True                      | 
+  88 |  }                                       | True                      | 
+  89 |                                          | True                      | 
+  90 |  /* -d LOOPDEV */                        | True                      | 
+  91 |  if (opt == OPT_d && argv[0]) {          | True                      | 
+  92 |   if (del_loop(argv[0]))                 | True                      | 
+  93 |    bb_simple_perror_msg_and_die(argv[0]) | True                      | 
+  94 |   return EXIT_SUCCESS;                   | True                      | 
+  95 |  }                                       | True                      | 
+  96 |                                          | True                      | 
+  97 |  /* -a */                                | True                      | 
+  98 |  if (opt == OPT_a) {                     | True                      | 
+  99 |   int n;                                 | True                      | 
+ 100 |   for (n = 0; n < MAX_LOOP_NUM; n++) {   | True                      | 
+ 101 |    char *s;                              | True                      | 
+ 102 |                                          | True                      | 
+ 103 |    sprintf(dev, LOOP_FORMAT, n);         | True                      | 
+ 104 |    s = query_loop(dev);                  | True                      | 
+ 105 |    if (s) {                              | True                      | 
+ 106 |     printf("%s: %s\n", dev, s);          | True                      | 
+ 107 |     free(s);                             | True                      | 
+ 108 |    }                                     | True                      | 
+ 109 |   }                                      | True                      | 
+ 110 |   return EXIT_SUCCESS;                   | True                      | 
+ 111 |  }                                       | True                      | 
+ 112 |                                          | True                      | 
+ 113 |  /* contains -f */                       | True                      | 
+ 114 |  if (opt & OPT_f) {                      | True                      | 
+ 115 |   char *s;                               | True                      | 
+ 116 |   int n;                                 | True                      | 
+ 117 |                                          | True                      | 
+ 118 |   n = get_free_loop();                   | True                      | 
+ 119 |   if (n == -1)                           | True                      | 
+ 120 |    bb_simple_error_msg_and_die("no free  | True                      | 
+ 121 |   if (n < 0) /* n == -2: no /dev/loop-co | True                      | 
+ 122 |    n = 0;                                | True                      | 
+ 123 |   /* or: n >= 0: the number of next free | True                      | 
+ 124 |   do {                                   | True                      | 
+ 125 |    if (n > MAX_LOOP_NUM)                 | True                      | 
+ 126 |     bb_simple_error_msg_and_die("no free | True                      | 
+ 127 |    sprintf(dev, LOOP_FORMAT, n++);       | True                      | 
+ 128 |    s = query_loop(dev);                  | True                      | 
+ 129 |    free(s);                              | True                      | 
+ 130 |   } while (s);                           | True                      | 
+ 131 |   /* now: dev is next free "/dev/loopN"  | True                      | 
+ 132 |   if ((opt == OPT_f) && !argv[0]) {      | True                      | 
+ 133 |    puts(dev);                            | True                      | 
+ 134 |    return EXIT_SUCCESS;                  | True                      | 
+ 135 |   }                                      | True                      | 
+ 136 |  }                                       | True                      | 
+ 137 |                                          | True                      | 
+ 138 |  /* [-rP] [-o OFS] {-f|LOOPDEV} FILE */  | True                      | 
+ 139 |  if (argv[0] && ((opt & OPT_f) || argv[1 | True                      | 
+ 140 |   unsigned long long offset = 0;         | True                      | 
+ 141 |   char *d = dev;                         | True                      | 
+ 142 |                                          | True                      | 
+ 143 |   if (opt & OPT_o)                       | True                      | 
+ 144 |    offset = xatoull(opt_o);              | True                      | 
+ 145 |   if (!(opt & OPT_f))                    | True                      | 
+ 146 |    d = *argv++;                          | True                      | 
+ 147 |                                          | True                      | 
+ 148 |   if (argv[0]) {                         | True                      | 
+ 149 |    unsigned flags = (opt & OPT_r) ? BB_L | True                      | 
+ 150 |    if (opt & OPT_P) {                    | True                      | 
+ 151 |     flags |= BB_LO_FLAGS_PARTSCAN;       | True                      | 
+ 152 |    }                                     | True                      | 
+ 153 |    if (set_loop(&d, argv[0], offset, 0,  | True                      | 
+ 154 |     bb_simple_perror_msg_and_die(argv[0] | True                      | 
+ 155 |    return EXIT_SUCCESS;                  | True                      | 
+ 156 |   }                                      | True                      | 
+ 157 |  }                                       | True                      | 
+ 158 |                                          | True                      | 
+ 159 |  /* TODO: util-linux 2.28 shows this whe | True                      | 
+ 160 |   * NAME       SIZELIMIT OFFSET AUTOCLEA | True                      | 
+ 161 |   * /dev/loop0         0      0          | True                      | 
+ 162 |   *                                      | True                      | 
+ 163 |   * implemented by reading /sys:         | True                      | 
+ 164 |   *                                      | True                      | 
+ 165 |   * open("/sys/block", O_RDONLY|O_NONBLO | True                      | 
+ 166 |   * newfstatat(3, "loop0/loop/backing_fi | True                      | 
+ 167 |   * stat("/dev/loop0", {st_mode=S_IFBLK| | True                      | 
+ 168 |   * open("/sys/dev/block/7:0/loop/offset | True                      | 
+ 169 |   * read(5, "0\n", 4096)                 | True                      | 
+ 170 |   * open("/sys/dev/block/7:0/loop/sizeli | True                      | 
+ 171 |   * read(5, "0\n", 4096)                 | True                      | 
+ 172 |   * open("/sys/dev/block/7:0/loop/offset | True                      | 
+ 173 |   * read(5, "0\n", 4096)                 | True                      | 
+ 174 |   * open("/sys/dev/block/7:0/loop/autocl | True                      | 
+ 175 |   * read(5, "1\n", 4096)                 | True                      | 
+ 176 |   * open("/sys/dev/block/7:0/ro", O_RDON | True                      | 
+ 177 |   * read(5, "0\n", 4096)                 | True                      | 
+ 178 |   * open("/sys/dev/block/7:0/loop/backin | True                      | 
+ 179 |   * read(5, "/PATH/TO/FILE", 4096) = 37  | True                      | 
+ 180 |   * open("/sys/dev/block/7:0/loop/dio",  | True                      | 
+ 181 |   * read(5, "0\n", 4096)                 | True                      | 
+ 182 |   */                                     | True                      | 
+ 183 |                                          | True                      | 
+ 184 |  bb_show_usage(); /* does not return */  | True                      | 
+ 185 |  /*return EXIT_FAILURE;*/                | True                      | 
+ 186 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +112MB, 235ms             | 

@@ -1,0 +1,634 @@
+FILE: data/raw/busybox-1.38.0/networking/tc.c
+Resultado PCLocator:
+   # | line of code                             | Merge                     | 
+-----+------------------------------------------+---------------------------+
+   1 | /* vi: set sw=4 ts=4: */                 | True                      | 
+   2 | /*                                       | True                      | 
+   3 |  * Licensed under GPLv2 or later, see fi | True                      | 
+   4 |  *                                       | True                      | 
+   5 |  * Authors: Alexey Kuznetsov, <kuznet@ms | True                      | 
+   6 |  *                                       | True                      | 
+   7 |  * Bernhard Reutner-Fischer adjusted for | True                      | 
+   8 |  */                                      | True                      | 
+   9 | //config:config TC                       | True                      | 
+  10 | //config: bool "tc (8.3 kb)"             | True                      | 
+  11 | //config: default y                      | True                      | 
+  12 | //config: help                           | True                      | 
+  13 | //config: Show / manipulate traffic cont | True                      | 
+  14 | //config:                                | True                      | 
+  15 | //config:config FEATURE_TC_INGRESS       | True                      | 
+  16 | //config: bool "Enable ingress"          | True                      | 
+  17 | //config: default y                      | True                      | 
+  18 | //config: depends on TC                  | True                      | 
+  19 |                                          | True                      | 
+  20 | //applet:IF_TC(APPLET(tc, BB_DIR_SBIN, B | True                      | 
+  21 |                                          | True                      | 
+  22 | //kbuild:lib-$(CONFIG_TC) += tc.o        | True                      | 
+  23 |                                          | True                      | 
+  24 | //usage:#define tc_trivial_usage         | True                      | 
+  25 | /* //usage: "[OPTIONS] OBJECT CMD [dev S | True                      | 
+  26 | //usage: "OBJECT CMD [dev STRING]"       | True                      | 
+  27 | //usage:#define tc_full_usage "\n\n"     | True                      | 
+  28 | //usage: "OBJECT: qdisc|class|filter\n"  | True                      | 
+  29 | //usage: "CMD: add|del|change|replace|sh | True                      | 
+  30 | //usage: "\n"                            | True                      | 
+  31 | //usage: "qdisc [handle QHANDLE] [root|" | True                      | 
+  32 | /* //usage: "[estimator INTERVAL TIME_CO | True                      | 
+  33 | //usage: " [[QDISC_KIND] [help|OPTIONS]] | True                      | 
+  34 | //usage: " QDISC_KIND := [p|b]fifo|tbf|p | True                      | 
+  35 | //usage: "qdisc show [dev STRING]"IF_FEA | True                      | 
+  36 | //usage: "class [classid CLASSID] [root| | True                      | 
+  37 | //usage: " [[QDISC_KIND] [help|OPTIONS]  | True                      | 
+  38 | //usage: "class show [ dev STRING ] [roo | True                      | 
+  39 | //usage: "filter [pref PRIO] [protocol P | True                      | 
+  40 | /* //usage: "\t[estimator INTERVAL TIME_ | True                      | 
+  41 | //usage: " [root|classid CLASSID] [handl | True                      | 
+  42 | //usage: " [[FILTER_TYPE] [help|OPTIONS] | True                      | 
+  43 | //usage: "filter show [dev STRING] [root | True                      | 
+  44 |                                          | True                      | 
+  45 | #include "libbb.h"                       | True                      | 
+  46 | #include "common_bufsiz.h"               | True                      | 
+  47 |                                          | True                      | 
+  48 | #include "libiproute/utils.h"            | True                      | 
+  49 | #include "libiproute/ip_common.h"        | True                      | 
+  50 | #include "libiproute/rt_names.h"         | True                      | 
+  51 | #include <linux/pkt_sched.h> /* for the  | True                      | 
+  52 |                                          | True                      | 
+  53 | /* This is the deprecated multiqueue int | True                      | 
+  54 | #ifndef TCA_PRIO_MAX                     | True                      | 
+  55 | enum                                     | !(TCA_PRIO_MAX)           | 
+  56 | {                                        | !(TCA_PRIO_MAX)           | 
+  57 |  TCA_PRIO_UNSPEC,                        | !(TCA_PRIO_MAX)           | 
+  58 |  TCA_PRIO_MQ,                            | !(TCA_PRIO_MAX)           | 
+  59 |  __TCA_PRIO_MAX                          | !(TCA_PRIO_MAX)           | 
+  60 | };                                       | !(TCA_PRIO_MAX)           | 
+  61 | #define TCA_PRIO_MAX    (__TCA_PRIO_MAX  | !(TCA_PRIO_MAX)           | 
+  62 | #endif                                   | True                      | 
+  63 |                                          | True                      | 
+  64 | #define parse_rtattr_nested(tb, max, rta | True                      | 
+  65 |  (parse_rtattr((tb), (max), RTA_DATA(rta | True                      | 
+  66 |                                          | True                      | 
+  67 | /* nullifies tb on error */              | True                      | 
+  68 | #define __parse_rtattr_nested_compat(tb, | True                      | 
+  69 | ({ \                                     | True                      | 
+  70 |  if ((RTA_PAYLOAD(rta) >= len) \         | True                      | 
+  71 |   && (RTA_PAYLOAD(rta) >= RTA_ALIGN(len) | True                      | 
+  72 |  ) { \                                   | True                      | 
+  73 |   rta = RTA_DATA(rta) + RTA_ALIGN(len);  | True                      | 
+  74 |   parse_rtattr_nested(tb, max, rta); \   | True                      | 
+  75 |  } else \                                | True                      | 
+  76 |   memset(tb, 0, sizeof(struct rtattr *)  | True                      | 
+  77 | })                                       | True                      | 
+  78 |                                          | True                      | 
+  79 | #define parse_rtattr_nested_compat(tb, m | True                      | 
+  80 | ({ \                                     | True                      | 
+  81 |  data = RTA_PAYLOAD(rta) >= len ? RTA_DA | True                      | 
+  82 |  __parse_rtattr_nested_compat(tb, max, r | True                      | 
+  83 | })                                       | True                      | 
+  84 |                                          | True                      | 
+  85 | #define show_details (0) /* not implemen | True                      | 
+  86 | #define use_iec (0) /* not currently doc | True                      | 
+  87 |                                          | True                      | 
+  88 |                                          | True                      | 
+  89 | struct globals {                         | True                      | 
+  90 |  int filter_ifindex;                     | True                      | 
+  91 |  uint32_t filter_qdisc;                  | True                      | 
+  92 |  uint32_t filter_parent;                 | True                      | 
+  93 |  uint32_t filter_prio;                   | True                      | 
+  94 |  uint32_t filter_proto;                  | True                      | 
+  95 | } FIX_ALIASING;                          | True                      | 
+  96 | #define G (*(struct globals*)bb_common_b | True                      | 
+  97 | #define filter_ifindex (G.filter_ifindex | True                      | 
+  98 | #define filter_qdisc (G.filter_qdisc)    | True                      | 
+  99 | #define filter_parent (G.filter_parent)  | True                      | 
+ 100 | #define filter_prio (G.filter_prio)      | True                      | 
+ 101 | #define filter_proto (G.filter_proto)    | True                      | 
+ 102 | #define INIT_G() do { \                  | True                      | 
+ 103 |  setup_common_bufsiz(); \                | True                      | 
+ 104 |  BUILD_BUG_ON(sizeof(G) > COMMON_BUFSIZE | True                      | 
+ 105 | } while (0)                              | True                      | 
+ 106 |                                          | True                      | 
+ 107 | /* Allocates a buffer containing the nam | True                      | 
+ 108 |  * The caller must free the returned mem | True                      | 
+ 109 | static char* print_tc_classid(uint32_t c | True                      | 
+ 110 | {                                        | True                      | 
+ 111 | #if 0 /* IMPOSSIBLE */                   | True                      | 
+ 112 |  if (cid == TC_H_ROOT)                   | 0                         | 
+ 113 |   return xasprintf("root");              | 0                         | 
+ 114 | #endif                                   | True                      | 
+ 115 |  if (cid == TC_H_UNSPEC)                 | True                      | 
+ 116 |   return xasprintf("none");              | True                      | 
+ 117 |  if (TC_H_MAJ(cid) == 0)                 | True                      | 
+ 118 |   return xasprintf(":%x", TC_H_MIN(cid)) | True                      | 
+ 119 |  if (TC_H_MIN(cid) == 0)                 | True                      | 
+ 120 |   return xasprintf("%x:", TC_H_MAJ(cid)> | True                      | 
+ 121 |  return xasprintf("%x:%x", TC_H_MAJ(cid) | True                      | 
+ 122 | }                                        | True                      | 
+ 123 |                                          | True                      | 
+ 124 | /* Get a qdisc handle.  Return 0 on succ | True                      | 
+ 125 | static int get_qdisc_handle(uint32_t *h, | True                      | 
+ 126 | {                                        | True                      | 
+ 127 |  uint32_t maj;                           | True                      | 
+ 128 |  char *p;                                | True                      | 
+ 129 |                                          | True                      | 
+ 130 |  maj = TC_H_UNSPEC;                      | True                      | 
+ 131 |  if (strcmp(str, "none") == 0)           | True                      | 
+ 132 |   goto ok;                               | True                      | 
+ 133 |  maj = strtoul(str, &p, 16);             | True                      | 
+ 134 |  if (p == str)                           | True                      | 
+ 135 |   return 1;                              | True                      | 
+ 136 |  maj <<= 16;                             | True                      | 
+ 137 |  if (*p != ':' && *p != '\0')            | True                      | 
+ 138 |   return 1;                              | True                      | 
+ 139 |  ok:                                     | True                      | 
+ 140 |  *h = maj;                               | True                      | 
+ 141 |  return 0;                               | True                      | 
+ 142 | }                                        | True                      | 
+ 143 |                                          | True                      | 
+ 144 | /* Get class ID.  Return 0 on success, ! | True                      | 
+ 145 | static int get_tc_classid(uint32_t *h, c | True                      | 
+ 146 | {                                        | True                      | 
+ 147 |  uint32_t maj, min;                      | True                      | 
+ 148 |  char *p;                                | True                      | 
+ 149 |                                          | True                      | 
+ 150 |  maj = TC_H_ROOT;                        | True                      | 
+ 151 |  if (strcmp(str, "root") == 0)           | True                      | 
+ 152 |   goto ok;                               | True                      | 
+ 153 |  maj = TC_H_UNSPEC;                      | True                      | 
+ 154 |  if (strcmp(str, "none") == 0)           | True                      | 
+ 155 |   goto ok;                               | True                      | 
+ 156 |  maj = strtoul(str, &p, 16);             | True                      | 
+ 157 |  if (p == str) {                         | True                      | 
+ 158 |   if (*p != ':')                         | True                      | 
+ 159 |    return 1;                             | True                      | 
+ 160 |   maj = 0;                               | True                      | 
+ 161 |  }                                       | True                      | 
+ 162 |  if (*p == ':') {                        | True                      | 
+ 163 |   if (maj >= (1<<16))                    | True                      | 
+ 164 |    return 1;                             | True                      | 
+ 165 |   maj <<= 16;                            | True                      | 
+ 166 |   str = p + 1;                           | True                      | 
+ 167 |   min = strtoul(str, &p, 16);            | True                      | 
+ 168 | //FIXME: check for "" too?               | True                      | 
+ 169 |   if (*p != '\0' || min >= (1<<16))      | True                      | 
+ 170 |    return 1;                             | True                      | 
+ 171 |   maj |= min;                            | True                      | 
+ 172 |  } else if (*p != 0)                     | True                      | 
+ 173 |   return 1;                              | True                      | 
+ 174 |  ok:                                     | True                      | 
+ 175 |  *h = maj;                               | True                      | 
+ 176 |  return 0;                               | True                      | 
+ 177 | }                                        | True                      | 
+ 178 |                                          | True                      | 
+ 179 | static void print_rate(char *buf, int le | True                      | 
+ 180 | {                                        | True                      | 
+ 181 |  double tmp = (double)rate*8;            | True                      | 
+ 182 |                                          | True                      | 
+ 183 |  if (use_iec) {                          | True                      | 
+ 184 |   if (tmp >= 1000*1024*1024)             | True                      | 
+ 185 |    snprintf(buf, len, "%.0fMibit", tmp/( | True                      | 
+ 186 |   else if (tmp >= 1000*1024)             | True                      | 
+ 187 |    snprintf(buf, len, "%.0fKibit", tmp/1 | True                      | 
+ 188 |   else                                   | True                      | 
+ 189 |    snprintf(buf, len, "%.0fbit", tmp);   | True                      | 
+ 190 |  } else {                                | True                      | 
+ 191 |   if (tmp >= 1000*1000000)               | True                      | 
+ 192 |    snprintf(buf, len, "%.0fMbit", tmp/10 | True                      | 
+ 193 |   else if (tmp >= 1000*1000)             | True                      | 
+ 194 |    snprintf(buf, len, "%.0fKbit", tmp/10 | True                      | 
+ 195 |   else                                   | True                      | 
+ 196 |    snprintf(buf, len, "%.0fbit",  tmp);  | True                      | 
+ 197 |  }                                       | True                      | 
+ 198 | }                                        | True                      | 
+ 199 |                                          | True                      | 
+ 200 | #if 0                                    | True                      | 
+ 201 | /* This is "pfifo_fast".  */             | 0                         | 
+ 202 | static int prio_parse_opt(int argc, char | 0                         | 
+ 203 | {                                        | 0                         | 
+ 204 |  return 0;                               | 0                         | 
+ 205 | }                                        | 0                         | 
+ 206 | #endif                                   | True                      | 
+ 207 | static int prio_print_opt(struct rtattr  | True                      | 
+ 208 | {                                        | True                      | 
+ 209 |  int i;                                  | True                      | 
+ 210 |  struct tc_prio_qopt *qopt;              | True                      | 
+ 211 |  struct rtattr *tb[TCA_PRIO_MAX+1];      | True                      | 
+ 212 |                                          | True                      | 
+ 213 |  if (opt == NULL)                        | True                      | 
+ 214 |   return 0;                              | True                      | 
+ 215 |  parse_rtattr_nested_compat(tb, TCA_PRIO | True                      | 
+ 216 |  printf("bands %u priomap ", qopt->bands | True                      | 
+ 217 |  for (i = 0; i <= TC_PRIO_MAX; i++)      | True                      | 
+ 218 |   printf(" %d", qopt->priomap[i]);       | True                      | 
+ 219 |                                          | True                      | 
+ 220 |  if (tb[TCA_PRIO_MQ])                    | True                      | 
+ 221 |   printf(" multiqueue: o%s ",            | True                      | 
+ 222 |       *(unsigned char *)RTA_DATA(tb[TCA_ | True                      | 
+ 223 |                                          | True                      | 
+ 224 |  return 0;                               | True                      | 
+ 225 | }                                        | True                      | 
+ 226 |                                          | True                      | 
+ 227 | #if 0                                    | True                      | 
+ 228 | /* Class Based Queue */                  | 0                         | 
+ 229 | static int cbq_parse_opt(int argc, char  | 0                         | 
+ 230 | {                                        | 0                         | 
+ 231 |  return 0;                               | 0                         | 
+ 232 | }                                        | 0                         | 
+ 233 | #endif                                   | True                      | 
+ 234 | static int cbq_print_opt(struct rtattr * | True                      | 
+ 235 | {                                        | True                      | 
+ 236 |  struct rtattr *tb[TCA_CBQ_MAX+1];       | True                      | 
+ 237 |  struct tc_ratespec *r = NULL;           | True                      | 
+ 238 |  struct tc_cbq_lssopt *lss = NULL;       | True                      | 
+ 239 |  struct tc_cbq_wrropt *wrr = NULL;       | True                      | 
+ 240 |  struct tc_cbq_fopt *fopt = NULL;        | True                      | 
+ 241 |  struct tc_cbq_ovl *ovl = NULL;          | True                      | 
+ 242 |  const char *const error = "CBQ: too sho | True                      | 
+ 243 |  char buf[64];                           | True                      | 
+ 244 |                                          | True                      | 
+ 245 |  if (opt == NULL)                        | True                      | 
+ 246 |   goto done;                             | True                      | 
+ 247 |  parse_rtattr_nested(tb, TCA_CBQ_MAX, op | True                      | 
+ 248 |                                          | True                      | 
+ 249 |  if (tb[TCA_CBQ_RATE]) {                 | True                      | 
+ 250 |   if (RTA_PAYLOAD(tb[TCA_CBQ_RATE]) < si | True                      | 
+ 251 |    bb_error_msg(error, "rate");          | True                      | 
+ 252 |   else                                   | True                      | 
+ 253 |    r = RTA_DATA(tb[TCA_CBQ_RATE]);       | True                      | 
+ 254 |  }                                       | True                      | 
+ 255 |  if (tb[TCA_CBQ_LSSOPT]) {               | True                      | 
+ 256 |   if (RTA_PAYLOAD(tb[TCA_CBQ_LSSOPT]) <  | True                      | 
+ 257 |    bb_error_msg(error, "lss");           | True                      | 
+ 258 |   else                                   | True                      | 
+ 259 |    lss = RTA_DATA(tb[TCA_CBQ_LSSOPT]);   | True                      | 
+ 260 |  }                                       | True                      | 
+ 261 |  if (tb[TCA_CBQ_WRROPT]) {               | True                      | 
+ 262 |   if (RTA_PAYLOAD(tb[TCA_CBQ_WRROPT]) <  | True                      | 
+ 263 |    bb_error_msg(error, "wrr");           | True                      | 
+ 264 |   else                                   | True                      | 
+ 265 |    wrr = RTA_DATA(tb[TCA_CBQ_WRROPT]);   | True                      | 
+ 266 |  }                                       | True                      | 
+ 267 |  if (tb[TCA_CBQ_FOPT]) {                 | True                      | 
+ 268 |   if (RTA_PAYLOAD(tb[TCA_CBQ_FOPT]) < si | True                      | 
+ 269 |    bb_error_msg(error, "fopt");          | True                      | 
+ 270 |   else                                   | True                      | 
+ 271 |    fopt = RTA_DATA(tb[TCA_CBQ_FOPT]);    | True                      | 
+ 272 |  }                                       | True                      | 
+ 273 |  if (tb[TCA_CBQ_OVL_STRATEGY]) {         | True                      | 
+ 274 |   if (RTA_PAYLOAD(tb[TCA_CBQ_OVL_STRATEG | True                      | 
+ 275 |    bb_error_msg("CBQ: too short overlimi | True                      | 
+ 276 |     (unsigned) RTA_PAYLOAD(tb[TCA_CBQ_OV | True                      | 
+ 277 |     (unsigned) sizeof(*ovl));            | True                      | 
+ 278 |   else                                   | True                      | 
+ 279 |    ovl = RTA_DATA(tb[TCA_CBQ_OVL_STRATEG | True                      | 
+ 280 |  }                                       | True                      | 
+ 281 |                                          | True                      | 
+ 282 |  if (r) {                                | True                      | 
+ 283 |   print_rate(buf, sizeof(buf), r->rate); | True                      | 
+ 284 |   printf("rate %s ", buf);               | True                      | 
+ 285 |   if (show_details) {                    | True                      | 
+ 286 |    printf("cell %ub ", 1<<r->cell_log);  | True                      | 
+ 287 |    if (r->mpu)                           | True                      | 
+ 288 |     printf("mpu %ub ", r->mpu);          | True                      | 
+ 289 |    if (r->overhead)                      | True                      | 
+ 290 |     printf("overhead %ub ", r->overhead) | True                      | 
+ 291 |   }                                      | True                      | 
+ 292 |  }                                       | True                      | 
+ 293 |  if (lss && lss->flags) {                | True                      | 
+ 294 |   bool comma = false;                    | True                      | 
+ 295 |   bb_putchar('(');                       | True                      | 
+ 296 |   if (lss->flags&TCF_CBQ_LSS_BOUNDED) {  | True                      | 
+ 297 |    printf("bounded");                    | True                      | 
+ 298 |    comma = true;                         | True                      | 
+ 299 |   }                                      | True                      | 
+ 300 |   if (lss->flags&TCF_CBQ_LSS_ISOLATED) { | True                      | 
+ 301 |    if (comma)                            | True                      | 
+ 302 |     bb_putchar(',');                     | True                      | 
+ 303 |    printf("isolated");                   | True                      | 
+ 304 |   }                                      | True                      | 
+ 305 |   printf(") ");                          | True                      | 
+ 306 |  }                                       | True                      | 
+ 307 |  if (wrr) {                              | True                      | 
+ 308 |   if (wrr->priority != TC_CBQ_MAXPRIO)   | True                      | 
+ 309 |    printf("prio %u", wrr->priority);     | True                      | 
+ 310 |   else                                   | True                      | 
+ 311 |    printf("prio no-transmit");           | True                      | 
+ 312 |   if (show_details) {                    | True                      | 
+ 313 |    printf("/%u ", wrr->cpriority);       | True                      | 
+ 314 |    if (wrr->weight != 1) {               | True                      | 
+ 315 |     print_rate(buf, sizeof(buf), wrr->we | True                      | 
+ 316 |     printf("weight %s ", buf);           | True                      | 
+ 317 |    }                                     | True                      | 
+ 318 |    if (wrr->allot)                       | True                      | 
+ 319 |     printf("allot %ub ", wrr->allot);    | True                      | 
+ 320 |   }                                      | True                      | 
+ 321 |  }                                       | True                      | 
+ 322 |  done:                                   | True                      | 
+ 323 |  return 0;                               | True                      | 
+ 324 | }                                        | True                      | 
+ 325 |                                          | True                      | 
+ 326 | static FAST_FUNC int print_qdisc(        | True                      | 
+ 327 |   const struct sockaddr_nl *who UNUSED_P | True                      | 
+ 328 |   struct nlmsghdr *hdr,                  | True                      | 
+ 329 |   void *arg UNUSED_PARAM)                | True                      | 
+ 330 | {                                        | True                      | 
+ 331 |  struct tcmsg *msg = NLMSG_DATA(hdr);    | True                      | 
+ 332 |  int len = hdr->nlmsg_len;               | True                      | 
+ 333 |  struct rtattr * tb[TCA_MAX+1];          | True                      | 
+ 334 |  char *name;                             | True                      | 
+ 335 |                                          | True                      | 
+ 336 |  if (hdr->nlmsg_type != RTM_NEWQDISC &&  | True                      | 
+ 337 |   /* bb_error_msg("not a qdisc"); */     | True                      | 
+ 338 |   return 0; /* ??? mimic upstream; shoul | True                      | 
+ 339 |  }                                       | True                      | 
+ 340 |  len -= NLMSG_LENGTH(sizeof(*msg));      | True                      | 
+ 341 |  if (len < 0) {                          | True                      | 
+ 342 |   /* bb_error_msg("wrong len %d", len);  | True                      | 
+ 343 |   return -1;                             | True                      | 
+ 344 |  }                                       | True                      | 
+ 345 |  /* not the desired interface? */        | True                      | 
+ 346 |  if (filter_ifindex && filter_ifindex != | True                      | 
+ 347 |   return 0;                              | True                      | 
+ 348 |  memset (tb, 0, sizeof(tb));             | True                      | 
+ 349 |  parse_rtattr(tb, TCA_MAX, TCA_RTA(msg), | True                      | 
+ 350 |  if (tb[TCA_KIND] == NULL) {             | True                      | 
+ 351 |   /* bb_error_msg("%s: NULL kind", "qdis | True                      | 
+ 352 |   return -1;                             | True                      | 
+ 353 |  }                                       | True                      | 
+ 354 |  if (hdr->nlmsg_type == RTM_DELQDISC)    | True                      | 
+ 355 |   printf("deleted ");                    | True                      | 
+ 356 |  name = (char*)RTA_DATA(tb[TCA_KIND]);   | True                      | 
+ 357 |  printf("qdisc %s %x: ", name, msg->tcm_ | True                      | 
+ 358 |  if (filter_ifindex == 0)                | True                      | 
+ 359 |   printf("dev %s ", ll_index_to_name(msg | True                      | 
+ 360 |  if (msg->tcm_parent == TC_H_ROOT)       | True                      | 
+ 361 |   printf("root ");                       | True                      | 
+ 362 |  else if (msg->tcm_parent) {             | True                      | 
+ 363 |   char *classid = print_tc_classid(msg-> | True                      | 
+ 364 |   printf("parent %s ", classid);         | True                      | 
+ 365 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                      | 
+ 366 |    free(classid);                        | True                      | 
+ 367 |  }                                       | True                      | 
+ 368 |  if (msg->tcm_info != 1)                 | True                      | 
+ 369 |   printf("refcnt %d ", msg->tcm_info);   | True                      | 
+ 370 |  if (tb[TCA_OPTIONS]) {                  | True                      | 
+ 371 |   static const char _q_[] ALIGN1 = "pfif | True                      | 
+ 372 |   int qqq = index_in_strings(_q_, name); | True                      | 
+ 373 |   if (qqq == 0) { /* pfifo_fast aka prio | True                      | 
+ 374 |    prio_print_opt(tb[TCA_OPTIONS]);      | True                      | 
+ 375 |   } else if (qqq == 1) { /* class based  | True                      | 
+ 376 |    cbq_print_opt(tb[TCA_OPTIONS]);       | True                      | 
+ 377 |   } else {                               | True                      | 
+ 378 |    /* don't know how to print options fo | True                      | 
+ 379 |    printf("(options for %s)", name);     | True                      | 
+ 380 |   }                                      | True                      | 
+ 381 |  }                                       | True                      | 
+ 382 |  bb_putchar('\n');                       | True                      | 
+ 383 |  return 0;                               | True                      | 
+ 384 | }                                        | True                      | 
+ 385 |                                          | True                      | 
+ 386 | static FAST_FUNC int print_class(        | True                      | 
+ 387 |   const struct sockaddr_nl *who UNUSED_P | True                      | 
+ 388 |   struct nlmsghdr *hdr,                  | True                      | 
+ 389 |   void *arg UNUSED_PARAM)                | True                      | 
+ 390 | {                                        | True                      | 
+ 391 |  struct tcmsg *msg = NLMSG_DATA(hdr);    | True                      | 
+ 392 |  int len = hdr->nlmsg_len;               | True                      | 
+ 393 |  struct rtattr * tb[TCA_MAX+1];          | True                      | 
+ 394 |  char *name, *classid;                   | True                      | 
+ 395 |                                          | True                      | 
+ 396 |  /*XXX Eventually factor out common code | True                      | 
+ 397 |                                          | True                      | 
+ 398 |  if (hdr->nlmsg_type != RTM_NEWTCLASS && | True                      | 
+ 399 |   /* bb_error_msg("not a class"); */     | True                      | 
+ 400 |   return 0; /* ??? mimic upstream; shoul | True                      | 
+ 401 |  }                                       | True                      | 
+ 402 |  len -= NLMSG_LENGTH(sizeof(*msg));      | True                      | 
+ 403 |  if (len < 0) {                          | True                      | 
+ 404 |   /* bb_error_msg("wrong len %d", len);  | True                      | 
+ 405 |   return -1;                             | True                      | 
+ 406 |  }                                       | True                      | 
+ 407 |  /* not the desired interface? */        | True                      | 
+ 408 |  if (filter_qdisc && TC_H_MAJ(msg->tcm_h | True                      | 
+ 409 |   return 0;                              | True                      | 
+ 410 |  memset (tb, 0, sizeof(tb));             | True                      | 
+ 411 |  parse_rtattr(tb, TCA_MAX, TCA_RTA(msg), | True                      | 
+ 412 |  if (tb[TCA_KIND] == NULL) {             | True                      | 
+ 413 |   /* bb_error_msg("%s: NULL kind", "clas | True                      | 
+ 414 |   return -1;                             | True                      | 
+ 415 |  }                                       | True                      | 
+ 416 |  if (hdr->nlmsg_type == RTM_DELTCLASS)   | True                      | 
+ 417 |   printf("deleted ");                    | True                      | 
+ 418 |                                          | True                      | 
+ 419 |  name = (char*)RTA_DATA(tb[TCA_KIND]);   | True                      | 
+ 420 |  classid = !msg->tcm_handle ? NULL : pri | True                      | 
+ 421 |     filter_qdisc ? TC_H_MIN(msg->tcm_han | True                      | 
+ 422 |  printf ("class %s %s ", name, classid); | True                      | 
+ 423 |  if (ENABLE_FEATURE_CLEAN_UP)            | True                      | 
+ 424 |   free(classid);                         | True                      | 
+ 425 |                                          | True                      | 
+ 426 |  if (filter_ifindex == 0)                | True                      | 
+ 427 |   printf("dev %s ", ll_index_to_name(msg | True                      | 
+ 428 |  if (msg->tcm_parent == TC_H_ROOT)       | True                      | 
+ 429 |   printf("root ");                       | True                      | 
+ 430 |  else if (msg->tcm_parent) {             | True                      | 
+ 431 |   classid = print_tc_classid(filter_qdis | True                      | 
+ 432 |     TC_H_MIN(msg->tcm_parent) : msg->tcm | True                      | 
+ 433 |   printf("parent %s ", classid);         | True                      | 
+ 434 |   if (ENABLE_FEATURE_CLEAN_UP)           | True                      | 
+ 435 |    free(classid);                        | True                      | 
+ 436 |  }                                       | True                      | 
+ 437 |  if (msg->tcm_info)                      | True                      | 
+ 438 |   printf("leaf %x ", msg->tcm_info >> 16 | True                      | 
+ 439 |  /* Do that get_qdisc_kind(RTA_DATA(tb[T | True                      | 
+ 440 |  if (tb[TCA_OPTIONS]) {                  | True                      | 
+ 441 |   static const char _q_[] ALIGN1 = "pfif | True                      | 
+ 442 |   int qqq = index_in_strings(_q_, name); | True                      | 
+ 443 |   if (qqq == 0) { /* pfifo_fast aka prio | True                      | 
+ 444 |    /* nothing. */ /*prio_print_opt(tb[TC | True                      | 
+ 445 |   } else if (qqq == 1) { /* class based  | True                      | 
+ 446 |    /* cbq_print_copt() is identical to c | True                      | 
+ 447 |    cbq_print_opt(tb[TCA_OPTIONS]);       | True                      | 
+ 448 |   } else {                               | True                      | 
+ 449 |    /* don't know how to print options fo | True                      | 
+ 450 |    printf("(options for %s)", name);     | True                      | 
+ 451 |   }                                      | True                      | 
+ 452 |  }                                       | True                      | 
+ 453 |  bb_putchar('\n');                       | True                      | 
+ 454 |                                          | True                      | 
+ 455 |  return 0;                               | True                      | 
+ 456 | }                                        | True                      | 
+ 457 |                                          | True                      | 
+ 458 | static FAST_FUNC int print_filter(       | True                      | 
+ 459 |   const struct sockaddr_nl *who UNUSED_P | True                      | 
+ 460 |   struct nlmsghdr *hdr UNUSED_PARAM,     | True                      | 
+ 461 |   void *arg UNUSED_PARAM)                | True                      | 
+ 462 | {                                        | True                      | 
+ 463 |  return 0;                               | True                      | 
+ 464 | }                                        | True                      | 
+ 465 |                                          | True                      | 
+ 466 | int tc_main(int argc, char **argv) MAIN_ | True                      | 
+ 467 | int tc_main(int argc UNUSED_PARAM, char  | True                      | 
+ 468 | {                                        | True                      | 
+ 469 |  static const char objects[] ALIGN1 =    | True                      | 
+ 470 |   "qdisc\0""class\0""filter\0"           | True                      | 
+ 471 |   ;                                      | True                      | 
+ 472 |  enum { OBJ_qdisc = 0, OBJ_class, OBJ_fi | True                      | 
+ 473 |  static const char commands[] ALIGN1 =   | True                      | 
+ 474 |   "add\0""delete\0""change\0"            | True                      | 
+ 475 |   "link\0" /* only qdisc */              | True                      | 
+ 476 |   "replace\0"                            | True                      | 
+ 477 |   "show\0""list\0"                       | True                      | 
+ 478 |   ;                                      | True                      | 
+ 479 |  enum {                                  | True                      | 
+ 480 |   CMD_add = 0, CMD_del, CMD_change,      | True                      | 
+ 481 |   CMD_link,                              | True                      | 
+ 482 |   CMD_replace,                           | True                      | 
+ 483 |   CMD_show                               | True                      | 
+ 484 |  };                                      | True                      | 
+ 485 |  static const char args[] ALIGN1 =       | True                      | 
+ 486 |   "dev\0" /* qdisc, class, filter */     | True                      | 
+ 487 |   "root\0" /* class, filter */           | True                      | 
+ 488 |   "parent\0" /* class, filter */         | True                      | 
+ 489 |   "qdisc\0" /* class */                  | True                      | 
+ 490 |   "handle\0" /* change: qdisc, class(cla | True                      | 
+ 491 |   "classid\0" /* change: for class use " | True                      | 
+ 492 |   "preference\0""priority\0""protocol\0" | True                      | 
+ 493 |   ;                                      | True                      | 
+ 494 |  enum {                                  | True                      | 
+ 495 |   ARG_dev = 0,                           | True                      | 
+ 496 |   ARG_root,                              | True                      | 
+ 497 |   ARG_parent,                            | True                      | 
+ 498 |   ARG_qdisc,                             | True                      | 
+ 499 |   ARG_handle,                            | True                      | 
+ 500 |   ARG_classid,                           | True                      | 
+ 501 |   ARG_pref, ARG_prio, ARG_proto          | True                      | 
+ 502 |  };                                      | True                      | 
+ 503 |  struct rtnl_handle rth;                 | True                      | 
+ 504 |  struct tcmsg msg;                       | True                      | 
+ 505 |  int obj, cmd, arg;                      | True                      | 
+ 506 |  char *dev = NULL;                       | True                      | 
+ 507 |                                          | True                      | 
+ 508 |  INIT_G();                               | True                      | 
+ 509 |                                          | True                      | 
+ 510 |  if (!*++argv)                           | True                      | 
+ 511 |   bb_show_usage();                       | True                      | 
+ 512 |  xrtnl_open(&rth);                       | True                      | 
+ 513 |                                          | True                      | 
+ 514 |  obj = index_in_substrings(objects, *arg | True                      | 
+ 515 |  if (obj < 0)                            | True                      | 
+ 516 |   bb_show_usage();                       | True                      | 
+ 517 |                                          | True                      | 
+ 518 |  cmd = CMD_show; /* list (aka show) is t | True                      | 
+ 519 |  if (*argv) {                            | True                      | 
+ 520 |   cmd = index_in_substrings(commands, *a | True                      | 
+ 521 |   if (cmd < 0)                           | True                      | 
+ 522 |    invarg_1_to_2(*argv, argv[-1]);       | True                      | 
+ 523 |   argv++;                                | True                      | 
+ 524 |  }                                       | True                      | 
+ 525 |                                          | True                      | 
+ 526 |  memset(&msg, 0, sizeof(msg));           | True                      | 
+ 527 |  if (AF_UNSPEC != 0)                     | True                      | 
+ 528 |   msg.tcm_family = AF_UNSPEC;            | True                      | 
+ 529 |  ll_init_map(&rth);                      | True                      | 
+ 530 |                                          | True                      | 
+ 531 |  while (*argv) {                         | True                      | 
+ 532 |   arg = index_in_substrings(args, *argv) | True                      | 
+ 533 |   if (arg == ARG_dev) {                  | True                      | 
+ 534 |    NEXT_ARG();                           | True                      | 
+ 535 |    if (dev)                              | True                      | 
+ 536 |     duparg2("dev", *argv);               | True                      | 
+ 537 |    dev = *argv++;                        | True                      | 
+ 538 |    msg.tcm_ifindex = xll_name_to_index(d | True                      | 
+ 539 |    if (cmd >= CMD_show)                  | True                      | 
+ 540 |     filter_ifindex = msg.tcm_ifindex;    | True                      | 
+ 541 |    continue;                             | True                      | 
+ 542 |   }                                      | True                      | 
+ 543 |   if ((arg == ARG_qdisc && obj == OBJ_cl | True                      | 
+ 544 |    || (arg == ARG_handle && obj == OBJ_q | True                      | 
+ 545 |   ) {                                    | True                      | 
+ 546 |    NEXT_ARG();                           | True                      | 
+ 547 |    /* We don't care about duparg2("qdisc | True                      | 
+ 548 |    if (get_qdisc_handle(&filter_qdisc, * | True                      | 
+ 549 |     invarg_1_to_2(*argv, "qdisc");       | True                      | 
+ 550 |   } else                                 | True                      | 
+ 551 |   if (obj != OBJ_qdisc /* tc class|filte | True                      | 
+ 552 |    && (arg == ARG_root                   | True                      | 
+ 553 |       || arg == ARG_parent               | True                      | 
+ 554 |       || (obj == OBJ_filter && arg >= AR | True                      | 
+ 555 |       )                                  | True                      | 
+ 556 |   ) {                                    | True                      | 
+ 557 |    /* nothing */                         | True                      | 
+ 558 |   } else {                               | True                      | 
+ 559 |    invarg_1_to_2(*argv, "command");      | True                      | 
+ 560 |   }                                      | True                      | 
+ 561 |   NEXT_ARG();                            | True                      | 
+ 562 |   if (arg == ARG_root) {                 | True                      | 
+ 563 |    if (msg.tcm_parent)                   | True                      | 
+ 564 |     duparg("parent", *argv);             | True                      | 
+ 565 |    msg.tcm_parent = TC_H_ROOT;           | True                      | 
+ 566 |    if (obj == OBJ_filter)                | True                      | 
+ 567 |     filter_parent = TC_H_ROOT;           | True                      | 
+ 568 |   } else                                 | True                      | 
+ 569 |   if (arg == ARG_parent) {               | True                      | 
+ 570 |    uint32_t handle;                      | True                      | 
+ 571 |    if (msg.tcm_parent)                   | True                      | 
+ 572 |     duparg(*argv, "parent");             | True                      | 
+ 573 |    if (get_tc_classid(&handle, *argv))   | True                      | 
+ 574 |     invarg_1_to_2(*argv, "parent");      | True                      | 
+ 575 |    msg.tcm_parent = handle;              | True                      | 
+ 576 |    if (obj == OBJ_filter)                | True                      | 
+ 577 |     filter_parent = handle;              | True                      | 
+ 578 |   } else                                 | True                      | 
+ 579 |   if (arg == ARG_handle) { /* filter::li | True                      | 
+ 580 |    if (msg.tcm_handle)                   | True                      | 
+ 581 |     duparg(*argv, "handle");             | True                      | 
+ 582 |    /* reject LONG_MIN || LONG_MAX */     | True                      | 
+ 583 |    /* TODO: for fw                       | True                      | 
+ 584 |    slash = strchr(handle, '/');          | True                      | 
+ 585 |    if (slash != NULL)                    | True                      | 
+ 586 |     *slash = '\0';                       | True                      | 
+ 587 |     */                                   | True                      | 
+ 588 |    msg.tcm_handle = get_u32(*argv, "hand | True                      | 
+ 589 |    /* if (slash) {if (get_u32(uint32_t & | True                      | 
+ 590 |   } else                                 | True                      | 
+ 591 |   if (arg == ARG_classid                 | True                      | 
+ 592 |    && obj == OBJ_class                   | True                      | 
+ 593 |    && cmd == CMD_change                  | True                      | 
+ 594 |   ) {                                    | True                      | 
+ 595 |    /* TODO */                            | True                      | 
+ 596 |   } else                                 | True                      | 
+ 597 |   if (arg == ARG_pref || arg == ARG_prio | True                      | 
+ 598 |    if (filter_prio)                      | True                      | 
+ 599 |     duparg(*argv, "priority");           | True                      | 
+ 600 |    filter_prio = get_u32(*argv, "priorit | True                      | 
+ 601 |   } else                                 | True                      | 
+ 602 |   if (arg == ARG_proto) { /* filter::lis | True                      | 
+ 603 |    uint16_t tmp;                         | True                      | 
+ 604 |    if (filter_proto)                     | True                      | 
+ 605 |     duparg(*argv, "protocol");           | True                      | 
+ 606 |    if (ll_proto_a2n(&tmp, *argv))        | True                      | 
+ 607 |     invarg_1_to_2(*argv, "protocol");    | True                      | 
+ 608 |    filter_proto = tmp;                   | True                      | 
+ 609 |   }                                      | True                      | 
+ 610 |  }                                       | True                      | 
+ 611 |                                          | True                      | 
+ 612 |  if (cmd >= CMD_show) { /* show or list  | True                      | 
+ 613 |   if (obj == OBJ_filter)                 | True                      | 
+ 614 |    msg.tcm_info = TC_H_MAKE(filter_prio< | True                      | 
+ 615 |   if (rtnl_dump_request(&rth, obj == OBJ | True                      | 
+ 616 |       obj == OBJ_class ? RTM_GETTCLASS : | True                      | 
+ 617 |       &msg, sizeof(msg)) < 0)            | True                      | 
+ 618 |    bb_simple_perror_msg_and_die("can't s | True                      | 
+ 619 |                                          | True                      | 
+ 620 |   xrtnl_dump_filter(&rth, obj == OBJ_qdi | True                      | 
+ 621 |       obj == OBJ_class ? print_class : p | True                      | 
+ 622 |       NULL);                             | True                      | 
+ 623 |  }                                       | True                      | 
+ 624 |  if (ENABLE_FEATURE_CLEAN_UP) {          | True                      | 
+ 625 |   rtnl_close(&rth);                      | True                      | 
+ 626 |  }                                       | True                      | 
+ 627 |  return EXIT_SUCCESS;                    | True                      | 
+ 628 | }                                        | True                      | 
+-----+------------------------------------------+---------------------------+
+     |                                          | +124MB, 305ms             | 
