@@ -1,9 +1,6 @@
 """
 metrics.py
 Gera tabelas de Feature/LoC, interacoes a partir de outputs do PCLocator.
-
-uv run pcl.py <caminho_para_PCLocator.jar> <pasta_raiz_arquivos_c> [ (optional) --saida <arquivo_saida> ]
-
 """
 
 import argparse
@@ -26,7 +23,7 @@ def main():
     parser.add_argument("--features", action="store_true", help="Gera apenas o CSV de features individuais")
     parser.add_argument("--interacoes", action="store_true", help="Gera apenas o CSV de interacoes")
     parser.add_argument("--agregado", action="store_true", help="Gera o CSV de agregado por grau de interacao (percentual de linhas em grau 1, 2, 3...)")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Imprime cada ocorrencia encontrada durante o parsing")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Imprime cada ocorrencia encontrada")
     args = parser.parse_args()
 
     raiz = Path(args.pasta)
