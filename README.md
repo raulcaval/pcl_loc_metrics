@@ -52,10 +52,10 @@ uv run pcl.py <caminho_para_PCLocator.jar> <pasta_raiz_arquivos_c>
 ```bash
 
 # Gerar todos os CSVs (saída padrão: /data/out/ <pasta>_LoC.csv)
-uv run features_loc.py <pasta_outputs_pclocator>
+uv run metrics.py <pasta_outputs_pclocator>
 
 # Especificar nome do arquivo de saída
-uv run features_loc.py <pasta_outputs_pclocator> --saida resultado.csv
+uv run metrics.py <pasta_outputs_pclocator> --saida resultado.csv
 
 # Gerar apenas o CSV de features individuais
 uv run metrics.py <pasta> --saida features.csv --features
