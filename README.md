@@ -3,7 +3,7 @@
 Projeto da disciplina Tópicos Avançados em Linguagens de Programação 2 — Software Product Lines (CInUFPE).
 
 Ferramenta de linha de comando para análise estática de **Software Product Lines (SPL)** em projetos C.
-A partir dos arquivos de saída do [PCLocator](https://github.com/FeatureIDE/PCLocator), extrai métricas de Loc de features condicionais (`#ifdef`/`#if defined`), gerando relatórios em CSV.
+A partir dos arquivos de saída do [PCLocator](https://github.com/ekuiter/PCLocator), extrai métricas de Loc de features condicionais (`#ifdef`/`#if defined`), gerando relatórios em CSV.
 
 ---
 
